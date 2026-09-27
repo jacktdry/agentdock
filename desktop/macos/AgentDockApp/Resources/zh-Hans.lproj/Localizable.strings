@@ -359,3 +359,9 @@
 "Command" = "命令";
 "Args JSON" = "参数 JSON";
 "Save" = "保存";
+"Window" = "窗口";
+"Close Window" = "关闭窗口";
+"Minimize" = "最小化";
+"Experimental build · %@" = "实验构建 · %@";
+"Upstream update available" = "上游有新版本";
+"This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely." = "此实验构建来自 %@。AgentDock 只会检查上游 Release，不会自动覆盖当前实验版本。请先同步 Fork 并重新构建后再安全更新。";

@@ -168,6 +168,7 @@ struct InstallerConfigurationTests {
 
         try testTunnelTokenStore()
         try testDesktopUpdateResult()
+        try await testDesktopUpdateTransactionRecoveryState()
         try testDesktopUpdateTerminalResult()
         try testDesktopUpdateServiceState()
         try testDesktopUpdateHandoff()
@@ -192,6 +193,43 @@ struct InstallerConfigurationTests {
         precondition(result?.ok == true)
         precondition(result?.targetVersion == "v0.7.0")
         precondition(!FileManager.default.fileExists(atPath: path.path))
+
+        try Data("not-json".utf8).write(to: path)
+        precondition(DesktopUpdateResult.load(from: path) == nil)
+        precondition(DesktopUpdateResult.discard(from: path))
+        precondition(!FileManager.default.fileExists(atPath: path.path))
+    }
+
+    private static func testDesktopUpdateTransactionRecoveryState() async throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AgentDockUpdateRecoveryTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let appBundle = home.appendingPathComponent("Applications/AgentDock.app", isDirectory: true)
+        let paths = AppPaths(home: home, appBundle: appBundle)
+        try FileManager.default.createDirectory(
+            at: paths.updateTransaction.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let active = """
+        {"schema_version":1,"transaction_id":"tx-active","state":"trial","macos":{"source_arbiter_path":"/tmp/missing-arbiter"}}
+        """
+        try Data(active.utf8).write(to: paths.updateTransaction)
+        precondition(DesktopUpdateTransactionRecovery.hasActiveTransaction(paths: paths))
+        precondition(DesktopUpdateTransactionRecovery.shouldPreserveResultTrigger(paths: paths))
+
+        let terminal = """
+        {"schema_version":1,"transaction_id":"tx-active","state":"failed","macos":{"source_arbiter_path":"/tmp/missing-arbiter"}}
+        """
+        try Data(terminal.utf8).write(to: paths.updateTransaction)
+        precondition(!DesktopUpdateTransactionRecovery.hasActiveTransaction(paths: paths))
+        precondition(!DesktopUpdateTransactionRecovery.shouldPreserveResultTrigger(paths: paths))
+
+        try Data("not-json".utf8).write(to: paths.updateTransaction)
+        precondition(!DesktopUpdateTransactionRecovery.hasActiveTransaction(paths: paths))
+        precondition(DesktopUpdateTransactionRecovery.shouldPreserveResultTrigger(paths: paths))
+        let malformedRecoveryReady = await DesktopUpdateTransactionRecovery.recoverIfNeeded(paths: paths)
+        precondition(!malformedRecoveryReady)
     }
 
     private static func testDesktopUpdateTerminalResult() throws {

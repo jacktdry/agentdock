@@ -359,3 +359,9 @@
 "Command" = "Command";
 "Args JSON" = "Args JSON";
 "Save" = "Save";
+"Window" = "Window";
+"Close Window" = "Close Window";
+"Minimize" = "Minimize";
+"Experimental build · %@" = "Experimental build · %@";
+"Upstream update available" = "Upstream update available";
+"This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely." = "This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely.";

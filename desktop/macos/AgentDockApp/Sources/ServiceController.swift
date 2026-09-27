@@ -41,13 +41,27 @@ struct DesktopUpdateCheck: Decodable {
     let currentVersion: String?
     let latestVersion: String?
     let updateAvailable: Bool
+    let distribution: String?
+    let applyAllowed: Bool
     let message: String
 
     private enum CodingKeys: String, CodingKey {
         case currentVersion = "current_version"
         case latestVersion = "latest_version"
         case updateAvailable = "update_available"
+        case distribution
+        case applyAllowed = "apply_allowed"
         case message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        currentVersion = try container.decodeIfPresent(String.self, forKey: .currentVersion)
+        latestVersion = try container.decodeIfPresent(String.self, forKey: .latestVersion)
+        updateAvailable = try container.decode(Bool.self, forKey: .updateAvailable)
+        distribution = try container.decodeIfPresent(String.self, forKey: .distribution)
+        applyAllowed = try container.decodeIfPresent(Bool.self, forKey: .applyAllowed) ?? true
+        message = try container.decode(String.self, forKey: .message)
     }
 
     static func decode(_ output: String) throws -> DesktopUpdateCheck {

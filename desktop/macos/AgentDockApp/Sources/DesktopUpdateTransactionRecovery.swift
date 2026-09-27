@@ -23,13 +23,53 @@ private struct DesktopUpdateMacOSPlan: Decodable {
 }
 
 enum DesktopUpdateTransactionRecovery {
-    static func recoverIfNeeded(paths: AppPaths) -> Bool {
-        guard let data = try? Data(contentsOf: paths.updateTransaction),
-              let transaction = try? JSONDecoder().decode(DesktopUpdateTransactionEnvelope.self, from: data),
-              transaction.schemaVersion == 1,
-              transaction.state == "trial" || transaction.state == "rolling_back" else {
+    static func hasActiveTransaction(paths: AppPaths) -> Bool {
+        pendingTransaction(paths: paths) != nil
+    }
+
+    static func shouldPreserveResultTrigger(paths: AppPaths) -> Bool {
+        guard FileManager.default.fileExists(atPath: paths.updateTransaction.path) else { return false }
+        guard let transaction = loadTransaction(paths: paths) else {
+            // An unreadable durable journal is a recovery problem, not proof that the
+            // one-shot desktop trigger is stale.
             return true
         }
+        return transaction.state == "trial" || transaction.state == "rolling_back"
+    }
+
+    static func recoverIfNeeded(paths: AppPaths) async -> Bool {
+        let transactionFileExists = FileManager.default.fileExists(atPath: paths.updateTransaction.path)
+        guard !transactionFileExists || loadTransaction(paths: paths) != nil else {
+            NSLog("AgentDock update recovery: durable transaction journal is unreadable.")
+            return false
+        }
+        guard hasActiveTransaction(paths: paths) else { return true }
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: recoverSynchronouslyIfNeeded(paths: paths))
+            }
+        }
+    }
+
+    private static func loadTransaction(paths: AppPaths) -> DesktopUpdateTransactionEnvelope? {
+        guard let data = try? Data(contentsOf: paths.updateTransaction),
+              let transaction = try? JSONDecoder().decode(DesktopUpdateTransactionEnvelope.self, from: data),
+              transaction.schemaVersion == 1 else {
+            return nil
+        }
+        return transaction
+    }
+
+    private static func pendingTransaction(paths: AppPaths) -> DesktopUpdateTransactionEnvelope? {
+        guard let transaction = loadTransaction(paths: paths),
+              transaction.state == "trial" || transaction.state == "rolling_back" else {
+            return nil
+        }
+        return transaction
+    }
+
+    private static func recoverSynchronouslyIfNeeded(paths: AppPaths) -> Bool {
+        guard let transaction = pendingTransaction(paths: paths) else { return true }
         guard let plan = transaction.macOS else {
             NSLog("AgentDock update recovery: pending macOS transaction has no platform plan.")
             return false

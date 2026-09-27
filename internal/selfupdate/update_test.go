@@ -55,8 +55,64 @@ func TestInspectUpdateReportsAvailableVersionWithoutApplying(t *testing.T) {
 	if !inspection.Result.UpdateAvailable || inspection.Result.CurrentVersion != "v0.6.1" || inspection.Result.LatestVersion != "v0.6.2" {
 		t.Fatalf("unexpected check result: %#v", inspection.Result)
 	}
+	if !inspection.Result.ApplyAllowed || inspection.Result.Distribution != "uvwt/agentdock" {
+		t.Fatalf("unexpected default update policy: %#v", inspection.Result)
+	}
 	if inspection.ArchiveName != "agentdock_windows_amd64.zip" || inspection.ExecutableName != "agentdock.exe" {
 		t.Fatalf("unexpected inspection assets: %#v", inspection)
+	}
+}
+
+func TestRunCheckOnlyBuildReportsUpdateWithoutApplying(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(release{
+			TagName: "v0.6.2",
+			Assets: []releaseAsset{
+				{Name: "agentdock_darwin_arm64.tar.gz", URL: "https://example.invalid/archive"},
+				{Name: "agentdock_darwin_arm64.tar.gz.sha256", URL: "https://example.invalid/checksum"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	inspection, err := inspectUpdate(context.Background(), options{
+		CurrentVersion: "0.6.1",
+		Distribution:   "jacktdry/agentdock",
+		UpdatePolicy:   "check-only",
+		GOOS:           "darwin",
+		GOARCH:         "arm64",
+		ReleaseAPI:     server.URL,
+		HTTPClient:     server.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inspection.Result.UpdateAvailable || inspection.Result.ApplyAllowed || inspection.Result.Distribution != "jacktdry/agentdock" {
+		t.Fatalf("unexpected fork check result: %#v", inspection.Result)
+	}
+
+	applied := false
+	err = run(context.Background(), options{
+		CurrentVersion: "0.6.1",
+		Distribution:   "jacktdry/agentdock",
+		UpdatePolicy:   "check-only",
+		ExecutablePath: "/tmp/agentdock",
+		GOOS:           "darwin",
+		GOARCH:         "arm64",
+		ReleaseAPI:     server.URL,
+		HTTPClient:     server.Client(),
+		Output:         io.Discard,
+		VerifyBinary:   func(context.Context, string, string) error { return nil },
+		Apply: func(context.Context, applyRequest) (applyResult, error) {
+			applied = true
+			return applyResult{}, nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "仅检查") || !strings.Contains(err.Error(), "jacktdry/agentdock") {
+		t.Fatalf("unexpected check-only error: %v", err)
+	}
+	if applied {
+		t.Fatal("check-only build must never apply an upstream release")
 	}
 }
 

@@ -25,6 +25,13 @@ if grep -Fq 'isVisible = false' "$APP_DELEGATE"; then
   exit 1
 fi
 
+APPLICATION_MENU="$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ApplicationMenu.swift"
+grep -Fq 'action: #selector(NSWindow.performClose(_:))' "$APPLICATION_MENU"
+grep -Fq 'keyEquivalent: "w"' "$APPLICATION_MENU"
+grep -Fq 'NSApp.windowsMenu = windowMenu' "$APPLICATION_MENU"
+UPDATE_PROGRESS_WINDOW="$ROOT_DIR/desktop/macos/AgentDockApp/Sources/UpdateProgressWindowController.swift"
+grep -Fq 'styleMask: [.titled]' "$UPDATE_PROGRESS_WINDOW"
+
 swiftc \
   -swift-version 5 \
   -parse-as-library \
@@ -40,6 +47,7 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerConfiguration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppVersion.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateResult.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateTransactionRecovery.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateServiceState.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateHandoff.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ManagedEnvironment.swift" \

@@ -209,13 +209,16 @@ struct ServiceControllerValidationTests {
         precondition(current.message.contains("最新版本"))
         precondition(current.currentVersion == "v0.7.2")
         precondition(current.latestVersion == "v0.7.2")
+        precondition(current.applyAllowed)
 
         let available = try DesktopUpdateCheck.decode(
-            #"{"current_version":"v0.8.2","latest_version":"v0.8.3","update_available":true,"message":"发现 AgentDock App 更新"}"#
+            #"{"current_version":"v0.8.2","latest_version":"v0.8.3","update_available":true,"distribution":"jacktdry/agentdock","apply_allowed":false,"message":"发现 AgentDock App 更新"}"#
         )
         precondition(available.updateAvailable)
         precondition(available.currentVersion == "v0.8.2")
         precondition(available.latestVersion == "v0.8.3")
+        precondition(available.distribution == "jacktdry/agentdock")
+        precondition(!available.applyAllowed)
 
         expectFailure(L10n.text("Unable to parse the AgentDock update check result.")) {
             _ = try DesktopUpdateCheck.decode("not-json")

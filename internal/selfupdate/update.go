@@ -51,6 +51,8 @@ type CheckResult struct {
 	DesktopCurrentVersion  string `json:"desktop_current_version,omitempty"`
 	UpdateAvailable        bool   `json:"update_available"`
 	DesktopUpdateAvailable bool   `json:"desktop_update_available,omitempty"`
+	Distribution           string `json:"distribution,omitempty"`
+	ApplyAllowed           bool   `json:"apply_allowed"`
 	Message                string `json:"message"`
 }
 
@@ -70,6 +72,8 @@ type options struct {
 	DesktopTargetPath     string
 	DesktopCurrentVersion string
 	DesktopOnly           bool
+	Distribution          string
+	UpdatePolicy          string
 	GOOS                  string
 	GOARCH                string
 	ReleaseAPI            string
@@ -155,6 +159,8 @@ func runtimeOptions(output io.Writer) (options, error) {
 		DesktopTargetPath:     desktopTarget,
 		DesktopCurrentVersion: desktopUpdateVersion(desktopTarget),
 		DesktopOnly:           desktopUpdateOwnsExecutable(desktopTarget, executable),
+		Distribution:          buildinfo.Distribution,
+		UpdatePolicy:          buildinfo.UpdatePolicy,
 		GOOS:                  runtime.GOOS,
 		GOARCH:                runtime.GOARCH,
 		ReleaseAPI:            defaultReleaseAPI,
@@ -194,6 +200,13 @@ func run(ctx context.Context, opts options) error {
 			})
 		}
 		return nil
+	}
+	if !updateApplyAllowed(opts.UpdatePolicy) {
+		return fmt.Errorf(
+			"此 AgentDock 构建来自 %s，更新策略为仅检查。已发现 %s；请先同步源码并重新构建，避免官方 Release 覆盖实验版",
+			updateDistribution(opts.Distribution),
+			inspection.Result.LatestVersion,
+		)
 	}
 	if opts.DesktopOnly || (inspection.Result.DesktopUpdateAvailable && normalizeVersion(inspection.Result.CurrentVersion) == normalizeVersion(inspection.Result.LatestVersion)) {
 		return runDesktopOnlyUpdate(ctx, opts, inspection)
@@ -397,6 +410,8 @@ func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) 
 		LatestVersion:          targetVersion,
 		DesktopCurrentVersion:  desktopVersion,
 		DesktopUpdateAvailable: desktopNeedsUpdate,
+		Distribution:           updateDistribution(opts.Distribution),
+		ApplyAllowed:           updateApplyAllowed(opts.UpdatePolicy),
 	}
 	if comparison, comparable := compareVersions(currentVersion, targetVersion); comparable && comparison > 0 {
 		result.Message = fmt.Sprintf("当前版本 %s 高于最新 Release %s，不执行降级。", currentVersion, targetVersion)
@@ -475,6 +490,19 @@ func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) 
 		DesktopArchiveAsset:  desktopArchiveAsset,
 		DesktopChecksumAsset: desktopChecksumAsset,
 	}, nil
+}
+
+func updateDistribution(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "uvwt/agentdock"
+	}
+	return value
+}
+
+func updateApplyAllowed(raw string) bool {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	return value == "" || value == "apply"
 }
 
 func fetchLatestRelease(ctx context.Context, client *http.Client, endpoint string) (release, error) {

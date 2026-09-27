@@ -9,25 +9,37 @@ import (
 const Version = "0.9.1"
 
 var (
-	Commit    string
-	BuildDate string
+	Commit       string
+	BuildDate    string
+	Distribution = "uvwt/agentdock"
+	UpdatePolicy = "apply"
 )
 
 type Info struct {
-	Version   string `json:"version"`
-	Commit    string `json:"commit"`
-	BuildDate string `json:"build_date"`
-	GoVersion string `json:"go_version"`
-	Platform  string `json:"platform"`
+	Version      string `json:"version"`
+	Commit       string `json:"commit"`
+	BuildDate    string `json:"build_date"`
+	Distribution string `json:"distribution"`
+	UpdatePolicy string `json:"update_policy"`
+	GoVersion    string `json:"go_version"`
+	Platform     string `json:"platform"`
 }
 
 func Current() Info {
 	info := Info{
-		Version:   strings.TrimSpace(Version),
-		Commit:    strings.TrimSpace(Commit),
-		BuildDate: strings.TrimSpace(BuildDate),
-		GoVersion: runtime.Version(),
-		Platform:  runtime.GOOS + "/" + runtime.GOARCH,
+		Version:      strings.TrimSpace(Version),
+		Commit:       strings.TrimSpace(Commit),
+		BuildDate:    strings.TrimSpace(BuildDate),
+		Distribution: strings.TrimSpace(Distribution),
+		UpdatePolicy: strings.TrimSpace(UpdatePolicy),
+		GoVersion:    runtime.Version(),
+		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
+	}
+	if info.Distribution == "" {
+		info.Distribution = "uvwt/agentdock"
+	}
+	if info.UpdatePolicy == "" {
+		info.UpdatePolicy = "apply"
 	}
 	build, ok := debug.ReadBuildInfo()
 	if ok {

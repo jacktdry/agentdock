@@ -15,6 +15,8 @@ CODESIGN_IDENTITY="${AGENTDOCK_CODESIGN_IDENTITY:-"-"}"
 CODESIGN_KEYCHAIN="${AGENTDOCK_CODESIGN_KEYCHAIN:-}"
 CODESIGN_KEYCHAIN_PASSWORD="${AGENTDOCK_CODESIGN_KEYCHAIN_PASSWORD:-}"
 CODESIGN_TIMESTAMP="${AGENTDOCK_CODESIGN_TIMESTAMP:-none}"
+DISTRIBUTION="${AGENTDOCK_DISTRIBUTION:-uvwt/agentdock}"
+UPDATE_POLICY="${AGENTDOCK_UPDATE_POLICY:-apply}"
 
 usage() {
   cat <<'USAGE'
@@ -32,6 +34,8 @@ usage() {
   AGENTDOCK_CODESIGN_KEYCHAIN_PASSWORD
                                可选，指定钥匙串解锁密码
   AGENTDOCK_CODESIGN_TIMESTAMP  none 或 auto；默认 none
+  AGENTDOCK_DISTRIBUTION        构建来源标识，默认 uvwt/agentdock
+  AGENTDOCK_UPDATE_POLICY       apply 或 check-only；默认 apply
 USAGE
 }
 
@@ -51,6 +55,10 @@ done
 case "$CODESIGN_TIMESTAMP" in
   none|auto) ;;
   *) die "AGENTDOCK_CODESIGN_TIMESTAMP 只支持 none 或 auto" ;;
+esac
+case "$UPDATE_POLICY" in
+  apply|check-only) ;;
+  *) die "AGENTDOCK_UPDATE_POLICY 只支持 apply 或 check-only" ;;
 esac
 if [[ "$CODESIGN_IDENTITY" != "-" ]]; then
   command -v security >/dev/null 2>&1 || die "缺少命令：security"
@@ -371,6 +379,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
+plutil -insert AgentDockDistribution -string "$DISTRIBUTION" "$CONTENTS_DIR/Info.plist"
+plutil -insert AgentDockUpdatePolicy -string "$UPDATE_POLICY" "$CONTENTS_DIR/Info.plist"
 plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
 
 sign_macos_code() {
