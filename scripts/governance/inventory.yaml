@@ -6,6 +6,13 @@
 review_threshold_lines: 300
 
 scripts:
+  - path: scripts/dev/build-macos-fork.sh
+    class: dev
+    owner: desktop
+    public_contract: false
+    deletable: true
+    notes: Fork 本机 macOS 集成构建辅助脚本；只负责准备离线载荷并调用正式 packaging/macos/build-app.sh。
+
   - path: scripts/install/install.sh
     class: bootstrap
     owner: installer
