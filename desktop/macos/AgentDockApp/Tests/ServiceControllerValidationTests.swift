@@ -179,26 +179,17 @@ struct ServiceControllerValidationTests {
     }
 
     private static func testBackgroundServiceLifecyclePolicy() {
-        precondition(BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+        precondition(BackgroundServiceLifecyclePolicy.shouldKickstart(
             registration: .enabled,
-            healthPassed: false
+            processID: nil
         ))
-        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+        precondition(!BackgroundServiceLifecyclePolicy.shouldKickstart(
             registration: .enabled,
-            healthPassed: true
+            processID: 1234
         ))
-        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
-            registration: .requiresApproval,
-            healthPassed: false
-        ))
-        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+        precondition(!BackgroundServiceLifecyclePolicy.shouldKickstart(
             registration: .notRegistered,
-            healthPassed: false
-        ))
-        precondition(BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
-            registration: .enabled,
-            healthPassed: true,
-            registrationVersionMismatch: true
+            processID: nil
         ))
 
         precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .quick, coreHealthy: true))
@@ -214,6 +205,16 @@ struct ServiceControllerValidationTests {
         """
         precondition(ServiceController.parentBundleVersion(fromLaunchctlOutput: launchctlOutput) == "0.8.3")
         precondition(ServiceController.parentBundleVersion(fromLaunchctlOutput: "state = running\n") == nil)
+
+        let runningLaunchctlOutput = """
+        gui/501/com.uvwt.agentdock.core = {
+            state = running
+            pid = 75598
+        }
+        """
+        precondition(ServiceController.processID(fromLaunchctlOutput: runningLaunchctlOutput) == 75598)
+        precondition(ServiceController.processID(fromLaunchctlOutput: "state = running\n") == nil)
+        precondition(ServiceController.processID(fromLaunchctlOutput: "pid = 0\n") == nil)
     }
 
     private static func testNexusConnectionStateResolution(root: URL) throws {
