@@ -343,6 +343,7 @@
 "Interface language" = "Interface language";
 "Follow system" = "Follow system";
 "Simplified Chinese" = "Simplified Chinese";
+"Traditional Chinese" = "Traditional Chinese";
 "English" = "English";
 "Failed to restart AgentDock interface: %@" = "Failed to restart AgentDock interface: %@";
 "Change interface language?" = "Change interface language?";

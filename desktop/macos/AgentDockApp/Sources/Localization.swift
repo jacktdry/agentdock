@@ -3,6 +3,7 @@ import Foundation
 enum UILanguagePreference: String, CaseIterable {
     case system
     case simplifiedChinese = "zh-Hans"
+    case traditionalChinese = "zh-Hant"
     case english = "en"
 
     var title: String {
@@ -11,6 +12,8 @@ enum UILanguagePreference: String, CaseIterable {
             return L10n.text("Follow system")
         case .simplifiedChinese:
             return L10n.text("Simplified Chinese")
+        case .traditionalChinese:
+            return L10n.text("Traditional Chinese")
         case .english:
             return L10n.text("English")
         }
@@ -21,11 +24,20 @@ enum L10n {
     private static let languagePreferenceKey = "AgentDockUILanguage"
 
     static func languagePreference(defaults: UserDefaults = .standard) -> UILanguagePreference {
-        guard let rawValue = defaults.string(forKey: languagePreferenceKey),
-              let preference = UILanguagePreference(rawValue: rawValue) else {
+        guard let rawValue = defaults.string(forKey: languagePreferenceKey) else {
             return .system
         }
-        return preference
+        if let preference = UILanguagePreference(rawValue: rawValue) {
+            return preference
+        }
+        switch rawValue.lowercased() {
+        case "zh-tw", "zh-hk", "zh-mo", "zh-hant-tw", "zh-hant-hk", "zh-hant-mo":
+            return .traditionalChinese
+        case "zh-cn", "zh-sg", "zh-hans-cn", "zh-hans-sg":
+            return .simplifiedChinese
+        default:
+            return .system
+        }
     }
 
     static func setLanguagePreference(_ preference: UILanguagePreference, defaults: UserDefaults = .standard) {
