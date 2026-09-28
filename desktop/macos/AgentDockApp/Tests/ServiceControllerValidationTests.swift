@@ -61,6 +61,7 @@ struct ServiceControllerValidationTests {
         try testLegacyRuntimeMigrationTransactions(root: root, appBundle: appBundle)
         testQuickTunnelBootstrap()
         testServiceRegistrationStatusClassification()
+        testBackgroundServiceLifecyclePolicy()
         try testNexusConnectionStateResolution(root: root)
         try testDesktopUpdateCheckDecoding()
         testStatusItemVisibilityPolicy()
@@ -175,6 +176,44 @@ struct ServiceControllerValidationTests {
         precondition(ServiceController.isUnregistered(.notFound))
         precondition(!ServiceController.isUnregistered(.enabled))
         precondition(!ServiceController.isUnregistered(.requiresApproval))
+    }
+
+    private static func testBackgroundServiceLifecyclePolicy() {
+        precondition(BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+            registration: .enabled,
+            healthPassed: false
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+            registration: .enabled,
+            healthPassed: true
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+            registration: .requiresApproval,
+            healthPassed: false
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+            registration: .notRegistered,
+            healthPassed: false
+        ))
+        precondition(BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
+            registration: .enabled,
+            healthPassed: true,
+            registrationVersionMismatch: true
+        ))
+
+        precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .quick, coreHealthy: true))
+        precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .named, coreHealthy: true))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .local, coreHealthy: true))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .named, coreHealthy: false))
+
+        let launchctlOutput = """
+        gui/501/com.uvwt.agentdock.tunnel = {
+            parent bundle identifier = com.uvwt.agentdock
+            parent bundle version = 0.8.3
+        }
+        """
+        precondition(ServiceController.parentBundleVersion(fromLaunchctlOutput: launchctlOutput) == "0.8.3")
+        precondition(ServiceController.parentBundleVersion(fromLaunchctlOutput: "state = running\n") == nil)
     }
 
     private static func testNexusConnectionStateResolution(root: URL) throws {

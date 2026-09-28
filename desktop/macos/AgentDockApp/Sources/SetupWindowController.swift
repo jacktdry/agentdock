@@ -716,6 +716,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
             } catch {
                 setBusy(false)
                 showStatus(error.localizedDescription, isError: true)
+                onChanged()
             }
         }
     }
