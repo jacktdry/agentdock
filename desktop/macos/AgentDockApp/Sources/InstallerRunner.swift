@@ -47,6 +47,14 @@ final class InstallerRunner {
     func run(request: InstallRequest) async throws -> InstallResult {
         let serverURL = try request.validatedServerURL()
         let providedTunnelToken = try request.validatedTunnelToken()
+        let tailscaleInfo: TailscaleFunnelInfo?
+        if request.mode == .tailscale {
+            tailscaleInfo = try await service.runInBackground {
+                try TailscaleFunnelSupport.resolve()
+            }
+        } else {
+            tailscaleInfo = nil
+        }
         try validateBundledRuntime()
         try service.validatePersistentAppLocation()
 
@@ -73,7 +81,8 @@ final class InstallerRunner {
             let prepared = try prepareConfiguration(
                 request: request,
                 serverURL: serverURL,
-                providedTunnelToken: providedTunnelToken
+                providedTunnelToken: providedTunnelToken,
+                tailscaleInfo: tailscaleInfo
             )
             try await service.runInBackground {
                 try self.writePreparedConfiguration(prepared)
@@ -101,6 +110,8 @@ final class InstallerRunner {
                 // Quick Tunnel readiness is asynchronous. Do not hold install completion open for
                 // Cloudflare provisioning; the control panel will expose the URL when it appears.
                 publicURL = currentQuickTunnelURL()
+            case .tailscale:
+                publicURL = prepared.tailscalePublicURL ?? ""
             }
 
             let finalConfiguration = ServiceConfiguration.load(from: paths.environment)
@@ -150,6 +161,7 @@ final class InstallerRunner {
         let environment: Data
         let tunnelEnvironment: Data
         let tunnelToken: String?
+        let tailscalePublicURL: String?
         let authToken: String
         let oauthPassword: String
     }
@@ -157,7 +169,8 @@ final class InstallerRunner {
     private func prepareConfiguration(
         request: InstallRequest,
         serverURL: String?,
-        providedTunnelToken: String?
+        providedTunnelToken: String?,
+        tailscaleInfo: TailscaleFunnelInfo?
     ) throws -> PreparedConfiguration {
         var values: [String: String] = [:]
         if fileManager.fileExists(atPath: paths.environment.path) {
@@ -190,6 +203,7 @@ final class InstallerRunner {
 
         var tunnelValues = ["AGENTDOCK_TUNNEL_MODE": request.mode.rawValue]
         var tunnelToken: String?
+        var tailscalePublicURL: String?
         switch request.mode {
         case .local:
             values.removeValue(forKey: "AGENTDOCK_SERVER_URL")
@@ -205,12 +219,23 @@ final class InstallerRunner {
             tunnelToken = try tokenStore.tokenForNamedTunnel(providedToken: providedTunnelToken)
             values["AGENTDOCK_SERVER_URL"] = serverURL
             values["AGENTDOCK_OAUTH_ENABLED"] = "true"
+        case .tailscale:
+            guard let info = tailscaleInfo else {
+                throw ValidationError(L10n.text("Unable to read Tailscale status."))
+            }
+            tailscalePublicURL = info.publicURL
+            values["AGENTDOCK_SERVER_URL"] = info.publicURL
+            values["AGENTDOCK_OAUTH_ENABLED"] = "true"
+            tunnelValues["AGENTDOCK_TUNNEL_TARGET"] = "http://127.0.0.1:\(port)"
+            tunnelValues["AGENTDOCK_TAILSCALE_BIN"] = info.executablePath
+            tunnelValues["AGENTDOCK_TAILSCALE_PUBLIC_URL"] = info.publicURL
         }
 
         return PreparedConfiguration(
             environment: renderEnvironment(values),
             tunnelEnvironment: renderEnvironment(tunnelValues),
             tunnelToken: tunnelToken,
+            tailscalePublicURL: tailscalePublicURL,
             authToken: authToken,
             oauthPassword: oauthPassword
         )

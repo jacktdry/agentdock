@@ -27,6 +27,59 @@ struct InstallerConfigurationTests {
         let reusedToken = try reuseNamed.validatedTunnelToken()
         precondition(reusedToken == nil)
 
+        let tailscale = InstallRequest(mode: .tailscale, serverURL: "", tunnelToken: "")
+        let tailscaleServerURL = try tailscale.validatedServerURL()
+        let tailscaleToken = try tailscale.validatedTunnelToken()
+        precondition(tailscaleServerURL == nil)
+        precondition(tailscaleToken == nil)
+        precondition(TunnelMode.local.provider == .none)
+        precondition(TunnelMode.quick.provider == .cloudflare)
+        precondition(TunnelMode.named.provider == .cloudflare)
+        precondition(TunnelMode.tailscale.provider == .tailscale)
+
+        let tailscaleStatus = """
+        {
+          "BackendState": "Running",
+          "Self": {
+            "DNSName": "agentdock-mac.example.ts.net.",
+            "Online": true,
+            "Capabilities": ["funnel", "https"]
+          }
+        }
+        """
+        let parsedTailscaleURL = try TailscaleFunnelSupport.publicURL(
+            fromStatusJSON: Data(tailscaleStatus.utf8)
+        )
+        precondition(parsedTailscaleURL == "https://agentdock-mac.example.ts.net")
+
+        let tailscaleOffline = """
+        {
+          "BackendState": "Stopped",
+          "Self": {
+            "DNSName": "agentdock-mac.example.ts.net.",
+            "Online": false,
+            "Capabilities": ["funnel", "https"]
+          }
+        }
+        """
+        expectFailure(L10n.text("Tailscale is not connected.")) {
+            _ = try TailscaleFunnelSupport.publicURL(fromStatusJSON: Data(tailscaleOffline.utf8))
+        }
+
+        let tailscaleWithoutFunnel = """
+        {
+          "BackendState": "Running",
+          "Self": {
+            "DNSName": "agentdock-mac.example.ts.net.",
+            "Online": true,
+            "Capabilities": ["https"]
+          }
+        }
+        """
+        expectFailure(L10n.text("Tailscale Funnel is not enabled for this device or tailnet.")) {
+            _ = try TailscaleFunnelSupport.publicURL(fromStatusJSON: Data(tailscaleWithoutFunnel.utf8))
+        }
+
         let environmentText = """
         # preserved comment
         AGENTDOCK_PORT=8765

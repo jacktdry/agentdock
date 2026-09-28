@@ -385,7 +385,7 @@ final class ServiceController: @unchecked Sendable {
         switch try configuredTunnelMode() {
         case .local:
             try setTunnelEnabled(false)
-        case .quick, .named:
+        case .quick, .named, .tailscale:
             try setTunnelEnabled(true)
         }
     }
@@ -800,7 +800,7 @@ final class ServiceController: @unchecked Sendable {
         switch mode {
         case .local:
             return tunnelService.status == .notRegistered || tunnelService.status == .notFound
-        case .quick, .named:
+        case .quick, .named, .tailscale:
             return tunnelService.status == .enabled
                 && !registrationVersionMismatch(label: Self.tunnelLabel)
                 && launchdProcessID(label: Self.tunnelLabel) != nil

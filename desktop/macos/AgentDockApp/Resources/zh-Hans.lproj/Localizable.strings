@@ -366,3 +366,10 @@
 "Experimental build · %@" = "实验构建 · %@";
 "Upstream update available" = "上游有新版本";
 "This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely." = "此实验构建来自 %@。AgentDock 只会检查上游 Release，不会自动覆盖当前实验版本。请先同步 Fork 并重新构建后再安全更新。";
+"Tailscale Funnel" = "Tailscale Funnel";
+"Expose AgentDock through Tailscale Funnel using this Mac's current Tailscale DNS name. Tailscale must be signed in and Funnel must be allowed for this tailnet." = "通过 Tailscale Funnel 使用这台 Mac 当前的 Tailscale DNS 名称公开 AgentDock。Tailscale 必须已登录，并且此 tailnet 必须允许 Funnel。";
+"Tailscale is not installed or its CLI is unavailable." = "未安装 Tailscale，或其 CLI 不可用。";
+"Unable to read Tailscale status." = "无法读取 Tailscale 状态。";
+"Tailscale is not connected." = "Tailscale 未连接。";
+"Tailscale Funnel is not enabled for this device or tailnet." = "当前设备或 tailnet 未启用 Tailscale Funnel。";
+"Unable to determine the Tailscale DNS name." = "无法确定 Tailscale DNS 名称。";

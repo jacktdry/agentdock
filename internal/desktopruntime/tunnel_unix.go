@@ -32,7 +32,7 @@ func loadTunnelEnvironment(runtimeRoot string) (unixRuntimeManifest, string, map
 
 func tunnelMode(values map[string]string) string {
 	mode := strings.ToLower(strings.TrimSpace(values["AGENTDOCK_TUNNEL_MODE"]))
-	if mode != "quick" && mode != "named" {
+	if mode != "quick" && mode != "named" && mode != "tailscale" {
 		return "none"
 	}
 	return mode
@@ -52,7 +52,7 @@ func platformTunnelStatus(ctx context.Context, runtimeRoot string) (TunnelStatus
 	if mode == "quick" {
 		data, _ := os.ReadFile(filepath.Join(root, "quick-tunnel-url.txt"))
 		publicURL = strings.TrimSpace(string(data))
-	} else if mode == "named" {
+	} else if mode == "named" || mode == "tailscale" {
 		_, _, core, coreErr := loadCoreEnvironment(runtimeRoot)
 		if coreErr == nil {
 			publicURL = strings.TrimSpace(core["AGENTDOCK_SERVER_URL"])
@@ -126,8 +126,18 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 		}
 		core["AGENTDOCK_SERVER_URL"] = origin
 		core["AGENTDOCK_OAUTH_ENABLED"] = "true"
+	case "tailscale":
+		binary, publicURL, err := resolveTailscaleFunnelInfo(ctx, tunnelValues["AGENTDOCK_TAILSCALE_BIN"])
+		if err != nil {
+			return err
+		}
+		tunnelValues["AGENTDOCK_TUNNEL_TARGET"] = strings.TrimSuffix(healthURL(core), "/healthz")
+		tunnelValues["AGENTDOCK_TAILSCALE_BIN"] = binary
+		tunnelValues["AGENTDOCK_TAILSCALE_PUBLIC_URL"] = publicURL
+		core["AGENTDOCK_SERVER_URL"] = publicURL
+		core["AGENTDOCK_OAUTH_ENABLED"] = "true"
 	default:
-		return errors.New("Tunnel 模式必须是 none、quick 或 named")
+		return errors.New("Tunnel 模式必须是 none、quick、named 或 tailscale")
 	}
 	if err := writeEnvironment(manifest.EnvironmentFile, core); err != nil {
 		return err
@@ -225,6 +235,8 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		command.Stdout = stdout
 		command.Stderr = stderr
 		return command.Run()
+	case "tailscale":
+		return runTailscaleFunnel(ctx, values, stdout, stderr)
 	default:
 		return errors.New("Tunnel 模式为 none")
 	}

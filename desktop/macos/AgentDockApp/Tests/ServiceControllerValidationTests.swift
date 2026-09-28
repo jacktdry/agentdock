@@ -84,6 +84,7 @@ struct ServiceControllerValidationTests {
             ("none", TunnelMode.local),
             ("quick", TunnelMode.quick),
             ("named", TunnelMode.named),
+            ("tailscale", TunnelMode.tailscale),
             ("unexpected", TunnelMode.local),
         ] {
             try Data("AGENTDOCK_TUNNEL_MODE='\(rawMode)'\n".utf8).write(to: paths.tunnelEnvironment)
@@ -245,6 +246,7 @@ struct ServiceControllerValidationTests {
 
         precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .quick, coreHealthy: true))
         precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .named, coreHealthy: true))
+        precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .tailscale, coreHealthy: true))
         precondition(!BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .local, coreHealthy: true))
         precondition(!BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .named, coreHealthy: false))
 

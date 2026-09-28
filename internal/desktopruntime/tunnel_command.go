@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/desktopcontrol"
@@ -69,18 +70,18 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		flags := flag.NewFlagSet("agentdock tunnel configure", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		runtimeRoot := flags.String("runtime-root", "", "AgentDock 桌面运行目录")
-		mode := flags.String("mode", "", "Tunnel 模式：none、quick 或 named")
+		mode := flags.String("mode", "", "Tunnel 模式：none、quick、named，macOS/Linux 另支持 tailscale")
 		serverURL := flags.String("server-url", "", "Named Tunnel HTTPS Origin")
 		tokenFile := flags.String("token-file", "", "临时 Tunnel Token 文件")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
 		if flags.NArg() != 0 || strings.TrimSpace(*runtimeRoot) == "" {
-			return errors.New("用法：agentdock tunnel configure --runtime-root <目录> --mode <none|quick|named> [--server-url <HTTPS Origin>] [--token-file <文件>]")
+			return errors.New("用法：agentdock tunnel configure --runtime-root <目录> --mode <none|quick|named|tailscale> [--server-url <HTTPS Origin>] [--token-file <文件>]")
 		}
 		normalizedMode := strings.ToLower(strings.TrimSpace(*mode))
-		if normalizedMode != "none" && normalizedMode != "quick" && normalizedMode != "named" {
-			return errors.New("tunnel configure 的 mode 必须是 none、quick 或 named")
+		if !supportedTunnelConfigureMode(normalizedMode) {
+			return errors.New("tunnel configure 的 mode 必须是 none、quick、named，macOS/Linux 另支持 tailscale")
 		}
 		request := TunnelConfigureRequest{
 			RuntimeRoot: *runtimeRoot,
@@ -113,6 +114,17 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		return json.NewEncoder(stdout).Encode(serviceCommandResult{Action: "autostart", Completed: true})
 	default:
 		return tunnelCommandUsageError()
+	}
+}
+
+func supportedTunnelConfigureMode(mode string) bool {
+	switch mode {
+	case "none", "quick", "named":
+		return true
+	case "tailscale":
+		return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+	default:
+		return false
 	}
 }
 

@@ -366,3 +366,10 @@
 "Experimental build · %@" = "Experimental build · %@";
 "Upstream update available" = "Upstream update available";
 "This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely." = "This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely.";
+"Tailscale Funnel" = "Tailscale Funnel";
+"Expose AgentDock through Tailscale Funnel using this Mac's current Tailscale DNS name. Tailscale must be signed in and Funnel must be allowed for this tailnet." = "Expose AgentDock through Tailscale Funnel using this Mac's current Tailscale DNS name. Tailscale must be signed in and Funnel must be allowed for this tailnet.";
+"Tailscale is not installed or its CLI is unavailable." = "Tailscale is not installed or its CLI is unavailable.";
+"Unable to read Tailscale status." = "Unable to read Tailscale status.";
+"Tailscale is not connected." = "Tailscale is not connected.";
+"Tailscale Funnel is not enabled for this device or tailnet." = "Tailscale Funnel is not enabled for this device or tailnet.";
+"Unable to determine the Tailscale DNS name." = "Unable to determine the Tailscale DNS name.";

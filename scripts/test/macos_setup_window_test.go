@@ -84,6 +84,43 @@ func TestMacOSUpdateCheckDoesNotLockUnrelatedControls(t *testing.T) {
 	}
 }
 
+func TestMacOSSetupWindowSupportsTailscaleFunnel(t *testing.T) {
+	root := filepath.Join("..", "..", "desktop", "macos", "AgentDockApp")
+	setupData, err := os.ReadFile(filepath.Join(root, "Sources", "SetupWindowController.swift"))
+	if err != nil {
+		t.Fatalf("read SetupWindowController.swift: %v", err)
+	}
+	setup := string(setupData)
+	for _, want := range []string{
+		`L10n.text("Tailscale Funnel")`,
+		`publicMode.widthAnchor.constraint(equalToConstant: 500)`,
+		`case .tailscale: return 3`,
+		`case 3: return .tailscale`,
+		`mode = (try? service.configuredTunnelMode()) ?? .local`,
+	} {
+		if !strings.Contains(setup, want) {
+			t.Fatalf("macOS setup window missing Tailscale Funnel contract %q", want)
+		}
+	}
+
+	configData, err := os.ReadFile(filepath.Join(root, "Sources", "InstallerConfiguration.swift"))
+	if err != nil {
+		t.Fatalf("read InstallerConfiguration.swift: %v", err)
+	}
+	config := string(configData)
+	for _, want := range []string{
+		`enum TunnelProvider: String`,
+		`case tailscale`,
+		`case .quick, .named: return .cloudflare`,
+		`case .tailscale: return .tailscale`,
+		`process.arguments = ["status", "--json"]`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("macOS tunnel configuration missing Tailscale provider contract %q", want)
+		}
+	}
+}
+
 func TestMacOSSetupWindowUsesResponsiveScrollableLayout(t *testing.T) {
 	root := filepath.Join("..", "..", "desktop", "macos", "AgentDockApp")
 	setupData, err := os.ReadFile(filepath.Join(root, "Sources", "SetupWindowController.swift"))
