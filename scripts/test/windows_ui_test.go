@@ -27,6 +27,55 @@ func TestWindowsControlPanelPrivilegeModeCopyStaysUserFacing(t *testing.T) {
 	}
 }
 
+func TestWindowsControlPanelRechecksPublicEndpointAfterRecovery(t *testing.T) {
+	path := filepath.Join("..", "..", "desktop", "windows", "control-panel", "MainWindow.xaml.cs")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read MainWindow.xaml.cs: %v", err)
+	}
+	content := string(data)
+	helperStart := strings.Index(content, `private void InvalidatePublicAutoTestCache()`)
+	actionStart := strings.Index(content, `private async Task<bool> ExecuteActionAsync(`)
+	if helperStart < 0 || actionStart <= helperStart {
+		t.Fatal("Windows public endpoint cache invalidation helper is missing")
+	}
+	helper := content[helperStart:actionStart]
+	for _, want := range []string{`_lastAutoTestOrigin = "";`, `_lastAutoTestAt = DateTimeOffset.MinValue;`} {
+		if !strings.Contains(helper, want) {
+			t.Fatalf("Windows public endpoint cache helper must reset %q", want)
+		}
+	}
+
+	for _, want := range []string{
+		`private void InvalidatePublicAutoTestCache()`,
+		`invalidatePublicAutoTestCache: action is "start" or "restart"`,
+		`"tunnel-configure",` + "\n" + `            invalidatePublicAutoTestCache: true`,
+		`"tunnel-regenerate",` + "\n" + `            invalidatePublicAutoTestCache: true`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("Windows public endpoint recheck contract missing %q", want)
+		}
+	}
+
+	actionEnd := strings.Index(content, `private Task RunCoreActionAsync(`)
+	if actionStart < 0 || actionEnd <= actionStart {
+		t.Fatal("Windows action execution contract is missing")
+	}
+	action := content[actionStart:actionEnd]
+	succeeded := strings.Index(action, `await action();`)
+	invalidated := strings.Index(action, `InvalidatePublicAutoTestCache();`)
+	refreshed := strings.Index(action, `await RefreshAsync();`)
+	if succeeded < 0 || invalidated <= succeeded || refreshed <= invalidated {
+		t.Fatal("public endpoint cache must be invalidated only after success and before refresh")
+	}
+	if !strings.Contains(action[succeeded:invalidated], `if (invalidatePublicAutoTestCache)`) {
+		t.Fatal("public endpoint cache invalidation must be opt-in")
+	}
+	if strings.Contains(content, `invalidatePublicAutoTestCache: action is "start" or "stop" or "restart"`) {
+		t.Fatal("stop must not invalidate the public endpoint cache")
+	}
+}
+
 func TestWindowsControlPanelSupportsPersistentLanguagePreference(t *testing.T) {
 	root := filepath.Join("..", "..", "desktop", "windows", "control-panel")
 	checks := map[string][]string{

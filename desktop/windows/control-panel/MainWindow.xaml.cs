@@ -184,11 +184,18 @@ public partial class MainWindow : Window
         PublicTestStatusText.Text = result.Message;
     }
 
+    private void InvalidatePublicAutoTestCache()
+    {
+        _lastAutoTestOrigin = "";
+        _lastAutoTestAt = DateTimeOffset.MinValue;
+    }
+
     private async Task<bool> ExecuteActionAsync(
         string pendingText,
         Func<Task> action,
         TextBlock? statusTarget = null,
-        string diagnosticAction = "")
+        string diagnosticAction = "",
+        bool invalidatePublicAutoTestCache = false)
     {
         statusTarget ??= FooterStatusText;
         statusTarget.Text = pendingText;
@@ -196,6 +203,10 @@ public partial class MainWindow : Window
         {
             await action();
             statusTarget.Text = UiText.Get("OperationCompleted");
+            if (invalidatePublicAutoTestCache)
+            {
+                InvalidatePublicAutoTestCache();
+            }
             await RefreshAsync();
             return true;
         }
@@ -213,7 +224,8 @@ public partial class MainWindow : Window
     }
 
     private Task RunCoreActionAsync(string action, string pendingText) =>
-        ExecuteActionAsync(pendingText, () => _runtime.RunActionAsync(action), diagnosticAction: action);
+        ExecuteActionAsync(pendingText, () => _runtime.RunActionAsync(action), diagnosticAction: action,
+            invalidatePublicAutoTestCache: action is "start" or "restart");
 
     private async void StartButton_Click(object sender, RoutedEventArgs e) => await RunCoreActionAsync("start", UiText.Get("Starting"));
     private async void StopButton_Click(object sender, RoutedEventArgs e) => await RunCoreActionAsync("stop", UiText.Get("Stopping"));
@@ -306,13 +318,13 @@ public partial class MainWindow : Window
         {
             PublicMcpTextBox.Text = "";
             PublicTestStatusText.Text = UiText.Get("GeneratingTemporaryAddress");
-            _lastAutoTestOrigin = "";
         }
         await ExecuteActionAsync(
             UiText.Get("SwitchingPublicAccess"),
             () => _runtime.SetTunnelModeAsync(mode, ServerUrlTextBox.Text.Trim(), TunnelTokenPasswordBox.Password),
             TunnelActionStatusText,
-            "tunnel-configure");
+            "tunnel-configure",
+            invalidatePublicAutoTestCache: true);
         TunnelTokenPasswordBox.Clear();
     }
 
@@ -321,12 +333,12 @@ public partial class MainWindow : Window
         PublicMcpTextBox.Text = "";
         PublicTestStatusText.Text = UiText.Get("GeneratingTemporaryAddress");
         TunnelActionStatusText.Text = UiText.Get("OldAddressHidden");
-        _lastAutoTestOrigin = "";
         await ExecuteActionAsync(
             UiText.Get("OldAddressHidden"),
             () => _runtime.RegenerateQuickTunnelAsync(),
             TunnelActionStatusText,
-            "tunnel-regenerate");
+            "tunnel-regenerate",
+            invalidatePublicAutoTestCache: true);
     }
 
     private void AcpOverviewToggle_Changed(object sender, RoutedEventArgs e)
