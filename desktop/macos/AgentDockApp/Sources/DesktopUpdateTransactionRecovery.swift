@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 private struct DesktopUpdateTransactionEnvelope: Decodable {
@@ -37,7 +38,11 @@ enum DesktopUpdateTransactionRecovery {
         return transaction.state == "trial" || transaction.state == "rolling_back"
     }
 
-    static func recoverIfNeeded(paths: AppPaths) async -> Bool {
+    static func recoverIfNeeded(
+        paths: AppPaths,
+        recoveryTimeout: TimeInterval = 90,
+        journalSettleTimeout: TimeInterval = 2
+    ) async -> Bool {
         let transactionFileExists = FileManager.default.fileExists(atPath: paths.updateTransaction.path)
         guard !transactionFileExists || loadTransaction(paths: paths) != nil else {
             NSLog("AgentDock update recovery: durable transaction journal is unreadable.")
@@ -46,7 +51,11 @@ enum DesktopUpdateTransactionRecovery {
         guard hasActiveTransaction(paths: paths) else { return true }
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: recoverSynchronouslyIfNeeded(paths: paths))
+                continuation.resume(returning: recoverSynchronouslyIfNeeded(
+                    paths: paths,
+                    recoveryTimeout: recoveryTimeout,
+                    journalSettleTimeout: journalSettleTimeout
+                ))
             }
         }
     }
@@ -68,7 +77,11 @@ enum DesktopUpdateTransactionRecovery {
         return transaction
     }
 
-    private static func recoverSynchronouslyIfNeeded(paths: AppPaths) -> Bool {
+    private static func recoverSynchronouslyIfNeeded(
+        paths: AppPaths,
+        recoveryTimeout: TimeInterval,
+        journalSettleTimeout: TimeInterval
+    ) -> Bool {
         guard let transaction = pendingTransaction(paths: paths) else { return true }
         guard let plan = transaction.macOS else {
             NSLog("AgentDock update recovery: pending macOS transaction has no platform plan.")
@@ -79,9 +92,12 @@ enum DesktopUpdateTransactionRecovery {
             .appendingPathComponent("update/arbiters", isDirectory: true)
             .standardizedFileURL
             .path
-        let arbiter = URL(fileURLWithPath: plan.sourceArbiterPath).standardizedFileURL
-        let resolvedArbiter = arbiter.resolvingSymlinksInPath().path
-        let prefix = allowedRoot.hasSuffix("/") ? allowedRoot : allowedRoot + "/"
+        guard let resolvedAllowedRoot = canonicalPath(allowedRoot),
+              let resolvedArbiter = canonicalPath(plan.sourceArbiterPath) else {
+            NSLog("AgentDock update recovery: source Arbiter path could not be resolved safely.")
+            return false
+        }
+        let prefix = resolvedAllowedRoot.hasSuffix("/") ? resolvedAllowedRoot : resolvedAllowedRoot + "/"
         guard resolvedArbiter.hasPrefix(prefix),
               FileManager.default.isExecutableFile(atPath: resolvedArbiter) else {
             NSLog("AgentDock update recovery: source Arbiter path is not trusted: %@", resolvedArbiter)
@@ -104,7 +120,7 @@ enum DesktopUpdateTransactionRecovery {
             return false
         }
 
-        let deadline = Date().addingTimeInterval(90)
+        let deadline = Date().addingTimeInterval(max(0, recoveryTimeout))
         while process.isRunning, Date() < deadline {
             Thread.sleep(forTimeInterval: 0.1)
         }
@@ -119,6 +135,37 @@ enum DesktopUpdateTransactionRecovery {
             NSLog("AgentDock update recovery: source Arbiter exited with status %d.", process.terminationStatus)
             return false
         }
-        return true
+
+        // Exit status alone is not enough. The durable journal is the source of truth: a
+        // helper that exits 0 without resolving trial/rolling_back must not let the new App
+        // acknowledge the handoff and clear update coordination files.
+        let settleDeadline = Date().addingTimeInterval(max(0, journalSettleTimeout))
+        repeat {
+            if durableTransactionIsSettled(paths: paths) {
+                return true
+            }
+            if Date() >= settleDeadline {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        } while true
+
+        NSLog("AgentDock update recovery: source Arbiter exited successfully but the durable transaction did not settle.")
+        return false
+    }
+
+    private static func canonicalPath(_ path: String) -> String? {
+        path.withCString { rawPath in
+            guard let resolved = Darwin.realpath(rawPath, nil) else { return nil }
+            defer { free(resolved) }
+            return String(cString: resolved)
+        }
+    }
+
+    private static func durableTransactionIsSettled(paths: AppPaths) -> Bool {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: paths.updateTransaction.path) else { return true }
+        guard let transaction = loadTransaction(paths: paths) else { return false }
+        return transaction.state != "trial" && transaction.state != "rolling_back"
     }
 }

@@ -54,10 +54,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog(
                 "AgentDock found a legacy update result that no longer matches the active App; reconciling the current installation."
             )
-            _ = DesktopUpdateResult.consume(from: service.paths.updateResult)
-            DesktopUpdateServiceState.remove(at: service.paths.updateServiceState)
-            DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
+            let discarded = DesktopUpdateResult.discard(from: service.paths.updateResult)
+            if discarded {
+                DesktopUpdateServiceState.remove(at: service.paths.updateServiceState)
+                DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
+            } else {
+                // The trigger could not be moved out of its well-known path. Keep the
+                // coordination files so the next launch can retry without losing evidence.
+                NSLog("AgentDock could not discard the stale legacy update trigger; preserving update coordination files.")
+            }
             pendingUpdateResult = nil
+            // This trigger is known stale for the active App. Ignore it for this launch even
+            // when the filesystem prevented cleanup; a future launch will retry the discard.
             updateResultExists = false
         }
 
@@ -70,9 +78,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // path can only reopen the finishing window on every launch. Durable diagnostics live
             // in update/transaction.json and update/result.json.
             NSLog("AgentDock found a stale or malformed update result without an active transaction; discarding the boot trigger.")
-            _ = DesktopUpdateResult.discard(from: service.paths.updateResult)
-            DesktopUpdateServiceState.remove(at: service.paths.updateServiceState)
-            DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
+            let discarded = DesktopUpdateResult.discard(from: service.paths.updateResult)
+            if discarded {
+                DesktopUpdateServiceState.remove(at: service.paths.updateServiceState)
+                DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
+            } else {
+                NSLog("AgentDock could not discard the stale update trigger; preserving update coordination files for a later retry.")
+            }
+            // There is no active durable transaction, so a stale trigger must not lock the
+            // current launch in the finishing UI. Leave the file on disk when cleanup failed
+            // and retry on the next launch instead.
             updateResultExists = false
         }
 
