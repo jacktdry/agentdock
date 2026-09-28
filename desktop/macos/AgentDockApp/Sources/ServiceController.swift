@@ -21,16 +21,35 @@ struct DesktopUpdateRegistrationState {
 }
 
 enum BackgroundServiceLifecyclePolicy {
-    static func shouldSelfHealCore(
-        registration: SMAppService.Status,
-        healthPassed: Bool,
-        registrationVersionMismatch: Bool = false
-    ) -> Bool {
-        registration == .enabled && (!healthPassed || registrationVersionMismatch)
+    static func shouldKickstart(registration: SMAppService.Status, processID: Int?) -> Bool {
+        registration == .enabled && processID == nil
     }
 
     static func shouldRunTunnel(mode: TunnelMode, coreHealthy: Bool) -> Bool {
         coreHealthy && mode != .local
+    }
+}
+
+private actor BackgroundServiceLifecycleGate {
+    private var locked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        if !locked {
+            locked = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        guard !waiters.isEmpty else {
+            locked = false
+            return
+        }
+        waiters.removeFirst().resume()
     }
 }
 
@@ -107,6 +126,7 @@ final class ServiceController: @unchecked Sendable {
     static let tunnelPlistName = "com.uvwt.agentdock.tunnel.plist"
 
     let paths: AppPaths
+    private let lifecycleGate = BackgroundServiceLifecycleGate()
 
     init(paths: AppPaths = AppPaths()) {
         self.paths = paths
@@ -159,6 +179,17 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func start() async throws {
+        await lifecycleGate.acquire()
+        do {
+            try await startLocked()
+            await lifecycleGate.release()
+        } catch {
+            await lifecycleGate.release()
+            throw error
+        }
+    }
+
+    private func startLocked() async throws {
         // Public access must not stay online while Core is unavailable. This also clears
         // stale Tunnel registrations left behind by an App bundle replacement.
         try setTunnelEnabled(false)
@@ -167,6 +198,17 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func stop() async throws {
+        await lifecycleGate.acquire()
+        do {
+            try stopLocked()
+            await lifecycleGate.release()
+        } catch {
+            await lifecycleGate.release()
+            throw error
+        }
+    }
+
+    private func stopLocked() throws {
         // "Stop AgentDock" means stop the whole externally reachable stack. Leaving the
         // Tunnel running after Core exits only exposes a persistent HTTP 502 endpoint.
         var failures: [String] = []
@@ -203,10 +245,23 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func restart() async throws {
+        await lifecycleGate.acquire()
+        do {
+            try await restartLocked()
+            await lifecycleGate.release()
+        } catch {
+            await lifecycleGate.release()
+            throw error
+        }
+    }
+
+    private func restartLocked() async throws {
         try setTunnelEnabled(false)
         try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-        guard let configuration = ServiceConfiguration.load(from: paths.environment),
-              await waitForHealth(configuration: configuration) else {
+        try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
+        guard await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3),
+              let configuration = ServiceConfiguration.load(from: paths.environment),
+              await waitForHealth(configuration: configuration, timeout: 8) else {
             throw ValidationError(L10n.text("AgentDock Core was re-registered, but the health check did not pass."))
         }
         try await restoreConfiguredTunnel(coreHealthy: true)
@@ -273,6 +328,12 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func reconcileBackgroundServicesOnLaunch() async {
+        await lifecycleGate.acquire()
+        await reconcileBackgroundServicesOnLaunchLocked()
+        await lifecycleGate.release()
+    }
+
+    private func reconcileBackgroundServicesOnLaunchLocked() async {
         guard !LegacyDesktopRuntimeMigration.isPresent(paths: paths) else { return }
 
         switch coreService.status {
@@ -282,43 +343,27 @@ final class ServiceController: @unchecked Sendable {
                 return
             }
 
-            var coreHealthy = await waitForHealth(configuration: configuration, timeout: 3)
-            if BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
-                registration: coreService.status,
-                healthPassed: coreHealthy,
-                registrationVersionMismatch: registrationVersionMismatch(label: Self.coreLabel)
-            ) {
-                // SMAppService may preserve an enabled registration across a manual App bundle
-                // replacement even though launchd has not rebound the job to the active bundle.
-                // Keep the public Tunnel offline while repairing Core so users do not see a
-                // persistent 502 from an otherwise-live Cloudflare edge.
-                NSLog("AgentDock Core is registered but unhealthy after launch; re-registering background services.")
-                do {
-                    try setTunnelEnabled(false)
-                    try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-                    coreHealthy = await waitForHealth(configuration: configuration)
-                    guard coreHealthy else {
-                        throw ValidationError(L10n.text("AgentDock Core was re-registered, but the health check did not pass."))
-                    }
-                } catch {
-                    NSLog("AgentDock startup Core reconciliation failed: %@", error.localizedDescription)
-                    return
-                }
-            }
+            let registrationMismatch = registrationVersionMismatch(label: Self.coreLabel)
+            let runningPID = launchdProcessID(label: Self.coreLabel)
+            let quicklyHealthy = runningPID != nil
+                ? await waitForHealth(configuration: configuration, timeout: 1.5)
+                : false
 
-            guard coreHealthy else {
+            if registrationMismatch || !quicklyHealthy {
+                // Keep the public Tunnel offline while repairing Core so an old Tunnel cannot
+                // keep serving HTTP 502 during App replacement or launchd convergence.
                 do {
                     try setTunnelEnabled(false)
                 } catch {
-                    NSLog("AgentDock could not disable Tunnel while Core remained unhealthy: %@", error.localizedDescription)
+                    NSLog("AgentDock could not disable Tunnel before Core repair: %@", error.localizedDescription)
                 }
-                return
             }
 
             do {
-                try await restoreConfiguredTunnel(coreHealthy: coreHealthy)
+                _ = try await ensureCoreHealthyForStart()
+                try await restoreConfiguredTunnel(coreHealthy: true)
             } catch {
-                NSLog("AgentDock startup Tunnel reconciliation failed: %@", error.localizedDescription)
+                NSLog("AgentDock startup background-service reconciliation failed: %@", error.localizedDescription)
             }
 
         case .requiresApproval, .notRegistered, .notFound:
@@ -573,16 +618,48 @@ final class ServiceController: @unchecked Sendable {
             throw ValidationError(L10n.text("Configuration unavailable"))
         }
 
-        var coreHealthy = await waitForHealth(configuration: configuration, timeout: 5)
-        if BackgroundServiceLifecyclePolicy.shouldSelfHealCore(
-            registration: coreService.status,
-            healthPassed: coreHealthy,
-            registrationVersionMismatch: registrationVersionMismatch(label: Self.coreLabel)
-        ) {
-            NSLog("AgentDock Core registration is stale or unhealthy; performing one automatic re-registration.")
+        if registrationVersionMismatch(label: Self.coreLabel) {
+            NSLog("AgentDock Core registration belongs to an older App bundle; re-registering it.")
             try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-            coreHealthy = await waitForHealth(configuration: configuration)
         }
+
+        var didKickstart = false
+        if BackgroundServiceLifecyclePolicy.shouldKickstart(
+            registration: coreService.status,
+            processID: launchdProcessID(label: Self.coreLabel)
+        ) {
+            NSLog("AgentDock Core is registered but has no running process; kickstarting it.")
+            try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
+            didKickstart = true
+        }
+
+        var processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+        var coreHealthy = processReady
+            ? await waitForHealth(configuration: configuration, timeout: 5)
+            : false
+        if coreHealthy {
+            return configuration
+        }
+
+        if !didKickstart {
+            NSLog("AgentDock Core is loaded but unhealthy; kickstarting it once before re-registration.")
+            try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
+            processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+            coreHealthy = processReady
+                ? await waitForHealth(configuration: configuration, timeout: 5)
+                : false
+            if coreHealthy {
+                return configuration
+            }
+        }
+
+        NSLog("AgentDock Core did not recover after kickstart; performing one automatic re-registration.")
+        try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
+        try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
+        processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+        coreHealthy = processReady
+            ? await waitForHealth(configuration: configuration, timeout: 8)
+            : false
 
         guard coreHealthy else {
             throw ValidationError(L10n.text("AgentDock background service is enabled, but the health check did not pass."))
@@ -597,26 +674,30 @@ final class ServiceController: @unchecked Sendable {
             return
         }
 
-        var tunnelWasReregistered = false
         if tunnelService.status == .enabled,
            registrationVersionMismatch(label: Self.tunnelLabel) {
             NSLog("AgentDock Tunnel registration belongs to an older App bundle; re-registering it.")
             try restartTunnel()
-            tunnelWasReregistered = true
         } else {
             try setTunnelEnabled(true)
         }
 
-        if !(await waitForTunnelProcess()) {
-            guard !tunnelWasReregistered else {
-                NSLog("AgentDock Tunnel process did not stabilize after re-registration.")
-                return
-            }
-            NSLog("AgentDock Tunnel is enabled but its process is not stable; re-registering it once.")
+        var processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 2)
+        if !processReady {
+            NSLog("AgentDock Tunnel is registered but has no stable process; kickstarting it.")
+            try kickstartRegisteredService(label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
+            processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 4)
+        }
+
+        if !processReady {
+            NSLog("AgentDock Tunnel did not recover after kickstart; re-registering it once.")
             try restartTunnel()
-            if !(await waitForTunnelProcess()) {
-                NSLog("AgentDock Tunnel process did not stabilize after automatic re-registration.")
-            }
+            try kickstartRegisteredService(label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
+            processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 4)
+        }
+
+        if !processReady {
+            NSLog("AgentDock Tunnel process did not stabilize after automatic recovery.")
         }
     }
 
@@ -770,19 +851,19 @@ final class ServiceController: @unchecked Sendable {
         }
     }
 
-    private func isLoaded(label: String) -> Bool {
+    private func launchdJobPresent(label: String) -> Bool {
         (try? runProcess(
             executable: "/bin/launchctl",
             arguments: ["print", "\(serviceDomain)/\(label)"]
         ).status) == 0
     }
 
-    private func launchdProcessID(label: String) -> Int? {
-        guard let result = try? runProcess(
-            executable: "/bin/launchctl",
-            arguments: ["print", "\(serviceDomain)/\(label)"]
-        ), result.status == 0 else { return nil }
-        for rawLine in result.output.split(whereSeparator: \.isNewline) {
+    private func isLoaded(label: String) -> Bool {
+        launchdProcessID(label: label) != nil
+    }
+
+    static func processID(fromLaunchctlOutput output: String) -> Int? {
+        for rawLine in output.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard line.hasPrefix("pid = "),
                   let pid = Int(line.dropFirst("pid = ".count)),
@@ -790,6 +871,32 @@ final class ServiceController: @unchecked Sendable {
             return pid
         }
         return nil
+    }
+
+    private func launchdProcessID(label: String) -> Int? {
+        guard let result = try? runProcess(
+            executable: "/bin/launchctl",
+            arguments: ["print", "\(serviceDomain)/\(label)"]
+        ), result.status == 0 else { return nil }
+        return Self.processID(fromLaunchctlOutput: result.output)
+    }
+
+    private func kickstartRegisteredService(label: String, displayName: String) throws {
+        let result = try runProcess(
+            executable: "/bin/launchctl",
+            arguments: ["kickstart", "-k", "\(serviceDomain)/\(label)"]
+        )
+        guard result.status == 0 else {
+            throw ValidationError(commandError(result.output, action: displayName))
+        }
+    }
+
+    private func waitForLaunchdProcess(label: String, timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: self.waitForStableLaunchdProcess(label: label, timeout: timeout))
+            }
+        }
     }
 
     private func waitForStableLaunchdProcess(label: String, timeout: TimeInterval) -> Bool {
@@ -817,10 +924,10 @@ final class ServiceController: @unchecked Sendable {
     private func waitUntilUnregistered(service: SMAppService, label: String, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if !isLoaded(label: label), Self.isUnregistered(service.status) { return true }
+            if !launchdJobPresent(label: label), Self.isUnregistered(service.status) { return true }
             Thread.sleep(forTimeInterval: 0.1)
         }
-        return !isLoaded(label: label) && Self.isUnregistered(service.status)
+        return !launchdJobPresent(label: label) && Self.isUnregistered(service.status)
     }
 
     static func isUnregistered(_ status: SMAppService.Status) -> Bool {
