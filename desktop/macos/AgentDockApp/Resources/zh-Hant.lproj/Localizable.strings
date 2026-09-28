@@ -360,3 +360,9 @@
 "Command" = "命令";
 "Args JSON" = "參數 JSON";
 "Save" = "儲存";
+"Close Window" = "關閉視窗";
+"Experimental build · %@" = "實驗版本 · %@";
+"Minimize" = "最小化";
+"This experimental build comes from %@. AgentDock will only check upstream releases and will not replace this build automatically. Sync the fork and rebuild to update safely." = "此實驗版本來自 %@。AgentDock 只會檢查上游版本，不會自動以其取代此版本。請同步 fork 後重新編譯，以安全更新。";
+"Upstream update available" = "有可用的上游更新";
+"Window" = "視窗";
