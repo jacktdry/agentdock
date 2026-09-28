@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"syscall"
@@ -81,7 +82,15 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		}
 
 		startedAt := time.Now()
-		runErr := runCloudflaredOnce(ctx, runtime, logs)
+		var runErr error
+		if runtime.mode == "tailscale" {
+			runtime.tailscaleBinary, runErr = configuredTailscaleExecutable(runtime.root)
+			if runErr == nil {
+				runErr = runTailscaleOnce(ctx, runtime, guard, logs)
+			}
+		} else {
+			runErr = runCloudflaredOnce(ctx, runtime, logs)
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -92,10 +101,14 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		if stopped {
 			return nil
 		}
+		processName := "cloudflared"
+		if runtime.mode == "tailscale" {
+			processName = "tailscale"
+		}
 		if runErr != nil {
-			fmt.Fprintf(logs.stderr, "cloudflared 异常退出: %v\n", runErr)
+			fmt.Fprintf(logs.stderr, "%s 异常退出: %v\n", processName, runErr)
 		} else {
-			fmt.Fprintln(logs.stderr, "cloudflared 意外退出，准备自动恢复")
+			fmt.Fprintf(logs.stderr, "%s 意外退出，准备自动恢复\n", processName)
 		}
 
 		if runtime.mode == "quick" {
@@ -105,7 +118,7 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		}
 
 		retryDelay = nextTunnelRetryDelay(retryDelay, time.Since(startedAt))
-		fmt.Fprintf(logs.stderr, "将在 %s 后重启 cloudflared\n", retryDelay)
+		fmt.Fprintf(logs.stderr, "将在 %s 后重启 %s\n", retryDelay, processName)
 		stopped, err = guard.waitRetry(ctx, retryDelay)
 		if err != nil {
 			return err
@@ -157,7 +170,16 @@ func platformTunnelStatus(ctx context.Context, runtimeRoot string) (TunnelStatus
 	if err != nil {
 		return TunnelStatus{}, err
 	}
-	running, err := processRunningAtPath(runtime.manifest.CloudflaredBinary)
+	var running bool
+	if runtime.mode == "tailscale" {
+		runtime.tailscaleBinary, err = configuredTailscaleExecutable(runtime.root)
+		if err != nil {
+			return TunnelStatus{}, err
+		}
+		running, err = tailscaleRunning(runtime)
+	} else {
+		running, err = processRunningAtPath(runtime.manifest.CloudflaredBinary)
+	}
 	if err != nil {
 		return TunnelStatus{}, err
 	}
@@ -173,8 +195,12 @@ func platformTunnelStatus(ctx context.Context, runtimeRoot string) (TunnelStatus
 	if runtime.mode == "quick" {
 		ready = running && publicURL != ""
 	}
-	if runtime.mode == "named" {
+	if runtime.mode == "named" || runtime.mode == "tailscale" {
 		ready = running && publicURL != ""
+	}
+	if runtime.mode == "tailscale" && ready {
+		_, currentOrigin, statusErr := resolveTailscaleFunnelInfo(ctx, runtime.tailscaleBinary)
+		ready = tailscaleStatusReady(running, publicURL, currentOrigin, statusErr)
 	}
 	return TunnelStatus{
 		Mode:           runtime.mode,
@@ -233,6 +259,9 @@ func captureTunnelLogCursors(files tunnelFiles) (tunnelLogCursors, error) {
 func startTunnel(ctx context.Context, runtime tunnelRuntime) error {
 	if runtime.mode == "none" {
 		return nil
+	}
+	if runtime.mode == "tailscale" {
+		return startTailscaleTunnel(ctx, runtime)
 	}
 	if info, err := os.Stat(runtime.manifest.CloudflaredBinary); err != nil || info.IsDir() {
 		return fmt.Errorf("找不到 cloudflared.exe，请运行 Setup.exe 修复安装: %s", runtime.manifest.CloudflaredBinary)
@@ -301,6 +330,22 @@ func startTunnel(ctx context.Context, runtime tunnelRuntime) error {
 func stopTunnel(ctx context.Context, runtime tunnelRuntime) error {
 	if err := signalTunnelSupervisorStop(runtime.root); err != nil {
 		return err
+	}
+	if runtime.mode == "tailscale" {
+		if err := waitTunnelSupervisorStopped(ctx, runtime.root, 15*time.Second); err != nil {
+			return err
+		}
+		if _, err := os.Stat(filepath.Join(runtime.root, tailscalePIDFile)); errors.Is(err, os.ErrNotExist) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		binary, err := configuredTailscalePath(runtime.root)
+		if err != nil {
+			return err
+		}
+		runtime.tailscaleBinary = binary
+		return stopOwnedTailscaleProcess(ctx, runtime)
 	}
 	if err := StopBinaryProcesses(ctx, runtime.manifest.CloudflaredBinary, 15*time.Second); err != nil {
 		return fmt.Errorf("停止 cloudflared 失败: %w", err)

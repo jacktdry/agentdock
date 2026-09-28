@@ -113,6 +113,7 @@ public partial class MainWindow : Window
             LocalModeRadio.IsChecked = string.Equals(snapshot.TunnelMode, "none", StringComparison.OrdinalIgnoreCase);
             QuickModeRadio.IsChecked = string.Equals(snapshot.TunnelMode, "quick", StringComparison.OrdinalIgnoreCase);
             NamedModeRadio.IsChecked = string.Equals(snapshot.TunnelMode, "named", StringComparison.OrdinalIgnoreCase);
+            TailscaleModeRadio.IsChecked = string.Equals(snapshot.TunnelMode, "tailscale", StringComparison.OrdinalIgnoreCase);
             if (!ServerUrlTextBox.IsKeyboardFocusWithin &&
                 (string.Equals(snapshot.TunnelMode, "named", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ServerUrlTextBox.Text)))
             {
@@ -154,6 +155,12 @@ public partial class MainWindow : Window
             }
 
             UpdateTunnelModeUi();
+            if (TailscaleModeRadio.IsChecked == true)
+            {
+                TunnelActionStatusText.Text = snapshot.CloudflaredRunning
+                    ? UiText.Get("TailscaleFunnelRunning")
+                    : UiText.Get("TailscaleFunnelStopped");
+            }
             RefreshBrowserConnectionUi();
         }
         finally
@@ -283,6 +290,7 @@ public partial class MainWindow : Window
         var named = NamedModeRadio.IsChecked == true;
         var quick = QuickModeRadio.IsChecked == true;
         NamedTunnelGroup.IsEnabled = named;
+        NamedTunnelGroup.Visibility = TailscaleModeRadio.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
         RegenerateQuickButton.IsEnabled = quick;
     }
 
@@ -295,6 +303,10 @@ public partial class MainWindow : Window
         if (NamedModeRadio.IsChecked == true)
         {
             return "named";
+        }
+        if (TailscaleModeRadio.IsChecked == true)
+        {
+            return "tailscale";
         }
         return "none";
     }
@@ -310,7 +322,9 @@ public partial class MainWindow : Window
         }
         await ExecuteActionAsync(
             UiText.Get("SwitchingPublicAccess"),
-            () => _runtime.SetTunnelModeAsync(mode, ServerUrlTextBox.Text.Trim(), TunnelTokenPasswordBox.Password),
+            () => _runtime.SetTunnelModeAsync(mode,
+                mode == "named" ? ServerUrlTextBox.Text.Trim() : "",
+                mode == "named" ? TunnelTokenPasswordBox.Password : ""),
             TunnelActionStatusText,
             "tunnel-configure");
         TunnelTokenPasswordBox.Clear();

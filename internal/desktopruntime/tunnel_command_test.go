@@ -44,7 +44,7 @@ func TestSupportedTunnelConfigureMode(t *testing.T) {
 		t.Fatal("invalid tunnel mode was accepted")
 	}
 
-	wantTailscale := runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+	wantTailscale := runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows"
 	if got := supportedTunnelConfigureMode("tailscale"); got != wantTailscale {
 		t.Fatalf("tailscale support=%v want=%v on %s", got, wantTailscale, runtime.GOOS)
 	}

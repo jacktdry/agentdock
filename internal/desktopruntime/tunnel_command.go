@@ -70,7 +70,7 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		flags := flag.NewFlagSet("agentdock tunnel configure", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		runtimeRoot := flags.String("runtime-root", "", "AgentDock 桌面运行目录")
-		mode := flags.String("mode", "", "Tunnel 模式：none、quick、named，macOS/Linux 另支持 tailscale")
+		mode := flags.String("mode", "", "Tunnel 模式：none、quick、named、tailscale")
 		serverURL := flags.String("server-url", "", "Named Tunnel HTTPS Origin")
 		tokenFile := flags.String("token-file", "", "临时 Tunnel Token 文件")
 		if err := flags.Parse(args[1:]); err != nil {
@@ -81,7 +81,7 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		}
 		normalizedMode := strings.ToLower(strings.TrimSpace(*mode))
 		if !supportedTunnelConfigureMode(normalizedMode) {
-			return errors.New("tunnel configure 的 mode 必须是 none、quick、named，macOS/Linux 另支持 tailscale")
+			return errors.New("tunnel configure 的 mode 必须是 none、quick、named 或 tailscale")
 		}
 		request := TunnelConfigureRequest{
 			RuntimeRoot: *runtimeRoot,
@@ -122,7 +122,7 @@ func supportedTunnelConfigureMode(mode string) bool {
 	case "none", "quick", "named":
 		return true
 	case "tailscale":
-		return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+		return runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows"
 	default:
 		return false
 	}

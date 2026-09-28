@@ -133,12 +133,14 @@ public sealed class RuntimeService : IDisposable
         var nexus = ReadNexusDeviceStatus();
         var nexusConnected = includeNexusConnection && coreRunning && nexus.Paired && string.IsNullOrWhiteSpace(nexus.Error)
             && await ReadNexusConnectionAsync(binaryPath, cancellationToken);
-        var cloudflaredRunning = IsProcessRunningAtPath("cloudflared", manifest.CloudflaredBinary);
         var tunnelMode = ReadText(Path.Combine(RuntimeRoot, "cloudflared-mode.txt"));
         if (string.IsNullOrWhiteSpace(tunnelMode))
         {
             tunnelMode = string.IsNullOrWhiteSpace(manifest.TunnelMode) ? "none" : manifest.TunnelMode;
         }
+        var tunnelRunning = string.Equals(tunnelMode, "tailscale", StringComparison.OrdinalIgnoreCase)
+            ? IsOwnedTailscaleProcessRunning(RuntimeRoot)
+            : IsProcessRunningAtPath("cloudflared", manifest.CloudflaredBinary);
 
         return new RuntimeSnapshot(
             manifest,
@@ -146,7 +148,7 @@ public sealed class RuntimeService : IDisposable
             version,
             coreRunning,
             health.Healthy,
-            cloudflaredRunning,
+            tunnelRunning,
             localMcpUrl,
             publicOrigin,
             publicMcpUrl,
@@ -1577,6 +1579,27 @@ public sealed class RuntimeService : IDisposable
                     }
                 }
             });
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsOwnedTailscaleProcessRunning(string runtimeRoot)
+    {
+        var pidText = ReadText(Path.Combine(runtimeRoot, "tailscale-funnel.pid"));
+        var binaryPath = ReadText(Path.Combine(runtimeRoot, "tailscale-bin.txt"));
+        if (!int.TryParse(pidText, out var pid) || pid <= 0 || string.IsNullOrWhiteSpace(binaryPath))
+        {
+            return false;
+        }
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited && string.Equals(
+                Path.GetFullPath(process.MainModule?.FileName ?? ""),
+                Path.GetFullPath(binaryPath), StringComparison.OrdinalIgnoreCase);
         }
         catch
         {

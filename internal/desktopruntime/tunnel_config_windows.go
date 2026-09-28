@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,6 +24,20 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 	}
 
 	namedServerURL := ""
+	tailscaleBinary, tailscalePublicURL := "", ""
+	if request.Mode == "tailscale" {
+		configured := strings.TrimSpace(os.Getenv("AGENTDOCK_TAILSCALE_BIN"))
+		if configured == "" {
+			configured, err = readTrimmedText(filepath.Join(runtime.root, "tailscale-bin.txt"))
+			if err != nil {
+				return err
+			}
+		}
+		tailscaleBinary, tailscalePublicURL, err = resolveTailscaleFunnelInfo(ctx, configured)
+		if err != nil {
+			return err
+		}
+	}
 	if request.Mode == "named" {
 		candidate := strings.TrimSpace(request.ServerURL)
 		if candidate == "" {
@@ -116,6 +131,30 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 			return err
 		}
 		runtime.mode = "named"
+		return startTunnel(ctx, runtime)
+	case "tailscale":
+		if err := writeRuntimeText(filepath.Join(runtime.root, "tailscale-bin.txt"), tailscaleBinary); err != nil {
+			return err
+		}
+		if err := writeRuntimeText(runtime.files.serverURL, tailscalePublicURL); err != nil {
+			return err
+		}
+		if err := writeRuntimeText(runtime.files.mode, "tailscale"); err != nil {
+			return err
+		}
+		if err := os.Remove(runtime.files.quickURL); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := runtime.updateManifest("tailscale", tailscalePublicURL); err != nil {
+			return err
+		}
+		if err := platformSetTunnelAutostart(ctx, runtime.root, true); err != nil {
+			return err
+		}
+		if err := platformServiceAction(ctx, runtime.root, "restart"); err != nil {
+			return err
+		}
+		runtime.mode = "tailscale"
 		return startTunnel(ctx, runtime)
 	default:
 		return fmt.Errorf("不支持的公网模式：%s", request.Mode)

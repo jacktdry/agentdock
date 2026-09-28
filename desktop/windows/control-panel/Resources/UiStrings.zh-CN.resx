@@ -108,6 +108,10 @@
   <data name="CustomDomainDescription" xml:space="preserve">
     <value>通过 Cloudflare Tunnel 使用自己的 HTTPS 域名，完成配置后即可获得稳定的公网地址。</value>
   </data>
+  <data name="TailscaleFunnel" xml:space="preserve"><value>Tailscale Funnel</value></data>
+  <data name="TailscaleFunnelDescription" xml:space="preserve"><value>通过此设备的 Tailscale Funnel HTTPS 地址公开 AgentDock。需要先连接 Tailscale 并启用 Funnel 和 HTTPS。</value></data>
+  <data name="TailscaleFunnelRunning" xml:space="preserve"><value>Tailscale Funnel 正在运行，公网端点显示在上方。</value></data>
+  <data name="TailscaleFunnelStopped" xml:space="preserve"><value>Tailscale Funnel 已停止，请检查 Tailscale 状态并启动 Tunnel。</value></data>
   <data name="CustomDomainConfiguration" xml:space="preserve">
     <value>固定域名配置</value>
   </data>

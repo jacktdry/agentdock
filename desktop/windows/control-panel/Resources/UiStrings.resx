@@ -108,6 +108,10 @@
   <data name="CustomDomainDescription" xml:space="preserve">
     <value>Use your own HTTPS domain through Cloudflare Tunnel. Once configured, the public address remains stable.</value>
   </data>
+  <data name="TailscaleFunnel" xml:space="preserve"><value>Tailscale Funnel</value></data>
+  <data name="TailscaleFunnelDescription" xml:space="preserve"><value>Publish AgentDock through this device's Tailscale Funnel HTTPS address. Tailscale must be connected with Funnel and HTTPS enabled.</value></data>
+  <data name="TailscaleFunnelRunning" xml:space="preserve"><value>Tailscale Funnel is running. The public endpoint appears above.</value></data>
+  <data name="TailscaleFunnelStopped" xml:space="preserve"><value>Tailscale Funnel is stopped. Check Tailscale status and start the tunnel.</value></data>
   <data name="CustomDomainConfiguration" xml:space="preserve">
     <value>Custom domain configuration</value>
   </data>

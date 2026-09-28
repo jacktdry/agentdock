@@ -120,6 +120,8 @@
                 <TextBlock Text="{local:Loc TemporaryAddressDescription}" Foreground="#667085" Margin="24,-8,0,14" TextWrapping="Wrap" />
                 <RadioButton x:Name="NamedModeRadio" GroupName="TunnelMode" Content="{local:Loc CustomDomain}" Tag="named" Margin="0,0,0,10" Checked="TunnelModeRadio_Checked" />
                 <TextBlock Text="{local:Loc CustomDomainDescription}" Foreground="#667085" Margin="24,-8,0,4" TextWrapping="Wrap" />
+                <RadioButton x:Name="TailscaleModeRadio" GroupName="TunnelMode" Content="{local:Loc TailscaleFunnel}" Tag="tailscale" Margin="0,8,0,10" Checked="TunnelModeRadio_Checked" />
+                <TextBlock Text="{local:Loc TailscaleFunnelDescription}" Foreground="#667085" Margin="24,-8,0,4" TextWrapping="Wrap" />
               </StackPanel>
             </GroupBox>
 

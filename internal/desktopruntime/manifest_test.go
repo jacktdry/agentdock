@@ -253,6 +253,24 @@ func TestManifestAllowsQuickModeWithoutPublicURL(t *testing.T) {
 	}
 }
 
+func TestManifestRequiresTailscaleHTTPSOrigin(t *testing.T) {
+	manifest := Manifest{
+		SchemaVersion:   SchemaVersion,
+		AgentDockBinary: filepath.Join(t.TempDir(), "agentdock.exe"),
+		Host:            "127.0.0.1", Port: 8765,
+		LocalMCPURL: "http://127.0.0.1:8765/mcp",
+		TunnelMode:  "tailscale",
+		PublicURL:   "https://device.example.ts.net",
+	}
+	if err := manifest.Validate(); err != nil {
+		t.Fatalf("valid tailscale origin: %v", err)
+	}
+	manifest.PublicURL = "http://device.example.ts.net"
+	if err := manifest.Validate(); err == nil {
+		t.Fatal("accepted insecure tailscale origin")
+	}
+}
+
 func TestManifestRejectsPublicURLInLocalMode(t *testing.T) {
 	manifest := Manifest{
 		SchemaVersion:   SchemaVersion,

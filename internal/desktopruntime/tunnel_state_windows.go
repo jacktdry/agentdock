@@ -45,11 +45,12 @@ type tunnelFiles struct {
 }
 
 type tunnelRuntime struct {
-	manifest Manifest
-	root     string
-	settings controlPanelSettings
-	files    tunnelFiles
-	mode     string
+	manifest        Manifest
+	root            string
+	settings        controlPanelSettings
+	files           tunnelFiles
+	mode            string
+	tailscaleBinary string
 }
 
 func loadTunnelRuntime(runtimeRoot string) (tunnelRuntime, error) {
@@ -93,8 +94,8 @@ func readTunnelMode(path, fallback string) (string, error) {
 	if mode == "" {
 		mode = "none"
 	}
-	if mode != "none" && mode != "quick" && mode != "named" {
-		return "", fmt.Errorf("不支持的 Cloudflare Tunnel 模式：%s", mode)
+	if mode != "none" && mode != "quick" && mode != "named" && mode != "tailscale" {
+		return "", fmt.Errorf("不支持的 Tunnel 模式：%s", mode)
 	}
 	return mode, nil
 }
