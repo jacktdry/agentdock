@@ -81,11 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DesktopUpdateHandoff.remove(at: service.paths.updateHandoff)
             refreshStatus(showWindow: !launchedInBackground)
             Task {
-                do {
-                    try service.reconcileTunnelRegistrationFromConfiguration()
-                } catch {
-                    NSLog("AgentDock 启动时 Tunnel 状态收敛失败：%@", error.localizedDescription)
-                }
+                await service.reconcileBackgroundServicesOnLaunch()
                 self.refreshStatus()
             }
         }
@@ -652,6 +648,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         message: error.localizedDescription,
                         style: .warning
                     )
+                    self.refreshStatus()
                 }
             }
         }
