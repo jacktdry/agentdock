@@ -152,6 +152,10 @@ func TestMacOSSetupWindowUsesResponsiveScrollableLayout(t *testing.T) {
 			`"Check permissions" = "权限检查";`,
 			`"Advanced settings" = "高级设置";`,
 		},
+		filepath.Join("Resources", "zh-Hant.lproj", "Localizable.strings"): {
+			`"Check permissions" = "權限檢查";`,
+			`"Advanced settings" = "進階設定";`,
+		},
 	}
 	for relativePath, wants := range resources {
 		data, err := os.ReadFile(filepath.Join(root, relativePath))

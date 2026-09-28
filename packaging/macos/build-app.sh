@@ -144,7 +144,7 @@ HELPERS_DIR="$CONTENTS_DIR/Helpers"
 LAUNCH_AGENTS_DIR="$CONTENTS_DIR/Library/LaunchAgents"
 MENU_LOGIN_HELPER="$HELPERS_DIR/AgentDockLoginHelper"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$HELPERS_DIR" "$LAUNCH_AGENTS_DIR"
-for localization in en zh-Hans; do
+for localization in en zh-Hans zh-Hant; do
   source_lproj="$LOCALIZATION_DIR/$localization.lproj"
   [[ -d "$source_lproj" && ! -L "$source_lproj" ]] || die "缺少 macOS 本地化目录：$source_lproj"
   ditto "$source_lproj" "$RESOURCES_DIR/$localization.lproj"

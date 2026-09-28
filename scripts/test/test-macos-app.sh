@@ -216,7 +216,7 @@ test "$(plutil -extract CFBundleIconFile raw -o - "$APP/Contents/Info.plist")" =
 test "$(plutil -extract CFBundleDevelopmentRegion raw -o - "$APP/Contents/Info.plist")" = "en"
 test "$(plutil -extract LSUIElement raw -o - "$APP/Contents/Info.plist")" = "true"
 test -n "$(plutil -extract NSAppleEventsUsageDescription raw -o - "$APP/Contents/Info.plist")"
-for localization in en zh-Hans; do
+for localization in en zh-Hans zh-Hant; do
   lproj="$APP/Contents/Resources/$localization.lproj"
   test -f "$lproj/Localizable.strings"
   test -f "$lproj/InfoPlist.strings"

@@ -17,8 +17,17 @@ struct LocalizationPreferenceTests {
         L10n.setLanguagePreference(.simplifiedChinese, defaults: defaults)
         precondition(L10n.languagePreference(defaults: defaults) == .simplifiedChinese)
 
-        defaults.set("zh-TW", forKey: "AgentDockUILanguage")
-        precondition(L10n.languagePreference(defaults: defaults) == .system)
+        L10n.setLanguagePreference(.traditionalChinese, defaults: defaults)
+        precondition(L10n.languagePreference(defaults: defaults) == .traditionalChinese)
+
+        for alias in ["zh-TW", "zh-HK", "zh-MO", "zh-Hant-TW"] {
+            defaults.set(alias, forKey: "AgentDockUILanguage")
+            precondition(L10n.languagePreference(defaults: defaults) == .traditionalChinese)
+        }
+        for alias in ["zh-CN", "zh-SG", "zh-Hans-CN"] {
+            defaults.set(alias, forKey: "AgentDockUILanguage")
+            precondition(L10n.languagePreference(defaults: defaults) == .simplifiedChinese)
+        }
 
         L10n.setLanguagePreference(.english, defaults: defaults)
         L10n.setLanguagePreference(.system, defaults: defaults)

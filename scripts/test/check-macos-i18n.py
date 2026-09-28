@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIR = ROOT / "desktop/macos/AgentDockApp/Sources"
 RESOURCE_DIR = ROOT / "desktop/macos/AgentDockApp/Resources"
-LOCALES = ("en", "zh-Hans")
+LOCALES = ("en", "zh-Hans", "zh-Hant")
 CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 L10N_CALL = re.compile(r'L10n\.(?:text|format)\(\s*"((?:\\.|[^"\\])*)"')
 STRINGS_KEY = re.compile(r'^\s*"((?:\\.|[^"\\])*)"\s*=', re.MULTILINE)
