@@ -3,6 +3,7 @@ package desktopruntime
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,22 @@ func TestRunTunnelCommandValidatesConfigureModeBeforePlatformAccess(t *testing.T
 	)
 	if err == nil || !strings.Contains(err.Error(), "mode") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSupportedTunnelConfigureMode(t *testing.T) {
+	for _, mode := range []string{"none", "quick", "named"} {
+		if !supportedTunnelConfigureMode(mode) {
+			t.Fatalf("expected %q to be supported", mode)
+		}
+	}
+	if supportedTunnelConfigureMode("invalid") {
+		t.Fatal("invalid tunnel mode was accepted")
+	}
+
+	wantTailscale := runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+	if got := supportedTunnelConfigureMode("tailscale"); got != wantTailscale {
+		t.Fatalf("tailscale support=%v want=%v on %s", got, wantTailscale, runtime.GOOS)
 	}
 }
 

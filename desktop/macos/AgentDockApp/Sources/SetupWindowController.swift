@@ -39,7 +39,12 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     private let updateButton = NSButton(title: L10n.text("Check for updates"), target: nil, action: nil)
 
     private let publicMode = NSSegmentedControl(
-        labels: [L10n.text("Local only"), L10n.text("Temporary address"), L10n.text("Custom domain")],
+        labels: [
+            L10n.text("Local only"),
+            L10n.text("Temporary address"),
+            L10n.text("Custom domain"),
+            L10n.text("Tailscale Funnel"),
+        ],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -302,7 +307,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         publicMode.target = self
         publicMode.action = #selector(modeChanged)
         publicMode.segmentStyle = .rounded
-        publicMode.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        publicMode.widthAnchor.constraint(equalToConstant: 500).isActive = true
         modeDescription.textColor = .secondaryLabelColor
         modeDescription.font = .systemFont(ofSize: 12)
 
@@ -561,22 +566,27 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func selectCurrentMode(configuration: ServiceConfiguration?) {
-        guard let publicURL = configuration?.publicURL, !publicURL.isEmpty else {
-            initialMode = .local
-            initialServerURL = ""
-            select(mode: .local)
-            return
-        }
-        if publicURL.contains(".trycloudflare.com") {
-            initialMode = .quick
-            initialServerURL = ""
-            select(mode: .quick)
+        let publicURL = configuration?.publicURL ?? ""
+        let mode: TunnelMode
+        if FileManager.default.fileExists(atPath: service.paths.tunnelEnvironment.path) {
+            mode = (try? service.configuredTunnelMode()) ?? .local
+        } else if publicURL.contains(".trycloudflare.com") {
+            mode = .quick
+        } else if !publicURL.isEmpty {
+            mode = .named
         } else {
-            initialMode = .named
+            mode = .local
+        }
+
+        initialMode = mode
+        initialServerURL = ""
+        if mode == .named {
             initialServerURL = publicURL
             serverURLField.stringValue = publicURL
-            select(mode: .named)
+        } else {
+            serverURLField.stringValue = ""
         }
+        select(mode: mode)
         tunnelTokenField.stringValue = ""
     }
 
@@ -597,6 +607,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         case .local: return 0
         case .quick: return 1
         case .named: return 2
+        case .tailscale: return 3
         }
     }
 
@@ -604,6 +615,7 @@ final class SetupWindowController: NSWindowController, NSWindowDelegate {
         switch publicMode.selectedSegment {
         case 1: return .quick
         case 2: return .named
+        case 3: return .tailscale
         default: return .local
         }
     }
