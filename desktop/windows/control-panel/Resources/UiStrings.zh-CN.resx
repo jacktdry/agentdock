@@ -716,6 +716,9 @@
   <data name="SimplifiedChinese" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="TraditionalChinese" xml:space="preserve">
+    <value>繁體中文</value>
+  </data>
   <data name="EnglishLanguage" xml:space="preserve">
     <value>English</value>
   </data>

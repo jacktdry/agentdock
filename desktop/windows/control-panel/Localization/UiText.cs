@@ -10,6 +10,7 @@ internal static class UiText
     internal const string SystemPreference = "system";
     internal const string EnglishPreference = "en";
     internal const string SimplifiedChinesePreference = "zh-CN";
+    internal const string TraditionalChinesePreference = "zh-TW";
 
     private static readonly string SystemLocale = NormalizeCultureName(CultureInfo.CurrentUICulture.Name);
     private static readonly ResourceManager Resources = new(
@@ -66,6 +67,7 @@ internal static class UiText
         {
             EnglishPreference => EnglishPreference,
             SimplifiedChinesePreference => SimplifiedChinesePreference,
+            TraditionalChinesePreference => TraditionalChinesePreference,
             _ => SystemPreference
         };
     }
@@ -76,6 +78,7 @@ internal static class UiText
         {
             EnglishPreference => EnglishPreference,
             SimplifiedChinesePreference => SimplifiedChinesePreference,
+            TraditionalChinesePreference => TraditionalChinesePreference,
             _ => NormalizeCultureName(systemCultureName)
         };
     }
@@ -90,6 +93,10 @@ internal static class UiText
         if (locale is "zh" or "zh-cn" or "zh-sg" or "zh-hans" || locale.StartsWith("zh-hans-", StringComparison.Ordinal))
         {
             return SimplifiedChinesePreference;
+        }
+        if (locale is "zh-tw" or "zh-hk" or "zh-mo" or "zh-hant" || locale.StartsWith("zh-hant-", StringComparison.Ordinal))
+        {
+            return TraditionalChinesePreference;
         }
         return EnglishPreference;
     }

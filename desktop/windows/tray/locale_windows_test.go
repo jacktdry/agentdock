@@ -20,6 +20,7 @@ func TestIsSimplifiedChineseLocale(t *testing.T) {
 		{locale: "zh-Hans-CN", want: true},
 		{locale: "zh-TW", want: false},
 		{locale: "zh-HK", want: false},
+		{locale: "zh-MO", want: false},
 		{locale: "zh-Hant", want: false},
 		{locale: "en-US", want: false},
 		{locale: "", want: false},
@@ -31,6 +32,19 @@ func TestIsSimplifiedChineseLocale(t *testing.T) {
 				t.Fatalf("isSimplifiedChineseLocale(%q)=%v want=%v", test.locale, got, test.want)
 			}
 		})
+	}
+}
+
+func TestIsTraditionalChineseLocale(t *testing.T) {
+	for _, locale := range []string{"zh-TW", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-HK", "ZH-hant-mo"} {
+		if !isTraditionalChineseLocale(locale) {
+			t.Errorf("isTraditionalChineseLocale(%q)=false", locale)
+		}
+	}
+	for _, locale := range []string{"zh", "zh-CN", "zh-SG", "zh-Hans", "en-US", ""} {
+		if isTraditionalChineseLocale(locale) {
+			t.Errorf("isTraditionalChineseLocale(%q)=true", locale)
+		}
 	}
 }
 
@@ -46,7 +60,11 @@ func TestResolveTrayLocaleHonorsExplicitPreference(t *testing.T) {
 		{name: "system follows simplified Chinese", preference: "system", systemLocale: "zh-SG", want: "zh-CN"},
 		{name: "system follows English", preference: "system", systemLocale: "en-US", want: "en"},
 		{name: "invalid preference follows system", preference: "invalid", systemLocale: "zh-Hans", want: "zh-CN"},
-		{name: "traditional Chinese falls back to English", preference: "system", systemLocale: "zh-TW", want: "en"},
+		{name: "explicit Traditional Chinese overrides English system", preference: "zh-TW", systemLocale: "en-US", want: "zh-TW"},
+		{name: "system follows Traditional Chinese Taiwan", preference: "system", systemLocale: "zh-TW", want: "zh-TW"},
+		{name: "system follows Traditional Chinese Hong Kong", preference: "system", systemLocale: "zh-HK", want: "zh-TW"},
+		{name: "system follows Traditional Chinese Macau", preference: "system", systemLocale: "zh-MO", want: "zh-TW"},
+		{name: "system follows Traditional Chinese script", preference: "system", systemLocale: "zh-Hant", want: "zh-TW"},
 	}
 
 	for _, test := range tests {
@@ -74,5 +92,11 @@ func TestReadTrayLanguagePreference(t *testing.T) {
 	}
 	if got := readTrayLanguagePreference(); got != "zh-CN" {
 		t.Fatalf("stored preference=%q want=zh-CN", got)
+	}
+	if err := os.WriteFile(filepath.Join(preferenceDir, "ui-language"), []byte("zh-TW\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTrayLanguagePreference(); got != "zh-TW" {
+		t.Fatalf("stored preference=%q want=zh-TW", got)
 	}
 }

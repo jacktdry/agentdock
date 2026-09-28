@@ -61,6 +61,7 @@ SignedUninstaller=yes
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "chinesesimplified"; MessagesFile: "compiler:Default.isl, languages\ChineseSimplified.isl"
+Name: "chinesetraditional"; MessagesFile: "compiler:Default.isl, languages\ChineseTraditional.isl"
 
 
 #include "includes\messages.iss"

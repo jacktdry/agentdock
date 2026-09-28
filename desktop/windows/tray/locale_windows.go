@@ -138,6 +138,47 @@ var trayTextChinese = trayText{
 	UpdateProgramFailed:  "启动更新程序失败，ShellExecute 错误码 %d",
 }
 
+var trayTextTraditionalChinese = trayText{
+	TooltipStopped:       "AgentDock：已停止",
+	TooltipRunning:       "AgentDock：執行中",
+	TooltipUnavailable:   "AgentDock：無法取得狀態",
+	StatusStopped:        "狀態：已停止",
+	StatusRunning:        "狀態：執行中",
+	StatusUnavailable:    "狀態：無法取得",
+	CopyLocalMCP:         "複製本機 MCP 位址",
+	CopyPublicMCP:        "複製公開 MCP 位址",
+	RefreshQuickURL:      "重新產生暫時公開位址",
+	StartAgentDock:       "啟動 AgentDock",
+	RestartAgentDock:     "重新啟動 AgentDock",
+	InstallUpdate:        "檢查並安裝更新",
+	OpenRuntimeFolder:    "開啟執行資料夾",
+	OpenDocumentation:    "開啟說明文件",
+	ExitTray:             "結束系統匣程式",
+	CopyLocalFailed:      "複製本機 MCP 位址失敗：%v",
+	CopyLocalSucceeded:   "已複製本機 MCP 位址。",
+	CopyPublicFailed:     "複製公開 MCP 位址失敗：%v",
+	CopyPublicSucceeded:  "已複製公開 MCP 位址。",
+	RefreshQuickFailed:   "重新產生暫時位址失敗：%v",
+	RefreshQuickStarted:  "正在產生新的暫時公開位址。完成後系統匣程式會自動更新。",
+	StartFailed:          "啟動 AgentDock 失敗：%v",
+	StartStarted:         "正在啟動 AgentDock。",
+	RestartFailed:        "重新啟動 AgentDock 失敗：%v",
+	RestartStarted:       "正在重新啟動 AgentDock。",
+	UpdateFailed:         "啟動更新程式失敗：%v",
+	ClipboardNoAddress:   "沒有可複製的位址",
+	ClipboardAllocFailed: "配置剪貼簿記憶體失敗：%v",
+	ClipboardLockFailed:  "鎖定剪貼簿記憶體失敗：%v",
+	ClipboardBusy:        "其他應用程式正在使用剪貼簿",
+	ClipboardClearFailed: "清除剪貼簿失敗：%v",
+	ClipboardWriteFailed: "寫入剪貼簿失敗：%v",
+	RuntimeIncomplete:    "AgentDock 執行資訊不完整",
+	CoreUnavailablePlain: "AgentDock 核心無法使用",
+	CoreUnavailable:      "AgentDock 核心無法使用：%v",
+	NativeCommandFailed:  "原生命令執行失敗：%v：%s",
+	QuickTunnelNotActive: "目前沒有使用暫時公開位址",
+	UpdateProgramFailed:  "啟動更新程式失敗；ShellExecute 錯誤代碼 %d",
+}
+
 func currentTrayText() trayText {
 	var localeName [localeNameMaxLength]uint16
 	result, _, _ := procGetUserDefaultLocaleName.Call(
@@ -148,8 +189,11 @@ func currentTrayText() trayText {
 	if result != 0 {
 		systemLocale = windows.UTF16ToString(localeName[:])
 	}
-	if resolveTrayLocale(readTrayLanguagePreference(), systemLocale) == "zh-CN" {
+	switch resolveTrayLocale(readTrayLanguagePreference(), systemLocale) {
+	case "zh-CN":
 		return trayTextChinese
+	case "zh-TW":
+		return trayTextTraditionalChinese
 	}
 	return trayTextEnglish
 }
@@ -172,6 +216,11 @@ func resolveTrayLocale(preference, systemLocale string) string {
 		return "en"
 	case "zh-CN":
 		return "zh-CN"
+	case "zh-TW":
+		return "zh-TW"
+	}
+	if isTraditionalChineseLocale(systemLocale) {
+		return "zh-TW"
 	}
 	if isSimplifiedChineseLocale(systemLocale) {
 		return "zh-CN"
@@ -182,4 +231,9 @@ func resolveTrayLocale(preference, systemLocale string) string {
 func isSimplifiedChineseLocale(value string) bool {
 	locale := strings.ToLower(strings.TrimSpace(value))
 	return locale == "zh" || locale == "zh-cn" || locale == "zh-sg" || locale == "zh-hans" || strings.HasPrefix(locale, "zh-hans-")
+}
+
+func isTraditionalChineseLocale(value string) bool {
+	locale := strings.ToLower(strings.TrimSpace(value))
+	return locale == "zh-tw" || locale == "zh-hk" || locale == "zh-mo" || locale == "zh-hant" || strings.HasPrefix(locale, "zh-hant-")
 }
