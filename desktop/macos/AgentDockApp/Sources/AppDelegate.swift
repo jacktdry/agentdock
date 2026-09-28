@@ -662,7 +662,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             title: L10n.text("AgentDock is busy"),
                             message: L10n.text("Wait for the current AgentDock operation to finish before starting an update.")
                         )
-                        )
                         self.refreshStatus()
                         return false
                     }
