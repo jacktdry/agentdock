@@ -28,6 +28,23 @@ enum BackgroundServiceLifecyclePolicy {
     static func shouldRunTunnel(mode: TunnelMode, coreHealthy: Bool) -> Bool {
         coreHealthy && mode != .local
     }
+
+    static func shouldUseFastStart(coreHealthy: Bool, tunnelMode _: TunnelMode, tunnelReady: Bool) -> Bool {
+        coreHealthy && tunnelReady
+    }
+
+    static func shouldQuiesceTunnel(coreHealthy: Bool, tunnelRunning: Bool) -> Bool {
+        !coreHealthy && tunnelRunning
+    }
+
+    static func kickstartArguments(target: String, killExisting: Bool) -> [String] {
+        var arguments = ["kickstart"]
+        if killExisting {
+            arguments.append("-k")
+        }
+        arguments.append(target)
+        return arguments
+    }
 }
 
 private actor BackgroundServiceLifecycleGate {
@@ -193,9 +210,12 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func start() async throws {
+        let startedAt = Date()
+        logStartupTiming(action: "start", stage: "requested", startedAt: startedAt)
         await lifecycleGate.acquire()
+        logStartupTiming(action: "start", stage: "gate_acquired", startedAt: startedAt)
         do {
-            try await startLocked()
+            try await startLocked(startedAt: startedAt)
             await lifecycleGate.release()
         } catch {
             await lifecycleGate.release()
@@ -203,12 +223,41 @@ final class ServiceController: @unchecked Sendable {
         }
     }
 
-    private func startLocked() async throws {
-        // Public access must not stay online while Core is unavailable. This also clears
-        // stale Tunnel registrations left behind by an App bundle replacement.
-        try setTunnelEnabled(false)
-        _ = try await ensureCoreHealthyForStart()
-        try await restoreConfiguredTunnel(coreHealthy: true)
+    private func startLocked(startedAt: Date) async throws {
+        let tunnelMode = try configuredTunnelMode()
+        let configuration = ServiceConfiguration.load(from: paths.environment)
+        let coreHealthy: Bool
+        if let configuration,
+           coreService.status == .enabled,
+           !registrationVersionMismatch(label: Self.coreLabel),
+           launchdProcessID(label: Self.coreLabel) != nil {
+            coreHealthy = await waitForHealth(configuration: configuration, timeout: 0.75)
+        } else {
+            coreHealthy = false
+        }
+        let tunnelReady = tunnelReadyForFastStart(mode: tunnelMode)
+
+        if BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: coreHealthy,
+            tunnelMode: tunnelMode,
+            tunnelReady: tunnelReady
+        ) {
+            logStartupTiming(action: "start", stage: "ready_fast_path", startedAt: startedAt)
+            return
+        }
+
+        if BackgroundServiceLifecyclePolicy.shouldQuiesceTunnel(
+            coreHealthy: coreHealthy,
+            tunnelRunning: launchdProcessID(label: Self.tunnelLabel) != nil
+        ) {
+            try setTunnelEnabled(false)
+            logStartupTiming(action: "start", stage: "tunnel_quiesced", startedAt: startedAt)
+        }
+
+        _ = try await ensureCoreHealthyForStart(startedAt: startedAt)
+        logStartupTiming(action: "start", stage: "core_ready", startedAt: startedAt)
+        try await restoreConfiguredTunnel(coreHealthy: true, startedAt: startedAt)
+        logStartupTiming(action: "start", stage: "complete", startedAt: startedAt)
     }
 
     func stop() async throws {
@@ -342,8 +391,12 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func reconcileBackgroundServicesOnLaunch() async {
+        let startedAt = Date()
+        logStartupTiming(action: "launch_reconcile", stage: "requested", startedAt: startedAt)
         await lifecycleGate.acquire()
+        logStartupTiming(action: "launch_reconcile", stage: "gate_acquired", startedAt: startedAt)
         await reconcileBackgroundServicesOnLaunchLocked()
+        logStartupTiming(action: "launch_reconcile", stage: "complete", startedAt: startedAt)
         await lifecycleGate.release()
     }
 
@@ -626,7 +679,7 @@ final class ServiceController: @unchecked Sendable {
         )
     }
 
-    private func ensureCoreHealthyForStart() async throws -> ServiceConfiguration {
+    private func ensureCoreHealthyForStart(startedAt: Date? = nil) async throws -> ServiceConfiguration {
         try registerCoreIfNeeded()
         guard let configuration = ServiceConfiguration.load(from: paths.environment) else {
             throw ValidationError(L10n.text("Configuration unavailable"))
@@ -643,13 +696,17 @@ final class ServiceController: @unchecked Sendable {
             processID: launchdProcessID(label: Self.coreLabel)
         ) {
             NSLog("AgentDock Core is registered but has no running process; kickstarting it.")
-            try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
+            try kickstartRegisteredService(
+                label: Self.coreLabel,
+                displayName: "AgentDock Core",
+                killExisting: false
+            )
             didKickstart = true
         }
 
-        var processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+        var processReady = await waitForLaunchdPID(label: Self.coreLabel, timeout: 1.5)
         var coreHealthy = processReady
-            ? await waitForHealth(configuration: configuration, timeout: 5)
+            ? await waitForHealth(configuration: configuration, timeout: 2)
             : false
         if coreHealthy {
             return configuration
@@ -657,10 +714,14 @@ final class ServiceController: @unchecked Sendable {
 
         if !didKickstart {
             NSLog("AgentDock Core is loaded but unhealthy; kickstarting it once before re-registration.")
-            try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
-            processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+            try kickstartRegisteredService(
+                label: Self.coreLabel,
+                displayName: "AgentDock Core",
+                killExisting: true
+            )
+            processReady = await waitForLaunchdPID(label: Self.coreLabel, timeout: 2)
             coreHealthy = processReady
-                ? await waitForHealth(configuration: configuration, timeout: 5)
+                ? await waitForHealth(configuration: configuration, timeout: 3)
                 : false
             if coreHealthy {
                 return configuration
@@ -669,10 +730,14 @@ final class ServiceController: @unchecked Sendable {
 
         NSLog("AgentDock Core did not recover after kickstart; performing one automatic re-registration.")
         try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-        try kickstartRegisteredService(label: Self.coreLabel, displayName: "AgentDock Core")
-        processReady = await waitForLaunchdProcess(label: Self.coreLabel, timeout: 3)
+        try kickstartRegisteredService(
+            label: Self.coreLabel,
+            displayName: "AgentDock Core",
+            killExisting: false
+        )
+        processReady = await waitForLaunchdPID(label: Self.coreLabel, timeout: 3)
         coreHealthy = processReady
-            ? await waitForHealth(configuration: configuration, timeout: 8)
+            ? await waitForHealth(configuration: configuration, timeout: 6)
             : false
 
         guard coreHealthy else {
@@ -681,10 +746,16 @@ final class ServiceController: @unchecked Sendable {
         return configuration
     }
 
-    private func restoreConfiguredTunnel(coreHealthy: Bool) async throws {
+    private func restoreConfiguredTunnel(coreHealthy: Bool, startedAt: Date? = nil) async throws {
         let mode = try configuredTunnelMode()
         guard BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: mode, coreHealthy: coreHealthy) else {
             try setTunnelEnabled(false)
+            logStartupTiming(action: "start", stage: "tunnel_disabled", startedAt: startedAt)
+            return
+        }
+
+        if tunnelReadyForFastStart(mode: mode) {
+            logStartupTiming(action: "start", stage: "tunnel_ready_existing", startedAt: startedAt)
             return
         }
 
@@ -696,23 +767,55 @@ final class ServiceController: @unchecked Sendable {
             try setTunnelEnabled(true)
         }
 
-        var processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 2)
+        var processReady = launchdProcessID(label: Self.tunnelLabel) != nil
         if !processReady {
-            NSLog("AgentDock Tunnel is registered but has no stable process; kickstarting it.")
-            try kickstartRegisteredService(label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
-            processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 4)
+            NSLog("AgentDock Tunnel is registered but has no running process; kickstarting it.")
+            try kickstartRegisteredService(
+                label: Self.tunnelLabel,
+                displayName: "AgentDock Tunnel",
+                killExisting: false
+            )
+            processReady = await waitForLaunchdPID(label: Self.tunnelLabel, timeout: 1.5)
         }
 
         if !processReady {
             NSLog("AgentDock Tunnel did not recover after kickstart; re-registering it once.")
             try restartTunnel()
-            try kickstartRegisteredService(label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
-            processReady = await waitForLaunchdProcess(label: Self.tunnelLabel, timeout: 4)
+            try kickstartRegisteredService(
+                label: Self.tunnelLabel,
+                displayName: "AgentDock Tunnel",
+                killExisting: false
+            )
+            processReady = await waitForLaunchdPID(label: Self.tunnelLabel, timeout: 3)
         }
 
         if !processReady {
-            NSLog("AgentDock Tunnel process did not stabilize after automatic recovery.")
+            NSLog("AgentDock Tunnel process did not appear after automatic recovery.")
+        } else {
+            logStartupTiming(action: "start", stage: "tunnel_process_ready", startedAt: startedAt)
         }
+    }
+
+    private func tunnelReadyForFastStart(mode: TunnelMode) -> Bool {
+        switch mode {
+        case .local:
+            return tunnelService.status == .notRegistered || tunnelService.status == .notFound
+        case .quick, .named:
+            return tunnelService.status == .enabled
+                && !registrationVersionMismatch(label: Self.tunnelLabel)
+                && launchdProcessID(label: Self.tunnelLabel) != nil
+        }
+    }
+
+    private func logStartupTiming(action: String, stage: String, startedAt: Date?) {
+        guard let startedAt else { return }
+        let elapsedMilliseconds = Date().timeIntervalSince(startedAt) * 1_000
+        NSLog(
+            "AgentDock startup timing action=%@ stage=%@ elapsed_ms=%.0f",
+            action,
+            stage,
+            elapsedMilliseconds
+        )
     }
 
     static func parentBundleVersion(fromLaunchctlOutput output: String) -> String? {
@@ -895,13 +998,37 @@ final class ServiceController: @unchecked Sendable {
         return Self.processID(fromLaunchctlOutput: result.output)
     }
 
-    private func kickstartRegisteredService(label: String, displayName: String) throws {
+    private func kickstartRegisteredService(
+        label: String,
+        displayName: String,
+        killExisting: Bool = true
+    ) throws {
+        let arguments = BackgroundServiceLifecyclePolicy.kickstartArguments(
+            target: "\(serviceDomain)/\(label)",
+            killExisting: killExisting
+        )
         let result = try runProcess(
             executable: "/bin/launchctl",
-            arguments: ["kickstart", "-k", "\(serviceDomain)/\(label)"]
+            arguments: arguments
         )
         guard result.status == 0 else {
             throw ValidationError(commandError(result.output, action: displayName))
+        }
+    }
+
+    private func waitForLaunchdPID(label: String, timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let deadline = Date().addingTimeInterval(timeout)
+                while Date() < deadline {
+                    if self.launchdProcessID(label: label) != nil {
+                        continuation.resume(returning: true)
+                        return
+                    }
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+                continuation.resume(returning: self.launchdProcessID(label: label) != nil)
+            }
         }
     }
 

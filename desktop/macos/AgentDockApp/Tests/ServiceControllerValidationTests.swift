@@ -192,6 +192,57 @@ struct ServiceControllerValidationTests {
             processID: nil
         ))
 
+        precondition(BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: true,
+            tunnelMode: .named,
+            tunnelReady: true
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: true,
+            tunnelMode: .local,
+            tunnelReady: false
+        ))
+        precondition(BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: true,
+            tunnelMode: .local,
+            tunnelReady: true
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: true,
+            tunnelMode: .named,
+            tunnelReady: false
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldUseFastStart(
+            coreHealthy: false,
+            tunnelMode: .named,
+            tunnelReady: true
+        ))
+        precondition(BackgroundServiceLifecyclePolicy.shouldQuiesceTunnel(
+            coreHealthy: false,
+            tunnelRunning: true
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldQuiesceTunnel(
+            coreHealthy: true,
+            tunnelRunning: true
+        ))
+        precondition(!BackgroundServiceLifecyclePolicy.shouldQuiesceTunnel(
+            coreHealthy: false,
+            tunnelRunning: false
+        ))
+
+        precondition(
+            BackgroundServiceLifecyclePolicy.kickstartArguments(
+                target: "gui/501/com.uvwt.agentdock.core",
+                killExisting: false
+            ) == ["kickstart", "gui/501/com.uvwt.agentdock.core"]
+        )
+        precondition(
+            BackgroundServiceLifecyclePolicy.kickstartArguments(
+                target: "gui/501/com.uvwt.agentdock.core",
+                killExisting: true
+            ) == ["kickstart", "-k", "gui/501/com.uvwt.agentdock.core"]
+        )
+
         precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .quick, coreHealthy: true))
         precondition(BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .named, coreHealthy: true))
         precondition(!BackgroundServiceLifecyclePolicy.shouldRunTunnel(mode: .local, coreHealthy: true))
