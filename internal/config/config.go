@@ -97,7 +97,7 @@ type Config struct {
 }
 
 // ACPProfile 表示一个可独立运行、独立持久化会话的 ACP 实例。
-// 内置类型使用固定 ID（codex/claude/grok）保持单实例；custom 使用自定义 ID 支持多个实例。
+// 内置类型使用固定 ID（codex/claude/grok/antigravity）保持单实例；custom 使用自定义 ID 支持多个实例。
 type ACPProfile struct {
 	ID          string            `json:"id"`
 	DisplayName string            `json:"display_name,omitempty"`
@@ -440,6 +440,12 @@ func (c *Config) normalizeACPProfiles() error {
 		profile := &c.ACPProfiles[index]
 		profile.ID = strings.TrimSpace(profile.ID)
 		profile.Kind = strings.ToLower(strings.TrimSpace(profile.Kind))
+		// Antigravity 最初只能通过 custom profile 配置。保留相同 ID 并提升为
+		// built-in kind，避免升级后既有 Session 身份和默认 Profile 失效。
+		if profile.Kind == "custom" && profile.ID == "antigravity" {
+			profile.Kind = "antigravity"
+			profile.DisplayName = ""
+		}
 		if !validACPAgentName(profile.ID) {
 			return fmt.Errorf("AGENTDOCK_ACP_PROFILES_JSON profile id must be a 1-64 character identifier using letters, numbers, dot, underscore, or hyphen: %q", profile.ID)
 		}
@@ -449,12 +455,12 @@ func (c *Config) normalizeACPProfiles() error {
 		seen[profile.ID] = struct{}{}
 
 		switch profile.Kind {
-		case "codex", "claude", "grok":
+		case "codex", "claude", "grok", "antigravity":
 			if profile.ID != profile.Kind {
 				return fmt.Errorf("built-in ACP profile %q must use id %q", profile.Kind, profile.Kind)
 			}
 		case "custom":
-			if profile.ID == "codex" || profile.ID == "claude" || profile.ID == "grok" {
+			if profile.ID == "codex" || profile.ID == "claude" || profile.ID == "grok" || profile.ID == "antigravity" {
 				return fmt.Errorf("custom ACP profile id %q is reserved for the built-in profile", profile.ID)
 			}
 		default:
@@ -531,7 +537,7 @@ func (c Config) EffectiveACPDefaultProfile() string {
 func legacyACPProfileKind(agent string) string {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	switch agent {
-	case "codex", "claude", "grok":
+	case "codex", "claude", "grok", "antigravity":
 		return agent
 	default:
 		return "custom"

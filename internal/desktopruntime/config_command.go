@@ -155,6 +155,12 @@ func validateConfigACPProfiles(request ConfigUpdateRequest) error {
 	for _, raw := range request.ACPProfiles {
 		id := strings.TrimSpace(raw.ID)
 		kind := strings.ToLower(strings.TrimSpace(raw.Kind))
+		// 旧版 macOS 只能把 Antigravity 保存成 custom profile。配置命令在
+		// 写回新版格式前也接受这条兼容路径，真正加载时 config.Normalize
+		// 会把它提升为内置 antigravity kind。
+		if kind == "custom" && id == "antigravity" {
+			kind = "antigravity"
+		}
 		if !validACPProfileIdentifier(id) {
 			return fmt.Errorf("ACP Profile ID 必须是 1-64 位字母、数字、点、下划线或连字符: %q", id)
 		}
@@ -163,12 +169,12 @@ func validateConfigACPProfiles(request ConfigUpdateRequest) error {
 		}
 		seen[id] = struct{}{}
 		switch kind {
-		case "codex", "claude", "grok":
+		case "codex", "claude", "grok", "antigravity":
 			if id != kind {
 				return fmt.Errorf("内置 ACP %s 必须使用固定 Profile ID %s", kind, kind)
 			}
 		case "custom":
-			if id == "codex" || id == "claude" || id == "grok" {
+			if id == "codex" || id == "claude" || id == "grok" || id == "antigravity" {
 				return fmt.Errorf("自定义 ACP Profile ID %s 已被内置 ACP 保留", id)
 			}
 		default:

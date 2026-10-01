@@ -70,12 +70,12 @@ struct EditableServiceSettings {
                 profile.displayName = nil
             }
             switch profile.kind {
-            case .codex, .claude, .grok:
+            case .codex, .claude, .grok, .antigravity:
                 guard profile.id == profile.kind.rawValue else {
                     throw ValidationError(L10n.format("Built-in Coding Agent %@ must use profile ID %@.", profile.kind.title, profile.kind.rawValue))
                 }
             case .custom:
-                guard !["codex", "claude", "grok"].contains(profile.id) else {
+                guard !ACPAgentPreset.builtInCases.map(\.rawValue).contains(profile.id) else {
                     throw ValidationError(L10n.format("Custom Coding Agent profile ID %@ is reserved.", profile.id))
                 }
             }

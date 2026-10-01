@@ -52,6 +52,12 @@ func resolveDesktopACPAdapter(agent, runtimeRoot, configuredCommand string, conf
 			executableNames: []string{"grok.exe", "grok.com"},
 			args:            []string{"agent", "stdio"},
 		}
+	case "antigravity":
+		preset = desktopACPAdapterPreset{
+			executableNames: []string{"refined-antigravity-acp.exe", "refined-antigravity-acp.com"},
+			npmPackage:      "@simonepri/refined-antigravity-acp",
+			npmBin:          "refined-antigravity-acp",
+		}
 	default:
 		return desktopACPAdapter{}, fmt.Errorf("不支持的 Coding Agent: %s", agent)
 	}

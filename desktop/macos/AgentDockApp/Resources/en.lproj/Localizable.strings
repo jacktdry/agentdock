@@ -356,6 +356,14 @@
 "Default ACP" = "Default ACP";
 "Delete" = "Delete";
 "Edit custom ACP" = "Edit custom ACP";
+"Edit ACP" = "Edit ACP";
+"Check ACP updates" = "Check ACP updates";
+"Install the Grok CLI from x.ai" = "Install the Grok CLI from x.ai";
+"Detected" = "Detected";
+"Installed %@" = "Installed %@";
+"Installed %@ · checking for updates…" = "Installed %@ · checking for updates…";
+"Installed %@ · up to date" = "Installed %@ · up to date";
+"Installed %@ · update %@ available" = "Installed %@ · update %@ available";
 "Name" = "Name";
 "Command" = "Command";
 "Args JSON" = "Args JSON";

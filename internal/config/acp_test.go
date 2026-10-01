@@ -230,3 +230,44 @@ func TestLegacyACPProfileUsesBuiltinKindForBuiltinAgent(t *testing.T) {
 		t.Fatalf("legacy builtin migration = %#v", cfg.ACPProfiles)
 	}
 }
+
+func TestNormalizeMigratesLegacyCustomAntigravityProfile(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{
+		AgentDockHome: t.TempDir(), AgentDockDefaultDir: t.TempDir(), ACPEnabled: true,
+		ACPProfiles: []ACPProfile{{
+			ID: "antigravity", DisplayName: "antigravity", Kind: "custom", Command: executable, Enabled: true,
+		}},
+		ACPDefaultProfile: "antigravity",
+	}
+	if err := cfg.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.ACPProfiles) != 1 || cfg.ACPProfiles[0].Kind != "antigravity" || cfg.ACPProfiles[0].DisplayName != "" {
+		t.Fatalf("legacy Antigravity profile was not migrated: %#v", cfg.ACPProfiles)
+	}
+	if cfg.ACPDefaultProfile != "antigravity" {
+		t.Fatalf("Antigravity default profile identity changed: %q", cfg.ACPDefaultProfile)
+	}
+}
+
+func TestLegacyAntigravityACPProfileUsesBuiltinKind(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTDOCK_ACP_ENABLED", "true")
+	t.Setenv("AGENTDOCK_ACP_AGENT", "antigravity")
+	t.Setenv("AGENTDOCK_ACP_COMMAND", filepath.Clean(executable))
+
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.ACPProfiles) != 1 || cfg.ACPProfiles[0].ID != "antigravity" || cfg.ACPProfiles[0].Kind != "antigravity" {
+		t.Fatalf("legacy Antigravity migration = %#v", cfg.ACPProfiles)
+	}
+}

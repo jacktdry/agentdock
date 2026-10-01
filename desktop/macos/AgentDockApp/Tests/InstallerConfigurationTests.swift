@@ -179,6 +179,8 @@ struct InstallerConfigurationTests {
             _ = try ACPDesktopConfiguration.decodeArguments("--flag value")
         }
         try testACPAdapterResolution()
+        try testACPProfileMigration()
+        try await testACPAdapterUpdateChecker()
 
         expectFailure(L10n.format(
             "Contains configuration keys that the GUI is not allowed to modify: %@",
@@ -540,6 +542,19 @@ struct InstallerConfigurationTests {
         precondition(claude.command == node.path)
         precondition(claude.arguments == [claudeEntry.path])
 
+        let antigravityPackageRoot = root
+            .appendingPathComponent(".local/lib/node_modules/@simonepri/refined-antigravity-acp", isDirectory: true)
+        let antigravityEntry = antigravityPackageRoot.appendingPathComponent("dist/index.js")
+        try FileManager.default.createDirectory(
+            at: antigravityEntry.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("console.log('antigravity acp')\n".utf8).write(to: antigravityEntry)
+        try Data("{\"version\":\"1.2.12\",\"bin\":{\"refined-antigravity-acp\":\"dist/index.js\"}}".utf8)
+            .write(to: antigravityPackageRoot.appendingPathComponent("package.json"))
+        let antigravity = ACPAgentPreset.antigravity.resolveAdapter(home: root, environment: [:])
+        precondition(antigravity.available)
+
         let configured = ACPAgentPreset.codex.resolveAdapter(
             configuredCommand: node.path,
             configuredArguments: [entry.path],
@@ -550,6 +565,46 @@ struct InstallerConfigurationTests {
         precondition(configured.command == node.path)
         precondition(configured.arguments == [entry.path])
 
+    }
+
+    private static func testACPProfileMigration() throws {
+        let raw = """
+        [{"id":"antigravity","display_name":"antigravity","kind":"custom","command":"/usr/bin/true","args":[],"enabled":true}]
+        """
+        let profiles = try ACPDesktopConfiguration.decodeProfiles(raw)
+        precondition(profiles.count == 1)
+        precondition(profiles[0].id == "antigravity")
+        precondition(profiles[0].kind == .antigravity)
+        precondition(profiles[0].displayName == nil)
+        precondition(ACPAgentPreset.builtInCases.contains(.antigravity))
+    }
+
+    private static func testACPAdapterUpdateChecker() async throws {
+        precondition(ACPAdapterUpdateChecker.isVersion("2.1.0", newerThan: "2.0.1"))
+        precondition(ACPAdapterUpdateChecker.isVersion("2.0.0", newerThan: "2.0.0-beta.1"))
+        precondition(!ACPAdapterUpdateChecker.isVersion("2.0.1", newerThan: "2.1.0"))
+        precondition(!ACPAdapterUpdateChecker.isVersion("2.0.0-beta.1", newerThan: "2.0.0"))
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        MockURLProtocol.handler = { request in
+            precondition(request.url?.absoluteString == "https://registry.npmjs.org/@agentclientprotocol%2Fcodex-acp/latest")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data("{\"version\":\"9.9.9\"}".utf8))
+        }
+        let status = await ACPAdapterUpdateChecker(session: session).check(
+            .codex,
+            home: FileManager.default.temporaryDirectory,
+            environment: [:]
+        )
+        precondition(status.latestVersion == "9.9.9")
     }
 
     private static func testTunnelTokenStore() throws {

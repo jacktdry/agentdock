@@ -27,6 +27,19 @@ func TestValidateConfigUpdate(t *testing.T) {
 		t.Fatalf("valid builtin ACP config rejected: %v", err)
 	}
 
+	validAntigravityACP := valid
+	validAntigravityACP.ACPEnabled = true
+	validAntigravityACP.ACPDefaultProfile = "antigravity"
+	validAntigravityACP.ACPProfiles = []agentconfig.ACPProfile{{ID: "antigravity", Kind: "antigravity", Enabled: true}}
+	if err := validateConfigUpdate(validAntigravityACP); err != nil {
+		t.Fatalf("valid Antigravity ACP config rejected: %v", err)
+	}
+	legacyAntigravityACP := validAntigravityACP
+	legacyAntigravityACP.ACPProfiles = []agentconfig.ACPProfile{{ID: "antigravity", Kind: "custom", Enabled: true}}
+	if err := validateConfigUpdate(legacyAntigravityACP); err != nil {
+		t.Fatalf("legacy custom Antigravity ACP config rejected: %v", err)
+	}
+
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

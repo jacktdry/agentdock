@@ -356,6 +356,14 @@
 "Default ACP" = "默认 ACP";
 "Delete" = "删除";
 "Edit custom ACP" = "编辑自定义ACP";
+"Edit ACP" = "编辑 ACP";
+"Check ACP updates" = "检查 ACP 更新";
+"Install the Grok CLI from x.ai" = "从 x.ai 安装 Grok CLI";
+"Detected" = "已检测到";
+"Installed %@" = "已安装 %@";
+"Installed %@ · checking for updates…" = "已安装 %@ · 正在检查更新…";
+"Installed %@ · up to date" = "已安装 %@ · 已是最新版本";
+"Installed %@ · update %@ available" = "已安装 %@ · 可更新至 %@";
 "Name" = "名称";
 "Command" = "命令";
 "Args JSON" = "参数 JSON";

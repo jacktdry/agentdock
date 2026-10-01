@@ -7,6 +7,13 @@ struct ACPAdapterResolution: Equatable {
     let message: String
 }
 
+struct ACPAdapterPackageStatus: Equatable {
+    let available: Bool
+    let installedVersion: String?
+    let latestVersion: String?
+    let updateAvailable: Bool?
+}
+
 private struct ACPNodePackage {
     let name: String
     let binName: String
@@ -16,13 +23,17 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
     case codex
     case claude
     case grok
+    case antigravity
     case custom
+
+    static let builtInCases: [ACPAgentPreset] = [.codex, .claude, .grok, .antigravity]
 
     var title: String {
         switch self {
         case .codex: return "Codex"
         case .claude: return "Claude"
         case .grok: return "Grok Build"
+        case .antigravity: return "Antigravity"
         case .custom: return L10n.text("Custom")
         }
     }
@@ -32,6 +43,7 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
         case .codex: return ["codex-acp"]
         case .claude: return ["claude-agent-acp"]
         case .grok: return ["grok"]
+        case .antigravity: return ["refined-antigravity-acp"]
         case .custom: return []
         }
     }
@@ -39,7 +51,7 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
     var arguments: [String] {
         switch self {
         case .grok: return ["agent", "stdio"]
-        case .codex, .claude, .custom: return []
+        case .codex, .claude, .antigravity, .custom: return []
         }
     }
 
@@ -49,8 +61,29 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
             return ACPNodePackage(name: "@agentclientprotocol/codex-acp", binName: "codex-acp")
         case .claude:
             return ACPNodePackage(name: "@agentclientprotocol/claude-agent-acp", binName: "claude-agent-acp")
+        case .antigravity:
+            return ACPNodePackage(name: "@simonepri/refined-antigravity-acp", binName: "refined-antigravity-acp")
         case .grok, .custom:
             return nil
+        }
+    }
+
+    var npmPackageName: String? {
+        nodePackage?.name
+    }
+
+    var installHint: String {
+        switch self {
+        case .codex:
+            return "npm install -g @agentclientprotocol/codex-acp"
+        case .claude:
+            return "npm install -g @agentclientprotocol/claude-agent-acp"
+        case .antigravity:
+            return "pnpm add -g @simonepri/refined-antigravity-acp && refined-antigravity-acp setup"
+        case .grok:
+            return L10n.text("Install the Grok CLI from x.ai")
+        case .custom:
+            return L10n.text("Enter the absolute path to an executable ACP Adapter")
         }
     }
 
@@ -144,6 +177,43 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
             command: "",
             arguments: [],
             message: L10n.format("Not installed · %@", missingAdapterMessage)
+        )
+    }
+
+    func localPackageStatus(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> ACPAdapterPackageStatus {
+        let resolution = resolveAdapter(home: home, environment: environment)
+        guard resolution.available else {
+            return ACPAdapterPackageStatus(
+                available: false,
+                installedVersion: nil,
+                latestVersion: nil,
+                updateAvailable: nil
+            )
+        }
+
+        guard let nodePackage else {
+            return ACPAdapterPackageStatus(
+                available: true,
+                installedVersion: nil,
+                latestVersion: nil,
+                updateAvailable: nil
+            )
+        }
+        let directories = searchDirectories(home: home, environment: environment)
+        let version = npmPackageRoots(nodePackage, directories: directories).compactMap { packageRoot -> String? in
+            guard readNPMBinEntry(packageRoot: packageRoot, binName: nodePackage.binName) != nil else {
+                return nil
+            }
+            return readNPMPackageVersion(packageRoot: packageRoot)
+        }.first
+        return ACPAdapterPackageStatus(
+            available: true,
+            installedVersion: version,
+            latestVersion: nil,
+            updateAvailable: nil
         )
     }
 
@@ -308,6 +378,17 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
         return candidate
     }
 
+    private func readNPMPackageVersion(packageRoot: URL) -> String? {
+        let manifest = packageRoot.appendingPathComponent("package.json")
+        guard let data = try? Data(contentsOf: manifest),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = object["version"] as? String else {
+            return nil
+        }
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private func executableFile(_ candidate: URL) -> URL? {
         let normalized = candidate.standardizedFileURL
         guard FileManager.default.isExecutableFile(atPath: normalized.path) else {
@@ -350,6 +431,89 @@ enum ACPAgentPreset: String, CaseIterable, Codable {
     }
 }
 
+final class ACPAdapterUpdateChecker: @unchecked Sendable {
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    func check(
+        _ preset: ACPAgentPreset,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) async -> ACPAdapterPackageStatus {
+        let local = preset.localPackageStatus(home: home, environment: environment)
+        guard let packageName = preset.npmPackageName else {
+            return local
+        }
+        let encodedPackageName = packageName.replacingOccurrences(of: "/", with: "%2F")
+        guard let url = URL(string: "https://registry.npmjs.org/\(encodedPackageName)/latest") else {
+            return local
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 5
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            let (data, response) = try await session.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                return local
+            }
+            let latest = try JSONDecoder().decode(NPMRegistryLatest.self, from: data).version
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !latest.isEmpty else { return local }
+            return ACPAdapterPackageStatus(
+                available: local.available,
+                installedVersion: local.installedVersion,
+                latestVersion: latest,
+                updateAvailable: local.installedVersion.map { Self.isVersion(latest, newerThan: $0) }
+            )
+        } catch {
+            return local
+        }
+    }
+
+    static func isVersion(_ candidate: String, newerThan current: String) -> Bool {
+        guard let candidateVersion = parsedVersion(candidate),
+              let currentVersion = parsedVersion(current) else {
+            return false
+        }
+        let count = max(candidateVersion.components.count, currentVersion.components.count)
+        for index in 0..<count {
+            let candidateComponent = index < candidateVersion.components.count ? candidateVersion.components[index] : 0
+            let currentComponent = index < currentVersion.components.count ? currentVersion.components[index] : 0
+            if candidateComponent != currentComponent {
+                return candidateComponent > currentComponent
+            }
+        }
+        if candidateVersion.prerelease != currentVersion.prerelease {
+            return currentVersion.prerelease && !candidateVersion.prerelease
+        }
+        return false
+    }
+
+    private static func parsedVersion(_ raw: String) -> (components: [Int], prerelease: Bool)? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("v") || value.hasPrefix("V") {
+            value.removeFirst()
+        }
+        let buildStripped = value.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let segments = buildStripped.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        let core = String(segments[0])
+        let rawComponents = core.split(separator: ".", omittingEmptySubsequences: false)
+        let components = rawComponents.compactMap { Int($0) }
+        guard !components.isEmpty, components.count == rawComponents.count else {
+            return nil
+        }
+        return (components, segments.count > 1 && !segments[1].isEmpty)
+    }
+
+    private struct NPMRegistryLatest: Decodable {
+        let version: String
+    }
+}
+
 struct ACPProfileConfiguration: Codable, Equatable {
     var id: String
     var displayName: String? = nil
@@ -387,7 +551,15 @@ struct ACPDesktopConfiguration {
             return []
         }
         let data = Data(raw.utf8)
-        return try JSONDecoder().decode([ACPProfileConfiguration].self, from: data)
+        return try JSONDecoder().decode([ACPProfileConfiguration].self, from: data).map { profile in
+            var migrated = profile
+            if migrated.kind == .custom,
+               migrated.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == ACPAgentPreset.antigravity.rawValue {
+                migrated.kind = .antigravity
+                migrated.displayName = nil
+            }
+            return migrated
+        }
     }
 
     static func encodeArguments(_ arguments: [String]) throws -> String {
