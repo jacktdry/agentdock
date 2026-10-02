@@ -1,6 +1,6 @@
 # Cross-platform Desktop UI
 
-> 狀態：Architecture proposal；framework 尚需 POC 驗證
+> 狀態：M1 POC 完成；Wails v3 provisional，production gates 尚未關閉
 
 ## 1. 問題
 
@@ -118,9 +118,18 @@ Electron 增加 Chromium / Node distribution 與 security surface；Flutter 則�
 
 - 先量測目前 native Desktop 的 idle memory / CPU 作為 baseline，再為 WebView shell 設 regression budget。
 - 高頻 activity event 不逐筆無限制推入 UI；Desktop API 必須支援 batching / backpressure。
+- Wails M1 已確認一般 Event bus 的 frontend mailbox 為 unbounded；Activity / Call 等高頻資料禁止走 `Event.Emit`，必須使用 bounded Stream / `TrySend` 或等價的有界 transport。
 - 壓力測試時 UI 不應因 activity stream 持續堆積而失去互動能力。
 - Browser routing / CDP attach 延遲要與目前 native / Core 路徑比較，不能只驗證「功能可用」。
 - POC 要留下可重複量測方法；在沒有 baseline 前不先寫死任意 RAM 或 latency 數字。
+
+### Security boundary
+
+- Shared WebView 視為 trusted local UI，不載入 remote application content。
+- 禁止以 `v-html` / `innerHTML` 直接渲染未受信任內容；需要 rich content 時必須先定義 sanitizer / renderer contract。
+- Go binding 採最小權限面：只有 UI 真正需要的 exported service methods 才可被 generator 暴露。
+- AssetServer 維持 restrictive CSP、`nosniff`、`no-referrer` 等防護。
+- Wails 沒有直接等價於 Tauri capability manifest 的 per-command UI policy，因此 M2 必須把 privileged binding review 納入 Desktop API Definition of Done。
 
 ### Runtime integration
 
@@ -196,7 +205,7 @@ POC 完成後才建立正式 ADR，至少比較：
 - upstream merge impact
 - testability
 
-POC 前不把 Wails 寫成不可逆的產品依賴。
+M1 POC 後允許 M2/M3/M4 以 Wails 作為 provisional shell 繼續，但 production 採用仍需通過 `adr-shared-desktop-framework.md` 列出的 Windows installer/signing、macOS notarization/update、accessibility、soak 與 pre-release dependency gates。
 
 ## 8. Migration 保護
 

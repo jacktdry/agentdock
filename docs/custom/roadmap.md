@@ -61,6 +61,17 @@
 
 之後才正式決定 Wails / fallback。
 
+### M1 實測結論（2026-10-02）
+
+- Wails v3.0.0-beta.27 POC 已完成，列為 provisional shared Desktop shell。
+- Vue/TS、Go tests、typed control binding、bounded Stream/TrySend backpressure、Runtime read-only integration 已驗證。
+- macOS arm64 `.app` / DMG 已建置驗證。
+- Windows ARM64 / x64 EXE 已 cross-build 驗證。
+- Windows installer、Authenticode、Narrator 必須在 Windows runner/device 補驗。
+- VoiceOver、tray/window interactive automation、long-running sleep/wake soak 仍是 production gate。
+- Wails macOS production binding generation 的 CGO 成本偏高，需持續追蹤。
+- M2 可以開始，但 native AppKit/WPF 不移除。
+
 ## M2 — Shared Desktop API
 
 ### 目標

@@ -1,0 +1,15 @@
+{
+  "fixed": {
+    "file_version": "0.1.0"
+  },
+  "info": {
+    "0000": {
+      "ProductVersion": "0.1.0",
+      "CompanyName": "AgentDock Custom",
+      "FileDescription": "AgentDock cross-platform desktop architecture spike",
+      "LegalCopyright": "© 2026 AgentDock Custom",
+      "ProductName": "AgentDock Shared Desktop POC",
+      "Comments": "M1 shared desktop architecture spike; not a production release"
+    }
+  }
+}

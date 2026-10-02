@@ -1,0 +1,8 @@
+.task
+bin
+frontend/dist
+frontend/node_modules
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/darwin/Assets.car
+build/darwin/icons.icns
+build/windows/icon.ico
