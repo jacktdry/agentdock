@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { clientError, desktopApi, type APIError, type Preferences } from '../api/desktopApi'
+import { t } from '../i18n'
 
 const fallback: Preferences = {
   batchIntervalMs: 100,
@@ -39,7 +40,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       error.value = result.error ?? null
       if (!error.value && result.saved) {
         preferences.value = next
-        message.value = 'POC preference saved.'
+        message.value = t('settings.saved')
       }
       return result.saved && !result.error
     } catch (caught) {

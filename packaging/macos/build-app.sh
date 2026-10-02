@@ -136,11 +136,14 @@ HELPERS_DIR="$CONTENTS_DIR/Helpers"
 LAUNCH_AGENTS_DIR="$CONTENTS_DIR/Library/LaunchAgents"
 MENU_LOGIN_HELPER="$HELPERS_DIR/AgentDockLoginHelper"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$HELPERS_DIR" "$LAUNCH_AGENTS_DIR"
-for localization in en zh-Hans; do
-  source_lproj="$LOCALIZATION_DIR/$localization.lproj"
-  [[ -d "$source_lproj" && ! -L "$source_lproj" ]] || die "缺少 macOS 本地化目录：$source_lproj"
+localization_count=0
+while IFS= read -r -d '' source_lproj; do
+  localization="$(basename "$source_lproj" .lproj)"
+  [[ -d "$source_lproj" && ! -L "$source_lproj" ]] || die "無效的 macOS 本地化目錄：$source_lproj"
   ditto "$source_lproj" "$RESOURCES_DIR/$localization.lproj"
-done
+  ((localization_count += 1))
+done < <(find "$LOCALIZATION_DIR" -mindepth 1 -maxdepth 1 -type d -name '*.lproj' -print0 | sort -z)
+(( localization_count > 0 )) || die "找不到 macOS 本地化目錄：$LOCALIZATION_DIR"
 
 if (( ${#compiled_binaries[@]} == 1 )); then
   cp -p "$compiled_binaries[1]" "$MACOS_DIR/AgentDock"

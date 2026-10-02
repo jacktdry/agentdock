@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check test test-scripts test-scripts-macos vet race build check run docker-build docker-dev-build docker-browser-build docker-up docker-browser-up docker-down smoke-docker logs clean clean-local-artifacts install install-linux install-macos uninstall-macos test-install-macos deploy-macos-source restart-macos
+.PHONY: fmt fmt-check test test-scripts test-scripts-macos i18n-generate i18n-check i18n-coverage vet race build check run docker-build docker-dev-build docker-browser-build docker-up docker-browser-up docker-down smoke-docker logs clean clean-local-artifacts install install-linux install-macos uninstall-macos test-install-macos deploy-macos-source restart-macos
 
 APP := agentdock
 IMAGE := agentdock:local
@@ -32,6 +32,16 @@ test-scripts:
 test-scripts-macos:
 	./scripts/test/check-scripts.sh --macos
 
+i18n-generate:
+	go run ./tools/i18n generate
+
+i18n-check:
+	go test ./tools/i18n
+	go run ./tools/i18n check
+
+i18n-coverage:
+	go run ./tools/i18n coverage
+
 vet:
 	go vet ./...
 
@@ -41,7 +51,7 @@ race:
 build:
 	go build -trimpath -ldflags "$(BUILD_LDFLAGS)" -o ./bin/$(APP) ./cmd/agentdock
 
-check: fmt-check test test-scripts vet build
+check: fmt-check i18n-check test test-scripts vet build
 
 run:
 	go run ./cmd/agentdock --host $(HOST) --port $(PORT) --log-level $(LOG_LEVEL)

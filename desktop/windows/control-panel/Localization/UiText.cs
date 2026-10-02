@@ -8,8 +8,6 @@ namespace AgentDock.ControlPanel;
 internal static class UiText
 {
     internal const string SystemPreference = "system";
-    internal const string EnglishPreference = "en";
-    internal const string SimplifiedChinesePreference = "zh-CN";
 
     private static readonly string SystemLocale = NormalizeCultureName(CultureInfo.CurrentUICulture.Name);
     private static readonly ResourceManager Resources = new(
@@ -62,36 +60,35 @@ internal static class UiText
 
     internal static string NormalizePreference(string? value)
     {
-        return value?.Trim() switch
+        var candidate = value?.Trim();
+        if (string.IsNullOrEmpty(candidate) || string.Equals(candidate, SystemPreference, StringComparison.OrdinalIgnoreCase))
         {
-            EnglishPreference => EnglishPreference,
-            SimplifiedChinesePreference => SimplifiedChinesePreference,
-            _ => SystemPreference
-        };
+            return SystemPreference;
+        }
+
+        return FindLocale(candidate)?.Code ?? SystemPreference;
     }
 
     internal static string ResolveLocale(string preference, string systemCultureName)
     {
-        return NormalizePreference(preference) switch
+        var normalized = NormalizePreference(preference);
+        if (normalized == SystemPreference)
         {
-            EnglishPreference => EnglishPreference,
-            SimplifiedChinesePreference => SimplifiedChinesePreference,
-            _ => NormalizeCultureName(systemCultureName)
-        };
+            return NormalizeCultureName(systemCultureName);
+        }
+
+        return FindLocale(normalized)?.WindowsResource ?? SourceLocale().WindowsResource;
     }
 
     internal static string NormalizeCultureName(string? value)
     {
-        var locale = value?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(locale))
+        var candidate = value?.Trim();
+        if (string.IsNullOrEmpty(candidate))
         {
-            return EnglishPreference;
+            return SourceLocale().WindowsResource;
         }
-        if (locale is "zh" or "zh-cn" or "zh-sg" or "zh-hans" || locale.StartsWith("zh-hans-", StringComparison.Ordinal))
-        {
-            return SimplifiedChinesePreference;
-        }
-        return EnglishPreference;
+
+        return FindLocale(candidate)?.WindowsResource ?? SourceLocale().WindowsResource;
     }
 
     public static string Get(string key)
@@ -104,11 +101,26 @@ internal static class UiText
         return string.Format(CultureInfo.CurrentCulture, Get(key), args);
     }
 
+    private static GeneratedLocaleDescriptor SourceLocale() =>
+        GeneratedLocales.Supported.First(locale => locale.Code == GeneratedLocales.SourceLocale);
+
+    private static GeneratedLocaleDescriptor? FindLocale(string value)
+    {
+        static bool Matches(string candidate, string value) =>
+            string.Equals(candidate, value, StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith(candidate + "-", StringComparison.OrdinalIgnoreCase);
+
+        return GeneratedLocales.Supported.FirstOrDefault(locale =>
+            Matches(locale.Code, value)
+            || Matches(locale.WindowsResource, value)
+            || locale.Aliases.Any(alias => Matches(alias, value)));
+    }
+
     private static void ApplyPreference(string preference)
     {
         var locale = ResolveLocale(preference, SystemLocale);
         var culture = CultureInfo.GetCultureInfo(locale);
-        // 资源查找使用显式 culture，避免 async 事件恢复旧 CurrentUICulture 后动态文案回退。
+        // Use an explicit culture so async continuations cannot silently restore stale UI-language state.
         _resourceCulture = culture;
         CultureInfo.CurrentUICulture = culture;
         CultureInfo.DefaultThreadCurrentUICulture = culture;

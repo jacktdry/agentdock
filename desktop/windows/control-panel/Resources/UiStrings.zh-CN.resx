@@ -737,4 +737,7 @@
   <data name="LanguageChangeDiscardWarning" xml:space="preserve">
     <value>切换界面语言会重新加载此窗口，未保存的更改将会丢失。是否继续？</value>
   </data>
+  <data name="TraditionalChinese" xml:space="preserve">
+    <value>繁体中文</value>
+  </data>
 </root>

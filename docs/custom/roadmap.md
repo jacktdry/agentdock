@@ -129,6 +129,17 @@ Shared UI 不需要直接引用散落的 `internal/*` 實作。
 - zh-Hant
 - zh-Hans
 
+### M3 實測結論（2026-10-03）
+
+- 建立 repo-level `i18n/manifest.yaml`、strict YAML catalogs、glossary 與 schema。
+- `tools/i18n` 提供 deterministic generate/check/coverage/inventory，並以結構化 parser 驗證 ICU arguments。
+- Shared Vue UI 已切換為 semantic key + `intl-messageformat`，語言選單直接由 manifest 生成。
+- macOS `UILanguagePreference` 與 Windows `UiText` 已改由 generated locale descriptors 驅動，不再各自維護固定語系清單。
+- 既有繁中資源沿用先前人工翻譯並補齊最新 analytics keys；macOS 三語各 363 keys，Windows Control Panel 三語各 241 keys。
+- generated freshness、coverage 與 Shared UI hard-coded user-facing string scan 已納入 `make i18n-check` 與 CI。
+- legacy AppKit/WPF message key 尚未整批轉為 semantic key；migration inventory 明確保留這個邊界，不做猜測式自動合併。
+- M4 可從此 foundation 開始搬 Overview / Runtime / Connection / Basic Settings / Update-Diagnostics。
+
 ## M4 — Shared Desktop Baseline
 
 先搬足以驗證 shared shell 的既有能力：

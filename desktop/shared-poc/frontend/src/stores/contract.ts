@@ -9,6 +9,7 @@ import {
   type DomainCapability,
   type Manifest,
 } from '../api/desktopApi'
+import { t } from '../i18n'
 
 export const useContractStore = defineStore('contract', () => {
   const manifest = ref<Manifest | null>(null)
@@ -41,7 +42,7 @@ export const useContractStore = defineStore('contract', () => {
       const result = await desktopApi.negotiate(domains)
       if (!result.accepted || result.error) {
         error.value =
-          result.error ?? clientError('desktop_api_negotiation_rejected', 'contract negotiation rejected')
+          result.error ?? clientError('desktop_api_negotiation_rejected', t('common.rejected'))
         negotiated.value = []
         return
       }

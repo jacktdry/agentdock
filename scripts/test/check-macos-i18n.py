@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIR = ROOT / "desktop/macos/AgentDockApp/Sources"
 RESOURCE_DIR = ROOT / "desktop/macos/AgentDockApp/Resources"
-LOCALES = ("en", "zh-Hans")
+LOCALES = tuple(sorted(path.stem for path in RESOURCE_DIR.glob("*.lproj") if path.is_dir()))
 CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 L10N_CALL = re.compile(r'L10n\.(?:text|format)\(\s*"((?:\\.|[^"\\])*)"')
 STRINGS_KEY = re.compile(r'^\s*"((?:\\.|[^"\\])*)"\s*=', re.MULTILINE)
@@ -59,6 +59,8 @@ def main() -> int:
     for path in sorted(SOURCE_DIR.glob("*.swift")):
         text = path.read_text(encoding="utf-8")
         source_keys.update(L10N_CALL.findall(text))
+        if text.startswith("// GENERATED FILE — DO NOT EDIT"):
+            continue
         for line_number, line in enumerate(text.splitlines(), 1):
             executable = strip_line_comment(line)
             if "NSLog(" in executable:

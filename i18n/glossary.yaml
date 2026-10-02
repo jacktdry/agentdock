@@ -1,0 +1,24 @@
+version: 1
+terms:
+  ACP:
+    translate: false
+    note: Agent Client Protocol
+  MCP:
+    translate: false
+    note: Model Context Protocol
+  AgentDock:
+    translate: false
+  Wails:
+    translate: false
+  workspace:
+    translate: true
+    zh-Hant: 工作區
+    zh-Hans: 工作区
+  runtime:
+    translate: true
+    zh-Hant: 執行階段
+    zh-Hans: 运行时
+  activity:
+    translate: true
+    zh-Hant: 活動
+    zh-Hans: 活动

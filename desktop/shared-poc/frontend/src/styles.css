@@ -102,6 +102,21 @@ input {
   text-transform: uppercase;
 }
 
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.language-picker select {
+  min-height: 2rem;
+  border: 1px solid #596171;
+  border-radius: 0.55rem;
+  background: #15181e;
+  color: #f4f5f7;
+  padding: 0.35rem 0.55rem;
+}
+
 .poc-badge {
   border: 1px solid #596171;
   border-radius: 999px;

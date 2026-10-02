@@ -33,16 +33,21 @@ func TestWindowsControlPanelSupportsPersistentLanguagePreference(t *testing.T) {
 		"MainWindow.xaml": {
 			`x:Name="LanguageComboBox"`,
 			`Tag="system"`,
-			`Tag="zh-CN"`,
-			`Tag="en"`,
 			`SelectionChanged="LanguageComboBox_SelectionChanged"`,
 		},
 		"MainWindow.xaml.cs": {
+			`PopulateLanguageOptions()`,
+			`GeneratedLocales.Supported`,
 			`UiText.ReadPreference()`,
 			`UiText.Get("LanguageChangeDiscardWarning")`,
 			`MessageBoxButton.YesNo`,
 			`SelectUiLanguage(UiText.ReadPreference())`,
 			`ApplyLanguagePreferenceAsync(preference)`,
+		},
+		filepath.Join("Localization", "GeneratedLocales.cs"): {
+			`new("en", "English", "en"`,
+			`new("zh-Hant", "繁體中文", "zh-TW"`,
+			`new("zh-Hans", "简体中文", "zh-CN"`,
 		},
 		"App.xaml.cs": {
 			`UiText.SetPreference(preference)`,

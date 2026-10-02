@@ -28,6 +28,7 @@ fi
 swiftc \
   -swift-version 5 \
   -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/GeneratedLocales.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/LocalizationPreferenceTests.swift" \
   -o "$TMP_ROOT/localization-preference-tests"
@@ -36,6 +37,7 @@ swiftc \
 swiftc \
   -swift-version 5 \
   -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/GeneratedLocales.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerConfiguration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppVersion.swift" \
@@ -55,6 +57,7 @@ swiftc \
 swiftc \
   -swift-version 5 \
   -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/GeneratedLocales.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerConfiguration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppVersion.swift" \
@@ -75,6 +78,7 @@ swiftc \
 swiftc \
   -swift-version 5 \
   -parse-as-library \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/GeneratedLocales.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/Localization.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopPermissionChecker.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/FileAccessPermissionChecker.swift" \

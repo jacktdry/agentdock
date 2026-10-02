@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentdock.dev/schema/i18n/messages.schema.json",
+  "title": "AgentDock i18n message catalog",
+  "type": "object",
+  "propertyNames": {
+    "pattern": "^[a-z][a-z0-9]*(?:[.][a-z0-9_]+)+$"
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

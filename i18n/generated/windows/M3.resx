@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED FILE — DO NOT EDIT -->
+<root>
+  <data name="activity.clear_log" xml:space="preserve">
+    <value>Clear log</value>
+  </data>
+  <data name="activity.delivered" xml:space="preserve">
+    <value>Delivered</value>
+  </data>
+  <data name="activity.empty" xml:space="preserve">
+    <value>Start the probe to exercise the versioned Activity contract.</value>
+  </data>
+  <data name="activity.epoch" xml:space="preserve">
+    <value>Epoch: {epoch}</value>
+  </data>
+  <data name="activity.eyebrow" xml:space="preserve">
+    <value>Bounded data-plane contract</value>
+  </data>
+  <data name="activity.history" xml:space="preserve">
+    <value>Bounded frontend activity history</value>
+  </data>
+  <data name="activity.last_batch" xml:space="preserve">
+    <value>Last batch</value>
+  </data>
+  <data name="activity.latest_cursor" xml:space="preserve">
+    <value>Latest cursor</value>
+  </data>
+  <data name="activity.log_label" xml:space="preserve">
+    <value>Synthetic activity log</value>
+  </data>
+  <data name="activity.observed_gap" xml:space="preserve">
+    <value>Observed gap</value>
+  </data>
+  <data name="activity.probe" xml:space="preserve">
+    <value>Probe: {state}</value>
+  </data>
+  <data name="activity.published" xml:space="preserve">
+    <value>Published</value>
+  </data>
+  <data name="activity.queue" xml:space="preserve">
+    <value>Queue</value>
+  </data>
+  <data name="activity.queue_load" xml:space="preserve">
+    <value>Queue load</value>
+  </data>
+  <data name="activity.rate_unit" xml:space="preserve">
+    <value>activities/s</value>
+  </data>
+  <data name="activity.source_dropped" xml:space="preserve">
+    <value>Source dropped</value>
+  </data>
+  <data name="activity.start_probe" xml:space="preserve">
+    <value>Start probe</value>
+  </data>
+  <data name="activity.summary_active" xml:space="preserve">
+    <value>Activity stream active. {delivered} delivered, {dropped} dropped.</value>
+  </data>
+  <data name="activity.summary_disconnected" xml:space="preserve">
+    <value>Activity transport disconnected; new batches will be dropped until it reconnects.</value>
+  </data>
+  <data name="activity.summary_probe_failed" xml:space="preserve">
+    <value>Activity probe failed: {message}</value>
+  </data>
+  <data name="activity.summary_probe_started" xml:space="preserve">
+    <value>Activity probe started at {rate} events per second.</value>
+  </data>
+  <data name="activity.summary_rejected" xml:space="preserve">
+    <value>Activity contract rejected: {message}</value>
+  </data>
+  <data name="activity.summary_source_stopped" xml:space="preserve">
+    <value>Synthetic activity source stopped.</value>
+  </data>
+  <data name="activity.summary_stopped" xml:space="preserve">
+    <value>Synthetic activity stream is stopped.</value>
+  </data>
+  <data name="activity.synthetic_rate" xml:space="preserve">
+    <value>Synthetic rate</value>
+  </data>
+  <data name="activity.title" xml:space="preserve">
+    <value>Activity stream</value>
+  </data>
+  <data name="activity.total_dropped" xml:space="preserve">
+    <value>Total dropped</value>
+  </data>
+  <data name="activity.transport" xml:space="preserve">
+    <value>Transport: {state}</value>
+  </data>
+  <data name="activity.transport_dropped" xml:space="preserve">
+    <value>Transport dropped</value>
+  </data>
+  <data name="app.eyebrow" xml:space="preserve">
+    <value>M3 i18n foundation · Wails v3 beta.27</value>
+  </data>
+  <data name="app.lede" xml:space="preserve">
+    <value>Versioned control contracts, explicit capabilities, bounded Activity delivery, and one localization source for every desktop.</value>
+  </data>
+  <data name="app.poc_label" xml:space="preserve">
+    <value>Architecture proof of concept</value>
+  </data>
+  <data name="app.title" xml:space="preserve">
+    <value>AgentDock shared desktop</value>
+  </data>
+  <data name="common.cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="common.confirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="common.connected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="common.disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="common.enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="common.experimental" xml:space="preserve">
+    <value>Experimental</value>
+  </data>
+  <data name="common.follow_system" xml:space="preserve">
+    <value>Follow system</value>
+  </data>
+  <data name="common.healthy" xml:space="preserve">
+    <value>Healthy</value>
+  </data>
+  <data name="common.loading" xml:space="preserve">
+    <value>Loading</value>
+  </data>
+  <data name="common.negotiated" xml:space="preserve">
+    <value>Negotiated</value>
+  </data>
+  <data name="common.not_connected" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="common.not_healthy" xml:space="preserve">
+    <value>Not healthy</value>
+  </data>
+  <data name="common.not_started" xml:space="preserve">
+    <value>not started</value>
+  </data>
+  <data name="common.refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="common.rejected" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="common.restart" xml:space="preserve">
+    <value>Restart</value>
+  </data>
+  <data name="common.running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="common.save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="common.start" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="common.stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="common.stopped" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="common.unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="contract.eyebrow" xml:space="preserve">
+    <value>Control-plane contract</value>
+  </data>
+  <data name="contract.hint" xml:space="preserve">
+    <value>Unavailable domains are advertised explicitly instead of returning empty placeholder data.</value>
+  </data>
+  <data name="contract.negotiating" xml:space="preserve">
+    <value>Negotiating</value>
+  </data>
+  <data name="contract.title" xml:space="preserve">
+    <value>Desktop API</value>
+  </data>
+  <data name="contract.version" xml:space="preserve">
+    <value>v{version}</value>
+  </data>
+  <data name="runtime.action_completed" xml:space="preserve">
+    <value>{action} completed.</value>
+  </data>
+  <data name="runtime.action_failed" xml:space="preserve">
+    <value>{action} failed: {message}</value>
+  </data>
+  <data name="runtime.autostart" xml:space="preserve">
+    <value>Autostart</value>
+  </data>
+  <data name="runtime.confirm_action" xml:space="preserve">
+    <value>Confirm {action}</value>
+  </data>
+  <data name="runtime.confirm_prompt" xml:space="preserve">
+    <value>Confirm {action} of the AgentDock runtime?</value>
+  </data>
+  <data name="runtime.eyebrow" xml:space="preserve">
+    <value>Core lifecycle bridge</value>
+  </data>
+  <data name="runtime.health" xml:space="preserve">
+    <value>Health</value>
+  </data>
+  <data name="runtime.nexus" xml:space="preserve">
+    <value>Nexus</value>
+  </data>
+  <data name="runtime.process" xml:space="preserve">
+    <value>Process</value>
+  </data>
+  <data name="runtime.root_unavailable" xml:space="preserve">
+    <value>Runtime root unavailable</value>
+  </data>
+  <data name="runtime.status_failed" xml:space="preserve">
+    <value>Runtime status failed: {message}</value>
+  </data>
+  <data name="runtime.status_not_loaded" xml:space="preserve">
+    <value>Runtime status not loaded yet.</value>
+  </data>
+  <data name="runtime.status_summary" xml:space="preserve">
+    <value>Runtime status: {state}.</value>
+  </data>
+  <data name="runtime.title" xml:space="preserve">
+    <value>Runtime</value>
+  </data>
+  <data name="settings.batch_interval" xml:space="preserve">
+    <value>Event batch interval</value>
+  </data>
+  <data name="settings.eyebrow" xml:space="preserve">
+    <value>Persistence probe</value>
+  </data>
+  <data name="settings.hint" xml:space="preserve">
+    <value>Stored outside the production AgentDock configuration.</value>
+  </data>
+  <data name="settings.language" xml:space="preserve">
+    <value>Interface language</value>
+  </data>
+  <data name="settings.milliseconds" xml:space="preserve">
+    <value>ms</value>
+  </data>
+  <data name="settings.saved" xml:space="preserve">
+    <value>POC preference saved.</value>
+  </data>
+  <data name="settings.title" xml:space="preserve">
+    <value>POC settings</value>
+  </data>
+</root>

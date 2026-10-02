@@ -1,0 +1,36 @@
+{
+  "generatedFrom": "existing native resources; values are inventoried only and are never semantically merged automatically",
+  "macOS": {
+    "en": {
+      "path": "desktop/macos/AgentDockApp/Resources/en.lproj/Localizable.strings",
+      "keyCount": 363
+    },
+    "zh-Hans": {
+      "path": "desktop/macos/AgentDockApp/Resources/zh-Hans.lproj/Localizable.strings",
+      "keyCount": 363
+    },
+    "zh-Hant": {
+      "path": "desktop/macos/AgentDockApp/Resources/zh-Hant.lproj/Localizable.strings",
+      "keyCount": 363
+    }
+  },
+  "windows": {
+    "en": {
+      "path": "desktop/windows/control-panel/Resources/UiStrings.resx",
+      "keyCount": 241
+    },
+    "zh-Hans": {
+      "path": "desktop/windows/control-panel/Resources/UiStrings.zh-CN.resx",
+      "keyCount": 241
+    },
+    "zh-Hant": {
+      "path": "desktop/windows/control-panel/Resources/UiStrings.zh-TW.resx",
+      "keyCount": 241
+    }
+  },
+  "notes": [
+    "macOS legacy Localizable.strings uses English phrases as keys.",
+    "Windows legacy UiStrings.resx uses identifier-style keys.",
+    "M3 canonical semantic keys remain separate until each native surface is migrated explicitly."
+  ]
+}

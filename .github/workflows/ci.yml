@@ -41,6 +41,10 @@ jobs:
             exit 1
           fi
 
+      - name: Validate desktop i18n
+        if: runner.os == 'Linux'
+        run: make i18n-check
+
       - name: Test
         run: go test ./... -count=1 -timeout=3m
 

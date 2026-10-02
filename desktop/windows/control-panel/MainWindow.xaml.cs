@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     {
         _runtime = runtime;
         InitializeComponent();
+        PopulateLanguageOptions();
         _updatingUi = true;
         SelectUiLanguage(UiText.ReadPreference());
         _updatingUi = false;
@@ -781,6 +782,18 @@ public partial class MainWindow : Window
             _updatingUi = false;
             SettingsStatusText.Text = UiText.Format("LanguageChangeFailed", ex.Message);
             MessageBox.Show(this, SettingsStatusText.Text, "AgentDock", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void PopulateLanguageOptions()
+    {
+        foreach (var locale in GeneratedLocales.Supported)
+        {
+            LanguageComboBox.Items.Add(new ComboBoxItem
+            {
+                Content = locale.NativeName,
+                Tag = locale.Code
+            });
         }
     }
 

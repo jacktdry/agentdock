@@ -10,6 +10,7 @@ import {
   type ActivityStreamState,
   type APIError,
 } from '../api/desktopApi'
+import { t } from '../i18n'
 import { appendBoundedHistory } from '../utils/boundedHistory'
 
 const emptyStatus = (): ActivityProbeStatus => ({
@@ -34,7 +35,7 @@ export const useActivityStore = defineStore('activity', () => {
   const busy = ref(false)
   const error = ref<APIError | null>(null)
   const streamState = ref<ActivityStreamState>('closed')
-  const summaryAnnouncement = ref('Synthetic activity stream is stopped.')
+  const summaryAnnouncement = ref(t('activity.summary_stopped'))
   const observedGap = ref('0')
   let streamHandle: ActivityStreamHandle | null = null
   let lastSequence = '0'
@@ -89,19 +90,16 @@ export const useActivityStore = defineStore('activity', () => {
       queueDepth: batch.queueDepth,
       queueCapacity: batch.queueCapacity,
     }
-    summaryAnnouncement.value =
-      'Activity stream active. ' +
-      batch.deliveredTotal +
-      ' delivered, ' +
-      status.value.droppedTotal +
-      ' dropped.'
+    summaryAnnouncement.value = t('activity.summary_active', {
+      delivered: batch.deliveredTotal,
+      dropped: status.value.droppedTotal,
+    })
   }
 
   function updateStreamState(state: ActivityStreamState) {
     streamState.value = state
     if ((state === 'closed' || state === 'error') && status.value.running) {
-      summaryAnnouncement.value =
-        'Activity transport disconnected; new batches will be dropped until it reconnects.'
+      summaryAnnouncement.value = t('activity.summary_disconnected')
     }
   }
 
@@ -117,7 +115,9 @@ export const useActivityStore = defineStore('activity', () => {
         },
         (contractError) => {
           error.value = contractError
-          summaryAnnouncement.value = 'Activity contract rejected: ' + contractError.message
+          summaryAnnouncement.value = t('activity.summary_rejected', {
+            message: contractError.message,
+          })
         },
       )
       streamHandle = handle
@@ -151,12 +151,12 @@ export const useActivityStore = defineStore('activity', () => {
       status.value = result.status ?? emptyStatus()
       batchIntervalMs.value = intervalMs
       summaryAnnouncement.value = error.value
-        ? 'Activity probe failed: ' + error.value.message
-        : 'Activity probe started at ' + rateHz + ' events per second.'
+        ? t('activity.summary_probe_failed', { message: error.value.message })
+        : t('activity.summary_probe_started', { rate: rateHz })
     } catch (caught) {
       unsubscribeActivity()
       error.value = clientError('activity_start_call_failed', caught)
-      summaryAnnouncement.value = 'Activity probe failed: ' + error.value.message
+      summaryAnnouncement.value = t('activity.summary_probe_failed', { message: error.value.message })
     } finally {
       busy.value = false
     }
@@ -167,7 +167,7 @@ export const useActivityStore = defineStore('activity', () => {
     error.value = null
     try {
       status.value = await desktopApi.stopActivityProbe()
-      summaryAnnouncement.value = 'Synthetic activity source stopped.'
+      summaryAnnouncement.value = t('activity.summary_source_stopped')
     } catch (caught) {
       error.value = clientError('activity_stop_call_failed', caught)
     } finally {

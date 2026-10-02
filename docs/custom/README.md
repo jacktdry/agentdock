@@ -18,6 +18,7 @@
 - [workbench-adoption.md](workbench-adoption.md)：Workbench 功能採用、延後與排除清單。
 - [desktop-ui.md](desktop-ui.md)：macOS / Windows 共用 Desktop UI 的技術方向與 POC 驗收條件。
 - [i18n.md](i18n.md)：跨平台多國語系、志願翻譯與 CI 架構。
+- [m3-i18n-foundation.md](m3-i18n-foundation.md)：M3 實作、native bridge、migration boundary 與驗證方式。
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
 

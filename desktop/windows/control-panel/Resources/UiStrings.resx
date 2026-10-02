@@ -737,4 +737,7 @@ Update now?</value>
   <data name="LanguageChangeDiscardWarning" xml:space="preserve">
     <value>Changing the interface language reloads this window. Any unsaved changes will be lost. Continue?</value>
   </data>
+  <data name="TraditionalChinese" xml:space="preserve">
+    <value>Traditional Chinese</value>
+  </data>
 </root>

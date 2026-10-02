@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED FILE — DO NOT EDIT -->
+<root>
+  <data name="activity.clear_log" xml:space="preserve">
+    <value>清除紀錄</value>
+  </data>
+  <data name="activity.delivered" xml:space="preserve">
+    <value>已送達</value>
+  </data>
+  <data name="activity.empty" xml:space="preserve">
+    <value>啟動探測以驗證版本化 Activity 契約。</value>
+  </data>
+  <data name="activity.epoch" xml:space="preserve">
+    <value>Epoch：{epoch}</value>
+  </data>
+  <data name="activity.eyebrow" xml:space="preserve">
+    <value>有界資料平面契約</value>
+  </data>
+  <data name="activity.history" xml:space="preserve">
+    <value>有界前端 Activity 歷程</value>
+  </data>
+  <data name="activity.last_batch" xml:space="preserve">
+    <value>上一批次</value>
+  </data>
+  <data name="activity.latest_cursor" xml:space="preserve">
+    <value>最新游標</value>
+  </data>
+  <data name="activity.log_label" xml:space="preserve">
+    <value>模擬 Activity 紀錄</value>
+  </data>
+  <data name="activity.observed_gap" xml:space="preserve">
+    <value>觀察到的缺口</value>
+  </data>
+  <data name="activity.probe" xml:space="preserve">
+    <value>探測：{state}</value>
+  </data>
+  <data name="activity.published" xml:space="preserve">
+    <value>已發布</value>
+  </data>
+  <data name="activity.queue" xml:space="preserve">
+    <value>佇列</value>
+  </data>
+  <data name="activity.queue_load" xml:space="preserve">
+    <value>佇列負載</value>
+  </data>
+  <data name="activity.rate_unit" xml:space="preserve">
+    <value>活動/秒</value>
+  </data>
+  <data name="activity.source_dropped" xml:space="preserve">
+    <value>來源丟棄</value>
+  </data>
+  <data name="activity.start_probe" xml:space="preserve">
+    <value>啟動探測</value>
+  </data>
+  <data name="activity.summary_active" xml:space="preserve">
+    <value>Activity 串流執行中。已送達 {delivered} 筆，丟棄 {dropped} 筆。</value>
+  </data>
+  <data name="activity.summary_disconnected" xml:space="preserve">
+    <value>Activity 傳輸已中斷；重新連線前的新批次都會被丟棄。</value>
+  </data>
+  <data name="activity.summary_probe_failed" xml:space="preserve">
+    <value>Activity 探測失敗：{message}</value>
+  </data>
+  <data name="activity.summary_probe_started" xml:space="preserve">
+    <value>Activity 探測已以每秒 {rate} 個事件啟動。</value>
+  </data>
+  <data name="activity.summary_rejected" xml:space="preserve">
+    <value>Activity 契約遭拒絕：{message}</value>
+  </data>
+  <data name="activity.summary_source_stopped" xml:space="preserve">
+    <value>模擬 Activity 來源已停止。</value>
+  </data>
+  <data name="activity.summary_stopped" xml:space="preserve">
+    <value>模擬 Activity 串流已停止。</value>
+  </data>
+  <data name="activity.synthetic_rate" xml:space="preserve">
+    <value>模擬速率</value>
+  </data>
+  <data name="activity.title" xml:space="preserve">
+    <value>Activity 串流</value>
+  </data>
+  <data name="activity.total_dropped" xml:space="preserve">
+    <value>總丟棄數</value>
+  </data>
+  <data name="activity.transport" xml:space="preserve">
+    <value>傳輸：{state}</value>
+  </data>
+  <data name="activity.transport_dropped" xml:space="preserve">
+    <value>傳輸丟棄</value>
+  </data>
+  <data name="app.eyebrow" xml:space="preserve">
+    <value>M3 多國語系基礎 · Wails v3 beta.27</value>
+  </data>
+  <data name="app.lede" xml:space="preserve">
+    <value>版本化控制契約、明確能力宣告、受界限保護的 Activity 傳輸，以及所有桌面平台共用的單一翻譯來源。</value>
+  </data>
+  <data name="app.poc_label" xml:space="preserve">
+    <value>架構概念驗證</value>
+  </data>
+  <data name="app.title" xml:space="preserve">
+    <value>AgentDock 共用桌面介面</value>
+  </data>
+  <data name="common.cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="common.confirm" xml:space="preserve">
+    <value>確認</value>
+  </data>
+  <data name="common.connected" xml:space="preserve">
+    <value>已連線</value>
+  </data>
+  <data name="common.disabled" xml:space="preserve">
+    <value>已停用</value>
+  </data>
+  <data name="common.enabled" xml:space="preserve">
+    <value>已啟用</value>
+  </data>
+  <data name="common.experimental" xml:space="preserve">
+    <value>實驗性</value>
+  </data>
+  <data name="common.follow_system" xml:space="preserve">
+    <value>跟隨系統</value>
+  </data>
+  <data name="common.healthy" xml:space="preserve">
+    <value>正常</value>
+  </data>
+  <data name="common.loading" xml:space="preserve">
+    <value>載入中</value>
+  </data>
+  <data name="common.negotiated" xml:space="preserve">
+    <value>已協商</value>
+  </data>
+  <data name="common.not_connected" xml:space="preserve">
+    <value>未連線</value>
+  </data>
+  <data name="common.not_healthy" xml:space="preserve">
+    <value>狀態異常</value>
+  </data>
+  <data name="common.not_started" xml:space="preserve">
+    <value>尚未開始</value>
+  </data>
+  <data name="common.refresh" xml:space="preserve">
+    <value>重新整理</value>
+  </data>
+  <data name="common.rejected" xml:space="preserve">
+    <value>已拒絕</value>
+  </data>
+  <data name="common.restart" xml:space="preserve">
+    <value>重新啟動</value>
+  </data>
+  <data name="common.running" xml:space="preserve">
+    <value>執行中</value>
+  </data>
+  <data name="common.save" xml:space="preserve">
+    <value>儲存</value>
+  </data>
+  <data name="common.start" xml:space="preserve">
+    <value>啟動</value>
+  </data>
+  <data name="common.stop" xml:space="preserve">
+    <value>停止</value>
+  </data>
+  <data name="common.stopped" xml:space="preserve">
+    <value>已停止</value>
+  </data>
+  <data name="common.unavailable" xml:space="preserve">
+    <value>無法使用</value>
+  </data>
+  <data name="contract.eyebrow" xml:space="preserve">
+    <value>控制平面契約</value>
+  </data>
+  <data name="contract.hint" xml:space="preserve">
+    <value>無法使用的 domain 會明確宣告，而不是回傳空白的占位資料。</value>
+  </data>
+  <data name="contract.negotiating" xml:space="preserve">
+    <value>協商中</value>
+  </data>
+  <data name="contract.title" xml:space="preserve">
+    <value>桌面 API</value>
+  </data>
+  <data name="contract.version" xml:space="preserve">
+    <value>v{version}</value>
+  </data>
+  <data name="runtime.action_completed" xml:space="preserve">
+    <value>{action}完成。</value>
+  </data>
+  <data name="runtime.action_failed" xml:space="preserve">
+    <value>{action}失敗：{message}</value>
+  </data>
+  <data name="runtime.autostart" xml:space="preserve">
+    <value>自動啟動</value>
+  </data>
+  <data name="runtime.confirm_action" xml:space="preserve">
+    <value>確認{action}</value>
+  </data>
+  <data name="runtime.confirm_prompt" xml:space="preserve">
+    <value>確認要對 AgentDock 執行階段執行「{action}」嗎？</value>
+  </data>
+  <data name="runtime.eyebrow" xml:space="preserve">
+    <value>Core 生命週期橋接</value>
+  </data>
+  <data name="runtime.health" xml:space="preserve">
+    <value>運作狀態</value>
+  </data>
+  <data name="runtime.nexus" xml:space="preserve">
+    <value>Nexus</value>
+  </data>
+  <data name="runtime.process" xml:space="preserve">
+    <value>程序</value>
+  </data>
+  <data name="runtime.root_unavailable" xml:space="preserve">
+    <value>無法取得執行階段根目錄</value>
+  </data>
+  <data name="runtime.status_failed" xml:space="preserve">
+    <value>取得執行階段狀態失敗：{message}</value>
+  </data>
+  <data name="runtime.status_not_loaded" xml:space="preserve">
+    <value>尚未載入執行階段狀態。</value>
+  </data>
+  <data name="runtime.status_summary" xml:space="preserve">
+    <value>執行階段狀態：{state}。</value>
+  </data>
+  <data name="runtime.title" xml:space="preserve">
+    <value>執行階段</value>
+  </data>
+  <data name="settings.batch_interval" xml:space="preserve">
+    <value>事件批次間隔</value>
+  </data>
+  <data name="settings.eyebrow" xml:space="preserve">
+    <value>持久化驗證</value>
+  </data>
+  <data name="settings.hint" xml:space="preserve">
+    <value>儲存在正式 AgentDock 設定之外。</value>
+  </data>
+  <data name="settings.language" xml:space="preserve">
+    <value>介面語言</value>
+  </data>
+  <data name="settings.milliseconds" xml:space="preserve">
+    <value>毫秒</value>
+  </data>
+  <data name="settings.saved" xml:space="preserve">
+    <value>POC 偏好設定已儲存。</value>
+  </data>
+  <data name="settings.title" xml:space="preserve">
+    <value>POC 設定</value>
+  </data>
+</root>

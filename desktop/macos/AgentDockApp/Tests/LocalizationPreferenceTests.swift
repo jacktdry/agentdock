@@ -11,16 +11,26 @@ struct LocalizationPreferenceTests {
 
         precondition(L10n.languagePreference(defaults: defaults) == .system)
 
-        L10n.setLanguagePreference(.english, defaults: defaults)
-        precondition(L10n.languagePreference(defaults: defaults) == .english)
+        guard let english = UILanguagePreference(rawValue: "en"),
+              let simplifiedChinese = UILanguagePreference(rawValue: "zh-Hans"),
+              let traditionalChinese = UILanguagePreference(rawValue: "zh-Hant") else {
+            preconditionFailure("generated locale manifest is missing the M3 baseline locales")
+        }
 
-        L10n.setLanguagePreference(.simplifiedChinese, defaults: defaults)
-        precondition(L10n.languagePreference(defaults: defaults) == .simplifiedChinese)
+        L10n.setLanguagePreference(english, defaults: defaults)
+        precondition(L10n.languagePreference(defaults: defaults) == english)
 
+        L10n.setLanguagePreference(simplifiedChinese, defaults: defaults)
+        precondition(L10n.languagePreference(defaults: defaults) == simplifiedChinese)
+
+        // Legacy platform tags are normalized through the generated manifest aliases.
         defaults.set("zh-TW", forKey: "AgentDockUILanguage")
-        precondition(L10n.languagePreference(defaults: defaults) == .system)
+        precondition(L10n.languagePreference(defaults: defaults) == traditionalChinese)
 
-        L10n.setLanguagePreference(.english, defaults: defaults)
+        precondition(UILanguagePreference.allCases.count == GeneratedLocales.supported.count + 1)
+        precondition(traditionalChinese.title == "繁體中文")
+
+        L10n.setLanguagePreference(english, defaults: defaults)
         L10n.setLanguagePreference(.system, defaults: defaults)
         precondition(L10n.languagePreference(defaults: defaults) == .system)
         precondition(defaults.object(forKey: "AgentDockUILanguage") == nil)
