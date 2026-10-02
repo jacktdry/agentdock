@@ -181,6 +181,10 @@ input {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.contract-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .status-grid div,
 .metric-grid div {
   min-width: 0;
@@ -200,6 +204,14 @@ dd {
   font-weight: 650;
 }
 
+.cursor-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
 .actions,
 .input-row,
 .stream-toolbar {
@@ -207,6 +219,18 @@ dd {
   flex-wrap: wrap;
   gap: 0.55rem;
   align-items: center;
+}
+
+.confirmation-row {
+  margin-top: 0.8rem;
+  border: 1px solid #5d4e32;
+  border-radius: 0.65rem;
+  background: #211d16;
+  padding: 0.75rem;
+}
+
+.confirmation-row p {
+  margin: 0 0 0.6rem;
 }
 
 .settings-form {

@@ -40,6 +40,20 @@ The tradeoffs are also concrete: the WebView shell uses materially more memory t
 
 Tauri remains the fallback if Wails fails a production acceptance gate where its capabilities or distribution ecosystem provide a concrete benefit that justifies the Rust↔Go boundary.
 
+## M2 contract evidence
+
+M2 separates framework choice from Desktop domain semantics by introducing `internal/desktopapi` as the framework-neutral contract authority.
+
+- Wails is now a generated-binding / bounded-Stream adapter, not the owner of Runtime or Activity models.
+- protocol v1 exposes a manifest plus capability negotiation;
+- Runtime is the first available production-facing domain;
+- Activity v1 is explicitly experimental until M5 connects real execution sources;
+- all other planned domains are advertised as unavailable instead of returning placeholder success;
+- high-rate Activity uses epoch + decimal-string sequence cursors, bounded source buffering, a 256 KiB JSON payload ceiling, Wails `StreamConn.TrySend`, and bounded frontend history;
+- the stable root control surface is currently 2 services / 4 methods. POC Settings and synthetic Activity probe methods are not production API commitments.
+
+This reduces framework lock-in: a future Tauri/native adapter could reuse the same Desktop contract and Activity semantics rather than recreating domain behavior.
+
 ## Required production gates
 
 Before this ADR can become “Accepted”:

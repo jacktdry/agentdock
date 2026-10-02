@@ -1,23 +1,6 @@
 package main
 
-import "github.com/uvwt/agentdock/internal/desktopruntime"
-
-type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-type RuntimeStatusResult struct {
-	RuntimeRoot string                       `json:"runtimeRoot"`
-	Status      desktopruntime.ServiceStatus `json:"status"`
-	Error       *APIError                    `json:"error,omitempty"`
-}
-
-type RuntimeActionResult struct {
-	Action    string    `json:"action"`
-	Completed bool      `json:"completed"`
-	Error     *APIError `json:"error,omitempty"`
-}
+import "github.com/uvwt/agentdock/internal/desktopapi"
 
 type Preferences struct {
 	BatchIntervalMS int `json:"batchIntervalMs"`
@@ -26,52 +9,30 @@ type Preferences struct {
 }
 
 type PreferencesResult struct {
-	Preferences Preferences `json:"preferences"`
-	Error       *APIError   `json:"error,omitempty"`
+	Preferences Preferences          `json:"preferences"`
+	Error       *desktopapi.APIError `json:"error,omitempty"`
 }
 
 type SavePreferencesResult struct {
-	Saved bool      `json:"saved"`
-	Error *APIError `json:"error,omitempty"`
+	Saved bool                 `json:"saved"`
+	Error *desktopapi.APIError `json:"error,omitempty"`
 }
 
-type SyntheticEvent struct {
-	Sequence int64  `json:"sequence"`
-	Time     string `json:"time"`
+type ActivityProbeStatus struct {
+	Running               bool   `json:"running"`
+	RateHz                int    `json:"rateHz"`
+	Epoch                 string `json:"epoch"`
+	LatestSequence        string `json:"latestSequence"`
+	PublishedTotal        string `json:"publishedTotal"`
+	DeliveredTotal        string `json:"deliveredTotal"`
+	DroppedTotal          string `json:"droppedTotal"`
+	SourceDroppedTotal    string `json:"sourceDroppedTotal"`
+	TransportDroppedTotal string `json:"transportDroppedTotal"`
+	QueueDepth            int    `json:"queueDepth"`
+	QueueCapacity         int    `json:"queueCapacity"`
 }
 
-type EventBatch struct {
-	Events           []SyntheticEvent `json:"events"`
-	Produced         int64            `json:"produced"`
-	Delivered        int64            `json:"delivered"`
-	Dropped          int64            `json:"dropped"`
-	QueueDropped     int64            `json:"queueDropped"`
-	TransportDropped int64            `json:"transportDropped"`
-	QueueDepth       int              `json:"queueDepth"`
-	QueueCapacity    int              `json:"queueCapacity"`
-	BatchIntervalMS  int              `json:"batchIntervalMs"`
-}
-
-type EventSourceStatus struct {
-	Running          bool  `json:"running"`
-	RateHz           int   `json:"rateHz"`
-	Produced         int64 `json:"produced"`
-	Delivered        int64 `json:"delivered"`
-	Dropped          int64 `json:"dropped"`
-	QueueDropped     int64 `json:"queueDropped"`
-	TransportDropped int64 `json:"transportDropped"`
-	QueueDepth       int   `json:"queueDepth"`
-	QueueCapacity    int   `json:"queueCapacity"`
-}
-
-type EventControlResult struct {
-	Status EventSourceStatus `json:"status"`
-	Error  *APIError         `json:"error,omitempty"`
-}
-
-func apiError(code string, err error) *APIError {
-	if err == nil {
-		return nil
-	}
-	return &APIError{Code: code, Message: err.Error()}
+type ActivityProbeControlResult struct {
+	Status ActivityProbeStatus  `json:"status"`
+	Error  *desktopapi.APIError `json:"error,omitempty"`
 }

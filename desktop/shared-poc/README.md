@@ -1,24 +1,28 @@
 # AgentDock Shared Desktop POC
 
-M1 architecture spike for a shared AgentDock desktop UI.
+M1/M2 architecture POC for a shared AgentDock desktop UI and framework-neutral Desktop API.
 
-This is **not** a production desktop replacement. It validates a Vue 3 + TypeScript UI hosted by Wails v3 with Go remaining authoritative.
+This is **not** a production desktop replacement. It validates a Vue 3 + TypeScript UI hosted by Wails v3 while `internal/desktopapi` remains the framework-neutral contract authority and Go remains authoritative.
 
 ## Scope
 
 Validated in this POC:
 
 - generated Vue ↔ Go bindings;
+- protocol-v1 manifest / capability negotiation through `internal/desktopapi`;
 - read-only integration with the existing AgentDock runtime;
 - runtime start / stop / restart command surface;
-- bounded synthetic event batching plus Wails Stream/`TrySend` transport backpressure;
+- versioned Activity envelopes with epoch + decimal-string cursor;
+- bounded synthetic Activity batching plus Wails Stream/`TrySend` transport backpressure;
+- 256 KiB Activity payload ceiling and explicit source/transport drop accounting;
 - one persisted POC preference and window size;
 - native application menu and system tray construction;
 - restrictive AssetServer security headers;
 - macOS app/DMG packaging;
 - Windows ARM64/x64 cross-builds.
 
-See `../../docs/custom/m1-desktop-spike.md` and
+See `../../docs/custom/m1-desktop-spike.md`,
+`../../docs/custom/m2-shared-desktop-api.md` and
 `../../docs/custom/adr-shared-desktop-framework.md` for results and remaining
 production gates.
 

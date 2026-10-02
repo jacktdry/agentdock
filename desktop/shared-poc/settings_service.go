@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/uvwt/agentdock/internal/desktopapi"
 )
 
 const (
@@ -47,19 +49,41 @@ func (s *SettingsService) Get() PreferencesResult {
 	defer s.mu.Unlock()
 	prefs, err := s.readLocked()
 	if err != nil {
-		return PreferencesResult{Preferences: defaultPreferences(), Error: apiError("preferences_read_failed", err)}
+		return PreferencesResult{
+			Preferences: defaultPreferences(),
+			Error: desktopapi.ErrorFrom(
+				"preferences_read_failed",
+				desktopapi.ErrorCategoryOperation,
+				false,
+				err,
+			),
+		}
 	}
 	return PreferencesResult{Preferences: prefs}
 }
 
 func (s *SettingsService) Save(prefs Preferences) SavePreferencesResult {
 	if err := validatePreferences(prefs); err != nil {
-		return SavePreferencesResult{Error: apiError("preferences_invalid", err)}
+		return SavePreferencesResult{
+			Error: desktopapi.ErrorFrom(
+				"preferences_invalid",
+				desktopapi.ErrorCategoryValidation,
+				false,
+				err,
+			),
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.writeLocked(prefs); err != nil {
-		return SavePreferencesResult{Error: apiError("preferences_write_failed", err)}
+		return SavePreferencesResult{
+			Error: desktopapi.ErrorFrom(
+				"preferences_write_failed",
+				desktopapi.ErrorCategoryOperation,
+				false,
+				err,
+			),
+		}
 	}
 	return SavePreferencesResult{Saved: true}
 }

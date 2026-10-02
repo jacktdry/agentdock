@@ -1,98 +1,85 @@
 import { JSONStream, type JSONSocket } from '@wailsio/runtime'
-import * as EventService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/eventservice'
+import * as ActivityProbeService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/activityprobeservice'
+import type {
+  ActivityProbeStatus,
+  Preferences,
+  PreferencesResult,
+  SavePreferencesResult,
+} from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/models'
+import * as SettingsService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/settingsservice'
+import * as ContractService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/contractservice'
+import {
+  AccessLevel,
+  Availability,
+  Domain,
+  ErrorCategory,
+  RuntimeAction,
+} from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type {
   APIError,
-  EventSourceStatus,
+  DomainCapability,
+  Manifest,
+  NegotiationResult,
+  RuntimeActionResult,
+  RuntimeStatus,
+  RuntimeStatusResult,
+} from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
+import * as RuntimeService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/runtimeservice'
+import { parseActivityBatch, type ActivityBatch, type ActivityEnvelope } from './activityContract'
+
+export {
+  AccessLevel,
+  Availability,
+  Domain,
+  ErrorCategory,
+}
+export type {
+  ActivityBatch,
+  ActivityEnvelope,
+  ActivityProbeStatus,
+  APIError,
+  DomainCapability,
+  Manifest,
+  NegotiationResult,
   Preferences,
-} from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/models'
-import * as RuntimeService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/runtimeservice'
-import * as SettingsService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/settingsservice'
-
-export type { APIError, EventSourceStatus, Preferences }
-
-export interface SyntheticEvent {
-  sequence: number
-  time: string
+  PreferencesResult,
+  RuntimeActionResult,
+  RuntimeStatus,
+  RuntimeStatusResult,
+  SavePreferencesResult,
 }
 
-export interface ServiceStatus {
-  running: boolean
-  healthy: boolean
-  startupEnabled: boolean
-  nexusConnected: boolean
-}
+export const DESKTOP_API_VERSION = 1
 
-export interface RuntimeStatusResult {
-  runtimeRoot: string
-  status: ServiceStatus
-  error?: APIError | null
-}
+export type RuntimeActionName = 'start' | 'stop' | 'restart'
+export type ActivityStreamState = 'connecting' | 'open' | 'closed' | 'error'
 
-export interface RuntimeActionResult {
-  action: string
-  completed: boolean
-  error?: APIError | null
-}
-
-export interface PreferencesResult {
-  preferences: Preferences
-  error?: APIError | null
-}
-
-export interface SavePreferencesResult {
-  saved: boolean
-  error?: APIError | null
-}
-
-export interface EventBatch {
-  events: SyntheticEvent[]
-  produced: number
-  delivered: number
-  dropped: number
-  queueDropped: number
-  transportDropped: number
-  queueDepth: number
-  queueCapacity: number
-  batchIntervalMs: number
-}
-
-export interface EventControlResult {
-  status: EventSourceStatus
-  error?: APIError | null
-}
-
-export type EventStreamState = 'connecting' | 'open' | 'closed' | 'error'
-
-export interface EventStreamHandle {
+export interface ActivityStreamHandle {
   ready: Promise<void>
   close: () => void
 }
 
-function normaliseRuntimeStatus(result: Awaited<ReturnType<typeof RuntimeService.Status>>): RuntimeStatusResult {
+const runtimeActions: Record<RuntimeActionName, RuntimeAction> = {
+  start: RuntimeAction.RuntimeActionStart,
+  stop: RuntimeAction.RuntimeActionStop,
+  restart: RuntimeAction.RuntimeActionRestart,
+}
+
+export function clientError(code: string, caught: unknown): APIError {
   return {
-    runtimeRoot: result.runtimeRoot,
-    status: {
-      running: result.status.running,
-      healthy: result.status.healthy,
-      startupEnabled: result.status.startup_enabled,
-      nexusConnected: result.status.nexus_connected,
-    },
-    error: result.error,
+    code,
+    message: caught instanceof Error ? caught.message : String(caught),
+    category: ErrorCategory.ErrorCategoryInternal,
+    retryable: false,
   }
 }
 
-function normaliseBatch(batch: EventBatch): EventBatch {
-  return {
-    ...batch,
-    events: batch.events ?? [],
-  }
-}
-
-function openEventStream(
-  onBatch: (batch: EventBatch) => void,
-  onState: (state: EventStreamState) => void,
-): EventStreamHandle {
-  const stream: JSONSocket = JSONStream('poc:event-stream')
+function openActivityStream(
+  onBatch: (batch: ActivityBatch) => void,
+  onState: (state: ActivityStreamState) => void,
+  onContractError: (error: APIError) => void,
+): ActivityStreamHandle {
+  const stream: JSONSocket = JSONStream('desktop:activity')
   let settled = false
 
   const ready = new Promise<void>((resolve, reject) => {
@@ -105,20 +92,24 @@ function openEventStream(
       onState('error')
       if (!settled) {
         settled = true
-        reject(new Error('event stream failed to open'))
+        reject(new Error('activity stream failed to open'))
       }
     }
     stream.onclose = () => {
       onState('closed')
       if (!settled) {
         settled = true
-        reject(new Error('event stream closed before opening'))
+        reject(new Error('activity stream closed before opening'))
       }
     }
   })
 
   stream.onmessage = (event) => {
-    onBatch(normaliseBatch(event.data as EventBatch))
+    try {
+      onBatch(parseActivityBatch(event.data))
+    } catch (caught) {
+      onContractError(clientError('activity_contract_invalid', caught))
+    }
   }
 
   onState('connecting')
@@ -130,18 +121,25 @@ function openEventStream(
 }
 
 export const desktopApi = {
-  runtimeStatus: async () => normaliseRuntimeStatus(await RuntimeService.Status()),
-  runtimeAction: (action: 'start' | 'stop' | 'restart') =>
-    RuntimeService.Action(action) as Promise<RuntimeActionResult>,
+  manifest: () => ContractService.Manifest(),
+  negotiate: (domains: Domain[] = []) =>
+    ContractService.Negotiate({
+      clientVersion: DESKTOP_API_VERSION,
+      domains,
+    }),
 
-  getPreferences: () => SettingsService.Get() as Promise<PreferencesResult>,
+  runtimeStatus: () => RuntimeService.Status(),
+  runtimeAction: (action: RuntimeActionName) =>
+    RuntimeService.Action(runtimeActions[action]),
+
+  getPreferences: () => SettingsService.Get(),
   savePreferences: (preferences: Preferences) =>
-    SettingsService.Save(preferences) as Promise<SavePreferencesResult>,
+    SettingsService.Save(preferences),
 
-  eventStatus: () => EventService.Status(),
-  startEvents: (rateHz: number, batchIntervalMs: number) =>
-    EventService.Start(rateHz, batchIntervalMs) as Promise<EventControlResult>,
-  stopEvents: () => EventService.Stop(),
+  activityStatus: () => ActivityProbeService.Status(),
+  startActivityProbe: (rateHz: number, batchIntervalMs: number) =>
+    ActivityProbeService.Start(rateHz, batchIntervalMs),
+  stopActivityProbe: () => ActivityProbeService.Stop(),
 
-  openEventStream,
+  openActivityStream,
 }

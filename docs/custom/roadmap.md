@@ -95,6 +95,17 @@
 
 Shared UI 不需要直接引用散落的 `internal/*` 實作。
 
+### M2 實測結論（2026-10-03）
+
+- 建立 framework-neutral `internal/desktopapi`，Wails 僅作 binding / Stream transport adapter。
+- Desktop API protocol v1、capability negotiation、structured error、access level / confirmation metadata 已建立。
+- Runtime domain 已正式化，Shared UI 不再暴露 `desktopruntime.ServiceStatus`。
+- Activity v1 contract 已建立：epoch + decimal-string sequence、bounded source queue、256 KiB payload ceiling、source / transport drop accounting。
+- Activity 高頻 data plane 僅使用 bounded Stream / `TrySend`，禁止使用 Wails unbounded Event mailbox。
+- connection / acp / browser / permission / mcp / plugin / update / diagnostics 目前明確標示 unavailable，不建立假實作。
+- Go / race / vet、Vue typecheck、Vitest contract fixture、macOS DMG、Windows ARM64/x64 cross-build 均通過。
+- M3 可開始；real Activity / execution source 仍留在 M5。
+
 ## M3 — i18n Foundation
 
 ### 工作

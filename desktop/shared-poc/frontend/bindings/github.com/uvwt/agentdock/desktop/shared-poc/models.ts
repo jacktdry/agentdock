@@ -3,26 +3,23 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as desktopruntime$0 from "../../internal/desktopruntime/models.js";
+import * as desktopapi$0 from "../../internal/desktopapi/models.js";
 
-export interface APIError {
-    "code": string;
-    "message": string;
+export interface ActivityProbeControlResult {
+    "status": ActivityProbeStatus;
+    "error"?: desktopapi$0.APIError | null;
 }
 
-export interface EventControlResult {
-    "status": EventSourceStatus;
-    "error"?: APIError | null;
-}
-
-export interface EventSourceStatus {
+export interface ActivityProbeStatus {
     "running": boolean;
     "rateHz": number;
-    "produced": number;
-    "delivered": number;
-    "dropped": number;
-    "queueDropped": number;
-    "transportDropped": number;
+    "epoch": string;
+    "latestSequence": string;
+    "publishedTotal": string;
+    "deliveredTotal": string;
+    "droppedTotal": string;
+    "sourceDroppedTotal": string;
+    "transportDroppedTotal": string;
     "queueDepth": number;
     "queueCapacity": number;
 }
@@ -35,22 +32,10 @@ export interface Preferences {
 
 export interface PreferencesResult {
     "preferences": Preferences;
-    "error"?: APIError | null;
-}
-
-export interface RuntimeActionResult {
-    "action": string;
-    "completed": boolean;
-    "error"?: APIError | null;
-}
-
-export interface RuntimeStatusResult {
-    "runtimeRoot": string;
-    "status": desktopruntime$0.ServiceStatus;
-    "error"?: APIError | null;
+    "error"?: desktopapi$0.APIError | null;
 }
 
 export interface SavePreferencesResult {
     "saved": boolean;
-    "error"?: APIError | null;
+    "error"?: desktopapi$0.APIError | null;
 }

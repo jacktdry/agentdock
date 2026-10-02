@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { desktopApi, type APIError, type Preferences } from '../api/desktopApi'
+import { clientError, desktopApi, type APIError, type Preferences } from '../api/desktopApi'
 
 const fallback: Preferences = {
   batchIntervalMs: 100,
@@ -23,10 +23,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       preferences.value = { ...result.preferences }
       error.value = result.error ?? null
     } catch (caught) {
-      error.value = {
-        code: 'preferences_call_failed',
-        message: caught instanceof Error ? caught.message : String(caught),
-      }
+      error.value = clientError('preferences_call_failed', caught)
     } finally {
       loading.value = false
     }
@@ -46,10 +43,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
       }
       return result.saved && !result.error
     } catch (caught) {
-      error.value = {
-        code: 'preferences_save_call_failed',
-        message: caught instanceof Error ? caught.message : String(caught),
-      }
+      error.value = clientError('preferences_save_call_failed', caught)
       return false
     } finally {
       saving.value = false

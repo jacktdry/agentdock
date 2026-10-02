@@ -1,8 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { desktopApi, type APIError, type ServiceStatus } from '../api/desktopApi'
+import {
+  clientError,
+  desktopApi,
+  type APIError,
+  type RuntimeActionName,
+  type RuntimeStatus,
+} from '../api/desktopApi'
 
-const emptyStatus = (): ServiceStatus => ({
+const emptyStatus = (): RuntimeStatus => ({
   running: false,
   healthy: false,
   startupEnabled: false,
@@ -10,10 +16,10 @@ const emptyStatus = (): ServiceStatus => ({
 })
 
 export const useRuntimeStore = defineStore('runtime', () => {
-  const status = ref<ServiceStatus>(emptyStatus())
+  const status = ref<RuntimeStatus>(emptyStatus())
   const runtimeRoot = ref('')
   const loading = ref(false)
-  const actionPending = ref<'start' | 'stop' | 'restart' | null>(null)
+  const actionPending = ref<RuntimeActionName | null>(null)
   const error = ref<APIError | null>(null)
   const announcement = ref('Runtime status not loaded yet.')
 
@@ -33,35 +39,29 @@ export const useRuntimeStore = defineStore('runtime', () => {
       status.value = result.status ?? emptyStatus()
       error.value = result.error ?? null
       announcement.value = error.value
-        ? `Runtime status failed: ${error.value.message}`
-        : `Runtime status: ${stateLabel.value}.`
+        ? 'Runtime status failed: ' + error.value.message
+        : 'Runtime status: ' + stateLabel.value + '.'
     } catch (caught) {
-      error.value = {
-        code: 'runtime_call_failed',
-        message: caught instanceof Error ? caught.message : String(caught),
-      }
-      announcement.value = `Runtime status failed: ${error.value.message}`
+      error.value = clientError('runtime_call_failed', caught)
+      announcement.value = 'Runtime status failed: ' + error.value.message
     } finally {
       loading.value = false
     }
   }
 
-  async function perform(action: 'start' | 'stop' | 'restart') {
+  async function perform(action: RuntimeActionName) {
     actionPending.value = action
     error.value = null
     try {
       const result = await desktopApi.runtimeAction(action)
       error.value = result.error ?? null
       announcement.value = error.value
-        ? `${action} failed: ${error.value.message}`
-        : `${action} completed.`
+        ? action + ' failed: ' + error.value.message
+        : action + ' completed.'
       if (!error.value) await refresh()
     } catch (caught) {
-      error.value = {
-        code: 'runtime_action_call_failed',
-        message: caught instanceof Error ? caught.message : String(caught),
-      }
-      announcement.value = `${action} failed: ${error.value.message}`
+      error.value = clientError('runtime_action_call_failed', caught)
+      announcement.value = action + ' failed: ' + error.value.message
     } finally {
       actionPending.value = null
     }

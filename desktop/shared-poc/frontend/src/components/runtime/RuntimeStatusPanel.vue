@@ -1,15 +1,49 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { Domain, type RuntimeActionName } from '../../api/desktopApi'
+import { useContractStore } from '../../stores/contract'
 import { useRuntimeStore } from '../../stores/runtime'
 
 const runtime = useRuntimeStore()
+const contract = useContractStore()
 const { status, runtimeRoot, loading, actionPending, error, announcement, stateLabel } =
   storeToRefs(runtime)
+const confirmationAction = ref<RuntimeActionName | null>(null)
+
+const confirmationLabel = computed(() => {
+  if (!confirmationAction.value) return ''
+  return confirmationAction.value.charAt(0).toUpperCase() + confirmationAction.value.slice(1)
+})
 
 onMounted(() => {
+  void contract.load()
   void runtime.refresh()
 })
+
+function canInvoke(action: RuntimeActionName) {
+  return contract.canInvoke(Domain.DomainRuntime, action)
+}
+
+function requestAction(action: RuntimeActionName) {
+  if (!canInvoke(action)) return
+  if (contract.requiresConfirmation(Domain.DomainRuntime, action)) {
+    confirmationAction.value = action
+    return
+  }
+  void runtime.perform(action)
+}
+
+async function confirmAction() {
+  const action = confirmationAction.value
+  confirmationAction.value = null
+  if (!action) return
+  await runtime.perform(action)
+}
+
+function cancelConfirmation() {
+  confirmationAction.value = null
+}
 </script>
 
 <template>
@@ -48,15 +82,46 @@ onMounted(() => {
       <button type="button" :disabled="loading || actionPending !== null" @click="runtime.refresh">
         Refresh
       </button>
-      <button type="button" :disabled="actionPending !== null" @click="runtime.perform('start')">
+      <button
+        type="button"
+        :disabled="actionPending !== null || !canInvoke('start')"
+        @click="requestAction('start')"
+      >
         Start
       </button>
-      <button type="button" :disabled="actionPending !== null" @click="runtime.perform('restart')">
+      <button
+        type="button"
+        :disabled="actionPending !== null || !canInvoke('restart')"
+        @click="requestAction('restart')"
+      >
         Restart
       </button>
-      <button type="button" :disabled="actionPending !== null" @click="runtime.perform('stop')">
+      <button
+        type="button"
+        :disabled="actionPending !== null || !canInvoke('stop')"
+        @click="requestAction('stop')"
+      >
         Stop
       </button>
+    </div>
+
+    <div
+      v-if="confirmationAction"
+      class="confirmation-row"
+      role="group"
+      aria-labelledby="runtime-confirmation-label"
+    >
+      <p id="runtime-confirmation-label">
+        Confirm {{ confirmationLabel.toLowerCase() }} of the AgentDock runtime?
+      </p>
+      <div class="actions">
+        <button type="button" :disabled="actionPending !== null" @click="confirmAction">
+          Confirm {{ confirmationLabel }}
+        </button>
+        <button type="button" :disabled="actionPending !== null" @click="cancelConfirmation">
+          Cancel
+        </button>
+      </div>
     </div>
 
     <p class="sr-only" aria-live="polite">{{ announcement }}</p>

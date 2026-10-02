@@ -9,10 +9,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
-export function Action(action: string): $CancellablePromise<$models.RuntimeActionResult> {
-    return $Call.ByID(1765070295, action);
+export function Start(rateHz: number, batchIntervalMS: number): $CancellablePromise<$models.ActivityProbeControlResult> {
+    return $Call.ByID(1518847004, rateHz, batchIntervalMS);
 }
 
-export function Status(): $CancellablePromise<$models.RuntimeStatusResult> {
-    return $Call.ByID(3944379415);
+export function Status(): $CancellablePromise<$models.ActivityProbeStatus> {
+    return $Call.ByID(1845099586);
+}
+
+export function Stop(): $CancellablePromise<$models.ActivityProbeStatus> {
+    return $Call.ByID(996233912);
 }

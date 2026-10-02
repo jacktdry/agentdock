@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "epoch": "fixture-epoch",
+  "firstSequence": "9007199254740993",
+  "lastSequence": "9007199254740994",
+  "events": [
+    {
+      "schemaVersion": 1,
+      "epoch": "fixture-epoch",
+      "sequence": "9007199254740993",
+      "occurredAt": "2026-10-03T00:00:00Z",
+      "kind": "probe.tick",
+      "source": "fixture",
+      "data": {"value": 1}
+    },
+    {
+      "schemaVersion": 1,
+      "epoch": "fixture-epoch",
+      "sequence": "9007199254740994",
+      "occurredAt": "2026-10-03T00:00:01Z",
+      "kind": "probe.tick",
+      "source": "fixture"
+    }
+  ],
+  "publishedTotal": "9007199254740994",
+  "deliveredTotal": "9007199254740994",
+  "sourceDroppedTotal": "0",
+  "transportDroppedTotal": "0",
+  "queueDepth": 0,
+  "queueCapacity": 256
+}

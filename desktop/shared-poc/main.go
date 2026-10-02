@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync/atomic"
 
+	"github.com/uvwt/agentdock/internal/desktopapi"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/icons"
@@ -15,7 +16,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const eventStreamName = "poc:event-stream"
+const activityStreamName = "desktop:activity"
 
 func main() {
 	runtimeRootFlag := flag.String("runtime-root", "", "AgentDock runtime root override")
@@ -23,16 +24,18 @@ func main() {
 
 	settings := NewSettingsService("")
 	prefs := settings.Get().Preferences
-	runtimeService := NewRuntimeService(*runtimeRootFlag)
-	eventService := NewEventService()
+	contractService := desktopapi.NewContractService()
+	runtimeService := desktopapi.NewRuntimeService(*runtimeRootFlag)
+	activityProbeService := NewActivityProbeService()
 
 	app := application.New(application.Options{
 		Name:        "AgentDock Shared Desktop POC",
 		Description: "Cross-platform AgentDock desktop architecture spike",
 		Services: []application.Service{
+			application.NewService(contractService),
 			application.NewService(runtimeService),
 			application.NewService(settings),
-			application.NewService(eventService),
+			application.NewService(activityProbeService),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
@@ -43,7 +46,7 @@ func main() {
 		},
 	})
 
-	app.HandleStream(eventStreamName, eventService.serveStream)
+	app.HandleStream(activityStreamName, activityProbeService.serveStream)
 
 	width, height := normaliseWindowSize(prefs.WindowWidth, prefs.WindowHeight)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -82,7 +85,7 @@ func main() {
 	quit := func() {
 		quitting.Store(true)
 		persistWindowSize()
-		eventService.Stop()
+		activityProbeService.Stop()
 		app.Quit()
 	}
 

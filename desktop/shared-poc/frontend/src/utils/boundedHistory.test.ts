@@ -1,19 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { appendBoundedHistory, EVENT_HISTORY_LIMIT } from './boundedHistory'
+import type { ActivityEnvelope } from '../api/activityContract'
+import { ACTIVITY_HISTORY_LIMIT, appendBoundedHistory } from './boundedHistory'
 
-const sample = (start: number, count: number) =>
-  Array.from({ length: count }, (_, offset) => ({
-    sequence: start + offset,
-    time: `t-${start + offset}`,
-  }))
+const sample = (start: number, count: number): ActivityEnvelope[] =>
+  Array.from({ length: count }, (_, offset) => {
+    const sequence = String(start + offset)
+    return {
+      schemaVersion: 1,
+      epoch: 'test-epoch',
+      sequence,
+      occurredAt: '2026-10-03T00:00:00Z',
+      kind: 'probe.tick',
+      source: 'test',
+    }
+  })
 
 describe('appendBoundedHistory', () => {
-  it('retains only the newest bounded event history', () => {
-    const current = sample(1, EVENT_HISTORY_LIMIT)
+  it('retains only the newest bounded activity history', () => {
+    const current = sample(1, ACTIVITY_HISTORY_LIMIT)
     const result = appendBoundedHistory(current, sample(201, 25))
-    expect(result).toHaveLength(EVENT_HISTORY_LIMIT)
-    expect(result[0]?.sequence).toBe(26)
-    expect(result.at(-1)?.sequence).toBe(225)
+    expect(result).toHaveLength(ACTIVITY_HISTORY_LIMIT)
+    expect(result[0]?.sequence).toBe('26')
+    expect(result.at(-1)?.sequence).toBe('225')
   })
 
   it('supports a zero-size history', () => {

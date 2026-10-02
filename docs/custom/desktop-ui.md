@@ -1,6 +1,6 @@
 # Cross-platform Desktop UI
 
-> 狀態：M1 POC 完成；Wails v3 provisional，production gates 尚未關閉
+> 狀態：M2 Shared Desktop API 完成；Wails v3 provisional，production gates 尚未關閉
 
 ## 1. 問題
 
@@ -130,6 +130,17 @@ Electron 增加 Chromium / Node distribution 與 security surface；Flutter 則�
 - Go binding 採最小權限面：只有 UI 真正需要的 exported service methods 才可被 generator 暴露。
 - AssetServer 維持 restrictive CSP、`nosniff`、`no-referrer` 等防護。
 - Wails 沒有直接等價於 Tauri capability manifest 的 per-command UI policy，因此 M2 必須把 privileged binding review 納入 Desktop API Definition of Done。
+
+### M2 Desktop API contract
+
+- `internal/desktopapi` 是 framework-neutral contract authority；Wails 不擁有 domain semantics。
+- control plane 使用 generated bindings；目前 stable root contract 為 `ContractService` 與 `RuntimeService`。
+- protocol v1 以 manifest / negotiation 明確宣告 domain version、availability、operation access 與 stream constraints。
+- 未完成 domain 必須標示 `unavailable`，不可用空資料偽裝成功。
+- Activity v1 使用 epoch + decimal-string sequence cursor，避免 JavaScript `Number.MAX_SAFE_INTEGER` 精度問題。
+- Activity 單筆 payload 上限 256 KiB 且必須是有效 JSON；大量 output 留給 M5 continuation contract。
+- Activity source queue、Wails Stream transport、Vue history 三層都必須有界。
+- 新增 exported Desktop method 視為 API / security-surface change，必須同步審查 access level、confirmation 與平台 privilege semantics。
 
 ### Runtime integration
 
