@@ -1,0 +1,195 @@
+[
+  {
+    "name": "click",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "uid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pageId",
+        "uid"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "close_page",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pageId"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "evaluate_script",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "function": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pageId",
+        "function"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "fill",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "uid": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pageId",
+        "uid",
+        "value"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "list_pages",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "navigate_page",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "url": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "url",
+            "back",
+            "forward",
+            "reload"
+          ]
+        }
+      },
+      "required": [
+        "pageId"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "new_page",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "background": {
+          "type": "boolean"
+        },
+        "isolatedContext": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "press_key",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pageId",
+        "key"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "take_screenshot",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        },
+        "fullPage": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "png",
+            "jpeg",
+            "webp"
+          ]
+        }
+      },
+      "required": [
+        "pageId"
+      ],
+      "additionalProperties": true
+    }
+  },
+  {
+    "name": "take_snapshot",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pageId"
+      ],
+      "additionalProperties": true
+    }
+  }
+]

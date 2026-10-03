@@ -33,10 +33,13 @@ type EngineBinding struct {
 	BrowserLeaseID   string
 	BrowserSessionID string
 	WorkerID         string
+	// BrowserContextID is a native context ID, never an isolatedContext name.
 	BrowserContextID string
-	PageID           string
-	ConnectorID      string
-	Engine           EngineKind
+	// PageID is opaque and engine-local. The MCP adapter must later parse/bind
+	// numeric page IDs rather than interpreting this as a native CDP target ID.
+	PageID      string
+	ConnectorID string
+	Engine      EngineKind
 }
 
 // BrowserEngine adapts operations against an explicit binding. Close releases
@@ -48,3 +51,6 @@ type BrowserEngine interface {
 	Snapshot(ctx context.Context, scope RequestScope, binding EngineBinding, request SnapshotRequest) (Snapshot, error)
 	Close(ctx context.Context, scope RequestScope, binding EngineBinding) (CloseResult, error)
 }
+
+// EngineLifecycle shuts down workers, separately from releasing a page binding.
+type EngineLifecycle interface{ Shutdown(context.Context) error }

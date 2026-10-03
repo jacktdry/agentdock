@@ -901,39 +901,11 @@ func (m *Manager) refreshStateLocked(ctx context.Context, cfg ServerConfig, stat
 		recordStateError(state, err)
 		return nil, err
 	}
-	tools := make(map[string]Tool, len(listed))
-	for _, tool := range listed {
-		tool.Name = strings.TrimSpace(tool.Name)
-		if tool.Name == "" {
-			_ = client.close()
-			err := newError("MCP_INVALID_RESPONSE", "MCP tools/list returned an empty tool name", false, map[string]any{"server": cfg.Name}, nil)
-			recordStateError(state, err)
-			return nil, err
-		}
-		if _, duplicate := tools[tool.Name]; duplicate {
-			_ = client.close()
-			err := newError("MCP_INVALID_RESPONSE", "MCP tools/list returned duplicate tool names", false, map[string]any{"server": cfg.Name, "tool": tool.Name}, nil)
-			recordStateError(state, err)
-			return nil, err
-		}
-		if tool.InputSchema == nil {
-			tool.InputSchema = map[string]any{"type": "object", "additionalProperties": true}
-		}
-		validator, err := compileToolInputSchema(tool.InputSchema)
-		if err != nil {
-			_ = client.close()
-			schemaErr := newError(
-				"MCP_SCHEMA_INVALID",
-				"MCP tools/list returned an invalid input schema",
-				false,
-				map[string]any{"server": cfg.Name, "tool": tool.Name, "reason": err.Error()},
-				err,
-			)
-			recordStateError(state, schemaErr)
-			return nil, schemaErr
-		}
-		tool.inputValidator = validator
-		tools[tool.Name] = tool
+	tools, err := normalizeToolCatalog(cfg.Name, listed)
+	if err != nil {
+		_ = client.close()
+		recordStateError(state, err)
+		return nil, err
 	}
 	state.client = client
 	state.tools = tools
