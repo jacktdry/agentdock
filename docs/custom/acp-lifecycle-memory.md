@@ -217,4 +217,5 @@ Shared Desktop UI：
 - refined-antigravity-acp fork：完成，branch fix/session-lifecycle-recycle，commit 2b99cb4；wrapper 1.3.2 已全域安裝
 - Google Antigravity ACP runtime：已由 1.2.1 更新至 1.3.0
 - real lifecycle smoke：Codex 與 Antigravity 都已驗證最後一個 session/close 後底層 child PID 被替換
+- legacy stdio memory baseline：最終驗證仍有 53 個既有 .venv memory server process；本輪未終止，待 active session drain/restart 後再清理
 - AgentDock runtime lifecycle code：本輪刻意未修改，由後續 AgentDock session 接手
