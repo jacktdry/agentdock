@@ -214,6 +214,19 @@ explicit override
 
 UI 以管理目前實際使用的 adapters 為主，不發展成通用 package marketplace。
 
+### M7 lifecycle / shared-memory 補充（2026-10-03）
+
+ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
+
+- per-session persistent / ephemeral / idle-managed policy；
+- delegated ephemeral worker 完成後標準 session/close；
+- idle-managed session 的 bounded TTL sweeper；
+- managed / loaded / running / idle session 分流與 adapter process diagnostics；
+- AgentDock Memory dynamic MCP 從 per-process stdio 遷移至本機 shared Streamable HTTP daemon；
+- Adapter-specific cleanup 留在 codex-acp / refined-antigravity-acp fork，不在 AgentDock Core 寫 agent-specific kill hack。
+
+完整設計與接手條件見 [acp-lifecycle-memory.md](acp-lifecycle-memory.md)。
+
 ## M8 — Permission / Approval
 
 評估並最小化引入：

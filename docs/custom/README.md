@@ -21,6 +21,7 @@
 - [m3-i18n-foundation.md](m3-i18n-foundation.md)：M3 實作、native bridge、migration boundary 與驗證方式。
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
+- [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 
 ## 不可破壞的原則
 
