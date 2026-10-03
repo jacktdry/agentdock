@@ -89,19 +89,61 @@
     <value>傳輸丟棄</value>
   </data>
   <data name="app.eyebrow" xml:space="preserve">
-    <value>M3 多國語系基礎 · Wails v3 beta.27</value>
+    <value>AgentDock 桌面</value>
   </data>
   <data name="app.lede" xml:space="preserve">
-    <value>版本化控制契約、明確能力宣告、受界限保護的 Activity 傳輸，以及所有桌面平台共用的單一翻譯來源。</value>
+    <value>管理執行環境、連線與基本設定。</value>
   </data>
   <data name="app.poc_label" xml:space="preserve">
     <value>架構概念驗證</value>
   </data>
   <data name="app.title" xml:space="preserve">
-    <value>AgentDock 共用桌面介面</value>
+    <value>AgentDock 桌面</value>
+  </data>
+  <data name="basicsettings.autostart" xml:space="preserve">
+    <value>自動啟動核心</value>
+  </data>
+  <data name="basicsettings.confirm" xml:space="preserve">
+    <value>儲存這些基本設定？</value>
+  </data>
+  <data name="basicsettings.log_debug" xml:space="preserve">
+    <value>偵錯</value>
+  </data>
+  <data name="basicsettings.log_error" xml:space="preserve">
+    <value>錯誤</value>
+  </data>
+  <data name="basicsettings.log_info" xml:space="preserve">
+    <value>資訊</value>
+  </data>
+  <data name="basicsettings.log_level" xml:space="preserve">
+    <value>記錄層級</value>
+  </data>
+  <data name="basicsettings.log_warn" xml:space="preserve">
+    <value>警告</value>
+  </data>
+  <data name="basicsettings.native_autostart" xml:space="preserve">
+    <value>啟動註冊由原生 AgentDock 應用程式管理；此處顯示目前狀態，無法在此變更。</value>
+  </data>
+  <data name="basicsettings.port" xml:space="preserve">
+    <value>連接埠</value>
+  </data>
+  <data name="basicsettings.restart_note" xml:space="preserve">
+    <value>執行中的核心服務將重新啟動以套用設定。</value>
+  </data>
+  <data name="basicsettings.scope" xml:space="preserve">
+    <value>執行環境基本設定，進階設定請使用原生應用程式。</value>
+  </data>
+  <data name="basicsettings.title" xml:space="preserve">
+    <value>設定</value>
+  </data>
+  <data name="basicsettings.validation" xml:space="preserve">
+    <value>連接埠必須是 1 至 65535 的整數，並選擇支援的記錄層級。</value>
   </data>
   <data name="common.cancel" xml:space="preserve">
     <value>取消</value>
+  </data>
+  <data name="common.completed" xml:space="preserve">
+    <value>操作已完成。</value>
   </data>
   <data name="common.confirm" xml:space="preserve">
     <value>確認</value>
@@ -130,6 +172,9 @@
   <data name="common.negotiated" xml:space="preserve">
     <value>已協商</value>
   </data>
+  <data name="common.no" xml:space="preserve">
+    <value>否</value>
+  </data>
   <data name="common.not_connected" xml:space="preserve">
     <value>未連線</value>
   </data>
@@ -144,6 +189,9 @@
   </data>
   <data name="common.rejected" xml:space="preserve">
     <value>已拒絕</value>
+  </data>
+  <data name="common.reset" xml:space="preserve">
+    <value>重設變更</value>
   </data>
   <data name="common.restart" xml:space="preserve">
     <value>重新啟動</value>
@@ -166,6 +214,45 @@
   <data name="common.unavailable" xml:space="preserve">
     <value>無法使用</value>
   </data>
+  <data name="common.yes" xml:space="preserve">
+    <value>是</value>
+  </data>
+  <data name="connection.confirm" xml:space="preserve">
+    <value>確認連線操作：{action}？</value>
+  </data>
+  <data name="connection.mode" xml:space="preserve">
+    <value>模式</value>
+  </data>
+  <data name="connection.mode_named" xml:space="preserve">
+    <value>具名通道</value>
+  </data>
+  <data name="connection.mode_none" xml:space="preserve">
+    <value>尚未設定</value>
+  </data>
+  <data name="connection.mode_quick" xml:space="preserve">
+    <value>快速</value>
+  </data>
+  <data name="connection.mode_tailscale" xml:space="preserve">
+    <value>Tailscale</value>
+  </data>
+  <data name="connection.native_only" xml:space="preserve">
+    <value>連線設定及具名通道／Tailscale 憑證由原生 AgentDock 應用程式管理。</value>
+  </data>
+  <data name="connection.public_url" xml:space="preserve">
+    <value>公開網址</value>
+  </data>
+  <data name="connection.quick_only" xml:space="preserve">
+    <value>只有快速模式可重新產生網址，此操作會更換公開網址。</value>
+  </data>
+  <data name="connection.ready" xml:space="preserve">
+    <value>已就緒</value>
+  </data>
+  <data name="connection.regenerate" xml:space="preserve">
+    <value>重新產生網址</value>
+  </data>
+  <data name="connection.title" xml:space="preserve">
+    <value>連線</value>
+  </data>
   <data name="contract.eyebrow" xml:space="preserve">
     <value>控制平面契約</value>
   </data>
@@ -180,6 +267,69 @@
   </data>
   <data name="contract.version" xml:space="preserve">
     <value>v{version}</value>
+  </data>
+  <data name="developer.activity_experimental" xml:space="preserve">
+    <value>Activity 為實驗功能，合成事件測試僅供開發者診斷。</value>
+  </data>
+  <data name="developer.scope" xml:space="preserve">
+    <value>次要架構診斷；此介面尚未實作 Browser、ACP、MCP 與 Plugin 功能。</value>
+  </data>
+  <data name="diagnostics.architecture" xml:space="preserve">
+    <value>架構</value>
+  </data>
+  <data name="diagnostics.manifest_available" xml:space="preserve">
+    <value>執行環境清單可用</value>
+  </data>
+  <data name="diagnostics.platform" xml:space="preserve">
+    <value>平台</value>
+  </data>
+  <data name="diagnostics.runtime_available" xml:space="preserve">
+    <value>執行環境目錄可用</value>
+  </data>
+  <data name="diagnostics.scope" xml:space="preserve">
+    <value>唯讀平台資料，不提供檔案內容、記錄或環境變數值。</value>
+  </data>
+  <data name="diagnostics.title" xml:space="preserve">
+    <value>診斷</value>
+  </data>
+  <data name="errors.compatibility" xml:space="preserve">
+    <value>桌面 API 相容性檢查失敗。</value>
+  </data>
+  <data name="errors.operation" xml:space="preserve">
+    <value>操作失敗，請重新整理後再試。</value>
+  </data>
+  <data name="errors.timeout" xml:space="preserve">
+    <value>操作逾時或已取消，請重新整理以確認狀態。</value>
+  </data>
+  <data name="errors.unavailable" xml:space="preserve">
+    <value>目前無法使用此操作，必要時請使用原生 AgentDock 應用程式。</value>
+  </data>
+  <data name="errors.validation" xml:space="preserve">
+    <value>請檢查輸入值。</value>
+  </data>
+  <data name="nav.developer" xml:space="preserve">
+    <value>開發者／架構</value>
+  </data>
+  <data name="nav.overview" xml:space="preserve">
+    <value>總覽</value>
+  </data>
+  <data name="nav.primary" xml:space="preserve">
+    <value>桌面導覽</value>
+  </data>
+  <data name="nav.system" xml:space="preserve">
+    <value>系統</value>
+  </data>
+  <data name="overview.open_connection" xml:space="preserve">
+    <value>管理連線</value>
+  </data>
+  <data name="overview.open_diagnostics" xml:space="preserve">
+    <value>查看診斷</value>
+  </data>
+  <data name="overview.open_runtime" xml:space="preserve">
+    <value>管理執行環境</value>
+  </data>
+  <data name="overview.open_system" xml:space="preserve">
+    <value>查看更新</value>
   </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action}完成。</value>
@@ -227,7 +377,7 @@
     <value>事件批次間隔</value>
   </data>
   <data name="settings.eyebrow" xml:space="preserve">
-    <value>持久化驗證</value>
+    <value>本機偏好</value>
   </data>
   <data name="settings.hint" xml:space="preserve">
     <value>儲存在正式 AgentDock 設定之外。</value>
@@ -239,9 +389,42 @@
     <value>毫秒</value>
   </data>
   <data name="settings.saved" xml:space="preserve">
-    <value>POC 偏好設定已儲存。</value>
+    <value>開發者偏好設定已儲存。</value>
   </data>
   <data name="settings.title" xml:space="preserve">
-    <value>POC 設定</value>
+    <value>開發者偏好設定</value>
+  </data>
+  <data name="update.available" xml:space="preserve">
+    <value>有可用更新。</value>
+  </data>
+  <data name="update.check" xml:space="preserve">
+    <value>檢查更新</value>
+  </data>
+  <data name="update.core_available" xml:space="preserve">
+    <value>有核心更新</value>
+  </data>
+  <data name="update.current" xml:space="preserve">
+    <value>目前核心版本</value>
+  </data>
+  <data name="update.current_state" xml:space="preserve">
+    <value>目前沒有可用更新。</value>
+  </data>
+  <data name="update.desktop_available" xml:space="preserve">
+    <value>有桌面更新</value>
+  </data>
+  <data name="update.desktop_current" xml:space="preserve">
+    <value>目前桌面版本</value>
+  </data>
+  <data name="update.latest" xml:space="preserve">
+    <value>最新版本</value>
+  </data>
+  <data name="update.native_only" xml:space="preserve">
+    <value>此階段的更新安裝與套用仍由原生 AgentDock 更新流程處理。</value>
+  </data>
+  <data name="update.not_checked" xml:space="preserve">
+    <value>尚未檢查更新。</value>
+  </data>
+  <data name="update.title" xml:space="preserve">
+    <value>更新</value>
   </data>
 </root>

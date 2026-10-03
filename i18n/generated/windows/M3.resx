@@ -89,19 +89,61 @@
     <value>Transport dropped</value>
   </data>
   <data name="app.eyebrow" xml:space="preserve">
-    <value>M3 i18n foundation · Wails v3 beta.27</value>
+    <value>AgentDock desktop</value>
   </data>
   <data name="app.lede" xml:space="preserve">
-    <value>Versioned control contracts, explicit capabilities, bounded Activity delivery, and one localization source for every desktop.</value>
+    <value>Manage your runtime, connection and basic settings.</value>
   </data>
   <data name="app.poc_label" xml:space="preserve">
     <value>Architecture proof of concept</value>
   </data>
   <data name="app.title" xml:space="preserve">
-    <value>AgentDock shared desktop</value>
+    <value>AgentDock desktop</value>
+  </data>
+  <data name="basicsettings.autostart" xml:space="preserve">
+    <value>Start core automatically</value>
+  </data>
+  <data name="basicsettings.confirm" xml:space="preserve">
+    <value>Save these basic settings?</value>
+  </data>
+  <data name="basicsettings.log_debug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="basicsettings.log_error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="basicsettings.log_info" xml:space="preserve">
+    <value>Info</value>
+  </data>
+  <data name="basicsettings.log_level" xml:space="preserve">
+    <value>Log level</value>
+  </data>
+  <data name="basicsettings.log_warn" xml:space="preserve">
+    <value>Warning</value>
+  </data>
+  <data name="basicsettings.native_autostart" xml:space="preserve">
+    <value>Startup registration is managed in the native AgentDock app. The current state is shown here and cannot be changed in this shell.</value>
+  </data>
+  <data name="basicsettings.port" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="basicsettings.restart_note" xml:space="preserve">
+    <value>A running core service will be restarted to apply these settings.</value>
+  </data>
+  <data name="basicsettings.scope" xml:space="preserve">
+    <value>Basic runtime settings. Advanced configuration stays in the native app.</value>
+  </data>
+  <data name="basicsettings.title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="basicsettings.validation" xml:space="preserve">
+    <value>Port must be an integer from 1 to 65535. Choose a supported log level.</value>
   </data>
   <data name="common.cancel" xml:space="preserve">
     <value>Cancel</value>
+  </data>
+  <data name="common.completed" xml:space="preserve">
+    <value>Operation completed.</value>
   </data>
   <data name="common.confirm" xml:space="preserve">
     <value>Confirm</value>
@@ -130,6 +172,9 @@
   <data name="common.negotiated" xml:space="preserve">
     <value>Negotiated</value>
   </data>
+  <data name="common.no" xml:space="preserve">
+    <value>No</value>
+  </data>
   <data name="common.not_connected" xml:space="preserve">
     <value>Not connected</value>
   </data>
@@ -144,6 +189,9 @@
   </data>
   <data name="common.rejected" xml:space="preserve">
     <value>Rejected</value>
+  </data>
+  <data name="common.reset" xml:space="preserve">
+    <value>Reset changes</value>
   </data>
   <data name="common.restart" xml:space="preserve">
     <value>Restart</value>
@@ -166,6 +214,45 @@
   <data name="common.unavailable" xml:space="preserve">
     <value>Unavailable</value>
   </data>
+  <data name="common.yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="connection.confirm" xml:space="preserve">
+    <value>Confirm connection action: {action}?</value>
+  </data>
+  <data name="connection.mode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="connection.mode_named" xml:space="preserve">
+    <value>Named tunnel</value>
+  </data>
+  <data name="connection.mode_none" xml:space="preserve">
+    <value>Not configured</value>
+  </data>
+  <data name="connection.mode_quick" xml:space="preserve">
+    <value>Quick</value>
+  </data>
+  <data name="connection.mode_tailscale" xml:space="preserve">
+    <value>Tailscale</value>
+  </data>
+  <data name="connection.native_only" xml:space="preserve">
+    <value>Connection configuration and named tunnel / Tailscale credentials are managed in the native AgentDock app.</value>
+  </data>
+  <data name="connection.public_url" xml:space="preserve">
+    <value>Public URL</value>
+  </data>
+  <data name="connection.quick_only" xml:space="preserve">
+    <value>Regenerate is available only in quick mode and replaces the public URL.</value>
+  </data>
+  <data name="connection.ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="connection.regenerate" xml:space="preserve">
+    <value>Regenerate URL</value>
+  </data>
+  <data name="connection.title" xml:space="preserve">
+    <value>Connection</value>
+  </data>
   <data name="contract.eyebrow" xml:space="preserve">
     <value>Control-plane contract</value>
   </data>
@@ -180,6 +267,69 @@
   </data>
   <data name="contract.version" xml:space="preserve">
     <value>v{version}</value>
+  </data>
+  <data name="developer.activity_experimental" xml:space="preserve">
+    <value>Activity is experimental. This synthetic probe is for developer diagnostics.</value>
+  </data>
+  <data name="developer.scope" xml:space="preserve">
+    <value>Secondary architecture diagnostics. Browser, ACP, MCP and Plugin features are not implemented in this shell.</value>
+  </data>
+  <data name="diagnostics.architecture" xml:space="preserve">
+    <value>Architecture</value>
+  </data>
+  <data name="diagnostics.manifest_available" xml:space="preserve">
+    <value>Runtime manifest available</value>
+  </data>
+  <data name="diagnostics.platform" xml:space="preserve">
+    <value>Platform</value>
+  </data>
+  <data name="diagnostics.runtime_available" xml:space="preserve">
+    <value>Runtime directory available</value>
+  </data>
+  <data name="diagnostics.scope" xml:space="preserve">
+    <value>Read-only platform metadata. No file contents, logs or environment values are exposed.</value>
+  </data>
+  <data name="diagnostics.title" xml:space="preserve">
+    <value>Diagnostics</value>
+  </data>
+  <data name="errors.compatibility" xml:space="preserve">
+    <value>Desktop API compatibility check failed.</value>
+  </data>
+  <data name="errors.operation" xml:space="preserve">
+    <value>The operation failed. Refresh and try again.</value>
+  </data>
+  <data name="errors.timeout" xml:space="preserve">
+    <value>The operation timed out or was canceled. Refresh to check its state.</value>
+  </data>
+  <data name="errors.unavailable" xml:space="preserve">
+    <value>This operation is currently unavailable. Use the native AgentDock app if needed.</value>
+  </data>
+  <data name="errors.validation" xml:space="preserve">
+    <value>Check the entered values.</value>
+  </data>
+  <data name="nav.developer" xml:space="preserve">
+    <value>Developer / Architecture</value>
+  </data>
+  <data name="nav.overview" xml:space="preserve">
+    <value>Overview</value>
+  </data>
+  <data name="nav.primary" xml:space="preserve">
+    <value>Desktop navigation</value>
+  </data>
+  <data name="nav.system" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="overview.open_connection" xml:space="preserve">
+    <value>Manage connection</value>
+  </data>
+  <data name="overview.open_diagnostics" xml:space="preserve">
+    <value>View diagnostics</value>
+  </data>
+  <data name="overview.open_runtime" xml:space="preserve">
+    <value>Manage runtime</value>
+  </data>
+  <data name="overview.open_system" xml:space="preserve">
+    <value>View updates</value>
   </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action} completed.</value>
@@ -227,7 +377,7 @@
     <value>Event batch interval</value>
   </data>
   <data name="settings.eyebrow" xml:space="preserve">
-    <value>Persistence probe</value>
+    <value>Local preferences</value>
   </data>
   <data name="settings.hint" xml:space="preserve">
     <value>Stored outside the production AgentDock configuration.</value>
@@ -239,9 +389,42 @@
     <value>ms</value>
   </data>
   <data name="settings.saved" xml:space="preserve">
-    <value>POC preference saved.</value>
+    <value>Developer preference saved.</value>
   </data>
   <data name="settings.title" xml:space="preserve">
-    <value>POC settings</value>
+    <value>Developer preferences</value>
+  </data>
+  <data name="update.available" xml:space="preserve">
+    <value>An update is available.</value>
+  </data>
+  <data name="update.check" xml:space="preserve">
+    <value>Check for updates</value>
+  </data>
+  <data name="update.core_available" xml:space="preserve">
+    <value>Core update available</value>
+  </data>
+  <data name="update.current" xml:space="preserve">
+    <value>Current core version</value>
+  </data>
+  <data name="update.current_state" xml:space="preserve">
+    <value>No update is available.</value>
+  </data>
+  <data name="update.desktop_available" xml:space="preserve">
+    <value>Desktop update available</value>
+  </data>
+  <data name="update.desktop_current" xml:space="preserve">
+    <value>Current desktop version</value>
+  </data>
+  <data name="update.latest" xml:space="preserve">
+    <value>Latest version</value>
+  </data>
+  <data name="update.native_only" xml:space="preserve">
+    <value>For this milestone, installing and applying updates remain in the native AgentDock update flow.</value>
+  </data>
+  <data name="update.not_checked" xml:space="preserve">
+    <value>Updates have not been checked.</value>
+  </data>
+  <data name="update.title" xml:space="preserve">
+    <value>Updates</value>
   </data>
 </root>

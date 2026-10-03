@@ -6,10 +6,10 @@
     "0000": {
       "ProductVersion": "0.1.0",
       "CompanyName": "AgentDock Custom",
-      "FileDescription": "AgentDock cross-platform desktop architecture spike",
+      "FileDescription": "AgentDock cross-platform desktop",
       "LegalCopyright": "© 2026 AgentDock Custom",
-      "ProductName": "AgentDock Shared Desktop POC",
-      "Comments": "M1 shared desktop architecture spike; not a production release"
+      "ProductName": "AgentDock Desktop",
+      "Comments": "AgentDock shared desktop baseline"
     }
   }
 }

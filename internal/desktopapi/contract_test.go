@@ -46,14 +46,11 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 	}
 
 	for _, domain := range []Domain{
-		DomainConnection,
 		DomainACP,
 		DomainBrowser,
 		DomainPermission,
 		DomainMCP,
 		DomainPlugin,
-		DomainUpdate,
-		DomainDiagnostics,
 	} {
 		if seen[domain].Availability != AvailabilityUnavailable {
 			t.Fatalf("%s should remain unavailable in M2 scaffold, got %#v", domain, seen[domain])

@@ -1,3 +1,7 @@
+import * as ConnectionService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/connectionservice'
+import * as BasicSettingsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/basicsettingsservice'
+import * as UpdateService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/updateservice'
+import * as DiagnosticsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/diagnosticsservice'
 import { JSONStream, type JSONSocket } from '@wailsio/runtime'
 import * as ActivityProbeService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/activityprobeservice'
 import type {
@@ -17,6 +21,10 @@ import {
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type {
   APIError,
+  BasicSettings,
+  ConnectionStatus,
+  DiagnosticsSnapshot,
+  UpdateStatus,
   DomainCapability,
   Manifest,
   NegotiationResult,
@@ -38,6 +46,10 @@ export type {
   ActivityEnvelope,
   ActivityProbeStatus,
   APIError,
+  BasicSettings,
+  ConnectionStatus,
+  DiagnosticsSnapshot,
+  UpdateStatus,
   DomainCapability,
   Manifest,
   NegotiationResult,
@@ -51,6 +63,7 @@ export type {
 
 export const DESKTOP_API_VERSION = 1
 
+export type ConnectionActionName = 'start' | 'stop' | 'restart' | 'regenerate'
 export type RuntimeActionName = 'start' | 'stop' | 'restart'
 export type ActivityStreamState = 'connecting' | 'open' | 'closed' | 'error'
 
@@ -121,6 +134,12 @@ function openActivityStream(
 }
 
 export const desktopApi = {
+  connectionStatus: () => ConnectionService.Status(),
+  connectionAction: (action: ConnectionActionName) => ConnectionService.Action(action),
+  readBasicSettings: () => BasicSettingsService.Read(),
+  saveBasicSettings: (settings: BasicSettings) => BasicSettingsService.Save(settings),
+  checkUpdate: () => UpdateService.Check(),
+  diagnostics: () => DiagnosticsService.Snapshot(),
   manifest: () => ContractService.Manifest(),
   negotiate: (domains: Domain[] = []) =>
     ContractService.Negotiate({

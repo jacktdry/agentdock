@@ -21,7 +21,7 @@ Unicode true
 ####
 ## !define INFO_PROJECTNAME    "agentdock-shared-poc" # Default "agentdock-shared-poc"
 ## !define INFO_COMPANYNAME    "AgentDock Custom" # Default "AgentDock Custom"
-## !define INFO_PRODUCTNAME    "AgentDock Shared Desktop POC" # Default "AgentDock Shared Desktop POC"
+## !define INFO_PRODUCTNAME    "AgentDock Desktop" # Default "AgentDock Desktop"
 ## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
 ## !define INFO_COPYRIGHT      "(c) 2026 AgentDock Custom" # Default "(c) 2026 AgentDock Custom"
 ###

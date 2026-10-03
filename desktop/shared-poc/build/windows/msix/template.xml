@@ -10,15 +10,15 @@
     <Installer
         Path="agentdock-shared-poc"
         Arguments=""
-        InstallLocation="C:\Program Files\AgentDock Custom\AgentDock Shared Desktop POC">
+        InstallLocation="C:\Program Files\AgentDock Custom\AgentDock Desktop">
     </Installer>
     <PackageInformation
-        PackageName="AgentDock Shared Desktop POC"
-        PackageDisplayName="AgentDock Shared Desktop POC"
+        PackageName="AgentDock Desktop"
+        PackageDisplayName="AgentDock Desktop"
         PublisherName="CN=AgentDock Custom"
         PublisherDisplayName="AgentDock Custom"
         Version="0.1.0.0"
-        PackageDescription="AgentDock cross-platform desktop architecture spike">
+        PackageDescription="AgentDock cross-platform desktop">
         <Capabilities>
             <Capability Name="runFullTrust" />
 
@@ -26,8 +26,8 @@
         <Applications>
             <Application
                 Id="dev.agentdock.sharedpoc"
-                Description="AgentDock cross-platform desktop architecture spike"
-                DisplayName="AgentDock Shared Desktop POC"
+                Description="AgentDock cross-platform desktop"
+                DisplayName="AgentDock Desktop"
                 ExecutableName="agentdock-shared-poc"
                 EntryPoint="Windows.FullTrustApplication">
 
@@ -41,9 +41,9 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>AgentDock Shared Desktop POC</DisplayName>
+            <DisplayName>AgentDock Desktop</DisplayName>
             <PublisherDisplayName>AgentDock Custom</PublisherDisplayName>
-            <Description>AgentDock cross-platform desktop architecture spike</Description>
+            <Description>AgentDock cross-platform desktop</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>

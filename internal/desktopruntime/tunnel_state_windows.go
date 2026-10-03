@@ -45,11 +45,12 @@ type tunnelFiles struct {
 }
 
 type tunnelRuntime struct {
-	manifest Manifest
-	root     string
-	settings controlPanelSettings
-	files    tunnelFiles
-	mode     string
+	preserveStoppedCore bool
+	manifest            Manifest
+	root                string
+	settings            controlPanelSettings
+	files               tunnelFiles
+	mode                string
 }
 
 func loadTunnelRuntime(runtimeRoot string) (tunnelRuntime, error) {

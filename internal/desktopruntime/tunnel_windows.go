@@ -76,6 +76,7 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		if err != nil {
 			return err
 		}
+		runtime.preserveStoppedCore = os.Getenv("AGENTDOCK_TUNNEL_PRESERVE_STOPPED_CORE") == "1"
 		if runtime.mode == "none" {
 			return nil
 		}
@@ -335,6 +336,7 @@ func launchCloudflared(runtime tunnelRuntime) error {
 	// 直接绑定当前 active generation，避免 supervisor 在 commit 前绕回 shim 失败。
 	supervisorBinary := ActiveCoreBinary(runtime.root, runtime.manifest)
 	command := exec.Command(supervisorBinary, "tunnel", "launch", "--runtime-root", runtime.root)
+	command.Env = tunnelSupervisorEnvironment(os.Environ(), runtime.preserveStoppedCore)
 	command.Dir = runtime.root
 	command.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
@@ -380,7 +382,7 @@ func applyQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, publicURL s
 	if err := writeRuntimeText(runtime.files.serverURL, publicURL); err != nil {
 		return err
 	}
-	if err := platformServiceAction(ctx, runtime.root, "restart"); err != nil {
+	if err := restartQuickTunnelCore(ctx, runtime); err != nil {
 		return err
 	}
 	if err := runtime.updateManifest("quick", publicURL); err != nil {
@@ -405,7 +407,28 @@ func invalidateQuickTunnelAfterExit(ctx context.Context, runtime tunnelRuntime) 
 		return err
 	}
 	// 已对外发布过的 Quick URL 一旦失效，先让 Core 丢弃旧 OAuth Origin，再等待新 URL。
+	return restartQuickTunnelCore(ctx, runtime)
+}
+
+func restartQuickTunnelCore(ctx context.Context, runtime tunnelRuntime) error {
+	if runtime.preserveStoppedCore {
+		running, err := basicWindowsCoreRunning(ctx, runtime)
+		if err != nil {
+			return err
+		}
+		if !running {
+			return nil
+		}
+	}
 	return platformServiceAction(ctx, runtime.root, "restart")
+}
+
+func tunnelSupervisorEnvironment(environment []string, preserveStoppedCore bool) []string {
+	environment = environmentWithout(environment, "AGENTDOCK_TUNNEL_PRESERVE_STOPPED_CORE")
+	if preserveStoppedCore {
+		environment = append(environment, "AGENTDOCK_TUNNEL_PRESERVE_STOPPED_CORE=1")
+	}
+	return environment
 }
 
 const (

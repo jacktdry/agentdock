@@ -11,7 +11,7 @@
     !define INFO_COMPANYNAME "AgentDock Custom"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "AgentDock Shared Desktop POC"
+    !define INFO_PRODUCTNAME "AgentDock Desktop"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.1.0"

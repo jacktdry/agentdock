@@ -31,6 +31,54 @@ export enum Availability {
     AvailabilityUnavailable = "unavailable",
 };
 
+export interface BasicSettings {
+    "port": number;
+    "logLevel": string;
+    "coreAutostart": boolean;
+}
+
+export interface BasicSettingsResult {
+    "settings": BasicSettings;
+    "coreAutostartMutable": boolean;
+    "error"?: APIError | null;
+}
+
+export interface BasicSettingsSaveResult {
+    "completed": boolean;
+    "error"?: APIError | null;
+}
+
+export interface ConnectionActionResult {
+    "completed": boolean;
+    "error"?: APIError | null;
+}
+
+export interface ConnectionStatus {
+    "mode": string;
+    "running": boolean;
+    "ready": boolean;
+    "startupEnabled": boolean;
+    "publicURL"?: string;
+}
+
+export interface ConnectionStatusResult {
+    "status": ConnectionStatus;
+    "error"?: APIError | null;
+}
+
+export interface DiagnosticsResult {
+    "snapshot": DiagnosticsSnapshot;
+    "error"?: APIError | null;
+}
+
+export interface DiagnosticsSnapshot {
+    "platform": string;
+    "architecture": string;
+    "runtimeRoot": string;
+    "runtimeDirectoryAvailable": boolean;
+    "manifestAvailable": boolean;
+}
+
 export enum Domain {
     /**
      * The Go zero value for the underlying type of the enum.
@@ -38,6 +86,7 @@ export enum Domain {
     $zero = "",
 
     DomainRuntime = "runtime",
+    DomainSettings = "settings",
     DomainConnection = "connection",
     DomainACP = "acp",
     DomainBrowser = "browser",
@@ -133,4 +182,17 @@ export interface StreamCapability {
     "transport": string;
     "backpressure": string;
     "maxPayloadBytes"?: number;
+}
+
+export interface UpdateCheckResult {
+    "status": UpdateStatus;
+    "error"?: APIError | null;
+}
+
+export interface UpdateStatus {
+    "currentVersion": string;
+    "latestVersion": string;
+    "desktopCurrentVersion"?: string;
+    "updateAvailable": boolean;
+    "desktopUpdateAvailable": boolean;
 }
