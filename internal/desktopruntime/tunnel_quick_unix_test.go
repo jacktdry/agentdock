@@ -13,11 +13,88 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runQuickTunnel 是 Quick Tunnel 公网地址回写的唯一权威（平台脚本的 legacy
 // 刷新逻辑已删除）。回写必须：把新地址写进 AGENTDOCK_SERVER_URL、开启 OAuth、
 // 重启 Core 并落 quick-tunnel-url.txt，同时不能轮换已有的稳定凭据。
+func TestQuickTunnelURLPublicationWaitsForDesktopMutation(t *testing.T) {
+	root := t.TempDir()
+	envFile := filepath.Join(root, "agentdock.env")
+	if err := os.WriteFile(envFile, []byte("AGENTDOCK_HOST=127.0.0.1\nAGENTDOCK_PORT=8765\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	serviceManager := "launchd"
+	if runtime.GOOS == "darwin" {
+		launchctl := filepath.Join(root, "fake-launchctl")
+		if err := os.WriteFile(launchctl, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("AGENTDOCK_LAUNCHCTL_BIN", launchctl)
+	} else {
+		serviceManager = "systemd"
+		systemctl := filepath.Join(root, "systemctl")
+		if err := os.WriteFile(systemctl, []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
+	manifest := unixRuntimeManifest{
+		SchemaVersion:     1,
+		ServiceManager:    serviceManager,
+		ServiceName:       "com.uvwt.agentdock",
+		TunnelServiceName: "com.uvwt.agentdock.cloudflared",
+		AgentDockBinary:   filepath.Join(root, "agentdock"),
+		EnvironmentFile:   envFile,
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "desktop-runtime.json"), manifestBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := AcquireDesktopMutation(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- applyQuickTunnelURLUnix(context.Background(), manifest, root, root, "https://delayed.trycloudflare.com")
+	}()
+
+	time.Sleep(80 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(root, "quick-tunnel-url.txt")); !os.IsNotExist(err) {
+		t.Fatalf("quick URL published while mutation lock held: %v", err)
+	}
+	before, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(before), "AGENTDOCK_SERVER_URL") {
+		t.Fatal("core environment changed while mutation lock held")
+	}
+
+	release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("quick URL publication did not resume after lock release")
+	}
+	after, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(after), "AGENTDOCK_SERVER_URL='https://delayed.trycloudflare.com'") {
+		t.Fatalf("core environment missing delayed URL: %s", after)
+	}
+}
+
 func TestRunQuickTunnelWritesBackPublicURLAndRestartsCore(t *testing.T) {
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
@@ -45,11 +122,11 @@ func TestRunQuickTunnelWritesBackPublicURLAndRestartsCore(t *testing.T) {
 	}
 	serviceManager := "launchd"
 	if runtime.GOOS == "darwin" {
-		// 假 launchctl：print 视为已加载，kickstart 计数并成功，模拟 Core 重启。
+		// 假 launchctl：print 回報 Core 正在執行，kickstart 計數並成功。
 		launchctl := filepath.Join(root, "fake-launchctl")
 		fakeLaunchctl := "#!/bin/sh\n" +
 			`case "$1" in` + "\n" +
-			`  print) exit 0 ;;` + "\n" +
+			`  print) echo 'state = running'; exit 0 ;;` + "\n" +
 			`  kickstart) echo restart >> "$SERVICE_ACTION_LOG"; exit 0 ;;` + "\n" +
 			`esac` + "\n" +
 			"exit 1\n"
@@ -63,7 +140,10 @@ func TestRunQuickTunnelWritesBackPublicURLAndRestartsCore(t *testing.T) {
 		serviceManager = "systemd"
 		systemctl := filepath.Join(root, "systemctl")
 		fakeSystemctl := "#!/bin/sh\n" +
-			`echo restart >> "$SERVICE_ACTION_LOG"` + "\n"
+			`case "$1" in` + "\n" +
+			`  is-active) exit 0 ;;` + "\n" +
+			`  restart) echo restart >> "$SERVICE_ACTION_LOG"; exit 0 ;;` + "\n" +
+			`esac` + "\n" + "exit 1\n"
 		if err := os.WriteFile(systemctl, []byte(fakeSystemctl), 0o755); err != nil {
 			t.Fatal(err)
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -67,17 +68,17 @@ func resolveRuntimeRoot(explicitRoot string) (string, error) {
 
 func (s *RuntimeService) Status(ctx context.Context) RuntimeStatusResult {
 	if s.rootError != nil {
-		return RuntimeStatusResult{Error: ErrorFrom("runtime_root_unavailable", ErrorCategoryUnavailable, false, s.rootError)}
+		return RuntimeStatusResult{Error: safeServiceError("runtime_root_unavailable", s.rootError)}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	var stdout, stderr bytes.Buffer
-	if err := desktopruntime.RunServiceCommand(ctx, []string{"status", "--runtime-root", s.runtimeRoot}, &stdout, &stderr); err != nil {
+	var stdout bytes.Buffer
+	if err := desktopruntime.RunServiceCommand(ctx, []string{"status", "--runtime-root", s.runtimeRoot}, &stdout, io.Discard); err != nil {
 		return RuntimeStatusResult{
 			RuntimeRoot: s.runtimeRoot,
-			Error:       ErrorFrom("runtime_status_failed", ErrorCategoryOperation, true, joinCommandError(err, stderr.String())),
+			Error:       safeContextServiceError(ctx, "runtime_status_failed", err),
 		}
 	}
 
@@ -85,7 +86,7 @@ func (s *RuntimeService) Status(ctx context.Context) RuntimeStatusResult {
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
 		return RuntimeStatusResult{
 			RuntimeRoot: s.runtimeRoot,
-			Error:       ErrorFrom("runtime_status_decode_failed", ErrorCategoryInternal, false, err),
+			Error:       NewError("runtime_status_decode_failed", "Invalid runtime status", ErrorCategoryInternal, false, nil),
 		}
 	}
 	return RuntimeStatusResult{
@@ -115,27 +116,21 @@ func (s *RuntimeService) Action(ctx context.Context, action RuntimeAction) Runti
 	if s.rootError != nil {
 		return RuntimeActionResult{
 			Action: action,
-			Error:  ErrorFrom("runtime_root_unavailable", ErrorCategoryUnavailable, false, s.rootError),
+			Error:  safeServiceError("runtime_root_unavailable", s.rootError),
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	operationCtx, finish, err := beginRuntimeMutation(ctx, s.runtimeRoot)
+	if err != nil {
+		return RuntimeActionResult{Action: action, Error: safeContextServiceError(ctx, "runtime_mutation_busy", err)}
+	}
+	defer finish()
 
-	var stdout, stderr bytes.Buffer
-	if err := desktopruntime.RunServiceCommand(ctx, []string{string(action), "--runtime-root", s.runtimeRoot}, &stdout, &stderr); err != nil {
+	if err := desktopruntime.RunServiceCommand(operationCtx, []string{string(action), "--runtime-root", s.runtimeRoot}, io.Discard, io.Discard); err != nil {
 		return RuntimeActionResult{
 			Action: action,
-			Error:  ErrorFrom("runtime_action_failed", ErrorCategoryOperation, true, joinCommandError(err, stderr.String())),
+			Error:  safeContextServiceError(operationCtx, "runtime_action_failed", err),
 		}
 	}
 	return RuntimeActionResult{Action: action, Completed: true}
-}
-
-func joinCommandError(err error, stderr string) error {
-	stderr = strings.TrimSpace(stderr)
-	if stderr == "" {
-		return err
-	}
-	return fmt.Errorf("%w: %s", err, stderr)
 }

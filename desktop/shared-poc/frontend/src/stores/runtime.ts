@@ -7,6 +7,7 @@ import {
   type RuntimeActionName,
   type RuntimeStatus,
 } from '../api/desktopApi'
+import { errorMessage } from '../api/errorMessage'
 import { t, type MessageKey } from '../i18n'
 
 const emptyStatus = (): RuntimeStatus => ({
@@ -53,6 +54,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   })
 
   async function refresh() {
+    if (loading.value || actionPending.value) return
     loading.value = true
     error.value = null
     try {
@@ -61,17 +63,18 @@ export const useRuntimeStore = defineStore('runtime', () => {
       status.value = result.status ?? emptyStatus()
       error.value = result.error ?? null
       announcement.value = error.value
-        ? t('runtime.status_failed', { message: error.value.message })
+        ? t('runtime.status_failed', { message: errorMessage(error.value) })
         : t('runtime.status_summary', { state: stateLabel.value })
     } catch (caught) {
       error.value = clientError('runtime_call_failed', caught)
-      announcement.value = t('runtime.status_failed', { message: error.value.message })
+      announcement.value = t('runtime.status_failed', { message: errorMessage(error.value) })
     } finally {
       loading.value = false
     }
   }
 
   async function perform(action: RuntimeActionName) {
+    if (loading.value || actionPending.value) return
     actionPending.value = action
     error.value = null
     const actionLabel = t(actionMessageKeys[action])
@@ -79,14 +82,17 @@ export const useRuntimeStore = defineStore('runtime', () => {
       const result = await desktopApi.runtimeAction(action)
       error.value = result.error ?? null
       announcement.value = error.value
-        ? t('runtime.action_failed', { action: actionLabel, message: error.value.message })
+        ? t('runtime.action_failed', { action: actionLabel, message: errorMessage(error.value) })
         : t('runtime.action_completed', { action: actionLabel })
-      if (!error.value) await refresh()
+      if (!error.value) {
+        actionPending.value = null
+        await refresh()
+      }
     } catch (caught) {
       error.value = clientError('runtime_action_call_failed', caught)
       announcement.value = t('runtime.action_failed', {
         action: actionLabel,
-        message: error.value.message,
+        message: errorMessage(error.value),
       })
     } finally {
       actionPending.value = null

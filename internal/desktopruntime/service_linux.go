@@ -36,6 +36,14 @@ func linuxServiceActive(ctx context.Context, manager, name string) bool {
 	}
 }
 
+func basicUnixServiceRunning(ctx context.Context, manifest unixRuntimeManifest, tunnel bool) bool {
+	name := manifest.ServiceName
+	if tunnel {
+		name = manifest.TunnelServiceName
+	}
+	return linuxServiceActive(ctx, linuxServiceManager(manifest), name)
+}
+
 func linuxServiceEnabled(ctx context.Context, manager, name string) bool {
 	switch manager {
 	case "systemd":

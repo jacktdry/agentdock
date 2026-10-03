@@ -14,22 +14,22 @@ includes:
 
 tasks:
   build:
-    summary: Builds the POC application
+    summary: Builds the shared desktop application
     cmds:
       - task: "{{.GOOS}}:build"
 
   package:
-    summary: Packages a production POC build
+    summary: Packages a production shared desktop build
     cmds:
       - task: "{{.GOOS}}:package"
 
   run:
-    summary: Runs the POC application
+    summary: Runs the shared desktop application
     cmds:
       - task: "{{.GOOS}}:run"
 
   dev:
-    summary: Runs the POC in development mode
+    summary: Runs the shared desktop application in development mode
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
+	"github.com/uvwt/agentdock/internal/desktopruntime"
 	processcontrol "github.com/uvwt/agentdock/internal/process"
 )
 
@@ -133,6 +134,28 @@ func Check(ctx context.Context) (CheckResult, error) {
 	if err != nil {
 		return CheckResult{}, err
 	}
+	return checkWithOptions(ctx, opts)
+}
+
+// CheckForRuntime inspects updates for the managed core selected by runtimeRoot.
+// It never derives the current core version from the desktop shell executable.
+func CheckForRuntime(ctx context.Context, runtimeRoot string) (CheckResult, error) {
+	executable, err := desktopruntime.CoreBinaryForRuntime(runtimeRoot)
+	if err != nil {
+		fallback, ok := coreBinaryFallbackForRuntime(runtimeRoot)
+		if !ok {
+			return CheckResult{}, err
+		}
+		executable = fallback
+	}
+	opts, err := runtimeOptionsForTarget(ctx, io.Discard, executable, runtimeRoot)
+	if err != nil {
+		return CheckResult{}, err
+	}
+	return checkWithOptions(ctx, opts)
+}
+
+func checkWithOptions(ctx context.Context, opts options) (CheckResult, error) {
 	inspection, err := inspectUpdate(ctx, opts)
 	if err != nil {
 		return CheckResult{}, err
@@ -149,8 +172,24 @@ func runtimeOptions(output io.Writer) (options, error) {
 		executable = resolved
 	}
 	desktopTarget := detectDesktopUpdateTarget()
+	return newOptions(output, executable, buildinfo.Version, desktopTarget), nil
+}
+
+func runtimeOptionsForTarget(ctx context.Context, output io.Writer, executable, runtimeRoot string) (options, error) {
+	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
+		executable = resolved
+	}
+	version, err := readBinaryVersion(ctx, executable)
+	if err != nil {
+		return options{}, fmt.Errorf("读取目标 AgentDock 版本失败: %w", err)
+	}
+	desktopTarget := detectDesktopUpdateTargetForRuntime(runtimeRoot, executable)
+	return newOptions(output, executable, version, desktopTarget), nil
+}
+
+func newOptions(output io.Writer, executable, currentVersion, desktopTarget string) options {
 	return options{
-		CurrentVersion:        buildinfo.Version,
+		CurrentVersion:        currentVersion,
 		ExecutablePath:        executable,
 		DesktopTargetPath:     desktopTarget,
 		DesktopCurrentVersion: desktopUpdateVersion(desktopTarget),
@@ -163,7 +202,7 @@ func runtimeOptions(output io.Writer) (options, error) {
 		Apply:                 applyPlatformUpdate,
 		VerifyBinary:          verifyBinaryVersion,
 		ExtractDesktop:        extractDesktopUpdateArchive,
-	}, nil
+	}
 }
 
 func run(ctx context.Context, opts options) error {
@@ -652,15 +691,7 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 }
 
 func verifyBinaryVersion(ctx context.Context, binaryPath, targetVersion string) error {
-	verifyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	command := exec.CommandContext(verifyCtx, binaryPath, "--version")
-	processcontrol.ConfigureBackground(command)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("执行 --version 失败: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	actualVersion, err := parseVersionOutput(output)
+	actualVersion, err := readBinaryVersion(ctx, binaryPath)
 	if err != nil {
 		return err
 	}
@@ -668,6 +699,18 @@ func verifyBinaryVersion(ctx context.Context, binaryPath, targetVersion string) 
 		return fmt.Errorf("版本输出为 %s，目标版本为 %s", actualVersion, normalizeVersion(targetVersion))
 	}
 	return nil
+}
+
+func readBinaryVersion(ctx context.Context, binaryPath string) (string, error) {
+	verifyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(verifyCtx, binaryPath, "--version")
+	processcontrol.ConfigureBackground(command)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("执行 --version 失败: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return parseVersionOutput(output)
 }
 
 func parseVersionOutput(output []byte) (string, error) {

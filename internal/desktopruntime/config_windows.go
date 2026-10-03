@@ -92,6 +92,55 @@ func platformUpdateConfig(ctx context.Context, request ConfigUpdateRequest) erro
 			}
 		}
 	}
+
+	settings := controlPanelSettings{
+		Port:                    request.Port,
+		LogLevel:                request.LogLevel,
+		OAuthAccessTokenTTL:     request.OAuthAccessTokenTTL,
+		MCPAppsMode:             request.MCPAppsMode,
+		BrowserEnabled:          request.BrowserEnabled,
+		BrowserCDPURL:           request.BrowserCDPURL,
+		BrowserReuseExistingCDP: request.BrowserReuseExistingCDP,
+		ACPEnabled:              request.ACPEnabled,
+		ACPProfiles:             acpProfiles,
+		ACPDefaultProfile:       acpDefaultProfile,
+	}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return applyControlPanelSettings(ctx, runtime, settings, data)
+}
+
+// Shared by native full configuration and the basic-settings patch.
+func applyControlPanelSettings(ctx context.Context, runtime tunnelRuntime, settings controlPanelSettings, data []byte) error {
+	return applyControlPanelSettingsWithState(ctx, runtime, settings, data, nil, nativeControlPanelActions())
+}
+
+type controlPanelRunState struct{ coreRunning, tunnelRunning bool }
+
+func controlPanelState(mode string, prior *controlPanelRunState) controlPanelRunState {
+	if prior != nil {
+		return *prior
+	}
+	// Full ConfigUpdate retains its legacy always-start policy.
+	return controlPanelRunState{true, mode != "none"}
+}
+
+type controlPanelActions struct {
+	stopTunnel, startTunnel func(context.Context, tunnelRuntime) error
+	coreAction              func(context.Context, string, string) error
+}
+
+func nativeControlPanelActions() controlPanelActions {
+	return controlPanelActions{stopTunnel, startTunnel, platformServiceAction}
+}
+
+func applyControlPanelSettingsWithState(ctx context.Context, runtime tunnelRuntime, settings controlPanelSettings, data []byte, prior *controlPanelRunState, actions controlPanelActions) error {
+	state := controlPanelState(runtime.mode, prior)
+	runtime.preserveStoppedCore = prior != nil
+	var err error
 	settingsPath := filepath.Join(runtime.root, "control-panel-settings.json")
 	snapshotPaths := []string{
 		settingsPath,
@@ -108,43 +157,42 @@ func platformUpdateConfig(ctx context.Context, request ConfigUpdateRequest) erro
 		snapshots = append(snapshots, snapshot)
 	}
 
-	if err := stopTunnel(ctx, runtime); err != nil {
-		return err
-	}
 	rollback := func(cause error) error {
-		restoreErr := restoreSnapshots(snapshots)
-		oldRuntime, loadErr := loadTunnelRuntime(request.RuntimeRoot)
+		recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), basicRecoveryTimeout)
+		defer cancel()
+		var restoreErr error
+		if prior != nil && state.tunnelRunning {
+			// Stop a partially started supervisor before restoring files it writes.
+			restoreErr = actions.stopTunnel(recovery, runtime)
+		}
+		restoreErr = errors.Join(restoreErr, restoreSnapshots(snapshots))
+		oldRuntime, loadErr := loadTunnelRuntime(runtime.root)
 		if loadErr == nil {
-			_ = platformServiceAction(ctx, oldRuntime.root, "restart")
-			if oldRuntime.mode != "none" {
-				_ = startTunnel(ctx, oldRuntime)
+			oldRuntime.preserveStoppedCore = prior != nil
+			if state.coreRunning {
+				restoreErr = errors.Join(restoreErr, actions.coreAction(recovery, oldRuntime.root, "restart"))
+			}
+			if state.tunnelRunning {
+				restoreErr = errors.Join(restoreErr, actions.startTunnel(recovery, oldRuntime))
 			}
 		}
+		restoreErr = errors.Join(restoreErr, loadErr)
 		if restoreErr != nil {
 			return fmt.Errorf("%w；同时恢复配置失败: %v", cause, restoreErr)
 		}
 		return cause
 	}
+	if prior == nil || state.tunnelRunning {
+		if err := actions.stopTunnel(ctx, runtime); err != nil {
+			if prior != nil {
+				return rollback(err)
+			}
+			return err
+		}
+	}
 
-	settings := controlPanelSettings{
-		Port:                    request.Port,
-		LogLevel:                request.LogLevel,
-		OAuthAccessTokenTTL:     request.OAuthAccessTokenTTL,
-		MCPAppsMode:             request.MCPAppsMode,
-		BrowserEnabled:          request.BrowserEnabled,
-		BrowserCDPURL:           request.BrowserCDPURL,
-		BrowserReuseExistingCDP: request.BrowserReuseExistingCDP,
-		ACPEnabled:              request.ACPEnabled,
-		ACPProfiles:             acpProfiles,
-		ACPDefaultProfile:       acpDefaultProfile,
-	}
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return rollback(err)
-	}
-	data = append(data, '\n')
 	if err := atomicfile.Write(settingsPath, data, 0o600); err != nil {
-		return rollback(fmt.Errorf("保存控制面板设置失败: %w", err))
+		return rollback(err)
 	}
 
 	runtime.settings = settings
@@ -165,11 +213,13 @@ func platformUpdateConfig(ctx context.Context, request ConfigUpdateRequest) erro
 	if err := runtime.updateManifest(manifestMode, publicURL); err != nil {
 		return rollback(err)
 	}
-	if err := platformServiceAction(ctx, runtime.root, "restart"); err != nil {
-		return rollback(err)
+	if state.coreRunning {
+		if err := actions.coreAction(ctx, runtime.root, "restart"); err != nil {
+			return rollback(err)
+		}
 	}
-	if runtime.mode != "none" {
-		if err := startTunnel(ctx, runtime); err != nil {
+	if state.tunnelRunning {
+		if err := actions.startTunnel(ctx, runtime); err != nil {
 			return rollback(err)
 		}
 	}

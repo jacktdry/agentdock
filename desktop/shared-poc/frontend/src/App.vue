@@ -2,7 +2,14 @@
 import ActivityStreamPanel from './components/activity/ActivityStreamPanel.vue'
 import ContractStatusPanel from './components/contract/ContractStatusPanel.vue'
 import RuntimeStatusPanel from './components/runtime/RuntimeStatusPanel.vue'
-import PocSettingsPanel from './components/settings/PocSettingsPanel.vue'
+import { shallowRef } from 'vue'
+import BasicSettingsPanel from './components/settings/BasicSettingsPanel.vue'
+import ConnectionPanel from './components/connection/ConnectionPanel.vue'
+import OverviewPanel from './components/overview/OverviewPanel.vue'
+import UpdateCard from './components/system/UpdateCard.vue'
+import DiagnosticsCard from './components/system/DiagnosticsCard.vue'
+import { primarySections, sectionKeys, type Section } from './navigation'
+const section = shallowRef<Section>('overview')
 import { type LocalePreference, useI18n } from './i18n'
 
 const { currentPreference, localeOptions, setLocale, t } = useI18n()
@@ -13,7 +20,7 @@ function changeLocale(event: Event) {
 </script>
 
 <template>
-  <main class="app-shell">
+  <div class="app-shell">
     <header class="hero">
       <div>
         <p class="eyebrow">{{ t('app.eyebrow') }}</p>
@@ -30,15 +37,33 @@ function changeLocale(event: Event) {
             </option>
           </select>
         </label>
-        <div class="poc-badge" :aria-label="t('app.poc_label')">M3</div>
       </div>
     </header>
 
-    <div class="layout-grid">
-      <RuntimeStatusPanel />
-      <ContractStatusPanel />
-      <PocSettingsPanel />
-      <ActivityStreamPanel />
+    <div class="desktop-layout">
+      <nav class="primary-nav" :aria-label="t('nav.primary')">
+        <button v-for="item in primarySections" :key="item" type="button"
+          :aria-current="section === item ? 'page' : undefined" @click="section = item">{{ t(sectionKeys[item]) }}</button>
+        <button class="developer-entry" type="button" :aria-current="section === 'developer' ? 'page' : undefined"
+          @click="section = 'developer'">{{ t('nav.developer') }}</button>
+      </nav>
+      <main class="feature-content">
+        <OverviewPanel v-if="section === 'overview'" @navigate="section = $event" />
+        <RuntimeStatusPanel v-else-if="section === 'runtime'" />
+        <ConnectionPanel v-else-if="section === 'connection'" />
+        <BasicSettingsPanel v-else-if="section === 'settings'" />
+        <div v-else-if="section === 'system'" class="feature-stack">
+          <UpdateCard />
+          <DiagnosticsCard />
+        </div>
+        <section v-else class="feature-stack" aria-labelledby="developer-title">
+          <h2 id="developer-title">{{ t('nav.developer') }}</h2>
+          <p class="hint">{{ t('developer.scope') }}</p>
+          <ContractStatusPanel />
+          <p class="hint">{{ t('developer.activity_experimental') }}</p>
+          <ActivityStreamPanel />
+        </section>
+      </main>
     </div>
-  </main>
+  </div>
 </template>

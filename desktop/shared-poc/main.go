@@ -29,11 +29,15 @@ func main() {
 	activityProbeService := NewActivityProbeService()
 
 	app := application.New(application.Options{
-		Name:        "AgentDock Shared Desktop POC",
-		Description: "Cross-platform AgentDock desktop architecture spike",
+		Name:        "AgentDock Desktop",
+		Description: "Cross-platform AgentDock desktop",
 		Services: []application.Service{
 			application.NewService(contractService),
 			application.NewService(runtimeService),
+			application.NewService(desktopapi.NewConnectionService(*runtimeRootFlag)),
+			application.NewService(desktopapi.NewBasicSettingsService(*runtimeRootFlag)),
+			application.NewService(desktopapi.NewUpdateService(*runtimeRootFlag)),
+			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
 			application.NewService(settings),
 			application.NewService(activityProbeService),
 		},
@@ -51,7 +55,7 @@ func main() {
 	width, height := normaliseWindowSize(prefs.WindowWidth, prefs.WindowHeight)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "agentdock-shared-poc",
-		Title:              "AgentDock Shared Desktop POC",
+		Title:              "AgentDock Desktop",
 		Width:              width,
 		Height:             height,
 		MinWidth:           760,
@@ -93,12 +97,12 @@ func main() {
 	if runtime.GOOS == "darwin" {
 		menu.AddRole(application.AppMenu)
 	}
-	pocMenu := menu.AddSubmenu("POC")
-	pocMenu.Add("Show Window").SetAccelerator("CmdOrCtrl+Shift+A").OnClick(func(*application.Context) {
+	desktopMenu := menu.AddSubmenu("AgentDock")
+	desktopMenu.Add("Show Window").SetAccelerator("CmdOrCtrl+Shift+A").OnClick(func(*application.Context) {
 		showWindow()
 	})
-	pocMenu.AddSeparator()
-	pocMenu.Add("Quit").OnClick(func(*application.Context) {
+	desktopMenu.AddSeparator()
+	desktopMenu.Add("Quit").OnClick(func(*application.Context) {
 		quit()
 	})
 	menu.AddRole(application.EditMenu)
@@ -111,9 +115,9 @@ func main() {
 	} else {
 		tray.SetIcon(icons.DefaultWindowsIcon)
 	}
-	tray.SetTooltip("AgentDock Shared Desktop POC")
+	tray.SetTooltip("AgentDock Desktop")
 	trayMenu := app.NewMenu()
-	trayMenu.Add("Show AgentDock POC").OnClick(func(*application.Context) {
+	trayMenu.Add("Show AgentDock").OnClick(func(*application.Context) {
 		showWindow()
 	})
 	trayMenu.AddSeparator()

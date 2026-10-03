@@ -28,6 +28,24 @@ func launchdLoaded(ctx context.Context, label string) bool {
 	return err == nil
 }
 
+func basicUnixServiceRunning(ctx context.Context, manifest unixRuntimeManifest, tunnel bool) bool {
+	label := manifest.ServiceName
+	if tunnel {
+		label = manifest.TunnelServiceName
+	}
+	output, err := runCommand(ctx, launchctlBinary(), "print", launchdTarget(label))
+	return err == nil && launchdJobRunning(output)
+}
+
+func launchdJobRunning(output string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "state = running" {
+			return true
+		}
+	}
+	return false
+}
+
 func kickstartRegisteredLaunchAgent(ctx context.Context, label, manager string) error {
 	if !launchdLoaded(ctx, label) {
 		if manager == "launchd" {

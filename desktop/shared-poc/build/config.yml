@@ -6,11 +6,11 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "AgentDock Custom" # The name of the company
-  productName: "AgentDock Shared Desktop POC" # The name of the application
+  productName: "AgentDock Desktop" # The name of the application
   productIdentifier: "dev.agentdock.sharedpoc" # The unique product identifier
-  description: "AgentDock cross-platform desktop architecture spike" # The application description
+  description: "AgentDock cross-platform desktop" # The application description
   copyright: "(c) 2026 AgentDock Custom" # Copyright text
-  comments: "M1 architecture spike; not a production release" # Comments
+  comments: "Shared desktop baseline" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension

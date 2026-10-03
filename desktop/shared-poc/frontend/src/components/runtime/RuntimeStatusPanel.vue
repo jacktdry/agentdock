@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
+import { errorMessage } from '../../api/errorMessage'
 import { Domain, type RuntimeActionName } from '../../api/desktopApi'
 import { useI18n, type MessageKey } from '../../i18n'
 import { useContractStore } from '../../stores/contract'
@@ -35,11 +36,8 @@ function canInvoke(action: RuntimeActionName) {
 
 function requestAction(action: RuntimeActionName) {
   if (!canInvoke(action)) return
-  if (contract.requiresConfirmation(Domain.DomainRuntime, action)) {
-    confirmationAction.value = action
-    return
-  }
-  void runtime.perform(action)
+  if (loading.value || actionPending.value) return
+  confirmationAction.value = action
 }
 
 async function confirmAction() {
@@ -84,7 +82,7 @@ function cancelConfirmation() {
     </dl>
 
     <p class="path" :title="runtimeRoot">{{ runtimeRoot || t('runtime.root_unavailable') }}</p>
-    <p v-if="error" class="error" role="alert">{{ error.code }} — {{ error.message }}</p>
+    <p v-if="error" class="error" role="alert">{{ errorMessage(error) }}</p>
 
     <div class="actions">
       <button type="button" :disabled="loading || actionPending !== null" @click="runtime.refresh">
@@ -92,21 +90,21 @@ function cancelConfirmation() {
       </button>
       <button
         type="button"
-        :disabled="actionPending !== null || !canInvoke('start')"
+        :disabled="loading || actionPending !== null || !canInvoke('start')"
         @click="requestAction('start')"
       >
         {{ t('common.start') }}
       </button>
       <button
         type="button"
-        :disabled="actionPending !== null || !canInvoke('restart')"
+        :disabled="loading || actionPending !== null || !canInvoke('restart')"
         @click="requestAction('restart')"
       >
         {{ t('common.restart') }}
       </button>
       <button
         type="button"
-        :disabled="actionPending !== null || !canInvoke('stop')"
+        :disabled="loading || actionPending !== null || !canInvoke('stop')"
         @click="requestAction('stop')"
       >
         {{ t('common.stop') }}

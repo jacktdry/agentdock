@@ -142,15 +142,27 @@ Shared UI 不需要直接引用散落的 `internal/*` 實作。
 
 ## M4 — Shared Desktop Baseline
 
-先搬足以驗證 shared shell 的既有能力：
+狀態：**完成（2026-10-03）**
+
+第一批 production-facing shared shell 已完成：
 
 1. Overview
 2. Runtime
 3. Connection
 4. Basic Settings
-5. Update / Diagnostics 的最小可用路徑
+5. System：Update Check + Diagnostics
 
-此階段不追求一次搬完 Browser、ACP、MCP / Plugin。舊 native UI 繼續保留。
+完成邊界：
+
+- `internal/desktopapi` / `internal/desktopruntime` 持有 framework-neutral service semantics，Vue/Wails 不重做 platform state machine。
+- Runtime / Connection / Settings mutations 依 runtime root 串行化，並保留 rollback 與原本 running state。
+- Quick Tunnel port target 會隨 Basic Settings port 更新；`regenerate` 僅 quick mode 可用，前後端都 fail-closed。
+- Basic Settings 僅暴露 port / log level / core autostart；macOS SMAppService autostart 維持 native-only。
+- Update shared path 僅提供 check，且版本來源是被控制的 runtime core，不是 shared shell executable。
+- Diagnostics 僅回傳 secret-safe metadata。
+- Browser、ACP、MCP、Plugin、Permission 尚未搬入 shared shell；Activity 仍是 Developer / Architecture 下的 experimental surface。
+- AppKit / WPF native UI 持續保留作 fallback。
+- macOS、Windows x64、Windows ARM64 shared builds 與三語系 i18n gate 已驗證。
 
 ## M5 — Activity / Execution Vertical Slice
 

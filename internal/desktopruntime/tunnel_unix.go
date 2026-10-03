@@ -261,22 +261,7 @@ func runQuickTunnel(ctx context.Context, manifest unixRuntimeManifest, root, run
 		if publicURL == "" {
 			continue
 		}
-		_, _, core, err := loadCoreEnvironment(runtimeRoot)
-		if err != nil {
-			_ = command.Process.Kill()
-			return err
-		}
-		core["AGENTDOCK_SERVER_URL"] = publicURL
-		core["AGENTDOCK_OAUTH_ENABLED"] = "true"
-		if err := writeEnvironment(manifest.EnvironmentFile, core); err != nil {
-			_ = command.Process.Kill()
-			return err
-		}
-		if err := platformServiceAction(ctx, runtimeRoot, "restart"); err != nil {
-			_ = command.Process.Kill()
-			return err
-		}
-		if err := atomicfile.Write(filepath.Join(root, "quick-tunnel-url.txt"), []byte(publicURL+"\n"), 0o600); err != nil {
+		if err := applyQuickTunnelURLUnix(ctx, manifest, root, runtimeRoot, publicURL); err != nil {
 			_ = command.Process.Kill()
 			return err
 		}
@@ -287,6 +272,30 @@ func runQuickTunnel(ctx context.Context, manifest unixRuntimeManifest, root, run
 		return err
 	}
 	return <-wait
+}
+
+func applyQuickTunnelURLUnix(ctx context.Context, manifest unixRuntimeManifest, root, runtimeRoot, publicURL string) error {
+	release, err := AcquireDesktopMutation(ctx, runtimeRoot)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	_, _, core, err := loadCoreEnvironment(runtimeRoot)
+	if err != nil {
+		return err
+	}
+	core["AGENTDOCK_SERVER_URL"] = publicURL
+	core["AGENTDOCK_OAUTH_ENABLED"] = "true"
+	if err := writeEnvironment(manifest.EnvironmentFile, core); err != nil {
+		return err
+	}
+	if basicUnixServiceRunning(ctx, manifest, false) {
+		if err := platformServiceAction(ctx, runtimeRoot, "restart"); err != nil {
+			return err
+		}
+	}
+	return atomicfile.Write(filepath.Join(root, "quick-tunnel-url.txt"), []byte(publicURL+"\n"), 0o600)
 }
 
 func tunnelServiceActive(ctx context.Context, manifest unixRuntimeManifest) bool {

@@ -12,6 +12,7 @@ type Domain string
 
 const (
 	DomainRuntime     Domain = "runtime"
+	DomainSettings    Domain = "settings"
 	DomainConnection  Domain = "connection"
 	DomainACP         Domain = "acp"
 	DomainBrowser     Domain = "browser"
@@ -26,6 +27,7 @@ const (
 var domainOrder = []Domain{
 	DomainRuntime,
 	DomainConnection,
+	DomainSettings,
 	DomainACP,
 	DomainBrowser,
 	DomainActivity,
@@ -176,7 +178,8 @@ func DefaultManifest() Manifest {
 				},
 				Streams: []StreamCapability{},
 			},
-			unavailableCapability(DomainConnection, "connection adapter is scheduled for the shared desktop baseline"),
+			availableCapability(DomainConnection, "Tunnel configuration remains native-only; regenerate requires quick mode", "status", "start", "stop", "restart", "regenerate"),
+			availableCapability(DomainSettings, "Basic settings only; macOS autostart changes require native SMAppService", "read", "save"),
 			unavailableCapability(DomainACP, "ACP desktop contract is scheduled after the activity execution slice"),
 			unavailableCapability(DomainBrowser, "browser routing contract is scheduled for the browser-routing milestone"),
 			{
@@ -198,8 +201,8 @@ func DefaultManifest() Manifest {
 			unavailableCapability(DomainPermission, "permission parity is not implemented in the shared shell yet"),
 			unavailableCapability(DomainMCP, "MCP management has not been adapted to the shared desktop API yet"),
 			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),
-			unavailableCapability(DomainUpdate, "update transaction UI remains on the native desktop path"),
-			unavailableCapability(DomainDiagnostics, "diagnostics adapter has not been promoted into the shared desktop API yet"),
+			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
+			availableCapability(DomainDiagnostics, "Local file availability only; logs, content and environment are omitted", "snapshot"),
 		},
 	}
 }
@@ -213,4 +216,17 @@ func unavailableCapability(domain Domain, reason string) DomainCapability {
 		Streams:      []StreamCapability{},
 		Reason:       reason,
 	}
+}
+
+func availableCapability(domain Domain, reason string, names ...string) DomainCapability {
+	operations := make([]OperationCapability, 0, len(names))
+	for _, name := range names {
+		access := AccessRead
+		switch name {
+		case "start", "stop", "restart", "regenerate", "save":
+			access = AccessMutating
+		}
+		operations = append(operations, OperationCapability{Name: name, Access: access, RequiresConfirmation: access != AccessRead})
+	}
+	return DomainCapability{Domain: domain, Version: 1, Availability: AvailabilityAvailable, Operations: operations, Streams: []StreamCapability{}, Reason: reason}
 }
