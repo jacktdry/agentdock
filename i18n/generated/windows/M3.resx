@@ -502,6 +502,171 @@
   <data name="errors.validation" xml:space="preserve">
     <value>Check the entered values.</value>
   </data>
+  <data name="execution.ack_hint" xml:space="preserve">
+    <value>Accepted means Core accepted the input, not that a model consumed it. Delivery is reported separately.</value>
+  </data>
+  <data name="execution.active_calls" xml:space="preserve">
+    <value>Active calls</value>
+  </data>
+  <data name="execution.attention" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
+  <data name="execution.bounds" xml:space="preserve">
+    <value>Showing up to 120 calls and 200 recent events. Active calls take priority.</value>
+  </data>
+  <data name="execution.byte_limit" xml:space="preserve">
+    <value>{bytes} / {limit} UTF-8 bytes after trimming whitespace. Input must be non-empty.</value>
+  </data>
+  <data name="execution.bytes" xml:space="preserve">
+    <value>{bytes} bytes</value>
+  </data>
+  <data name="execution.child_of" xml:space="preserve">
+    <value>Child of {id}</value>
+  </data>
+  <data name="execution.continuation" xml:space="preserve">
+    <value>Continuation ID / status</value>
+  </data>
+  <data name="execution.cursor" xml:space="preserve">
+    <value>Latest applied cursor</value>
+  </data>
+  <data name="execution.epoch" xml:space="preserve">
+    <value>Epoch</value>
+  </data>
+  <data name="execution.error" xml:space="preserve">
+    <value>Error code / category</value>
+  </data>
+  <data name="execution.exit_code" xml:space="preserve">
+    <value>Exit code</value>
+  </data>
+  <data name="execution.file_stats" xml:space="preserve">
+    <value>Lines added / deleted</value>
+  </data>
+  <data name="execution.files" xml:space="preserve">
+    <value>{count} files changed</value>
+  </data>
+  <data name="execution.finished" xml:space="preserve">
+    <value>Finished</value>
+  </data>
+  <data name="execution.history" xml:space="preserve">
+    <value>Recent completed calls</value>
+  </data>
+  <data name="execution.insertion_accepted" xml:space="preserve">
+    <value>Accepted by Core</value>
+  </data>
+  <data name="execution.insertion_cancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="execution.insertion_delivered" xml:space="preserve">
+    <value>Delivered</value>
+  </data>
+  <data name="execution.insertion_expired" xml:space="preserve">
+    <value>Expired</value>
+  </data>
+  <data name="execution.insertion_rejected" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="execution.insertion_text" xml:space="preserve">
+    <value>Additional input</value>
+  </data>
+  <data name="execution.insertions" xml:space="preserve">
+    <value>Execution input</value>
+  </data>
+  <data name="execution.last_known" xml:space="preserve">
+    <value>Awaiting a Core snapshot; displayed calls are last known state.</value>
+  </data>
+  <data name="execution.no_calls" xml:space="preserve">
+    <value>No calls in this view.</value>
+  </data>
+  <data name="execution.output_bytes" xml:space="preserve">
+    <value>stdout / stderr bytes</value>
+  </data>
+  <data name="execution.paths_truncated" xml:space="preserve">
+    <value>Paths truncated</value>
+  </data>
+  <data name="execution.reason" xml:space="preserve">
+    <value>Reason</value>
+  </data>
+  <data name="execution.reason_unknown" xml:space="preserve">
+    <value>Not provided by the current update</value>
+  </data>
+  <data name="execution.recent_events" xml:space="preserve">
+    <value>Recent execution events</value>
+  </data>
+  <data name="execution.reconnect" xml:space="preserve">
+    <value>Reconnect / resync</value>
+  </data>
+  <data name="execution.reconnect_total" xml:space="preserve">
+    <value>Reconnect total</value>
+  </data>
+  <data name="execution.safe_facts" xml:space="preserve">
+    <value>Structural facts only: output sizes, continuation state and file changes.</value>
+  </data>
+  <data name="execution.select_target" xml:space="preserve">
+    <value>Choose a running or waiting call</value>
+  </data>
+  <data name="execution.send" xml:space="preserve">
+    <value>Send to Core</value>
+  </data>
+  <data name="execution.source" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="execution.started" xml:space="preserve">
+    <value>Started</value>
+  </data>
+  <data name="execution.status_cancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="execution.status_completed" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="execution.status_failed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="execution.status_running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="execution.status_waiting_for_user" xml:space="preserve">
+    <value>Waiting for user — attention needed</value>
+  </data>
+  <data name="execution.stream_closed" xml:space="preserve">
+    <value>Execution transport disconnected</value>
+  </data>
+  <data name="execution.stream_connecting" xml:space="preserve">
+    <value>Connecting to execution stream</value>
+  </data>
+  <data name="execution.stream_error" xml:space="preserve">
+    <value>Execution transport unavailable</value>
+  </data>
+  <data name="execution.stream_open" xml:space="preserve">
+    <value>Execution transport connected</value>
+  </data>
+  <data name="execution.synchronized" xml:space="preserve">
+    <value>Core snapshot received</value>
+  </data>
+  <data name="execution.target" xml:space="preserve">
+    <value>Target call</value>
+  </data>
+  <data name="execution.timed_out" xml:space="preserve">
+    <value>Timed out</value>
+  </data>
+  <data name="execution.title" xml:space="preserve">
+    <value>Activity Center</value>
+  </data>
+  <data name="execution.transport_dropped" xml:space="preserve">
+    <value>Transport dropped total</value>
+  </data>
+  <data name="execution.truncation" xml:space="preserve">
+    <value>stdout / stderr truncated</value>
+  </data>
+  <data name="execution.unknown" xml:space="preserve">
+    <value>Not provided</value>
+  </data>
+  <data name="execution.updated" xml:space="preserve">
+    <value>Updated</value>
+  </data>
+  <data name="execution.waiting_hint" xml:space="preserve">
+    <value>This call is waiting for user input.</value>
+  </data>
   <data name="nav.developer" xml:space="preserve">
     <value>Developer / Architecture</value>
   </data>

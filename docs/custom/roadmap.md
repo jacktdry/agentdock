@@ -166,6 +166,8 @@ Shared UI 不需要直接引用散落的 `internal/*` 實作。
 
 ## M5 — Activity / Execution Vertical Slice
 
+狀態：**實作完成（2026-10-03）**
+
 這是 shared UI foundation 後第一個新能力，也是架構壓力測試。
 
 - truthful execution state
@@ -177,13 +179,19 @@ Shared UI 不需要直接引用散落的 `internal/*` 實作。
 - ACK
 - attention semantics
 
-Exit criteria：
+完成邊界：
 
-- stream 中斷 / reconnect 後 state 不失真
-- UI 不因大量 log/event 形成無界 queue
-- insertion 有 stable ID 與可觀察 delivery state
-- recent interaction 不會被誤判為 active execution
-- keyboard / VoiceOver / Narrator 可以操作核心 execution controls
+- AgentDock Core 是唯一 execution truth source；Shared Desktop 以 snapshot / bounded replay / SSE 消費，不依 UI 最近互動推測 active state。
+- root / child call 使用 stable ID 與明確 parent，狀態區分 running / waiting_for_user / completed / failed / cancelled。
+- Activity Center 前端限制為 120 calls、200 events、128 insertions，active calls 優先，避免無界 queue。
+- insertion 使用 stable ID 與 accepted / delivered / rejected / expired / cancelled；ACK 只代表 Core 接受，delivery 另行回報。
+- insertion eligibility 由 Core 契約明示；沒有真實 delivery boundary 的 command-session / dynamic-MCP child 不接受 insertion。
+- reconnect 期間控制 fail-closed；同 epoch replay 可更新最後已知狀態，只有 Core SSE 真正重新 attach 後才恢復 synchronized。
+- expected epoch、cursor-ahead、pruned gap 都會強制 reset/resnapshot，避免 Core restart 後保留舊 running state。
+- execution journal 僅保存 bounded structural facts，不保存 raw stdout/stderr、任意檔案內容、tool args/results、env、auth header 或 remote MCP body。
+- 獨立 review 的 6 個 P2 已全部修正；P0/P1 為 0。
+- full Go test、M5 vet/race、30 個 Vitest、i18n 197/197（三語）、macOS arm64、Windows arm64/x64 shared build 均通過。
+- keyboard/semantic accessibility 的程式層 gate 已完成；原生 VoiceOver/Narrator smoke 保留在 release UAT。
 
 ## M6 — Browser Broker
 

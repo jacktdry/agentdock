@@ -18,9 +18,13 @@ import (
 
 func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg config.Config, oauthStore *auth.OAuthStore) {
 	h := runtimeAPIHandler(runtime, cfg, oauthStore)
+	mux.HandleFunc("/internal/runtime/activity/stream", runtimeActivityStreamHandler(runtime, cfg, oauthStore))
 	mux.HandleFunc("/internal/runtime/status", h)
 	mux.HandleFunc("/internal/runtime/analytics", h)
 	mux.HandleFunc("/internal/runtime/diagnostics", h)
+	mux.HandleFunc("/internal/runtime/execution", h)
+	mux.HandleFunc("/internal/runtime/activity", h)
+	mux.HandleFunc("/internal/runtime/insertions", h)
 	mux.HandleFunc("/internal/runtime/capabilities", h)
 	mux.HandleFunc("/internal/runtime/skills", h)
 	mux.HandleFunc("/internal/runtime/skills/", h)
@@ -44,9 +48,13 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 		}
 		staticOK := cfg.AuthToken != "" && authorizer.Authorized(r)
 		oauthOK := authorizedOAuth(r, cfg, oauthStore)
-		if strings.TrimSuffix(r.URL.Path, "/") == "/internal/runtime/analytics" &&
-			!authRequired && !isDirectLoopbackRequest(r) {
+		cleanPath := strings.TrimSuffix(r.URL.Path, "/")
+		if cleanPath == "/internal/runtime/analytics" && !authRequired && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
+			return
+		}
+		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions") && !isDirectLoopbackRequest(r) {
+			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}
 		if authRequired && !staticOK && !oauthOK {
@@ -78,7 +86,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 
 func runtimeRequestBody(r *http.Request) ([]byte, error) {
 	cleanPath := strings.TrimSuffix(r.URL.Path, "/")
-	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/mcp/oauth/callback" && cleanPath != "/internal/runtime/evolve") {
+	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/mcp/oauth/callback" && cleanPath != "/internal/runtime/evolve" && cleanPath != "/internal/runtime/insertions") {
 		return nil, nil
 	}
 	return io.ReadAll(io.LimitReader(r.Body, 64*1024+1))

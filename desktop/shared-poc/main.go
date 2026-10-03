@@ -27,6 +27,7 @@ func main() {
 	contractService := desktopapi.NewContractService()
 	runtimeService := desktopapi.NewRuntimeService(*runtimeRootFlag)
 	activityProbeService := NewActivityProbeService()
+	coreActivityService := NewCoreActivityService(*runtimeRootFlag)
 
 	app := application.New(application.Options{
 		Name:        "AgentDock Desktop",
@@ -41,6 +42,7 @@ func main() {
 			application.NewService(desktopapi.NewACPService(*runtimeRootFlag)),
 			application.NewService(settings),
 			application.NewService(activityProbeService),
+			application.NewService(coreActivityService),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
@@ -52,6 +54,7 @@ func main() {
 	})
 
 	app.HandleStream(activityStreamName, activityProbeService.serveStream)
+	app.HandleStream(executionStreamName, coreActivityService.serveStream)
 
 	width, height := normaliseWindowSize(prefs.WindowWidth, prefs.WindowHeight)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{

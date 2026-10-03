@@ -25,7 +25,7 @@ func MethodAllowed(method, path string) bool {
 		_, ok := runtimeTaskID(cleanPath)
 		return ok
 	}
-	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve")
+	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
 }
 
 func AllowHeader(path string) string {
@@ -34,6 +34,9 @@ func AllowHeader(path string) string {
 		return "GET, DELETE"
 	}
 	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" {
+		return "GET, POST"
+	}
+	if cleanPath == "/internal/runtime/insertions" {
 		return "GET, POST"
 	}
 	if cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/mcp/oauth/callback" {
@@ -64,6 +67,44 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 			}
 		}
 		return map[string]any(diagnostics.RuntimeDiagnostics()), nil
+	case path == "/internal/runtime/execution":
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution state", Category: "not_found"}
+		}
+		return map[string]any(executionRuntime.RuntimeExecution()), nil
+	case path == "/internal/runtime/activity":
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution activity", Category: "not_found"}
+		}
+		after, err := parseRuntimeActivityCursor(request.queryValue("after"))
+		if err != nil {
+			return nil, err
+		}
+		limit, err := parseRuntimeActivityLimit(request.queryValue("limit"))
+		if err != nil {
+			return nil, err
+		}
+		result, err := executionRuntime.RuntimeActivity(after, limit)
+		return map[string]any(result), err
+	case path == "/internal/runtime/insertions" && method == http.MethodGet:
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution insertions", Category: "not_found"}
+		}
+		return map[string]any(executionRuntime.RuntimeInsertions(request.queryValue("call_id"))), nil
+	case path == "/internal/runtime/insertions" && method == http.MethodPost:
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution insertions", Category: "not_found"}
+		}
+		args, err := decodeRuntimeInsertionRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		result, err := executionRuntime.RuntimeInsertionManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/capabilities":
 		refresh := strings.EqualFold(request.queryValue("refresh"), "true") || method == http.MethodPost
 		result, err := runtime.RuntimeCapabilities(ctx, refresh)
@@ -355,6 +396,36 @@ func parseRuntimeTaskLimit(raw string) (int, error) {
 		return 0, &app.ToolError{
 			Code: "INVALID_LIMIT", Message: "limit must be an integer between 0 and 200", Category: "validation",
 			Details: map[string]any{"limit": raw, "minimum": 0, "maximum": 200},
+		}
+	}
+	return limit, nil
+}
+
+func parseRuntimeActivityCursor(raw string) (uint64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, &app.ToolError{
+			Code: "INVALID_ACTIVITY_CURSOR", Message: "after must be an unsigned decimal sequence", Category: "validation",
+			Details: map[string]any{"after": raw},
+		}
+	}
+	return value, nil
+}
+
+func parseRuntimeActivityLimit(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 200, nil
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > 500 {
+		return 0, &app.ToolError{
+			Code: "INVALID_ACTIVITY_LIMIT", Message: "limit must be an integer between 1 and 500", Category: "validation",
+			Details: map[string]any{"limit": raw, "minimum": 1, "maximum": 500},
 		}
 	}
 	return limit, nil

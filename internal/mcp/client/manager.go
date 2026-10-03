@@ -655,7 +655,13 @@ func (m *Manager) InspectTool(ctx context.Context, qualifiedName string) (string
 	return server, tool, nil
 }
 
+type CallLifecycle func(context.Context, string, Tool) (context.Context, func(map[string]any, error))
+
 func (m *Manager) Call(ctx context.Context, qualifiedName string, arguments map[string]any) (map[string]any, error) {
+	return m.CallObserved(ctx, qualifiedName, arguments, nil)
+}
+
+func (m *Manager) CallObserved(ctx context.Context, qualifiedName string, arguments map[string]any, lifecycle CallLifecycle) (map[string]any, error) {
 	if err := m.syncRegistry(); err != nil {
 		return nil, err
 	}
@@ -693,9 +699,20 @@ func (m *Manager) Call(ctx context.Context, qualifiedName string, arguments map[
 	if err := validateToolArguments(tool, arguments); err != nil {
 		return nil, err
 	}
+	finishLifecycle := func(map[string]any, error) {}
+	if lifecycle != nil {
+		observedCtx, finish := lifecycle(ctx, server, tool)
+		if observedCtx != nil {
+			ctx = observedCtx
+		}
+		if finish != nil {
+			finishLifecycle = finish
+		}
+	}
 	callStartedAt := time.Now()
 	result, err := state.client.callTool(ctx, name, arguments)
 	observability.RecordStage(ctx, observability.StageMCPRemoteCall, callStartedAt, err == nil)
+	finishLifecycle(result, err)
 	if err != nil {
 		// 工具调用失败是请求级结果，不代表 MCP server 的连接或发现状态失效。
 		// server 的 lastError 只记录 refresh / initialize / tools/list 生命周期故障。

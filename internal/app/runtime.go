@@ -14,6 +14,7 @@ import (
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
+	"github.com/uvwt/agentdock/internal/execution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/observability"
 	pluginruntime "github.com/uvwt/agentdock/internal/plugin"
@@ -56,6 +57,7 @@ type Runtime struct {
 	taskTools      *tooltask.Service
 	acp            *toolacp.Service
 	observer       *observability.Recorder
+	execution      *execution.Store
 	tracing        *observability.Tracing
 	lifecycleMu    sync.RWMutex
 	commandCtx     context.Context
@@ -100,6 +102,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		cfg: cfg, ws: ws, skills: skills,
 		toolNames: toolNames, toolValidators: toolValidators,
 		observer:   observability.NewRecorder(observability.DefaultRecentCapacity),
+		execution:  execution.NewStore(execution.DefaultEventCapacity, execution.DefaultCallCapacity),
 		commandCtx: commandCtx, commandCancel: commandCancel,
 	}
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, func(ctx context.Context, skillRef string) (toolcommand.SkillLease, error) {
@@ -139,8 +142,10 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			SkillDataDir: skillDataDir, RuntimeEnv: runtimeEnv, Release: release,
 		}, nil
 	}, runtime.commandExecutionContext)
+	runtime.command.SetSessionLifecycleHook(runtime.observeCommandSession)
 	runtime.files = toolfile.New(ws, skills.ResolveResource, runtime.command.CommandEnv)
 	runtime.dynamicMCP = toolmcp.New(mcpClients, envs)
+	runtime.dynamicMCP.SetExecutionStore(runtime.execution)
 	if err := runtime.configureMCPOAuthCallbacks(); err != nil {
 		_ = runtime.dynamicMCP.Close()
 		commandCancel()
@@ -340,10 +345,16 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 	startedAt := time.Now()
 	r.observer.BeginTool()
 	source := observability.SourceFromContext(ctx)
+	executionTool := "unknown"
+	if _, available := r.toolValidators[name]; available {
+		executionTool = name
+	}
 	parentCtx := ctx
 	ctx, span := r.tracing.StartTool(ctx, source)
 	defer span.End()
 	ctx = observability.WithExecution(ctx, startedAt)
+	ctx, executionCall := r.execution.Begin(ctx, execution.BeginInput{Tool: executionTool, Source: string(source), InsertionSupported: true})
+	defer func() { r.finishExecutionCall(ctx, executionCall.ID, result, &err) }()
 	defer r.observeToolCall(parentCtx, ctx, name, startedAt, &err)
 
 	if args == nil {
@@ -358,6 +369,14 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 		return nil, err
 	}
 	result, err = spec.Handler(ctx, r, args)
+	if result != nil {
+		r.recordExecutionResultFacts(executionCall.ID, name, args, result)
+	}
+	if failed, _, _ := executionResultFailure(result); err == nil && ctx.Err() == nil && result != nil && !failed {
+		if deliveries := r.execution.DeliverInsertions(executionCall.ID); len(deliveries) > 0 {
+			result["agentdock_user_insertions"] = deliveries
+		}
+	}
 	return result, err
 }
 

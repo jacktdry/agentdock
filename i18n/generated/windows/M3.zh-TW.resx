@@ -502,6 +502,171 @@
   <data name="errors.validation" xml:space="preserve">
     <value>請檢查輸入值。</value>
   </data>
+  <data name="execution.ack_hint" xml:space="preserve">
+    <value>已接受表示 Core 接受輸入，不代表模型已讀取。傳遞狀態會另外回報。</value>
+  </data>
+  <data name="execution.active_calls" xml:space="preserve">
+    <value>進行中的呼叫</value>
+  </data>
+  <data name="execution.attention" xml:space="preserve">
+    <value>需要處理</value>
+  </data>
+  <data name="execution.bounds" xml:space="preserve">
+    <value>最多顯示 120 個呼叫與 200 個最近事件，優先保留進行中的呼叫。</value>
+  </data>
+  <data name="execution.byte_limit" xml:space="preserve">
+    <value>移除首尾空白後：{bytes}／{limit} UTF-8 位元組。輸入不可空白。</value>
+  </data>
+  <data name="execution.bytes" xml:space="preserve">
+    <value>{bytes} 位元組</value>
+  </data>
+  <data name="execution.child_of" xml:space="preserve">
+    <value>子呼叫，父呼叫：{id}</value>
+  </data>
+  <data name="execution.continuation" xml:space="preserve">
+    <value>延續執行 ID／狀態</value>
+  </data>
+  <data name="execution.cursor" xml:space="preserve">
+    <value>最新套用游標</value>
+  </data>
+  <data name="execution.epoch" xml:space="preserve">
+    <value>執行世代</value>
+  </data>
+  <data name="execution.error" xml:space="preserve">
+    <value>錯誤代碼／類別</value>
+  </data>
+  <data name="execution.exit_code" xml:space="preserve">
+    <value>結束代碼</value>
+  </data>
+  <data name="execution.file_stats" xml:space="preserve">
+    <value>新增／刪除行數</value>
+  </data>
+  <data name="execution.files" xml:space="preserve">
+    <value>變更 {count} 個檔案</value>
+  </data>
+  <data name="execution.finished" xml:space="preserve">
+    <value>結束時間</value>
+  </data>
+  <data name="execution.history" xml:space="preserve">
+    <value>最近結束的呼叫</value>
+  </data>
+  <data name="execution.insertion_accepted" xml:space="preserve">
+    <value>Core 已接受</value>
+  </data>
+  <data name="execution.insertion_cancelled" xml:space="preserve">
+    <value>已取消</value>
+  </data>
+  <data name="execution.insertion_delivered" xml:space="preserve">
+    <value>已傳遞</value>
+  </data>
+  <data name="execution.insertion_expired" xml:space="preserve">
+    <value>已過期</value>
+  </data>
+  <data name="execution.insertion_rejected" xml:space="preserve">
+    <value>已拒絕</value>
+  </data>
+  <data name="execution.insertion_text" xml:space="preserve">
+    <value>補充輸入</value>
+  </data>
+  <data name="execution.insertions" xml:space="preserve">
+    <value>執行補充輸入</value>
+  </data>
+  <data name="execution.last_known" xml:space="preserve">
+    <value>等待 Core 快照；畫面保留最後已知的呼叫狀態。</value>
+  </data>
+  <data name="execution.no_calls" xml:space="preserve">
+    <value>此區目前沒有呼叫。</value>
+  </data>
+  <data name="execution.output_bytes" xml:space="preserve">
+    <value>stdout／stderr 位元組</value>
+  </data>
+  <data name="execution.paths_truncated" xml:space="preserve">
+    <value>路徑是否截斷</value>
+  </data>
+  <data name="execution.reason" xml:space="preserve">
+    <value>原因</value>
+  </data>
+  <data name="execution.reason_unknown" xml:space="preserve">
+    <value>本次更新未提供</value>
+  </data>
+  <data name="execution.recent_events" xml:space="preserve">
+    <value>最近執行事件</value>
+  </data>
+  <data name="execution.reconnect" xml:space="preserve">
+    <value>重新連線／同步</value>
+  </data>
+  <data name="execution.reconnect_total" xml:space="preserve">
+    <value>重新連線總次數</value>
+  </data>
+  <data name="execution.safe_facts" xml:space="preserve">
+    <value>僅顯示結構資訊：輸出大小、延續執行狀態與檔案變更。</value>
+  </data>
+  <data name="execution.select_target" xml:space="preserve">
+    <value>選擇執行中或等待使用者的呼叫</value>
+  </data>
+  <data name="execution.send" xml:space="preserve">
+    <value>傳送至 Core</value>
+  </data>
+  <data name="execution.source" xml:space="preserve">
+    <value>來源</value>
+  </data>
+  <data name="execution.started" xml:space="preserve">
+    <value>開始時間</value>
+  </data>
+  <data name="execution.status_cancelled" xml:space="preserve">
+    <value>已取消</value>
+  </data>
+  <data name="execution.status_completed" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="execution.status_failed" xml:space="preserve">
+    <value>失敗</value>
+  </data>
+  <data name="execution.status_running" xml:space="preserve">
+    <value>執行中</value>
+  </data>
+  <data name="execution.status_waiting_for_user" xml:space="preserve">
+    <value>等待使用者 — 需要處理</value>
+  </data>
+  <data name="execution.stream_closed" xml:space="preserve">
+    <value>執行串流已斷線</value>
+  </data>
+  <data name="execution.stream_connecting" xml:space="preserve">
+    <value>正在連接執行串流</value>
+  </data>
+  <data name="execution.stream_error" xml:space="preserve">
+    <value>執行串流無法使用</value>
+  </data>
+  <data name="execution.stream_open" xml:space="preserve">
+    <value>執行串流已連線</value>
+  </data>
+  <data name="execution.synchronized" xml:space="preserve">
+    <value>已取得 Core 快照</value>
+  </data>
+  <data name="execution.target" xml:space="preserve">
+    <value>目標呼叫</value>
+  </data>
+  <data name="execution.timed_out" xml:space="preserve">
+    <value>是否逾時</value>
+  </data>
+  <data name="execution.title" xml:space="preserve">
+    <value>活動中心</value>
+  </data>
+  <data name="execution.transport_dropped" xml:space="preserve">
+    <value>傳輸丟棄總數</value>
+  </data>
+  <data name="execution.truncation" xml:space="preserve">
+    <value>stdout／stderr 是否截斷</value>
+  </data>
+  <data name="execution.unknown" xml:space="preserve">
+    <value>未提供</value>
+  </data>
+  <data name="execution.updated" xml:space="preserve">
+    <value>更新時間</value>
+  </data>
+  <data name="execution.waiting_hint" xml:space="preserve">
+    <value>此呼叫正在等待使用者輸入。</value>
+  </data>
   <data name="nav.developer" xml:space="preserve">
     <value>開發者／架構</value>
   </data>

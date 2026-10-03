@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/observability"
 )
 
 func TestDynamicMCPToolsStaySeparateAndAppearLightweightInContext(t *testing.T) {
+	blockStarted := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodDelete {
 			w.WriteHeader(http.StatusNoContent)
@@ -44,7 +46,7 @@ func TestDynamicMCPToolsStaySeparateAndAppearLightweightInContext(t *testing.T) 
 				"capabilities":    map[string]any{"tools": map[string]any{}},
 				"serverInfo":      map[string]any{"name": "demo-upstream", "version": "1.0.0"},
 			})
-		case "notifications/initialized":
+		case "notifications/initialized", "notifications/cancelled":
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
 			writeDynamicMCPRPCResult(t, w, rpc.ID, map[string]any{
@@ -60,12 +62,26 @@ func TestDynamicMCPToolsStaySeparateAndAppearLightweightInContext(t *testing.T) 
 			})
 		case "tools/call":
 			arguments, _ := rpc.Params["arguments"].(map[string]any)
-			if arguments["text"] == "fail" {
+			switch arguments["text"] {
+			case "fail":
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"jsonrpc": "2.0",
 					"id":      rpc.ID,
 					"error":   map[string]any{"code": -32000, "message": "synthetic failure"},
 				})
+				return
+			case "semantic_fail":
+				writeDynamicMCPRPCResult(t, w, rpc.ID, map[string]any{
+					"content": []map[string]any{{"type": "text", "text": "semantic failure"}},
+					"isError": true,
+				})
+				return
+			case "block":
+				select {
+				case blockStarted <- struct{}{}:
+				default:
+				}
+				<-request.Context().Done()
 				return
 			}
 			writeDynamicMCPRPCResult(t, w, rpc.ID, map[string]any{
@@ -158,6 +174,17 @@ func TestDynamicMCPToolsStaySeparateAndAppearLightweightInContext(t *testing.T) 
 			t.Fatalf("cold MCP stage failed: %#v", stage)
 		}
 	}
+	executionSnapshot := runtime.execution.Snapshot()
+	if len(executionSnapshot.Calls) < 2 {
+		t.Fatalf("execution snapshot missing MCP root/child: %#v", executionSnapshot)
+	}
+	coldRoot := executionSnapshot.Calls[len(executionSnapshot.Calls)-2]
+	coldChild := executionSnapshot.Calls[len(executionSnapshot.Calls)-1]
+	if coldRoot.Tool != "mcp_tool_call" || coldRoot.Status != "completed" ||
+		coldChild.Tool != "demo:echo" || coldChild.Status != "completed" ||
+		coldChild.ParentCallID != coldRoot.ID || coldChild.Source != "dynamic_mcp" {
+		t.Fatalf("cold MCP execution hierarchy = root %#v child %#v", coldRoot, coldChild)
+	}
 
 	search, err := runtime.Call(context.Background(), "mcp_tool_search", map[string]any{
 		"server": "demo",
@@ -225,6 +252,66 @@ func TestDynamicMCPToolsStaySeparateAndAppearLightweightInContext(t *testing.T) 
 		failedRecord.Stages[0].Name != observability.StageMCPRemoteCall ||
 		failedRecord.Stages[0].Success {
 		t.Fatalf("failed MCP stages = %#v, want remote call success=false", failedRecord.Stages)
+	}
+	executionSnapshot = runtime.execution.Snapshot()
+	failedRoot := executionSnapshot.Calls[len(executionSnapshot.Calls)-2]
+	failedChild := executionSnapshot.Calls[len(executionSnapshot.Calls)-1]
+	if failedRoot.Tool != "mcp_tool_call" || failedRoot.Status != "failed" ||
+		failedChild.Tool != "demo:echo" || failedChild.Status != "failed" ||
+		failedChild.ParentCallID != failedRoot.ID || failedChild.ErrorCode == "" {
+		t.Fatalf("failed MCP execution hierarchy = root %#v child %#v", failedRoot, failedChild)
+	}
+
+	semantic, err := runtime.Call(context.Background(), "mcp_tool_call", map[string]any{
+		"name":      "demo:echo",
+		"arguments": map[string]any{"text": "semantic_fail"},
+	})
+	if err != nil {
+		t.Fatalf("semantic MCP result changed public error contract: %v", err)
+	}
+	semanticRemote, _ := semantic["result"].(map[string]any)
+	if semanticRemote["isError"] != true {
+		t.Fatalf("semantic MCP result = %#v", semantic)
+	}
+	executionSnapshot = runtime.execution.Snapshot()
+	semanticRoot := executionSnapshot.Calls[len(executionSnapshot.Calls)-2]
+	semanticChild := executionSnapshot.Calls[len(executionSnapshot.Calls)-1]
+	if semanticRoot.Status != "failed" || semanticRoot.ErrorCode != "TOOL_RESULT_ERROR" ||
+		semanticChild.Status != "failed" || semanticChild.ErrorCode != "MCP_TOOL_RESULT_ERROR" ||
+		semanticChild.ParentCallID != semanticRoot.ID {
+		t.Fatalf("semantic MCP execution hierarchy = root %#v child %#v", semanticRoot, semanticChild)
+	}
+
+	cancelCtx, cancelCall := context.WithCancel(context.Background())
+	type callOutcome struct {
+		result Result
+		err    error
+	}
+	cancelledCall := make(chan callOutcome, 1)
+	go func() {
+		result, callErr := runtime.Call(cancelCtx, "mcp_tool_call", map[string]any{
+			"name":      "demo:echo",
+			"arguments": map[string]any{"text": "block"},
+		})
+		cancelledCall <- callOutcome{result: result, err: callErr}
+	}()
+	select {
+	case <-blockStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocking MCP call did not start")
+	}
+	cancelCall()
+	select {
+	case <-cancelledCall:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled MCP call did not return")
+	}
+	executionSnapshot = runtime.execution.Snapshot()
+	cancelRoot := executionSnapshot.Calls[len(executionSnapshot.Calls)-2]
+	cancelChild := executionSnapshot.Calls[len(executionSnapshot.Calls)-1]
+	if cancelRoot.Status != "cancelled" || cancelChild.Status != "cancelled" ||
+		cancelChild.ParentCallID != cancelRoot.ID {
+		t.Fatalf("cancelled MCP execution hierarchy = root %#v child %#v", cancelRoot, cancelChild)
 	}
 
 	for _, name := range runtime.ToolNames() {

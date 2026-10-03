@@ -397,3 +397,18 @@ dialog::backdrop { background: rgb(0 0 0 / 65%); }
 .acp-session { border-top: 1px solid #303641; padding-top: 0.5rem; }
 .acp-session .actions label { display: grid; gap: 0.4rem; max-width: 100%; }
 .acp-session input { width: 10rem; max-width: 100%; }
+.execution-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.65rem; }
+.execution-call { min-width: 0; border: 1px solid #303641; border-radius: 0.65rem; padding: 0.8rem; overflow-wrap: anywhere; }
+.execution-call .panel-heading { flex-wrap: wrap; }
+.execution-meta { color: #aeb5c0; font-size: 0.8rem; overflow-wrap: anywhere; }
+.execution-facts { display: flex; flex-wrap: wrap; gap: 0.8rem 1.5rem; font-size: 0.8rem; }
+.execution-facts > div { min-width: 0; }
+.execution-attention, .state-pill[data-state="waiting_for_user"] { color: #ffd28b; }
+.state-pill[data-state="waiting_for_user"] { border-color: #9b7130; }
+.state-pill[data-state="failed"] { border-color: #755054; color: #ffacb5; }
+.execution-form { display: grid; gap: 0.6rem; }
+.execution-form select, .execution-form textarea { width: 100%; min-width: 0; }
+.execution-form textarea { font: inherit; color: inherit; background: #181b21; border: 1px solid #596171; border-radius: 0.55rem; padding: 0.65rem; resize: vertical; }
+.execution-form textarea:focus-visible { outline: 3px solid #8fb3ff; outline-offset: 2px; }
+.execution-form button { justify-self: start; }
+.execution-events { max-height: 24rem; overflow: auto; }
