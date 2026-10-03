@@ -38,6 +38,17 @@ type DiagnosticsRuntime interface {
 	RuntimeDiagnostics() app.Result
 }
 
+// ExecutionRuntime is an optional local execution capability. Keeping it
+// separate avoids forcing non-Core test doubles and remote bridge consumers to
+// expose local execution state.
+type ExecutionRuntime interface {
+	RuntimeExecution() app.Result
+	RuntimeActivity(after uint64, limit int) (app.Result, error)
+	RuntimeActivityWait(context.Context, uint64) error
+	RuntimeInsertions(string) app.Result
+	RuntimeInsertionManage(context.Context, map[string]any) (app.Result, error)
+}
+
 type MCPOAuthRuntime interface {
 	RuntimeMCPOAuthCallback(context.Context, oauthclient.CallbackResult) error
 }

@@ -1,6 +1,9 @@
 package main
 
-import "github.com/uvwt/agentdock/internal/desktopapi"
+import (
+	"github.com/uvwt/agentdock/internal/desktopapi"
+	"github.com/uvwt/agentdock/internal/execution"
+)
 
 type Preferences struct {
 	BatchIntervalMS int `json:"batchIntervalMs"`
@@ -35,4 +38,10 @@ type ActivityProbeStatus struct {
 type ActivityProbeControlResult struct {
 	Status ActivityProbeStatus  `json:"status"`
 	Error  *desktopapi.APIError `json:"error,omitempty"`
+}
+
+type InsertionControlResult struct {
+	Insertion execution.Insertion  `json:"insertion"`
+	ACK       bool                 `json:"ack"`
+	Error     *desktopapi.APIError `json:"error,omitempty"`
 }

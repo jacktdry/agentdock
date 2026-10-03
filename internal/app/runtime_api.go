@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/execution"
 	"github.com/uvwt/agentdock/internal/observability"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
 	toolplugin "github.com/uvwt/agentdock/internal/tool/plugin"
@@ -56,6 +58,67 @@ func (r *Runtime) RuntimeDiagnostics() Result {
 		"ok":           true,
 		"source":       runtimeAPISource,
 		"recent_calls": observability.ProjectDiagnostics(r.observer.RecentCalls()),
+	}
+}
+
+func (r *Runtime) RuntimeExecution() Result {
+	return Result{
+		"ok":       true,
+		"source":   runtimeAPISource,
+		"snapshot": r.execution.Snapshot(),
+	}
+}
+
+func (r *Runtime) RuntimeActivity(after uint64, limit int) (Result, error) {
+	return Result{
+		"ok":     true,
+		"source": runtimeAPISource,
+		"page":   r.execution.Page(after, limit),
+	}, nil
+}
+
+func (r *Runtime) RuntimeActivityWait(ctx context.Context, after uint64) error {
+	return r.execution.Wait(ctx, after)
+}
+
+func (r *Runtime) RuntimeInsertions(callID string) Result {
+	return Result{
+		"ok":         true,
+		"source":     runtimeAPISource,
+		"insertions": r.execution.Insertions(callID),
+	}
+}
+
+func (r *Runtime) RuntimeInsertionManage(_ context.Context, args map[string]any) (Result, error) {
+	action, _ := args["action"].(string)
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "enqueue":
+		callID, _ := args["call_id"].(string)
+		text, _ := args["text"].(string)
+		item, err := r.execution.EnqueueInsertion(callID, text)
+		if err != nil {
+			switch {
+			case errors.Is(err, execution.ErrInsertionTarget):
+				return nil, toolError("INSERTION_TARGET_UNAVAILABLE", err.Error(), "not_found")
+			case errors.Is(err, execution.ErrInsertionCapacity):
+				return nil, toolError("INSERTION_CAPACITY", err.Error(), "runtime")
+			default:
+				return nil, toolError("INVALID_INSERTION", err.Error(), "validation")
+			}
+		}
+		return Result{"ok": true, "source": runtimeAPISource, "ack": true, "insertion": item}, nil
+	case "cancel":
+		id, _ := args["insertion_id"].(string)
+		item, err := r.execution.CancelInsertion(id)
+		if err != nil {
+			if errors.Is(err, execution.ErrInsertionNotFound) {
+				return nil, toolError("INSERTION_NOT_FOUND", err.Error(), "not_found")
+			}
+			return nil, toolError("INSERTION_CANCEL_FAILED", err.Error(), "runtime")
+		}
+		return Result{"ok": true, "source": runtimeAPISource, "insertion": item}, nil
+	default:
+		return nil, toolError("INVALID_INSERTION_ACTION", "unsupported insertion action", "validation")
 	}
 }
 

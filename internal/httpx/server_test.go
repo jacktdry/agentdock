@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/auth"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/execution"
 	"github.com/uvwt/agentdock/internal/mcp"
 )
 
@@ -682,5 +685,203 @@ func TestRequestRemoteIPOnlyTrustsConfiguredProxyChain(t *testing.T) {
 				t.Fatalf("requestRemoteIP() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestRuntimeExecutionAPIIsDirectLoopbackOnlyAndReplayable(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+	if _, err := runtime.Call(context.Background(), "agentdock_context", map[string]any{}); err != nil {
+		t.Fatalf("seed execution: %v", err)
+	}
+	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+
+	proxied := httptest.NewRequest(http.MethodGet, "/internal/runtime/execution", nil)
+	proxied.RemoteAddr = "127.0.0.1:54321"
+	proxied.Host = "public.example"
+	proxied.Header.Set("CF-Ray", "abc")
+	proxyRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(proxyRecorder, proxied)
+	if proxyRecorder.Code != http.StatusForbidden {
+		t.Fatalf("proxied execution status = %d, want %d", proxyRecorder.Code, http.StatusForbidden)
+	}
+
+	local := httptest.NewRequest(http.MethodGet, "/internal/runtime/execution", nil)
+	local.RemoteAddr = "127.0.0.1:54321"
+	local.Host = "127.0.0.1:27123"
+	localRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(localRecorder, local)
+	if localRecorder.Code != http.StatusOK {
+		t.Fatalf("local execution status = %d body=%s", localRecorder.Code, localRecorder.Body.String())
+	}
+	if !strings.Contains(localRecorder.Body.String(), `"active_calls":0`) ||
+		!strings.Contains(localRecorder.Body.String(), `"tool":"agentdock_context"`) {
+		t.Fatalf("execution response = %s", localRecorder.Body.String())
+	}
+
+	activity := httptest.NewRequest(http.MethodGet, "/internal/runtime/activity?after=0&limit=10", nil)
+	activity.RemoteAddr = "127.0.0.1:54321"
+	activity.Host = "127.0.0.1:27123"
+	activityRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(activityRecorder, activity)
+	if activityRecorder.Code != http.StatusOK {
+		t.Fatalf("activity status = %d body=%s", activityRecorder.Code, activityRecorder.Body.String())
+	}
+	if !strings.Contains(activityRecorder.Body.String(), `"kind":"call.started"`) ||
+		!strings.Contains(activityRecorder.Body.String(), `"kind":"call.completed"`) {
+		t.Fatalf("activity response = %s", activityRecorder.Body.String())
+	}
+
+	invalid := httptest.NewRequest(http.MethodGet, "/internal/runtime/activity?after=not-a-cursor", nil)
+	invalid.RemoteAddr = "127.0.0.1:54321"
+	invalid.Host = "127.0.0.1:27123"
+	invalidRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(invalidRecorder, invalid)
+	if invalidRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidRecorder.Body.String(), "INVALID_ACTIVITY_CURSOR") {
+		t.Fatalf("invalid cursor response = status %d body=%s", invalidRecorder.Code, invalidRecorder.Body.String())
+	}
+}
+
+func TestRuntimeActivityStreamReplaysBoundedCoreEvents(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+	if _, err := runtime.Call(context.Background(), "agentdock_context", map[string]any{}); err != nil {
+		t.Fatalf("seed execution: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerRuntimeAPI(mux, runtime, cfg, auth.NewOAuthStore())
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/internal/runtime/activity/stream?after=0", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("stream request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("stream response status=%d content-type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	var event strings.Builder
+	for {
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read stream: %v", readErr)
+		}
+		event.WriteString(line)
+		if line == "\n" {
+			break
+		}
+	}
+	body := event.String()
+	if !strings.Contains(body, "event: activity\n") ||
+		!strings.Contains(body, `"kind":"call.started"`) ||
+		!strings.Contains(body, `"kind":"call.completed"`) {
+		t.Fatalf("unexpected first stream event: %s", body)
+	}
+}
+
+func TestRuntimeActivityStreamResetsOnEpochMismatchOrAheadCursor(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+	if _, err := runtime.Call(context.Background(), "agentdock_context", map[string]any{}); err != nil {
+		t.Fatalf("seed execution: %v", err)
+	}
+	snapshot, ok := runtime.RuntimeExecution()["snapshot"].(execution.Snapshot)
+	if !ok || snapshot.Epoch == "" {
+		t.Fatalf("execution snapshot = %#v", runtime.RuntimeExecution())
+	}
+	latest, err := strconv.ParseUint(snapshot.LatestSequence, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	registerRuntimeAPI(mux, runtime, cfg, auth.NewOAuthStore())
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	cases := []struct {
+		name  string
+		epoch string
+		after string
+	}{
+		{name: "epoch_mismatch", epoch: "stale_epoch", after: snapshot.LatestSequence},
+		{name: "cursor_ahead", epoch: snapshot.Epoch, after: strconv.FormatUint(latest+1000, 10)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			query := url.Values{"epoch": {tc.epoch}, "after": {tc.after}}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/internal/runtime/activity/stream?"+query.Encode(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status=%d", resp.StatusCode)
+			}
+			reader := bufio.NewReader(resp.Body)
+			var event strings.Builder
+			for {
+				line, readErr := reader.ReadString('\n')
+				if readErr != nil {
+					t.Fatalf("read reset: %v", readErr)
+				}
+				event.WriteString(line)
+				if line == "\n" {
+					break
+				}
+			}
+			body := event.String()
+			if !strings.Contains(body, "event: reset\n") || !strings.Contains(body, `"epoch":"`+snapshot.Epoch+`"`) {
+				t.Fatalf("reset event = %s", body)
+			}
+		})
+	}
+}
+
+func TestRuntimeActivityStreamRejectsProxiedAccess(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+	handler := runtimeActivityStreamHandler(runtime, cfg, auth.NewOAuthStore())
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/runtime/activity/stream", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Host = "public.example"
+	request.Header.Set("CF-Ray", "abc")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), "LOCAL_ACCESS_REQUIRED") {
+		t.Fatalf("proxied stream response = status %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

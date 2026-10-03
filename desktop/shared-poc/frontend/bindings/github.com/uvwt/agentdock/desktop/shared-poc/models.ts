@@ -4,6 +4,9 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as desktopapi$0 from "../../internal/desktopapi/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as execution$0 from "../../internal/execution/models.js";
 
 export interface ActivityProbeControlResult {
     "status": ActivityProbeStatus;
@@ -22,6 +25,12 @@ export interface ActivityProbeStatus {
     "transportDroppedTotal": string;
     "queueDepth": number;
     "queueCapacity": number;
+}
+
+export interface InsertionControlResult {
+    "insertion": execution$0.Insertion;
+    "ack": boolean;
+    "error"?: desktopapi$0.APIError | null;
 }
 
 export interface Preferences {

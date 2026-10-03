@@ -130,6 +130,7 @@ func (svc *Service) Exec(ctx context.Context, request ExecRequest) (Result, erro
 	storeSession := func(reason string) Result {
 		svc.storeReservedSession(s)
 		reservationActive = false
+		svc.notifySessionLifecycle(ctx, s)
 		result := snapshotResult(s.Snapshot("running", maxBytes))
 		result["sandbox"] = preparationStatusResult(sandboxStatus)
 		result["session_reason"] = reason

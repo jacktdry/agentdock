@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ActivityStreamPanel from './components/activity/ActivityStreamPanel.vue'
+import ExecutionCenterPanel from './components/execution/ExecutionCenterPanel.vue'
 import ContractStatusPanel from './components/contract/ContractStatusPanel.vue'
 import RuntimeStatusPanel from './components/runtime/RuntimeStatusPanel.vue'
 import { shallowRef } from 'vue'
@@ -50,6 +51,7 @@ function changeLocale(event: Event) {
       <main class="feature-content">
         <OverviewPanel v-if="section === 'overview'" @navigate="section = $event" />
         <RuntimeStatusPanel v-else-if="section === 'runtime'" />
+        <ExecutionCenterPanel v-else-if="section === 'execution'" />
         <ConnectionPanel v-else-if="section === 'connection'" />
         <BasicSettingsPanel v-else-if="section === 'settings'" />
         <div v-else-if="section === 'system'" class="feature-stack">

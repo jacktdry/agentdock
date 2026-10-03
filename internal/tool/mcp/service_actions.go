@@ -7,6 +7,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/execution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 )
 
@@ -155,11 +156,53 @@ func (s *Service) Call(ctx context.Context, request CallRequest) (Result, error)
 	if arguments == nil {
 		arguments = map[string]any{}
 	}
-	result, err := s.mcpClients.Call(ctx, qualifiedName, arguments)
+
+	result, err := s.mcpClients.CallObserved(ctx, qualifiedName, arguments, func(callCtx context.Context, server string, tool mcpclient.Tool) (context.Context, func(map[string]any, error)) {
+		if s.execution == nil {
+			return callCtx, nil
+		}
+		childCtx, child := s.execution.Begin(callCtx, execution.BeginInput{
+			Tool:   server + ":" + tool.Name,
+			Source: "dynamic_mcp",
+		})
+		return childCtx, func(result map[string]any, callErr error) {
+			finish := execution.FinishInput{Status: execution.StatusCompleted}
+			switch {
+			case errors.Is(callErr, context.Canceled) || errors.Is(childCtx.Err(), context.Canceled):
+				finish.Status = execution.StatusCancelled
+				finish.ErrorCode = "CANCELED"
+				finish.ErrorCategory = "runtime"
+			case callErr != nil:
+				finish.Status = execution.StatusFailed
+				finish.ErrorCode = "MCP_ERROR"
+				finish.ErrorCategory = "external"
+				toolErr := dynamicMCPToolError(callErr)
+				var typed *ToolError
+				if errors.As(toolErr, &typed) {
+					finish.ErrorCode = typed.Code
+					finish.ErrorCategory = typed.Category
+				}
+			case mcpExecutionResultFailed(result):
+				finish.Status = execution.StatusFailed
+				finish.ErrorCode = "MCP_TOOL_RESULT_ERROR"
+				finish.ErrorCategory = "external"
+			}
+			s.execution.Finish(child.ID, finish)
+		}
+	})
 	if err != nil {
 		return nil, dynamicMCPToolError(err)
 	}
 	return Result{"name": qualifiedName, "result": result}, nil
+}
+
+func mcpExecutionResultFailed(result map[string]any) bool {
+	for _, key := range []string{"isError", "is_error"} {
+		if failed, ok := result[key].(bool); ok && failed {
+			return true
+		}
+	}
+	return false
 }
 
 func dynamicMCPToolError(err error) error {
