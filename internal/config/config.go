@@ -86,6 +86,7 @@ type Config struct {
 	MCPAppsMode                  MCPAppsMode
 	BrowserEnabled               bool
 	BrowserWorkspacePolicies     []browserpolicy.WorkspaceRootPolicy
+	BrowserCatalog               browserpolicy.CatalogDefinition
 	BrowserExecutablePath        string
 	BrowserCDPURL                string
 	BrowserReuseExistingCDP      bool
@@ -111,8 +112,19 @@ type ACPProfile struct {
 }
 
 func FromEnv() (Config, error) {
+	browserCatalog, err := browserCatalogFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
 	browserWorkspacePolicies, err := browserWorkspacePoliciesFromEnv()
 	if err != nil {
+		return Config{}, err
+	}
+	catalog, err := normalizeBrowserCatalog(browserCatalog)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateBrowserPolicyCatalog(browserWorkspacePolicies, catalog); err != nil {
 		return Config{}, err
 	}
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
@@ -196,6 +208,7 @@ func FromEnv() (Config, error) {
 		MCPAppsMode:                  mcpAppsMode,
 		BrowserEnabled:               browserEnabled,
 		BrowserWorkspacePolicies:     browserWorkspacePolicies,
+		BrowserCatalog:               browserCatalog,
 		BrowserExecutablePath:        os.Getenv("AGENTDOCK_BROWSER_EXECUTABLE_PATH"),
 		BrowserCDPURL:                strings.TrimSpace(os.Getenv("AGENTDOCK_BROWSER_CDP_URL")),
 		BrowserReuseExistingCDP:      browserReuseExistingCDP,
@@ -210,10 +223,18 @@ func FromEnv() (Config, error) {
 }
 
 func (c *Config) Normalize() error {
+	catalog, catalogErr := normalizeBrowserCatalog(c.BrowserCatalog)
+	if catalogErr != nil {
+		return catalogErr
+	}
 	policies, policyErr := normalizeBrowserWorkspacePolicies(c.BrowserWorkspacePolicies)
 	if policyErr != nil {
 		return policyErr
 	}
+	if err := validateBrowserPolicyCatalog(policies, catalog); err != nil {
+		return err
+	}
+	c.BrowserCatalog = catalog.Definition()
 	c.BrowserWorkspacePolicies = policies
 	home, err := os.UserHomeDir()
 	if err != nil {

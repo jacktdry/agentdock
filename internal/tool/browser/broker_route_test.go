@@ -18,17 +18,25 @@ func requiredRouteFixture(t *testing.T) RouteRequest {
 
 func TestResolveRoute(t *testing.T) {
 	cases := []struct {
-		name   string
-		mutate func(*RouteRequest)
-		code   string
-		route  browserpolicy.RouteKind
+		name    string
+		mutate  func(*RouteRequest)
+		code    string
+		route   browserpolicy.RouteKind
+		browser Kind
 	}{
 		{name: "required authenticated external", route: browserpolicy.RouteRequiredExternal},
+		{name: "generic required authenticated Chrome", mutate: func(r *RouteRequest) {
+			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered", RequiredProfileID: "user-profile"}
+			r.Connectors[0].Browser = BrowserChrome
+		}, route: browserpolicy.RouteRequiredExternal, browser: BrowserChrome},
 		{name: "missing connector", mutate: func(r *RouteRequest) { r.Connectors = nil }, code: ErrRequiredRouteUnavailable},
 		{name: "unregistered", mutate: func(r *RouteRequest) { r.Connectors[0].Registered = false }, code: ErrRequiredRouteUnavailable},
 		{name: "unhealthy", mutate: func(r *RouteRequest) { r.Connectors[0].Healthy = false }, code: ErrRequiredRouteUnavailable},
 		{name: "unverified", mutate: func(r *RouteRequest) { r.Connectors[0].Verified = false }, code: ErrRequiredRouteUnavailable},
 		{name: "unauthenticated", mutate: func(r *RouteRequest) { r.Connectors[0].Authenticated = false }, code: ErrRequiredRouteUnavailable},
+		{name: "wrong engine", mutate: func(r *RouteRequest) { r.Connectors[0].Engine = EngineNativeCDP }, code: ErrRequiredRouteUnavailable},
+		{name: "wrong version", mutate: func(r *RouteRequest) { r.Connectors[0].EngineVersion = "1.8.0" }, code: ErrRequiredRouteUnavailable},
+		{name: "wrong transport", mutate: func(r *RouteRequest) { r.Connectors[0].Transport = "stdio" }, code: ErrRequiredRouteUnavailable},
 		{name: "wrong browser", mutate: func(r *RouteRequest) { r.Connectors[0].Browser = BrowserChrome }, code: ErrRequiredRouteUnavailable},
 		{name: "wrong profile", mutate: func(r *RouteRequest) { r.Connectors[0].ProfileID = "other" }, code: ErrPolicyConflict},
 		{name: "unsafe process ownership", mutate: func(r *RouteRequest) { r.Connectors[0].Ownership.Process = OwnerAgentDockIsolated }, code: ErrRequiredRouteUnavailable},
@@ -55,6 +63,12 @@ func TestResolveRoute(t *testing.T) {
 		{name: "explicit permitted", mutate: func(r *RouteRequest) {
 			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged, AllowExplicitExternal: true}
 			r.Override = &RouteOverride{Route: browserpolicy.RouteExternal, ConnectorID: "registered", ExplicitUserInstruction: true}
+		}, route: browserpolicy.RouteExternal},
+		{name: "explicit external persistent need not be authenticated", mutate: func(r *RouteRequest) {
+			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged, AllowExplicitExternal: true}
+			r.Override = &RouteOverride{Route: browserpolicy.RouteExternal, ConnectorID: "registered", ExplicitUserInstruction: true}
+			r.Connectors[0].ProfileClass = ProfileExternal
+			r.Connectors[0].Authenticated = false
 		}, route: browserpolicy.RouteExternal},
 		{name: "explicit denied by policy", mutate: func(r *RouteRequest) {
 			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}
@@ -85,8 +99,14 @@ func TestResolveRoute(t *testing.T) {
 				if got.Start.Browser != BrowserChrome || !got.Start.Headless || got.Start.ProfileClass != ProfileIsolated || got.Start.Engine != EngineChromeDevToolsMCP || got.Start.EngineVersion != PreferredEngineVersion {
 					t.Fatalf("default route=%+v", got)
 				}
-			} else if got.Start.Browser != BrowserEdge || got.Start.Ownership.Process != OwnerExternalPersistent || got.Start.Ownership.Profile != OwnerExternalPersistent || got.Start.LifecyclePolicy != LifecycleExternal {
-				t.Fatalf("external route=%+v", got)
+			} else {
+				wantBrowser := tc.browser
+				if wantBrowser == "" {
+					wantBrowser = BrowserEdge
+				}
+				if got.Start.Browser != wantBrowser || got.Start.Ownership.Process != OwnerExternalPersistent || got.Start.Ownership.Profile != OwnerExternalPersistent || got.Start.LifecyclePolicy != LifecycleExternal {
+					t.Fatalf("external route=%+v", got)
+				}
 			}
 		})
 	}

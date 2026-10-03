@@ -7,35 +7,16 @@ import (
 )
 
 // ResolveRoute is pure: no discovery, health probes, launches or filesystem IO.
-// Scope, policy and connector verification are supplied by trusted boundaries.
+// Production callers must use RoutePlanner, which derives policy and identities.
+// This low-level helper accepts preassembled trusted data for contract testing.
 func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 	fail := func(code, reason, id string) (RouteDecision, error) {
 		return RouteDecision{}, browserError(code, "browser route rejected", "routing", &ErrorDetails{WorkspaceID: r.Scope.WorkspaceID, ConnectorID: id, Reason: reason}, nil)
 	}
 	s := r.Scope
-	if strings.TrimSpace(s.WorkspaceID) == "" || !filepath.IsAbs(s.CanonicalWorkspaceRoot) || filepath.Clean(s.CanonicalWorkspaceRoot) != s.CanonicalWorkspaceRoot ||
-		(s.Provenance != ScopeRuntime && s.Provenance != ScopeUpstream && s.Provenance != ScopeACP) ||
-		(s.OwnerTaskID == "" && s.OwnerSessionID == "" && s.OwnerACPSessionID == "") {
-		return fail(ErrScopeRequired, "trusted workspace and owner scope required", "")
-	}
-	if err := browserpolicy.ValidateRoutePolicy(r.Policy); err != nil {
-		return fail(ErrPolicyConflict, err.Error(), "")
-	}
-	route, id, profile := r.Policy.Route, r.Policy.RequiredConnectorID, r.Policy.RequiredProfileID
-	if o := r.Override; o != nil {
-		if !o.ExplicitUserInstruction {
-			return fail(ErrPolicyConflict, "override lacks trusted explicit user provenance", o.ConnectorID)
-		}
-		if route == browserpolicy.RouteRequiredExternal {
-			if o.Route != browserpolicy.RouteExternal || o.ConnectorID != id || (o.ProfileID != "" && o.ProfileID != profile) || (o.Browser != "" && o.Browser != BrowserEdge) {
-				return fail(ErrPolicyConflict, "override conflicts with required authenticated route", id)
-			}
-		} else {
-			if o.Route != browserpolicy.RouteExternal || !r.Policy.AllowExplicitExternal || o.ConnectorID == "" {
-				return fail(ErrPolicyConflict, "explicit external route not permitted", o.ConnectorID)
-			}
-			route, id, profile = browserpolicy.RouteExternal, o.ConnectorID, o.ProfileID
-		}
+	route, id, profile, err := selectRoute(s, r.Policy, r.Override)
+	if err != nil {
+		return RouteDecision{}, err
 	}
 	d := RouteDecision{Scope: s, Route: route}
 	d.Start = ResolvedStart{Browser: BrowserChrome, Engine: EngineChromeDevToolsMCP, EngineVersion: PreferredEngineVersion, ProfileClass: ProfileIsolated, Headless: true, BackgroundPage: true, ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleOwned, Ownership: ResourceOwnership{Process: OwnerAgentDockIsolated, Profile: OwnerAgentDockIsolated, Connector: OwnerAgentDockIsolated}}
@@ -54,7 +35,7 @@ func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 	if c == nil || !c.Registered || !c.Healthy || !c.Verified || c.Endpoint == "" {
 		return fail(ErrRequiredRouteUnavailable, "connector missing, unhealthy or unverified", id)
 	}
-	if (c.Browser != BrowserChrome && c.Browser != BrowserChromium && c.Browser != BrowserEdge) || (c.Engine != EngineNativeCDP && c.Engine != EngineChromeDevToolsMCP) || c.EngineVersion == "" || c.Transport == "" || c.ProfileID == "" {
+	if (c.Browser != BrowserChrome && c.Browser != BrowserChromium && c.Browser != BrowserEdge) || c.Engine != EngineChromeDevToolsMCP || c.EngineVersion != PreferredEngineVersion || c.Transport != "websocket" || c.ProfileID == "" {
 		return fail(ErrRequiredRouteUnavailable, "connector identity incomplete", id)
 	}
 	if profile != "" && c.ProfileID != profile {
@@ -63,14 +44,19 @@ func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 	if o := r.Override; o != nil && o.Browser != "" && o.Browser != c.Browser {
 		return fail(ErrPolicyConflict, "connector browser mismatch", id)
 	}
-	if route == browserpolicy.RouteRequiredExternal && (c.Browser != BrowserEdge || c.ProfileClass != ProfileAuthenticatedExternal || !c.Authenticated) {
-		return fail(ErrRequiredRouteUnavailable, "authenticated required browser/profile unavailable", id)
+	if route == browserpolicy.RouteRequiredExternal && c.ProfileClass != ProfileAuthenticatedExternal {
+		return fail(ErrRequiredRouteUnavailable, "authenticated required profile unavailable", id)
+	}
+	if r.Policy.Class == browserpolicy.WorkspaceCompany && c.Browser != BrowserEdge {
+		return fail(ErrRequiredRouteUnavailable, "company required browser unavailable", id)
+	}
+	if c.ProfileClass == ProfileAuthenticatedExternal && !c.Authenticated {
+		return fail(ErrRequiredRouteUnavailable, "authenticated external profile unavailable", id)
 	}
 	if (c.ProfileClass != ProfileExternal && c.ProfileClass != ProfileAuthenticatedExternal) || c.Ownership.Process != OwnerExternalPersistent || c.Ownership.Profile != OwnerExternalPersistent || (c.Ownership.Connector != OwnerAgentDockIsolated && c.Ownership.Connector != OwnerAdapter) {
 		return fail(ErrRequiredRouteUnavailable, "external ownership not verified", id)
 	}
-	required := []ConnectorCapability{CapabilityBackgroundPage, CapabilityNoFocus, CapabilityLeaseTarget, CapabilitySafeRelease}
-	for _, want := range required {
+	for _, want := range requiredRouteCapabilities() {
 		found := false
 		for _, got := range c.Capabilities {
 			if want == got {
@@ -83,4 +69,36 @@ func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 	}
 	d.Start = ResolvedStart{Browser: c.Browser, Engine: c.Engine, EngineVersion: c.EngineVersion, ConnectorID: id, ProfileID: c.ProfileID, ProfileClass: c.ProfileClass, Endpoint: c.Endpoint, ProfilePath: c.ProfilePath, BackgroundPage: true, ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleExternal, Ownership: c.Ownership}
 	return d, nil
+}
+
+// selectRoute is shared by the planner and the pure low-level resolver.
+func selectRoute(s RequestScope, policy browserpolicy.BrowserRoutePolicy, override *RouteOverride) (browserpolicy.RouteKind, string, string, error) {
+	reject := func(code, reason, id string) (browserpolicy.RouteKind, string, string, error) {
+		return "", "", "", browserError(code, "browser route rejected", "routing", &ErrorDetails{WorkspaceID: s.WorkspaceID, ConnectorID: id, Reason: reason}, nil)
+	}
+	if strings.TrimSpace(s.WorkspaceID) == "" || !filepath.IsAbs(s.CanonicalWorkspaceRoot) || filepath.Clean(s.CanonicalWorkspaceRoot) != s.CanonicalWorkspaceRoot ||
+		(s.Provenance != ScopeRuntime && s.Provenance != ScopeUpstream && s.Provenance != ScopeACP) ||
+		(s.OwnerTaskID == "" && s.OwnerSessionID == "" && s.OwnerACPSessionID == "") {
+		return reject(ErrScopeRequired, "trusted workspace and owner scope required", "")
+	}
+	if err := browserpolicy.ValidateRoutePolicy(policy); err != nil {
+		return reject(ErrPolicyConflict, err.Error(), "")
+	}
+	route, id, profile := policy.Route, policy.RequiredConnectorID, policy.RequiredProfileID
+	if o := override; o != nil {
+		if !o.ExplicitUserInstruction {
+			return reject(ErrPolicyConflict, "override lacks trusted explicit user provenance", o.ConnectorID)
+		}
+		if route == browserpolicy.RouteRequiredExternal {
+			if o.Route != browserpolicy.RouteExternal || o.ConnectorID != id || (o.ProfileID != "" && o.ProfileID != profile) {
+				return reject(ErrPolicyConflict, "override conflicts with required authenticated route", id)
+			}
+		} else {
+			if o.Route != browserpolicy.RouteExternal || !policy.AllowExplicitExternal || o.ConnectorID == "" {
+				return reject(ErrPolicyConflict, "explicit external route not permitted", o.ConnectorID)
+			}
+			route, id, profile = browserpolicy.RouteExternal, o.ConnectorID, o.ProfileID
+		}
+	}
+	return route, id, profile, nil
 }
