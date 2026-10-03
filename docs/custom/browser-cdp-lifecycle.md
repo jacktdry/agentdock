@@ -560,6 +560,46 @@ UI 必須避免把：
 
 同樣也不能把 `ready` 直接解讀成「可安全 kill」。
 
+## Current Implementation Checkpoint — 2026-10-04
+
+M6 Browser Broker 的實作狀態已固定為以下基線：
+
+| Step | Status | Commit / State |
+| --- | --- | --- |
+| Contract | Completed | `c14b21ca` |
+| Managed engine | Completed | `8edcecef` |
+| Profiles / route planner | Completed | `c08dc81b` |
+| Lease isolation | In progress | working tree changes on `feature/browser-broker` |
+| Concurrency / queue / TTL | Pending | next after leases |
+| External Edge attach safety | Pending | after concurrency |
+| ACP Broker integration | Pending | after external route |
+| Computer Control Broker integration | Pending | after ACP integration |
+| Lifecycle / diagnostics / stress | Pending | final M6 hardening |
+
+目前 lease 階段的設計重點：
+
+- 每個 lease 必須綁定 owner task/session/ACP identity；
+- 每次 page operation 都要顯式解析 lease-owned target，不依賴 MCP 的 shared selected-page state；
+- Page ID 屬於 engine-local opaque identity，不能跨 worker restart/generation 誤用；
+- named `isolatedContext` 與 native CDP BrowserContext ID 不可混為同一識別；
+- release 只能處理 lease-owned page/context/resource，不能碰其他 lease 或 user-owned targets；
+- `chrome-devtools-mcp@1.7.0` 若無法證明 named isolated context 可單獨完整銷毀，worker recycle 才是 managed resource 的完整 cleanup boundary；
+- owner mismatch 必須回傳 typed `BROWSER_LEASE_OWNER_MISMATCH`；
+- 不向 ACP 暴露可繞過 Broker 的 raw MCP worker call。
+
+Branch state：
+
+```text
+custom/main
+└─ 098301e0 docs(custom): define M6 browser broker routing
+
+feature/browser-broker
+├─ c14b21ca feat(browser): define broker routing contract
+├─ 8edcecef feat(browser): add managed MCP worker engine
+└─ c08dc81b feat(browser): plan workspace profile routes
+    └─ leases work in progress
+```
+
 ## Handoff Work Items
 
 ### M6 — Browser Broker

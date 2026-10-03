@@ -189,6 +189,44 @@ Exit criteria：
 
 實作 workspace-aware Browser Control Broker，而不是讓每個 ACP / session 自己選擇或啟動瀏覽器 backend。
 
+### Implementation checkpoint — 2026-10-04
+
+M6 已進入實作階段，工作分支為 `feature/browser-broker`。目前完成狀態：
+
+- ✅ `contract` — `c14b21ca feat(browser): define broker routing contract`
+  - canonical workspace root policy；
+  - company route 必須使用 authenticated external Edge，無法使用時 fail closed；
+  - Browser Broker / Engine / lease ownership contract；
+  - typed routing errors 與 compatibility matrix baseline。
+- ✅ `engine` — `8edcecef feat(browser): add managed MCP worker engine`
+  - 重用既有 Go MCP SDK / process controller 建立 ephemeral stdio MCP session；
+  - managed worker 固定使用 `chrome-devtools-mcp@1.7.0`；
+  - 啟用 `--isolated --headless --experimentalPageIdRouting`；
+  - 已驗證 handshake、background isolated page、owned Chrome descendants cleanup 與 temporary profile cleanup。
+- ✅ `profiles` — `c08dc81b feat(browser): plan workspace profile routes`
+  - browser/profile/connector catalog；
+  - loopback WebSocket endpoint canonicalization；
+  - company authenticated Edge route；
+  - non-company managed isolated Chrome route；
+  - explicit user-requested external route；
+  - runtime connector status 與 strict config validation。
+- 🚧 `leases` — 正在實作 lease-scoped BrowserContext/Page isolation、owner validation 與每次操作的 explicit target resolution。
+- ⏳ 後續順序：`concurrency` → `external` → `acp` → `computer` → `lifecycle` → `diagnostics` → `stress` → `handoff`。
+
+目前 `custom/main` 仍停在 `098301e0 docs(custom): define M6 browser broker routing`；M6 runtime code 尚未合併回 `custom/main`。
+
+版本策略暫時維持 `chrome-devtools-mcp@1.7.0`。即使 upstream 已有較新版本，也必須先通過 managed-headless、persistent-profile、Chrome-live、Edge-live compatibility matrix 才能升級，避免破壞 company Edge / default-profile attach。
+
+M6 實作期間持續遵守以下硬限制：
+
+- 不以 global selected page 作為 ACP/browser 操作狀態；
+- 不以 global `pkill` 清理 browser/MCP；
+- external Edge/Chrome 的 PID 只可作 observation，不能被視為 kill authority；
+- company Edge 只操作 AgentDock-owned background leased target，使用者既有 tabs/profile/browser process 必須保留；
+- Browser Broker 不得 silent fallback 到 foreground Computer Use；
+- Computer Use 與 Browser automation 分開，Computer Use 統一走 AgentDock Computer Control Broker → Orca default。
+
+
 預設 policy：
 
 ```text
