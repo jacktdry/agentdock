@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 	"github.com/uvwt/agentdock/internal/fs/securepath"
 )
 
@@ -84,6 +85,7 @@ type Config struct {
 	NexusDeviceToken             string
 	MCPAppsMode                  MCPAppsMode
 	BrowserEnabled               bool
+	BrowserWorkspacePolicies     []browserpolicy.WorkspaceRootPolicy
 	BrowserExecutablePath        string
 	BrowserCDPURL                string
 	BrowserReuseExistingCDP      bool
@@ -109,6 +111,10 @@ type ACPProfile struct {
 }
 
 func FromEnv() (Config, error) {
+	browserWorkspacePolicies, err := browserWorkspacePoliciesFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
 	if err != nil {
 		return Config{}, err
@@ -189,6 +195,7 @@ func FromEnv() (Config, error) {
 		LogLevel:                     getenv("AGENTDOCK_LOG_LEVEL", "info"),
 		MCPAppsMode:                  mcpAppsMode,
 		BrowserEnabled:               browserEnabled,
+		BrowserWorkspacePolicies:     browserWorkspacePolicies,
 		BrowserExecutablePath:        os.Getenv("AGENTDOCK_BROWSER_EXECUTABLE_PATH"),
 		BrowserCDPURL:                strings.TrimSpace(os.Getenv("AGENTDOCK_BROWSER_CDP_URL")),
 		BrowserReuseExistingCDP:      browserReuseExistingCDP,
@@ -203,6 +210,11 @@ func FromEnv() (Config, error) {
 }
 
 func (c *Config) Normalize() error {
+	policies, policyErr := normalizeBrowserWorkspacePolicies(c.BrowserWorkspacePolicies)
+	if policyErr != nil {
+		return policyErr
+	}
+	c.BrowserWorkspacePolicies = policies
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("resolve user home for AgentDock directories: %w", err)
