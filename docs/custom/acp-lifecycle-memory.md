@@ -209,10 +209,12 @@ Shared Desktop UI：
 
 截至 2026-10-03：
 
-- shared Memory daemon：完成並運行
+- shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 stable/v11.14.0
 - Codex CLI → shared Memory HTTP：完成
 - AGY CLI → shared Memory HTTP：完成
 - AgentDock dynamic MCP → shared Memory HTTP：待 M7 / 安全切換
-- codex-acp fork：開發中
-- refined-antigravity-acp fork：開發中
+- codex-acp fork：完成，branch fix/session-lifecycle-recycle，commit 630d7c6；已全域安裝
+- refined-antigravity-acp fork：完成，branch fix/session-lifecycle-recycle，commit 2b99cb4；wrapper 1.3.2 已全域安裝
+- Google Antigravity ACP runtime：已由 1.2.1 更新至 1.3.0
+- real lifecycle smoke：Codex 與 Antigravity 都已驗證最後一個 session/close 後底層 child PID 被替換
 - AgentDock runtime lifecycle code：本輪刻意未修改，由後續 AgentDock session 接手
