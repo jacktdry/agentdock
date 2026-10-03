@@ -239,6 +239,12 @@ ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
 
 完整設計與接手條件見 [acp-lifecycle-memory.md](acp-lifecycle-memory.md)。
 
+### M7 CBM lifecycle 技術債（2026-10-03）
+
+實測發現 Codebase Memory executable 更新後，舊 daemon / supervisor 仍存活時，新 index worker 可能因 build mismatch 被拒絕並形成連續 worker failure。這屬於 dynamic MCP service lifecycle / process ownership 問題，不應以全域 `pkill` 解決。
+
+M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、restart-pending、active work drain、pending re-index queue、bounded retry/backoff，以及 versioned executable / graceful restart 的責任邊界。完整現場證據與接手確認清單見 [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)。
+
 ## M8 — Permission / Approval
 
 評估並最小化引入：
