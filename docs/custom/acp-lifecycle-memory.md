@@ -153,6 +153,34 @@ Branch：fix/session-lifecycle-recycle
 
 AgentDock 不加入 Antigravity-specific kill hack。
 
+2026-10-03 現場另發現多個 `localharness_external` 同時持有 `chrome-devtools-mcp --isolated --headless` child，但目前 AgentDock / adapter diagnostics 無法可靠從 persisted `ready` session 判斷哪些 browser child 可安全回收。Browser ownership、CDP connector 與 temporary profile lifecycle 的完整設計見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+
+後續架構不再讓每個 ACP / localharness 長期自行持有 browser backend。ACP browser 工作改成：
+
+```text
+ACP session
+→ request browser capability
+→ AgentDock Browser Broker
+→ acquire browser lease
+→ isolated context / page
+→ task work
+→ release lease
+```
+
+多 ACP 並行時，lease 必須以 `owner_acp_session_id` / `owner_task_id` 隔離，不得依賴 shared global selected page。Browser worker 可以共用，但 logical browser session 不可共用 target state。
+
+初始 concurrency policy 先採 bounded pool：
+
+```text
+managed headless: 4
+persistent authenticated profile: 2
+external user-owned browser: 1~2
+```
+
+實際數值由 M6 4~8 ACP 並行壓測後調整；超出上限 queue，不以無界 spawn MCP / browser 擴充。
+
+同一 application resource 的 write race 另以 site / resource lock 處理，不能只靠 browser context isolation。
+
 ## M7 Work Items
 
 Backend：
@@ -162,6 +190,11 @@ Backend：
 - idle-managed sweeper
 - close failure / retry state
 - resource diagnostics
+- Browser Broker lease acquire / release integration
+- session close / TTL / crash 時釋放 browser lease
+- browser lease / worker / context / page ownership diagnostics
+- 禁止 ACP adapter 預設 per-session 常駐 `chrome-devtools-mcp`
+- Computer Control request 經 AgentDock provider abstraction，不由 ACP 自行選 Orca / OpenAI Computer Use
 - AgentDock Memory dynamic MCP 改用 shared HTTP
 - ACP Manager API 暴露 lifecycle policy 與 diagnostics
 
@@ -188,7 +221,12 @@ Shared Desktop UI：
 9. 新 ACP session 不再 spawn mcp-memory-service stdio child。
 10. shared memory daemon 不再建立 CoreML partition temp bundle。
 11. diagnostics 能區分 managed / loaded / active。
-12. relevant unit / integration / race / Desktop tests 通過。
+12. 4~8 個並行 ACP browser task 不互相改變 context / page target。
+13. ACP browser concurrency 超額會 queue，不無界新增 `chrome-devtools-mcp` / Chrome process。
+14. ACP session close / crash / idle TTL 後，其 browser lease 可回收到基線。
+15. 同一 resource 的並行 write 可被 serialize。
+16. ACP 不 silent fallback 到 foreground Computer Use。
+17. relevant unit / integration / race / Desktop tests 通過。
 
 ## Rollout / Cleanup
 

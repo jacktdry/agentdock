@@ -15,7 +15,8 @@ AgentDock Custom 是官方 AgentDock 的 workflow-oriented 客製版本，不是
 優先改善的問題：
 
 - ACP adapter / package 的偵測、版本、更新、編輯與移除。
-- Browser / CDP 根據 workspace 與任務情境自動選擇執行環境。
+- Browser Broker 根據 workspace、認證需求與並行情境分配 browser lease；company workspace 強制使用使用者既有 Microsoft Edge authenticated profile，非公司工作則預設由 `chrome-devtools-mcp` 使用 AgentDock-managed isolated/headless Chrome。無論上游 ChatGPT 或 ACP 都不得各自繞過 Broker 持有另一套 browser backend。
+- Computer Use 只作 native GUI fallback；無論上游 ChatGPT 自己需要 GUI 操作或 ACP delegated Computer Use，都預設經 AgentDock Computer Control Broker 使用 Orca，並禁止 foreground control 靜默搶走使用者焦點。
 - 長時間 Agent / ACP 任務的執行狀態、call tree、output 與 file changes 可視性。
 - 任務執行中追加要求、ACK、有限重送與不中斷原任務的 attention semantics。
 - macOS / Windows Desktop 不再重複實作同一套業務 UI。
@@ -71,7 +72,8 @@ Shared UI 負責：
 - Runtime overview
 - Connection settings
 - ACP management
-- Browser / CDP settings與 routing
+- Browser Broker / CDP registry / lease settings
+- Computer Control provider / foreground policy
 - MCP / Plugin management
 - Activity / Call Center
 - Task / Conversation presentation

@@ -185,28 +185,60 @@ Exit criteria：
 - recent interaction 不會被誤判為 active execution
 - keyboard / VoiceOver / Narrator 可以操作核心 execution controls
 
-## M6 — Browser Routing
+## M6 — Browser Broker
 
-實作 workspace-aware policy：
+實作 workspace-aware Browser Control Broker，而不是讓每個 ACP / session 自己選擇或啟動瀏覽器 backend。
+
+預設 policy：
 
 ```text
 company project
-→ persistent profile Edge
+→ user's existing Microsoft Edge
+→ user's authenticated Edge profile
+→ AgentDock-owned background tab / leased target only
 
-default task
-→ isolated Chrome
+non-company browser task
+→ chrome-devtools-mcp
+→ AgentDock-managed isolated/headless Chrome
 
-explicit override
-→ chosen profile/browser
+explicit user request
+→ chosen user profile/browser
 ```
+
+Browser engine 優先採 `chrome-devtools-mcp`，AgentDock Core 負責 routing / ownership / lease / lifecycle，而不是重寫完整 CDP automation engine。
+
+公司 workspace 是硬路由例外：無論由上游 ChatGPT 自己做 UAT，或分派 Codex / Antigravity ACP 做 UAT，只要需要公司的已登入 Web 狀態，就必須 attach 使用者現有的 Microsoft Edge 與該使用者 profile。原因是公司 GitLab、Cloudflare 與相關後台登入只存在於這個 Edge profile；不得靜默改用 isolated Chrome 或其他未登入 profile。若 company Edge attach 不可用，應 fail closed / 回報需要恢復 Edge connector，而不是改走未登入 browser。
+
+非公司 workspace 或其他一般 browser 需求，除非使用者明確指定自己的 profile/browser，否則一律由 `chrome-devtools-mcp` 使用 AgentDock-managed isolated/headless Chrome。
 
 並處理：
 
-- CDP discovery
+- browser registry / explicit routing
+- managed headless + persistent profile
+- existing Chrome / Edge explicit attach
+- `chrome-devtools-mcp` worker pool / version policy
+- multi-ACP browser lease / BrowserContext / Page isolation
+- per-lease page ownership，禁止依賴 global selected page
+- bounded concurrency / queue / lease TTL
+- site / resource write lock
+- no-focus / background page policy
+- external browser user-tab protection
 - profile/process ownership
 - stale cleanup
 - tmp lifecycle
 - health/diagnostics
+
+2026-10-03 bake-off 補充：
+
+- `chrome-devtools-mcp@1.7.0` 已實測可操作 AgentDock-owned isolated headless Chrome、Chrome Remote Debugging 與 Edge Remote Debugging；
+- AgentDock 管理的 isolated MCP 移除後，可連同 owned headless Chrome 一起回收；
+- background tab 建立可避免把測試 tab 帶到前景；
+- 但目前 Chrome / Edge default-profile 新版 Remote Debugging 與較新 `chrome-devtools-mcp` 存在相容性風險，因此 existing browser attach 只能當 explicit compatibility backend，不可作唯一主路徑；
+- 不再採 `AGENTDOCK_BROWSER_REUSE_EXISTING_CDP=true` 這種「找到任意 CDP 就重用」的長期策略，因為目前同時可能存在 Chrome / Edge 多個 endpoint。
+
+M6 必須先建立 browser process / connector / profile / lease ownership contract，並避免以 process age 或全域 `pkill` 作清理判斷。完整現場證據、並行模型、lifecycle 與驗收條件見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+
+Computer Use 不屬於一般 browser routing；只有程式化工具與 Browser Broker 都做不到時才進入 Computer Control provider。無論是 ACP 請求 Computer Use，或上游 ChatGPT 自己需要直接操作本機 GUI，預設都必須經 AgentDock Computer Control Broker 使用 Orca；不得繞過 AgentDock 直接把 ChatGPT/OpenAI Computer Use 當一般執行路徑。只有使用者明確指定或未來正式 fallback policy 允許時，才考慮其他 provider。Provider / no-focus contract 見 [computer-use-backends.md](computer-use-backends.md)。
 
 ## M7 — ACP Manager
 
@@ -238,6 +270,12 @@ ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
 - Adapter-specific cleanup 留在 codex-acp / refined-antigravity-acp fork，不在 AgentDock Core 寫 agent-specific kill hack。
 
 完整設計與接手條件見 [acp-lifecycle-memory.md](acp-lifecycle-memory.md)。
+
+Browser / CDP child ownership、connector cleanup 與 Antigravity `localharness` / `chrome-devtools-mcp` 現場盤點另見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+
+M7 同時需確保 ACP 不再各自常駐重複 browser backend；ACP browser request 應轉成 AgentDock browser lease，並在 session close / TTL / crash recovery 時釋放。多 ACP browser concurrency、lease isolation 與 Browser Broker contract 見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+
+Computer Use 亦採 AgentDock provider abstraction；ACP 不自行選 Orca / OpenAI Computer Use。現階段 AgentDock primary provider 為 Orca，OpenAI Sky / ChatGPT Computer Use 僅保留 product fallback，完整決策見 [computer-use-backends.md](computer-use-backends.md)。
 
 ### M7 CBM lifecycle 技術債（2026-10-03）
 
