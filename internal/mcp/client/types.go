@@ -23,6 +23,7 @@ type ServerConfig struct {
 	Name              string            `json:"name"`
 	Description       string            `json:"description"`
 	Transport         string            `json:"transport"`
+	ProtocolVersion   string            `json:"protocol_version,omitempty"`
 	URL               string            `json:"url,omitempty"`
 	Command           string            `json:"command,omitempty"`
 	Args              []string          `json:"args,omitempty"`
@@ -101,6 +102,7 @@ func normalizeServerConfig(cfg ServerConfig) ServerConfig {
 	cfg.Name = strings.TrimSpace(cfg.Name)
 	cfg.Description = strings.TrimSpace(cfg.Description)
 	cfg.Transport = strings.ToLower(strings.TrimSpace(cfg.Transport))
+	cfg.ProtocolVersion = strings.TrimSpace(cfg.ProtocolVersion)
 	cfg.URL = strings.TrimSpace(cfg.URL)
 	cfg.Command = strings.TrimSpace(cfg.Command)
 	cfg.Cwd = strings.TrimSpace(cfg.Cwd)

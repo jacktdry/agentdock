@@ -156,6 +156,9 @@ func validateServerConfig(cfg ServerConfig) error {
 	if cfg.TimeoutMS < 1 || cfg.TimeoutMS > maxTimeoutMS {
 		return fmt.Errorf("timeout_ms must be between 1 and %d", maxTimeoutMS)
 	}
+	if cfg.ProtocolVersion != "" && !supportedMCPProtocolVersion(cfg.ProtocolVersion) {
+		return fmt.Errorf("unsupported protocol_version %q", cfg.ProtocolVersion)
+	}
 	for header, envName := range cfg.HeaderEnv {
 		if strings.TrimSpace(header) == "" || strings.TrimSpace(envName) == "" {
 			return errors.New("header_env keys and values must be non-empty")

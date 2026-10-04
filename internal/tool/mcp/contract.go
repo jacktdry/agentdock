@@ -22,6 +22,7 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["name"] = stringProp("Dynamic MCP server name. Use a stable short identifier such as figma or github.")
 		props["description"] = stringProp("Short capability description shown in agentdock_context.")
 		props["transport"] = map[string]any{"type": "string", "description": "MCP transport for action=add.", "enum": []string{"streamable_http", "stdio"}}
+		props["protocol_version"] = map[string]any{"type": "string", "description": "Optional MCP protocol compatibility pin. Omit to use SDK negotiation/latest.", "enum": []string{"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"}}
 		props["url"] = stringProp("Absolute MCP endpoint URL for transport=streamable_http.")
 		props["command"] = stringProp("Executable name or path for transport=stdio.")
 		props["args"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Command arguments for transport=stdio."}

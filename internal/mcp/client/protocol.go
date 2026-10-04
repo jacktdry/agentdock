@@ -29,6 +29,19 @@ const sdkTransportRejectedCode int64 = -32005
 const stdioGracePeriod = 2500 * time.Millisecond
 const stdioTerminateWait = 3 * time.Second
 
+var supportedMCPProtocolVersions = map[string]struct{}{
+	"2024-11-05": {},
+	"2025-03-26": {},
+	"2025-06-18": {},
+	"2025-11-25": {},
+	"2026-07-28": {},
+}
+
+func supportedMCPProtocolVersion(version string) bool {
+	_, ok := supportedMCPProtocolVersions[strings.TrimSpace(version)]
+	return ok
+}
+
 type protocolClient interface {
 	initialize(context.Context) error
 	listTools(context.Context) ([]Tool, error)
@@ -66,7 +79,11 @@ func (c *sdkProtocolClient) initialize(ctx context.Context) error {
 		&mcpsdk.Implementation{Name: config.ServerName, Version: buildinfo.Version},
 		&mcpsdk.ClientOptions{Capabilities: &mcpsdk.ClientCapabilities{}},
 	)
-	session, err := client.Connect(ctx, transport, nil)
+	var sessionOptions *mcpsdk.ClientSessionOptions
+	if c.cfg.ProtocolVersion != "" {
+		sessionOptions = &mcpsdk.ClientSessionOptions{ProtocolVersion: c.cfg.ProtocolVersion}
+	}
+	session, err := client.Connect(ctx, transport, sessionOptions)
 	if err != nil {
 		return errors.Join(c.wrapSDKError("initialize MCP session", err), c.cleanupProcess())
 	}

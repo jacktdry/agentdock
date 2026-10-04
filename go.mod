@@ -9,7 +9,7 @@ require (
 	github.com/chromedp/chromedp v0.14.2
 	github.com/go-oauth2/oauth2/v4 v4.5.4
 	github.com/gorilla/websocket v1.5.3
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/uvwt/agentdock-protocol v0.8.2-0.20260929005641-178b21b7f423

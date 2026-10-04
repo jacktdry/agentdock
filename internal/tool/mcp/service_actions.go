@@ -28,17 +28,18 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		return Result{"action": action, "server": summary, "config": cfg}, nil
 	case "add":
 		cfg := mcpclient.ServerConfig{
-			Name:        request.Name,
-			Description: request.Description,
-			Transport:   request.Transport,
-			URL:         request.URL,
-			Command:     request.Command,
-			Args:        append([]string(nil), request.Args...),
-			Cwd:         request.CWD,
-			HeaderEnv:   cloneStringMap(request.HeaderEnv),
-			EnvFromEnv:  cloneStringMap(request.EnvFromEnv),
-			Enabled:     boolValue(request.Enabled, true),
-			TimeoutMS:   intValue(request.TimeoutMS, 30000),
+			Name:            request.Name,
+			Description:     request.Description,
+			Transport:       request.Transport,
+			ProtocolVersion: request.ProtocolVersion,
+			URL:             request.URL,
+			Command:         request.Command,
+			Args:            append([]string(nil), request.Args...),
+			Cwd:             request.CWD,
+			HeaderEnv:       cloneStringMap(request.HeaderEnv),
+			EnvFromEnv:      cloneStringMap(request.EnvFromEnv),
+			Enabled:         boolValue(request.Enabled, true),
+			TimeoutMS:       intValue(request.TimeoutMS, 30000),
 		}
 		server, err := s.mcpClients.Add(cfg)
 		if err != nil {
