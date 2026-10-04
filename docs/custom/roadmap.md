@@ -191,7 +191,7 @@ Exit criteria：
 
 ### Completion checkpoint — 2026-10-04
 
-M6 runtime、lifecycle、diagnostics 與 stress validation 已在 `feature/browser-broker` 完成。完成狀態：
+M6 runtime、lifecycle、diagnostics 與 stress validation 先在 `feature/browser-broker` 完成，後續已整合回 `custom/main`。完成狀態：
 
 - ✅ `contract` — `c14b21ca feat(browser): define broker routing contract`
   - canonical workspace root policy；
@@ -234,7 +234,7 @@ M6 runtime、lifecycle、diagnostics 與 stress validation 已在 `feature/brows
   - 真實 Orca no-focus observation、Microsoft Edge external user-page preservation、managed host hard-crash process-group cleanup、pin/schema regression 全部通過。
 - ✅ `handoff` — 本文件、[browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)、[computer-use-backends.md](computer-use-backends.md) 與 [acp-lifecycle-memory.md](acp-lifecycle-memory.md) 已同步 M6 完成基線。
 
-M6 code 目前仍位於 `feature/browser-broker`，尚未合併回 `custom/main`；功能完成不等於已完成 branch integration。合併應作為獨立 review / integration 動作，不在 handoff 文件更新時隱式進行。
+M6 已在獨立 merge-result 上重新通過 repo-wide tests、vet、focused race 與 Windows cross-build，並以 `e8044084 merge: integrate M6 browser broker` 整合回 `custom/main`。`feature/browser-broker` 保留的意義僅為 milestone 歷史，不再是主線執行來源。
 
 版本策略暫時維持 `chrome-devtools-mcp@1.7.0`。即使 upstream 已有較新版本，也必須先通過 managed-headless、persistent-profile、Chrome-live、Edge-live compatibility matrix 才能升級，避免破壞 company Edge / default-profile attach。
 
