@@ -1,6 +1,201 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- GENERATED FILE — DO NOT EDIT -->
 <root>
+  <data name="acp.act" xml:space="preserve">
+    <value>電腦操作工作階段</value>
+  </data>
+  <data name="acp.adapter" xml:space="preserve">
+    <value>配接器程序健康狀態</value>
+  </data>
+  <data name="acp.alive" xml:space="preserve">
+    <value>存活</value>
+  </data>
+  <data name="acp.apply_policy" xml:space="preserve">
+    <value>套用原則</value>
+  </data>
+  <data name="acp.auto_close_failed" xml:space="preserve">
+    <value>自動關閉失敗。請重新整理或嘗試手動關閉。</value>
+  </data>
+  <data name="acp.backend" xml:space="preserve">
+    <value>後端</value>
+  </data>
+  <data name="acp.browser_leases" xml:space="preserve">
+    <value>瀏覽器租約</value>
+  </data>
+  <data name="acp.bytes" xml:space="preserve">
+    <value>{count, number} 位元組</value>
+  </data>
+  <data name="acp.cleanup_issues" xml:space="preserve">
+    <value>瀏覽器清理問題</value>
+  </data>
+  <data name="acp.close" xml:space="preserve">
+    <value>關閉工作階段</value>
+  </data>
+  <data name="acp.closed" xml:space="preserve">
+    <value>已關閉</value>
+  </data>
+  <data name="acp.confirm_close" xml:space="preserve">
+    <value>關閉此 ACP 工作階段並釋放其資源？</value>
+  </data>
+  <data name="acp.confirm_policy" xml:space="preserve">
+    <value>將此生命週期原則套用至 ACP 工作階段？</value>
+  </data>
+  <data name="acp.default_profile" xml:space="preserve">
+    <value>預設設定檔</value>
+  </data>
+  <data name="acp.descendants" xml:space="preserve">
+    <value>子孫程序數</value>
+  </data>
+  <data name="acp.eligible" xml:space="preserve">
+    <value>符合閒置關閉條件</value>
+  </data>
+  <data name="acp.empty_sessions" xml:space="preserve">
+    <value>沒有受管理的工作階段。</value>
+  </data>
+  <data name="acp.endpoint" xml:space="preserve">
+    <value>端點</value>
+  </data>
+  <data name="acp.failures" xml:space="preserve">
+    <value>自動關閉失敗</value>
+  </data>
+  <data name="acp.idle" xml:space="preserve">
+    <value>閒置</value>
+  </data>
+  <data name="acp.installed" xml:space="preserve">
+    <value>已安裝</value>
+  </data>
+  <data name="acp.invalid_policy" xml:space="preserve">
+    <value>請選擇支援的原則與範圍內的逾時值。</value>
+  </data>
+  <data name="acp.kind" xml:space="preserve">
+    <value>類型</value>
+  </data>
+  <data name="acp.last_active" xml:space="preserve">
+    <value>最後活動時間</value>
+  </data>
+  <data name="acp.loaded" xml:space="preserve">
+    <value>已載入</value>
+  </data>
+  <data name="acp.managed" xml:space="preserve">
+    <value>受管理</value>
+  </data>
+  <data name="acp.memory" xml:space="preserve">
+    <value>共享記憶</value>
+  </data>
+  <data name="acp.minutes" xml:space="preserve">
+    <value>{count, number} 分鐘</value>
+  </data>
+  <data name="acp.observe" xml:space="preserve">
+    <value>電腦觀察工作階段</value>
+  </data>
+  <data name="acp.package" xml:space="preserve">
+    <value>套件</value>
+  </data>
+  <data name="acp.pid" xml:space="preserve">
+    <value>程序 ID</value>
+  </data>
+  <data name="acp.policy" xml:space="preserve">
+    <value>生命週期原則</value>
+  </data>
+  <data name="acp.policy_ephemeral" xml:space="preserve">
+    <value>暫時保留</value>
+  </data>
+  <data name="acp.policy_idle_managed" xml:space="preserve">
+    <value>閒置管理</value>
+  </data>
+  <data name="acp.policy_persistent" xml:space="preserve">
+    <value>持續保留</value>
+  </data>
+  <data name="acp.process_error" xml:space="preserve">
+    <value>無法觀察程序健康狀態。</value>
+  </data>
+  <data name="acp.protocol" xml:space="preserve">
+    <value>通訊協定版本</value>
+  </data>
+  <data name="acp.provider" xml:space="preserve">
+    <value>提供者</value>
+  </data>
+  <data name="acp.ready" xml:space="preserve">
+    <value>就緒</value>
+  </data>
+  <data name="acp.rss" xml:space="preserve">
+    <value>RSS</value>
+  </data>
+  <data name="acp.running" xml:space="preserve">
+    <value>執行中</value>
+  </data>
+  <data name="acp.session" xml:space="preserve">
+    <value>工作階段</value>
+  </data>
+  <data name="acp.sessions" xml:space="preserve">
+    <value>工作階段</value>
+  </data>
+  <data name="acp.source" xml:space="preserve">
+    <value>來源</value>
+  </data>
+  <data name="acp.state_disabled" xml:space="preserve">
+    <value>ACP 已停用。</value>
+  </data>
+  <data name="acp.state_empty" xml:space="preserve">
+    <value>尚未設定 ACP 設定檔。</value>
+  </data>
+  <data name="acp.state_loading" xml:space="preserve">
+    <value>正在載入 ACP 狀態…</value>
+  </data>
+  <data name="acp.state_ready" xml:space="preserve">
+    <value>已載入 ACP 狀態。</value>
+  </data>
+  <data name="acp.state_unavailable" xml:space="preserve">
+    <value>無法取得 ACP 狀態。</value>
+  </data>
+  <data name="acp.status" xml:space="preserve">
+    <value>狀態</value>
+  </data>
+  <data name="acp.status_cancelled" xml:space="preserve">
+    <value>已取消</value>
+  </data>
+  <data name="acp.status_closed" xml:space="preserve">
+    <value>已關閉</value>
+  </data>
+  <data name="acp.status_failed" xml:space="preserve">
+    <value>失敗</value>
+  </data>
+  <data name="acp.status_ready" xml:space="preserve">
+    <value>就緒</value>
+  </data>
+  <data name="acp.status_running" xml:space="preserve">
+    <value>執行中</value>
+  </data>
+  <data name="acp.status_starting" xml:space="preserve">
+    <value>啟動中</value>
+  </data>
+  <data name="acp.storage" xml:space="preserve">
+    <value>儲存路徑</value>
+  </data>
+  <data name="acp.title" xml:space="preserve">
+    <value>ACP</value>
+  </data>
+  <data name="acp.total_memories" xml:space="preserve">
+    <value>記憶總數</value>
+  </data>
+  <data name="acp.tree_rss" xml:space="preserve">
+    <value>程序樹 RSS</value>
+  </data>
+  <data name="acp.ttl" xml:space="preserve">
+    <value>閒置逾時（分鐘）</value>
+  </data>
+  <data name="acp.ttl_hint" xml:space="preserve">
+    <value>支援範圍：1 分鐘至 7 天。預設為 30 分鐘。</value>
+  </data>
+  <data name="acp.unhealthy" xml:space="preserve">
+    <value>不健康</value>
+  </data>
+  <data name="acp.version" xml:space="preserve">
+    <value>版本</value>
+  </data>
+  <data name="acp.version_state" xml:space="preserve">
+    <value>版本狀態</value>
+  </data>
   <data name="activity.clear_log" xml:space="preserve">
     <value>清除紀錄</value>
   </data>
@@ -272,7 +467,7 @@
     <value>Activity 為實驗功能，合成事件測試僅供開發者診斷。</value>
   </data>
   <data name="developer.scope" xml:space="preserve">
-    <value>次要架構診斷；此介面尚未實作 Browser、ACP、MCP 與 Plugin 功能。</value>
+    <value>次要架構診斷。此介面尚未實作瀏覽器、MCP 與外掛功能。</value>
   </data>
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>架構</value>
