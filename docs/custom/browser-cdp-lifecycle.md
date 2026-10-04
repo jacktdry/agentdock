@@ -618,7 +618,7 @@ M6 已交付 browser ownership / lease model、`chrome-devtools-mcp@1.7.0` engin
 - cleanup/recovery 只對 AgentDock-owned worker/connector/page 有 authority；external browser PID 永遠只是 observation；
 - terminal metadata 暫留供 idempotent release 與 diagnostics 使用，實體 browser/MCP resource 已回收；metadata retention/pruning 可在後續 observability policy 再定義。
 
-### M7 — ACP Manager
+### M7 — ACP Manager（code / stress completed）
 
 - 將既有 `browser_broker` / `computer_broker` diagnostics 納入 ACP session diagnostics；
 - persistent / ephemeral / idle-managed policy 決定何時保留或釋放 host-owned capability；
@@ -627,6 +627,7 @@ M6 已交付 browser ownership / lease model、`chrome-devtools-mcp@1.7.0` engin
 - 明確區分 persisted / loaded / running / idle；
 - adapter process recycle 仍由 adapter fork 負責，不在 AgentDock Core 寫 Antigravity / Codex 專屬 process-name kill；
 - 不重新建立 ACP-owned browser backend，也不繞過 Computer Control Broker。
+- 2026-10-04 M7 real stress：Codex / Antigravity 各 20 個 prompt-driven ephemeral session；每批 Browser owner / Computer active session 回 0，adapter descendants 不累積；4 live managed Chrome lease 與 8-owner 4+4 queue regression再次通過。
 
 ## M6 Verification Result
 

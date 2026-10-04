@@ -1,6 +1,6 @@
 # Computer Use Backend Strategy
 
-> 狀態：M6 completed / M7 handoff
+> 狀態：M6 completed / M7 lifecycle integration completed
 > 建立日期：2026-10-03
 > 實作更新：2026-10-04
 > 主要 Milestone：M6 — Browser Broker、M7 — ACP Manager、M8 — Permission / Approval
@@ -23,7 +23,7 @@ Computer Control Broker 已在 `13c9cd9a feat(computer): add Orca computer contr
 - `af49037b` 加入 bounded diagnostics：active/released session、`focus_violation`、`provider_failure`、`foreground_denied`；不保存文字輸入、screenshot 或 provider payload；
 - `dc46459e` stress validation 搭配真實 Orca background observation，確認 no-focus guard 與 20 次 Antigravity capability lifecycle 回到 baseline。
 
-M7 不需要重做 Computer provider routing；M7 只需讓 ACP persistent / ephemeral / idle-managed session policy 在 close/idle lifecycle 上正確釋放既有 Computer capability，並把 diagnostics 納入 session view。
+M7 沒有重做 Computer provider routing；persistent / ephemeral / idle-managed lifecycle 已沿用既有 `SessionMCPProvider` release，ACP diagnostics 已關聯 Computer Broker。真 Codex / Antigravity ephemeral auto-close 與 20-prompt stress 均驗證 active Computer session 回 baseline，foreground act 仍在 provider call 前 fail closed。
 
 ## Goal
 

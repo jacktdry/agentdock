@@ -1,10 +1,10 @@
 # ACP Session Lifecycle and Shared Memory
 
-> 狀態：M7 implementation plan / M6 Broker handoff integrated
+> 狀態：M7 code + stress completed / final live AgentDock Memory cutover pending
 >
 > 日期：2026-10-03
 >
-> 更新：2026-10-04 — Antigravity 已切換到 hardened `antigravity-acp` 單一路徑；M6 Browser / Computer host capability 已完成
+> 更新：2026-10-04 — M7 lifecycle / diagnostics / Shared Desktop / real-adapter stress 已完成；最後只剩已安裝 AgentDock.app 更新後的 live Memory registry cutover
 >
 > 目標 Milestone：M7 — ACP Manager
 
@@ -61,7 +61,7 @@ storage:
 - quality device：cpu
 - Codex CLI 與 AGY CLI 已切 shared HTTP memory
 
-AgentDock dynamic MCP 的 memory 目前故意維持 stdio，以免干擾另一條開發 session。M7 接手時應改成 Streamable HTTP endpoint。
+M7 branch 已完成 AgentDock dynamic MCP 的 shared HTTP client、`protocol_version=2025-11-25` compatibility pin 與 live integration test。**目前正在執行的 pre-M7 AgentDock.app 仍維持 stdio registry**，因舊 binary 使用 go-sdk 1.7.0；最終 cutover 必須在 M7 整合、重建並重啟 App/Core 後再進行，避免舊 runtime 對 Memory daemon 送出不相容的 `2026-07-28` protocol。
 
 HTTP mode 保留一般 store/search/retrieve/tag/delete 等能力。memory_harvest 與 memory_ingest 因可讀 server host filesystem path，被 upstream 刻意設為 local-only。未來若 UI 需要 Import / Harvest，應另建 trusted local maintenance path，不要因此退回 per-session stdio。
 
@@ -225,6 +225,24 @@ Shared Desktop UI：
 - fork/custom source
 - shared Memory endpoint / version / storage / provider / health
 
+### M7 Implementation Checkpoint — 2026-10-04
+
+M7 code / stress 已完成：
+
+- per-session `persistent | ephemeral | idle-managed` policy、metadata persistence 與 legacy default；
+- prompt terminal 後 ephemeral auto-close、close failure/retry、manual-vs-auto race fence；
+- 單一 30 秒 bounded idle sweeper，每次最多 4 個，且不為 unloaded/dead adapter 重新啟動 process；
+- `acp_session action=status`：managed / loaded / running / ready / idle / closed、auto-close failure、adapter PID / descendants / RSS，以及 M6 Browser / Computer correlation；
+- Shared Desktop ACP lifecycle UI、manual close / policy update confirmation、adapter health、Memory health；
+- `modelcontextprotocol/go-sdk` 升至 `v1.8.0`，dynamic MCP 支援 optional `protocol_version`，Memory 使用 `2025-11-25`；
+- 真實 `codex-acp 2.1.1` 與 `antigravity-acp 1.2.0-agentdock.5` 均通過 persistent、ephemeral、idle-managed close/resume；
+- 兩個 adapter 各完成 20 個 prompt-driven ephemeral session stress，同一 Runtime / adapter PID 下 resources 每批回 baseline；
+- Antigravity `gemini-3.1-pro` + `reasoning_effort=high` update / prompt 實測通過；
+- M6 regression：8 owner = 4 active + 4 queued、4 live managed Chrome leases、same-resource lock、foreground Computer fail-closed、adapter-owned browser/computer backend 不復活；
+- Shared Memory：Codex CLI / AGY CLI 已指向 `http://127.0.0.1:8766/mcp`；新 ACP session 不產生 per-session stdio Memory child；daemon idle CPU 約 0.1%，stress 後未見 CoreML / `.mlmodelc` / partition bundle。
+
+尚未宣稱完成的唯一 live cutover：已安裝的 pre-M7 `AgentDock.app` 目前仍持有 stdio `memory` registry。需先讓 M7 binary 生效，再把 registry 切成 Streamable HTTP，確認舊 stdio Memory child 退出後才能關閉 M7。
+
 ## Acceptance Criteria
 
 1. 20 個 ephemeral Codex worker 完成後 loaded sessions 回到基線。
@@ -264,19 +282,19 @@ Shared Desktop UI：
 
 截至 2026-10-04：
 
-- shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 `stable/v11.14.0`；
+- shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 `stable/v11.14.0`；live idle CPU 約 0.1%，M7 stress 後沒有 CoreML / `.mlmodelc` / partition bundle；
 - Codex CLI → shared Memory HTTP：完成；
 - AGY CLI → shared Memory HTTP：完成；
-- AgentDock dynamic MCP → shared Memory HTTP：待 M7 / 安全切換；
-- codex-acp fork：既有 lifecycle recycle 工作可沿用，M7 仍需驗證 prompt-driven ephemeral / idle-managed policy；
+- AgentDock dynamic MCP → shared Memory HTTP：**程式碼 / integration test 完成，live pre-M7 App cutover 待 final handoff**；
+- codex-acp：`2.1.1` 真實驗證 persistent / ephemeral / idle-managed、20 prompt-driven ephemeral stress、host capability release 均完成；
 - Antigravity ACP：`jacktdry/antigravity-acp` `fix/agentdock-hardening`，目前部署 `1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`；
 - refined-antigravity-acp：不再是 AgentDock 可執行 AGY 路徑；僅保留歷史/研究 repo；
 - AgentDock Antigravity runtime：isolated HOME + `AGY_BIN`，不繼承互動 AGY MCP/plugin；Browser / Computer capability 由 AgentDock host 注入；
-- real adapter smoke：Gemini prompt、parallel sessions、cancel、close、resume、delete 均已驗證；M6 另跑 20 次真實 session new/close/runtime-close，task 結束後相關 descendants 回到基線；
+- real adapter：Codex / Antigravity 均完成 persistent / prompt-driven ephemeral / idle-managed TTL close+resume；兩邊各跑 20 prompt stress，同一 adapter PID 下 resources / descendants 回到 baseline；
 - model discovery / routing：Model 與 Reasoning effort 分離；Claude Sonnet 5.5 / Opus 5.5 視為獨立稀缺額度 specialist，只派 bounded + context-compacted review / architecture，concurrency = 1；
 - M6 Browser Broker：lease isolation、4-active bounded admission、5 分鐘 TTL、30 秒 sweep、bounded recovery、external user-page protection、diagnostics 與 cleanup controls 已完成；
-- M6 stress：8-owner Broker stress、4 個真 managed MCP/Chrome concurrent lease、managed host hard-crash cleanup、Orca no-focus、Edge external safety、`chrome-devtools-mcp@1.7.0` pin/schema regression均通過；
-- M7 **尚未完成**：per-session `persistent | ephemeral | idle-managed` policy、prompt-driven ephemeral auto-close、idle-managed adapter close、shared Memory migration 與對應 Desktop UI；
+- M6/M7 regression：8-owner Broker stress（4 active + 4 queued）、4 個真 managed MCP/Chrome concurrent lease、same-resource lock、managed host hard-crash cleanup、Orca no-focus、foreground fail-closed、Edge external safety、`chrome-devtools-mcp@1.7.0` pin/schema regression均通過；
+- M7 code / stress **已完成**：lifecycle policy、prompt-driven auto-close、idle-managed close/resume、diagnostics、Shared Desktop UI、Memory HTTP client / protocol pin 與 real-adapter stress；唯一 final blocker 是已安裝 pre-M7 AgentDock.app 的 live Memory registry cutover；
 - legacy stdio memory /舊 adapter process 數量應在 M7 drain/restart 時重新量測，不沿用 2026-10-03 的 process count 當現況。
 
 M7 的核心原則是「消費 M6 Broker capability，不重做 M6 ownership」。Browser / Computer physical resource cleanup 由 Broker 負責；M7 決定的是 ACP session 在何時 release 這些 capability、何時保留 adapter runtime，以及如何呈現 lifecycle diagnostics。

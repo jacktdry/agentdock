@@ -347,6 +347,22 @@ M7 不重新實作 Browser Broker。M6 已完成 ACP browser request → AgentDo
 
 Computer Use 亦採 AgentDock provider abstraction；ACP 不自行選 Orca / OpenAI Computer Use。現階段 AgentDock primary provider 為 Orca，OpenAI Sky / ChatGPT Computer Use 僅保留 product fallback，完整決策見 [computer-use-backends.md](computer-use-backends.md)。
 
+### M7 Completion checkpoint — 2026-10-04
+
+M7 feature branch 已完成 lifecycle、Memory client、diagnostics、Shared Desktop 與 real-adapter stress：
+
+- `persistent / ephemeral / idle-managed` per-session policy 與 restart-persistent metadata；
+- ephemeral terminal auto-close、bounded idle-managed sweeper、close/retry/race hardening；
+- ACP diagnostics + adapter process observation + M6 Browser/Computer correlation；
+- Shared Desktop ACP lifecycle controls / adapter health / shared Memory health；
+- MCP go-sdk `v1.8.0` + per-server `protocol_version` compatibility pin，Memory HTTP 使用 `2025-11-25`；
+- `codex-acp 2.1.1` 與 `antigravity-acp 1.2.0-agentdock.5` 均通過 persistent / ephemeral / idle-managed 真實 lifecycle；
+- 兩個 adapter 各完成 20 prompt-driven ephemeral stress，同一 Runtime / adapter PID 下 Browser / Computer capability 與 child resources 回 baseline；
+- M6 4-active bounded Browser queue、live managed Chrome isolation、resource lock、foreground Computer fail-closed 等 regression 全綠；
+- root tests / vet、ACP / Desktop / MCP race、Shared Desktop 30 frontend tests + build、macOS nested module test、Windows amd64 cross-build均通過。
+
+最後 rollout gate：目前執行中的 pre-M7 `AgentDock.app` 仍使用 stdio Memory registry；待 M7 整合並重建 / 重啟 App/Core 後，才切 live registry 到 `http://127.0.0.1:8766/mcp` 並確認舊 stdio Memory child 歸零。
+
 ### M7 CBM lifecycle 技術債（2026-10-03）
 
 實測發現 Codebase Memory executable 更新後，舊 daemon / supervisor 仍存活時，新 index worker 可能因 build mismatch 被拒絕並形成連續 worker failure。這屬於 dynamic MCP service lifecycle / process ownership 問題，不應以全域 `pkill` 解決。
