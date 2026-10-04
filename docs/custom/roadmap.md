@@ -371,14 +371,16 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 ## M7.5 — AgentDock Next Isolation（pre-M8 gate）
 
-狀態：**待實作 / 驗證；M7 feature code / stress 已完成，stable live cutover 刻意延後**。
+狀態：**Phase 1 repository identity/runtime isolation 已完成；Phase 2 updater/arbiter isolation 與 Next-only package/live 驗證待完成；stable live cutover 刻意延後**。
+
+2026-10-05 checkpoint：文件 gate 已於 `9962c61` 完成；Phase 1 於 `architecture/agentdock-next-isolation` 的 `b189ee5` 完成。Shell syntax、packaging metadata fixture、Swift fixture/typecheck、Go `internal/desktopruntime` / `scripts/test` 均通過；Gemini 3.1 Pro cross-review 無 blocker。整個 Phase 1 未操作 stable App/Core/state/registry/live launchd。
 
 目前連線的 AgentDock 是 production control plane，Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得以 stable 作 development target。
 
 工作與 Exit criteria：
 
-- 以 **AgentDock Next.app** side-by-side 實作獨立 bundle / LaunchAgent / runtime / log / state / work directory / port / connector namespace；精確 defaults 見 [agentdock-next-isolation.md](agentdock-next-isolation.md)。
-- Runtime / Connection / Settings / Update / Diagnostics、installer / self-update 僅能控制 Next；缺少或矛盾的 Next identity 必須 fail closed，禁止 fallback 到 `AgentDock.app`。
+- ✅ Phase 1：以 **AgentDock Next.app** side-by-side 實作獨立 bundle / LaunchAgent / runtime / log / state / work directory / port namespace；精確 defaults 見 [agentdock-next-isolation.md](agentdock-next-isolation.md)。
+- 🔄 Phase 2：Runtime / Connection / Settings / Update / Diagnostics、installer / self-update 僅能控制 Next；目前 GUI update check/apply/recovery 對 Next 先 fail closed，下一步要 generalize `selfupdate` / `updateplatform` / arbiter，使來源 artifact、destination、bundle/signing identity、service labels、transaction/rollback/recovery 全部 Next-target-aware，禁止 fallback 到 `AgentDock.app`。
 - Memory HTTP cutover 先在 Next registry / ACP sessions 驗證，固定 `http://127.0.0.1:8766/mcp` 與 `protocol_version=2025-11-25`；stable stdio registry 與其 children 不列入 Next cleanup。
 - 通過隔離、Next lifecycle / update / rollback 與 M6/M7 regression；證據不得來自開發中操作 stable runtime。
 - Next 必須能以未來 `mac-dev-next` connector 獨立連上 ChatGPT，Next lifecycle 操作不能影響原 Mac-Dev control channel。

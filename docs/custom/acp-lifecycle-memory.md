@@ -1,10 +1,10 @@
 # ACP Session Lifecycle and Shared Memory
 
-> 狀態：M7 code + stress completed / M7.5 Next isolation pending / stable cutover intentionally deferred
+> 狀態：M7 code + stress completed / M7.5 Phase 1 isolation completed / Phase 2 updater isolation pending / stable cutover intentionally deferred
 >
 > 日期：2026-10-03
 >
-> 更新：2026-10-05 — M7 已於 d8acb9be 整合完成；Memory cutover 先在 AgentDock Next 驗證，stable control plane 保持原樣
+> 更新：2026-10-05 — M7 已於 d8acb9be 整合完成；M7.5 Phase 1 identity/runtime isolation 已於 b189ee5 完成，下一步先完成 Next updater/arbiter target isolation，再做 Next-only Memory cutover；stable control plane 保持原樣
 >
 > 目標 Milestone：M7 — ACP Manager
 
@@ -14,7 +14,7 @@
 
 目前連線中的 AgentDock 是 production control plane。先前 live activation 導致 ChatGPT Mac-Dev channel 斷線，故 Next 開發禁止檢查、修改、重啟、停止、替換 stable App/Core，或操作 `~/.agentdock`、stable stdio Memory registry 與 live launchd services。Stable 不是 development target；舊 stdio Memory children 不可為 Next 驗收而 drain / kill / cleanup。
 
-下一步是 [M7.5 AgentDock Next isolation](agentdock-next-isolation.md)，不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
+目前 M7.5 Phase 1 已完成；下一步是 [M7.5 AgentDock Next isolation](agentdock-next-isolation.md) 的 Phase 2 self-update / updateplatform / arbiter target isolation，不是 direct stable activation 或 Memory cutover。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
 
 ## 背景
 
