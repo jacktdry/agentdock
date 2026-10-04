@@ -26,6 +26,7 @@ type managedLease struct {
 	metadata LeaseMetadata
 	binding  EngineBinding
 	pageID   float64
+	idleTTL  time.Duration // Set only by the managed coordinator.
 }
 
 // ManagedLeaseManager does not reuse workers between leases. No public adapters,
@@ -65,7 +66,9 @@ func (m *ManagedLeaseManager) Acquire(ctx context.Context, scope RequestScope, s
 	worker, err := m.backend.StartManaged(ctx, ManagedWorkerOptions{Cwd: scope.CanonicalWorkspaceRoot})
 	fail := func(err error) (LeaseMetadata, EngineBinding, error) {
 		if worker.WorkerID != "" {
-			err = errors.Join(err, m.backend.Stop(worker.WorkerID))
+			if stopErr := m.backend.Stop(worker.WorkerID); stopErr != nil {
+				err = &managedAcquireCleanupError{workerID: worker.WorkerID, cause: errors.Join(err, stopErr)}
+			}
 		}
 		return LeaseMetadata{}, EngineBinding{}, err
 	}
@@ -142,6 +145,9 @@ func (m *ManagedLeaseManager) Call(ctx context.Context, scope RequestScope, id, 
 	}
 	if err == nil {
 		l.metadata.LastActiveAt = time.Now().UTC()
+		if l.idleTTL > 0 {
+			l.metadata.ExpiresAt = l.metadata.LastActiveAt.Add(l.idleTTL)
+		}
 	}
 	return result, err
 }
@@ -155,6 +161,12 @@ func (m *ManagedLeaseManager) Release(ctx context.Context, scope RequestScope, i
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return m.releaseLocked(ctx, scope, l)
+}
+
+// The caller holds l.mu across the idle check and authoritative cleanup.
+func (m *ManagedLeaseManager) releaseLocked(ctx context.Context, scope RequestScope, l *managedLease) (LeaseMetadata, error) {
+	id := l.metadata.BrowserLeaseID
 	if err := l.checkOwner(scope); err != nil {
 		return LeaseMetadata{}, err
 	}
