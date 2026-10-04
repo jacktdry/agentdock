@@ -142,6 +142,7 @@ func (m *Manager) StartPromptBlocks(ctx context.Context, sessionID string, block
 	}
 	record.Status = SessionRunning
 	record.UpdatedAt = time.Now().UTC()
+	record.LastActiveAt = record.UpdatedAt
 	m.sessions[sessionID] = record
 	m.mu.Unlock()
 
@@ -544,6 +545,7 @@ func (m *Manager) finishRun(run *Run, status RunStatus, stopReason string, err e
 			record.LastStopReason = errorCode(err)
 		}
 		record.UpdatedAt = now
+		record.LastActiveAt = now
 		m.sessions[run.SessionID] = record
 	}
 	m.mu.Unlock()

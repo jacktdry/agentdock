@@ -7,18 +7,21 @@ import (
 )
 
 type sessionListItem struct {
-	ID                    string                   `json:"id"`
-	Source                string                   `json:"source"`
-	SessionID             string                   `json:"session_id,omitempty"`
-	RemoteSessionID       string                   `json:"remote_session_id"`
-	Managed               bool                     `json:"managed"`
-	RemoteListed          bool                     `json:"remote_listed"`
-	Agent                 string                   `json:"agent,omitempty"`
-	Status                acpruntime.SessionStatus `json:"status,omitempty"`
-	CWD                   string                   `json:"cwd,omitempty"`
-	AdditionalDirectories []string                 `json:"additional_directories,omitempty"`
-	Title                 string                   `json:"title,omitempty"`
-	UpdatedAt             string                   `json:"updated_at,omitempty"`
+	ID                    string                            `json:"id"`
+	Source                string                            `json:"source"`
+	SessionID             string                            `json:"session_id,omitempty"`
+	RemoteSessionID       string                            `json:"remote_session_id"`
+	Managed               bool                              `json:"managed"`
+	RemoteListed          bool                              `json:"remote_listed"`
+	Agent                 string                            `json:"agent,omitempty"`
+	Status                acpruntime.SessionStatus          `json:"status,omitempty"`
+	CWD                   string                            `json:"cwd,omitempty"`
+	AdditionalDirectories []string                          `json:"additional_directories,omitempty"`
+	Title                 string                            `json:"title,omitempty"`
+	UpdatedAt             string                            `json:"updated_at,omitempty"`
+	LastActiveAt          string                            `json:"last_active_at,omitempty"`
+	LifecyclePolicy       acpruntime.SessionLifecyclePolicy `json:"lifecycle_policy,omitempty"`
+	IdleCloseAfterMS      int64                             `json:"idle_close_after_ms,omitempty"`
 }
 
 func mergeSessionList(profileID string, managed []acpruntime.SessionRecord, remote []acpruntime.RemoteSession) []sessionListItem {
@@ -31,9 +34,13 @@ func mergeSessionList(profileID string, managed []acpruntime.SessionRecord, remo
 			Agent: session.Agent, Status: session.Status, CWD: session.CWD,
 			Title:                 session.Title,
 			AdditionalDirectories: append([]string(nil), session.AdditionalDirectories...),
+			LifecyclePolicy:       session.LifecyclePolicy, IdleCloseAfterMS: session.IdleCloseAfterMS,
 		}
 		if !session.UpdatedAt.IsZero() {
 			item.UpdatedAt = session.UpdatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		if !session.LastActiveAt.IsZero() {
+			item.LastActiveAt = session.LastActiveAt.UTC().Format(time.RFC3339Nano)
 		}
 		byRemote[session.RemoteSessionID] = len(items)
 		items = append(items, item)

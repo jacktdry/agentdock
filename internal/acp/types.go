@@ -116,19 +116,25 @@ const (
 )
 
 type SessionRecord struct {
-	SchemaVersion         int           `json:"schema_version"`
-	ID                    string        `json:"id"`
-	Agent                 string        `json:"agent"`
-	RemoteSessionID       string        `json:"remote_session_id"`
-	CWD                   string        `json:"cwd"`
-	Title                 string        `json:"title,omitempty"`
-	AdditionalDirectories []string      `json:"additional_directories,omitempty"`
-	ModeID                string        `json:"mode_id,omitempty"`
-	Status                SessionStatus `json:"status"`
-	LastStopReason        string        `json:"last_stop_reason,omitempty"`
-	CreatedAt             time.Time     `json:"created_at"`
-	UpdatedAt             time.Time     `json:"updated_at"`
-	ClosedAt              *time.Time    `json:"closed_at,omitempty"`
+	SchemaVersion         int                    `json:"schema_version"`
+	ID                    string                 `json:"id"`
+	Agent                 string                 `json:"agent"`
+	RemoteSessionID       string                 `json:"remote_session_id"`
+	CWD                   string                 `json:"cwd"`
+	Title                 string                 `json:"title,omitempty"`
+	AdditionalDirectories []string               `json:"additional_directories,omitempty"`
+	ModeID                string                 `json:"mode_id,omitempty"`
+	Status                SessionStatus          `json:"status"`
+	LastStopReason        string                 `json:"last_stop_reason,omitempty"`
+	LifecyclePolicy       SessionLifecyclePolicy `json:"lifecycle_policy"`
+	IdleCloseAfterMS      int64                  `json:"idle_close_after_ms,omitempty"`
+	LastActiveAt          time.Time              `json:"last_active_at"`
+	ClosedReason          string                 `json:"closed_reason,omitempty"`
+	AutoCloseAttemptedAt  *time.Time             `json:"auto_close_attempted_at,omitempty"`
+	AutoCloseError        string                 `json:"auto_close_error,omitempty"`
+	CreatedAt             time.Time              `json:"created_at"`
+	UpdatedAt             time.Time              `json:"updated_at"`
+	ClosedAt              *time.Time             `json:"closed_at,omitempty"`
 }
 
 type RunStatus string

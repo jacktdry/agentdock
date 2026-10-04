@@ -1,6 +1,11 @@
 package acp
 
-import toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
+import (
+	"time"
+
+	acpruntime "github.com/uvwt/agentdock/internal/acp"
+	toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
+)
 
 const (
 	ToolSession     = "acp_session"
@@ -27,9 +32,11 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["additional_directories"] = map[string]any{"type": "array", "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Additional workspace directories for new or forked sessions."}
 		props["cursor"] = stringProp("Adapter session/list cursor. Pass next_cursor unchanged to continue native-session pagination.")
 		props["include_history"] = boolProp("For inspect, load Adapter-owned history through standard session/load. Defaults to false.")
-		props["mode_id"] = stringProp("Agent-advertised session mode id for update. Provide exactly one of mode_id or config_id.")
-		props["config_id"] = stringProp("Agent-advertised session configuration option id for update. Provide exactly one of mode_id or config_id.")
+		props["mode_id"] = stringProp("Agent-advertised session mode id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
+		props["config_id"] = stringProp("Agent-advertised session configuration option id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
 		props["config_value"] = map[string]any{"description": "String value id or boolean value when update uses config_id.", "oneOf": []map[string]any{{"type": "string"}, {"type": "boolean"}}}
+		props["lifecycle_policy"] = map[string]any{"type": "string", "enum": []string{"persistent", "ephemeral", "idle-managed"}, "description": "Per-session lifecycle policy for new or update. Defaults to persistent for new/fork. Lifecycle update does not load/resume the Adapter session."}
+		props["idle_close_after_ms"] = boundedIntProp("Per-session idle timeout for lifecycle_policy=idle-managed. Omit to use 30 minutes.", int(acpruntime.MinIdleCloseAfter/time.Millisecond), int(acpruntime.MaxIdleCloseAfter/time.Millisecond))
 		required = []string{"action"}
 	case ToolPrompt:
 		props["profile_id"] = stringProp("Configured ACP profile id. Omit to use the default profile.")
@@ -116,8 +123,8 @@ func OutputSchema(name string) (map[string]any, bool) {
 			"additionalProperties": false,
 			"required":             []string{"field", "id", "label"},
 			"properties": map[string]any{
-				"field":  map[string]any{"type": "string", "enum": []string{"mode", "config_option"}},
-				"id":     stringProp("Mode/config option identifier."),
+				"field":  map[string]any{"type": "string", "enum": []string{"mode", "config_option", "lifecycle"}},
+				"id":     stringProp("Mode, config option, or lifecycle setting identifier."),
 				"label":  stringProp("Human-readable setting label."),
 				"before": changeValue,
 				"after":  changeValue,
