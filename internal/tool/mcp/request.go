@@ -2,21 +2,22 @@ package mcp
 
 // ManageRequest 是 mcp_manage 进入动态 MCP capability 后的稳定输入契约。
 type ManageRequest struct {
-	Action      string            `json:"action"`
-	Name        string            `json:"name,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Transport   string            `json:"transport,omitempty"`
-	URL         string            `json:"url,omitempty"`
-	Command     string            `json:"command,omitempty"`
-	Args        []string          `json:"args,omitempty"`
-	CWD         string            `json:"cwd,omitempty"`
-	HeaderEnv   map[string]string `json:"header_env,omitempty"`
-	EnvFromEnv  map[string]string `json:"env_from_env,omitempty"`
-	Key         string            `json:"key,omitempty"`
-	Value       *string           `json:"value,omitempty"`
-	Enabled     *bool             `json:"enabled,omitempty"`
-	TimeoutMS   *int              `json:"timeout_ms,omitempty"`
-	CallbackID  string            `json:"callback_id,omitempty"`
+	Action          string            `json:"action"`
+	Name            string            `json:"name,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Transport       string            `json:"transport,omitempty"`
+	ProtocolVersion string            `json:"protocol_version,omitempty"`
+	URL             string            `json:"url,omitempty"`
+	Command         string            `json:"command,omitempty"`
+	Args            []string          `json:"args,omitempty"`
+	CWD             string            `json:"cwd,omitempty"`
+	HeaderEnv       map[string]string `json:"header_env,omitempty"`
+	EnvFromEnv      map[string]string `json:"env_from_env,omitempty"`
+	Key             string            `json:"key,omitempty"`
+	Value           *string           `json:"value,omitempty"`
+	Enabled         *bool             `json:"enabled,omitempty"`
+	TimeoutMS       *int              `json:"timeout_ms,omitempty"`
+	CallbackID      string            `json:"callback_id,omitempty"`
 }
 
 type SearchRequest struct {

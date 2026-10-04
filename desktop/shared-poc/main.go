@@ -38,6 +38,7 @@ func main() {
 			application.NewService(desktopapi.NewBasicSettingsService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewUpdateService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
+			application.NewService(desktopapi.NewACPService(*runtimeRootFlag)),
 			application.NewService(settings),
 			application.NewService(activityProbeService),
 		},

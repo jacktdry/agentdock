@@ -1,6 +1,11 @@
 package acp
 
-import toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
+import (
+	"time"
+
+	acpruntime "github.com/uvwt/agentdock/internal/acp"
+	toolcontract "github.com/uvwt/agentdock/internal/tool/contract"
+)
 
 const (
 	ToolSession     = "acp_session"
@@ -18,7 +23,7 @@ func InputSchema(name string) (map[string]any, bool) {
 	switch name {
 	case ToolSession:
 		props["profile_id"] = stringProp("Configured ACP profile id. Omit to use the default profile.")
-		props["action"] = map[string]any{"type": "string", "description": "AgentDock ACP session management action.", "enum": []string{"info", "new", "list", "inspect", "open", "update", "close", "delete"}}
+		props["action"] = map[string]any{"type": "string", "description": "AgentDock ACP session management action.", "enum": []string{"info", "status", "new", "list", "inspect", "open", "update", "close", "delete"}}
 		props["auth_method_id"] = stringProp("Optional authentication method advertised by info. info authenticates and then returns refreshed agent metadata; other session actions authenticate before performing the requested action.")
 		props["session_id"] = stringProp("AgentDock managed session id for inspect, open, update, close, or delete.")
 		props["remote_session_id"] = stringProp("Adapter-native session id for inspect, open, or delete without requiring a prior AgentDock mapping.")
@@ -27,9 +32,11 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["additional_directories"] = map[string]any{"type": "array", "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Additional workspace directories for new or forked sessions."}
 		props["cursor"] = stringProp("Adapter session/list cursor. Pass next_cursor unchanged to continue native-session pagination.")
 		props["include_history"] = boolProp("For inspect, load Adapter-owned history through standard session/load. Defaults to false.")
-		props["mode_id"] = stringProp("Agent-advertised session mode id for update. Provide exactly one of mode_id or config_id.")
-		props["config_id"] = stringProp("Agent-advertised session configuration option id for update. Provide exactly one of mode_id or config_id.")
+		props["mode_id"] = stringProp("Agent-advertised session mode id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
+		props["config_id"] = stringProp("Agent-advertised session configuration option id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
 		props["config_value"] = map[string]any{"description": "String value id or boolean value when update uses config_id.", "oneOf": []map[string]any{{"type": "string"}, {"type": "boolean"}}}
+		props["lifecycle_policy"] = map[string]any{"type": "string", "enum": []string{"persistent", "ephemeral", "idle-managed"}, "description": "Per-session lifecycle policy for new or update. Defaults to persistent for new/fork. Lifecycle update does not load/resume the Adapter session."}
+		props["idle_close_after_ms"] = boundedIntProp("Per-session idle timeout for lifecycle_policy=idle-managed. Omit to use 30 minutes.", int(acpruntime.MinIdleCloseAfter/time.Millisecond), int(acpruntime.MaxIdleCloseAfter/time.Millisecond))
 		required = []string{"action"}
 	case ToolPrompt:
 		props["profile_id"] = stringProp("Configured ACP profile id. Omit to use the default profile.")
@@ -91,6 +98,10 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["steering_policy"] = objectProp("Capability-driven steering policy used internally by acp_prompt start.")
 		props["session"] = objectProp("AgentDock managed ACP session record.")
 		props["runtime_state"] = objectProp("Process-local projection of non-transcript ACP session/update state such as mode, config, commands, info, and usage.")
+		props["diagnostics"] = objectProp("Pure ACP lifecycle diagnostics snapshot for status, including managed/loaded/running/ready/idle/closed counts and per-session lifecycle state.")
+		props["adapter_pid"] = intProp("Immutable root PID of the currently owned ACP adapter process when one has been started.")
+		props["adapter_process"] = objectProp("Best-effort observation-only process tree/resource snapshot added by the AgentDock app runtime for status.")
+		props["broker_correlation"] = objectProp("M6 Browser/Computer Broker resources correlated to ACP sessions for the selected profile; capability tokens are never included.")
 		props["remote_session"] = objectProp("Adapter-native session metadata.")
 		props["sessions"] = arrayProp("Canonical session list combining managed AgentDock mappings and Adapter-native sessions. Each item declares source, managed, session_id, and remote_session_id as applicable.")
 		props["count"] = intProp("Number of unique session rows returned by list.")
@@ -116,8 +127,8 @@ func OutputSchema(name string) (map[string]any, bool) {
 			"additionalProperties": false,
 			"required":             []string{"field", "id", "label"},
 			"properties": map[string]any{
-				"field":  map[string]any{"type": "string", "enum": []string{"mode", "config_option"}},
-				"id":     stringProp("Mode/config option identifier."),
+				"field":  map[string]any{"type": "string", "enum": []string{"mode", "config_option", "lifecycle"}},
+				"id":     stringProp("Mode, config option, or lifecycle setting identifier."),
 				"label":  stringProp("Human-readable setting label."),
 				"before": changeValue,
 				"after":  changeValue,

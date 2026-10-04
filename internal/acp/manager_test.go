@@ -730,6 +730,7 @@ func TestACPHelperProcess(t *testing.T) {
 	}
 	promptMode := os.Getenv("GO_ACP_HELPER_PROMPT_MODE")
 	promptCount := 0
+	closeCount := 0
 	helperCWD, _ := os.Getwd()
 	for scanner.Scan() {
 		var message rpcMessage
@@ -845,7 +846,10 @@ func TestACPHelperProcess(t *testing.T) {
 				})
 			}
 		case "session/close":
-			if promptMode == "steering_reset_failure" {
+			closeCount++
+			if promptMode == "close_failure" || (promptMode == "close_once_failure" && closeCount == 1) {
+				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "close failed"}})
+			} else if promptMode == "steering_reset_failure" {
 				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "reset failed"}})
 			} else {
 				writeHelperResult(encoder, message.ID, map[string]any{})

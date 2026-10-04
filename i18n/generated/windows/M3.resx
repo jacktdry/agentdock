@@ -1,6 +1,201 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- GENERATED FILE — DO NOT EDIT -->
 <root>
+  <data name="acp.act" xml:space="preserve">
+    <value>Computer act sessions</value>
+  </data>
+  <data name="acp.adapter" xml:space="preserve">
+    <value>Adapter process health</value>
+  </data>
+  <data name="acp.alive" xml:space="preserve">
+    <value>Alive</value>
+  </data>
+  <data name="acp.apply_policy" xml:space="preserve">
+    <value>Apply policy</value>
+  </data>
+  <data name="acp.auto_close_failed" xml:space="preserve">
+    <value>Auto-close failed. Refresh or try manual close.</value>
+  </data>
+  <data name="acp.backend" xml:space="preserve">
+    <value>Backend</value>
+  </data>
+  <data name="acp.browser_leases" xml:space="preserve">
+    <value>Browser leases</value>
+  </data>
+  <data name="acp.bytes" xml:space="preserve">
+    <value>{count, number} bytes</value>
+  </data>
+  <data name="acp.cleanup_issues" xml:space="preserve">
+    <value>Browser cleanup issues</value>
+  </data>
+  <data name="acp.close" xml:space="preserve">
+    <value>Close session</value>
+  </data>
+  <data name="acp.closed" xml:space="preserve">
+    <value>Closed</value>
+  </data>
+  <data name="acp.confirm_close" xml:space="preserve">
+    <value>Close this ACP session and release its resources?</value>
+  </data>
+  <data name="acp.confirm_policy" xml:space="preserve">
+    <value>Apply this lifecycle policy to the ACP session?</value>
+  </data>
+  <data name="acp.default_profile" xml:space="preserve">
+    <value>Default profile</value>
+  </data>
+  <data name="acp.descendants" xml:space="preserve">
+    <value>Descendant processes</value>
+  </data>
+  <data name="acp.eligible" xml:space="preserve">
+    <value>Idle close eligible</value>
+  </data>
+  <data name="acp.empty_sessions" xml:space="preserve">
+    <value>No managed sessions.</value>
+  </data>
+  <data name="acp.endpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="acp.failures" xml:space="preserve">
+    <value>Auto-close failures</value>
+  </data>
+  <data name="acp.idle" xml:space="preserve">
+    <value>Idle</value>
+  </data>
+  <data name="acp.installed" xml:space="preserve">
+    <value>Installed</value>
+  </data>
+  <data name="acp.invalid_policy" xml:space="preserve">
+    <value>Choose a supported policy and timeout within the supported range.</value>
+  </data>
+  <data name="acp.kind" xml:space="preserve">
+    <value>Kind</value>
+  </data>
+  <data name="acp.last_active" xml:space="preserve">
+    <value>Last active</value>
+  </data>
+  <data name="acp.loaded" xml:space="preserve">
+    <value>Loaded</value>
+  </data>
+  <data name="acp.managed" xml:space="preserve">
+    <value>Managed</value>
+  </data>
+  <data name="acp.memory" xml:space="preserve">
+    <value>Shared Memory</value>
+  </data>
+  <data name="acp.minutes" xml:space="preserve">
+    <value>{count, number} minutes</value>
+  </data>
+  <data name="acp.observe" xml:space="preserve">
+    <value>Computer observe sessions</value>
+  </data>
+  <data name="acp.package" xml:space="preserve">
+    <value>Package</value>
+  </data>
+  <data name="acp.pid" xml:space="preserve">
+    <value>Process ID</value>
+  </data>
+  <data name="acp.policy" xml:space="preserve">
+    <value>Lifecycle policy</value>
+  </data>
+  <data name="acp.policy_ephemeral" xml:space="preserve">
+    <value>Ephemeral</value>
+  </data>
+  <data name="acp.policy_idle_managed" xml:space="preserve">
+    <value>Idle-managed</value>
+  </data>
+  <data name="acp.policy_persistent" xml:space="preserve">
+    <value>Persistent</value>
+  </data>
+  <data name="acp.process_error" xml:space="preserve">
+    <value>Process health observation failed.</value>
+  </data>
+  <data name="acp.protocol" xml:space="preserve">
+    <value>Protocol version</value>
+  </data>
+  <data name="acp.provider" xml:space="preserve">
+    <value>Provider</value>
+  </data>
+  <data name="acp.ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="acp.rss" xml:space="preserve">
+    <value>RSS</value>
+  </data>
+  <data name="acp.running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="acp.session" xml:space="preserve">
+    <value>Session</value>
+  </data>
+  <data name="acp.sessions" xml:space="preserve">
+    <value>Sessions</value>
+  </data>
+  <data name="acp.source" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="acp.state_disabled" xml:space="preserve">
+    <value>ACP is disabled.</value>
+  </data>
+  <data name="acp.state_empty" xml:space="preserve">
+    <value>No ACP profiles are configured.</value>
+  </data>
+  <data name="acp.state_loading" xml:space="preserve">
+    <value>Loading ACP status…</value>
+  </data>
+  <data name="acp.state_ready" xml:space="preserve">
+    <value>ACP status loaded.</value>
+  </data>
+  <data name="acp.state_unavailable" xml:space="preserve">
+    <value>ACP status is unavailable.</value>
+  </data>
+  <data name="acp.status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="acp.status_cancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="acp.status_closed" xml:space="preserve">
+    <value>Closed</value>
+  </data>
+  <data name="acp.status_failed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="acp.status_ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="acp.status_running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="acp.status_starting" xml:space="preserve">
+    <value>Starting</value>
+  </data>
+  <data name="acp.storage" xml:space="preserve">
+    <value>Storage path</value>
+  </data>
+  <data name="acp.title" xml:space="preserve">
+    <value>ACP</value>
+  </data>
+  <data name="acp.total_memories" xml:space="preserve">
+    <value>Total memories</value>
+  </data>
+  <data name="acp.tree_rss" xml:space="preserve">
+    <value>Process tree RSS</value>
+  </data>
+  <data name="acp.ttl" xml:space="preserve">
+    <value>Idle timeout (minutes)</value>
+  </data>
+  <data name="acp.ttl_hint" xml:space="preserve">
+    <value>Supported range: 1 minute to 7 days. Default: 30 minutes.</value>
+  </data>
+  <data name="acp.unhealthy" xml:space="preserve">
+    <value>Unhealthy</value>
+  </data>
+  <data name="acp.version" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="acp.version_state" xml:space="preserve">
+    <value>Version state</value>
+  </data>
   <data name="activity.clear_log" xml:space="preserve">
     <value>Clear log</value>
   </data>
@@ -272,7 +467,7 @@
     <value>Activity is experimental. This synthetic probe is for developer diagnostics.</value>
   </data>
   <data name="developer.scope" xml:space="preserve">
-    <value>Secondary architecture diagnostics. Browser, ACP, MCP and Plugin features are not implemented in this shell.</value>
+    <value>Secondary architecture diagnostics. Browser, MCP and Plugin features are not implemented in this shell.</value>
   </data>
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>Architecture</value>

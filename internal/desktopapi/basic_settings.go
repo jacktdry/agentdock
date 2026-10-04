@@ -73,7 +73,7 @@ func safeServiceError(code string, err error) *APIError {
 	case errors.Is(err, desktopruntime.ErrBasicSettingsUnavailable):
 		category, message = ErrorCategoryUnavailable, "This setting requires the native desktop service adapter"
 	}
-	if code == "connection_root_unavailable" || code == "settings_root_unavailable" || code == "diagnostics_root_unavailable" || code == "runtime_root_unavailable" || code == "update_root_unavailable" {
+	if code == "connection_root_unavailable" || code == "settings_root_unavailable" || code == "diagnostics_root_unavailable" || code == "runtime_root_unavailable" || code == "update_root_unavailable" || code == "acp_root_unavailable" {
 		category, message = ErrorCategoryUnavailable, "Runtime root unavailable"
 	}
 	return NewError(code, message, category, category == ErrorCategoryTimeout, nil)

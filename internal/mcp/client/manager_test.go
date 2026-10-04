@@ -685,3 +685,91 @@ func TestPluginOwnedStdioUsesStableEnvAndRuntimeProvenance(t *testing.T) {
 		}
 	}
 }
+
+func TestManagerStreamableHTTPProtocolPinSkipsDiscover(t *testing.T) {
+	const pinned = "2025-11-25"
+	var discoverCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var request struct {
+			ID     any            `json:"id"`
+			Method string         `json:"method"`
+			Params map[string]any `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch request.Method {
+		case "server/discover":
+			discoverCalls.Add(1)
+			http.Error(w, "Bad Request: Unsupported protocol version: 2026-07-28. Supported versions: 2025-11-25", http.StatusBadRequest)
+		case "initialize":
+			if got := request.Params["protocolVersion"]; got != pinned {
+				t.Errorf("initialize protocol version = %#v, want %q", got, pinned)
+			}
+			if got := r.Header.Get("MCP-Protocol-Version"); got != "" {
+				t.Errorf("initialize protocol header = %q, want empty", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Mcp-Session-Id", "legacy-session")
+			writeRPCResult(t, w, request.ID, map[string]any{
+				"protocolVersion": pinned,
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "legacy", "version": "1.0.0"},
+			})
+		case "notifications/initialized":
+			if got := r.Header.Get("MCP-Protocol-Version"); got != pinned {
+				t.Errorf("initialized protocol header = %q, want %q", got, pinned)
+			}
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			if got := r.Header.Get("MCP-Protocol-Version"); got != pinned {
+				t.Errorf("tools/list protocol header = %q, want %q", got, pinned)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			writeRPCResult(t, w, request.ID, map[string]any{"tools": []map[string]any{{
+				"name": "health", "description": "health", "inputSchema": map[string]any{"type": "object"},
+			}}})
+		default:
+			t.Errorf("unexpected method %q", request.Method)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	manager, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.Add(ServerConfig{
+		Name: "legacy", Description: "Legacy MCP", Transport: TransportStreamableHTTP,
+		ProtocolVersion: pinned, URL: server.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed, tools, err := manager.Refresh(context.Background(), "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if discoverCalls.Load() != 0 {
+		t.Fatalf("pinned legacy server received %d server/discover calls", discoverCalls.Load())
+	}
+	if refreshed.Status != "ready" || refreshed.ToolCount != 1 || len(tools) != 1 || tools[0].Name != "health" {
+		t.Fatalf("refresh=%#v tools=%#v", refreshed, tools)
+	}
+	cfg, _, err := manager.Inspect("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProtocolVersion != pinned {
+		t.Fatalf("persisted protocol_version=%q", cfg.ProtocolVersion)
+	}
+}

@@ -34,3 +34,15 @@ func TestStoreRejectsOversizedRegistryBeforeDecode(t *testing.T) {
 		t.Fatal("oversized registry was accepted")
 	}
 }
+
+func TestStoreValidatesProtocolVersionPin(t *testing.T) {
+	valid := ServerConfig{Name: "legacy", Description: "legacy", Transport: TransportStreamableHTTP, URL: "http://127.0.0.1:8766/mcp", Enabled: true, TimeoutMS: 30000, ProtocolVersion: "2025-11-25"}
+	if err := validateServerConfig(valid); err != nil {
+		t.Fatalf("valid protocol pin rejected: %v", err)
+	}
+	invalid := valid
+	invalid.ProtocolVersion = "2027-01-01"
+	if err := validateServerConfig(invalid); err == nil || !strings.Contains(err.Error(), "unsupported protocol_version") {
+		t.Fatalf("invalid protocol pin error=%v", err)
+	}
+}

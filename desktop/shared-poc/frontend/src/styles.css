@@ -391,3 +391,9 @@ dialog::backdrop { background: rgb(0 0 0 / 65%); }
   .primary-nav .developer-entry { margin-top: 0; }
 }
 @media (max-width: 560px) { .overview-grid { grid-template-columns: 1fr; } }
+
+.acp-card dd, .acp-card h3 { overflow-wrap: anywhere; }
+.acp-sessions { list-style: none; padding: 0; display: grid; gap: 1rem; }
+.acp-session { border-top: 1px solid #303641; padding-top: 0.5rem; }
+.acp-session .actions label { display: grid; gap: 0.4rem; max-width: 100%; }
+.acp-session input { width: 10rem; max-width: 100%; }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ACPPanel from './components/acp/ACPPanel.vue'
 import ActivityStreamPanel from './components/activity/ActivityStreamPanel.vue'
 import ContractStatusPanel from './components/contract/ContractStatusPanel.vue'
 import RuntimeStatusPanel from './components/runtime/RuntimeStatusPanel.vue'
@@ -51,6 +52,7 @@ function changeLocale(event: Event) {
         <OverviewPanel v-if="section === 'overview'" @navigate="section = $event" />
         <RuntimeStatusPanel v-else-if="section === 'runtime'" />
         <ConnectionPanel v-else-if="section === 'connection'" />
+        <ACPPanel v-else-if="section === 'acp'" />
         <BasicSettingsPanel v-else-if="section === 'settings'" />
         <div v-else-if="section === 'system'" class="feature-stack">
           <UpdateCard />
