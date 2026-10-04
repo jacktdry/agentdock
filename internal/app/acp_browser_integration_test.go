@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
 	toolacp "github.com/uvwt/agentdock/internal/tool/acp"
 )
@@ -279,6 +280,152 @@ func TestAntigravityACPBrowserDisabledStillStartsWithoutGlobalBrowserBackends(t 
 			if strings.Contains(command, forbidden) {
 				t.Fatalf("browser-disabled antigravity spawned forbidden backend (%s): %s", forbidden, command)
 			}
+		}
+	}
+}
+
+func TestAntigravityACPTwentyEphemeralLifecycleStress(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_STRESS") != "1" {
+		t.Skip("set AGENTDOCK_RUN_STRESS=1 for the 20-cycle adapter lifecycle stress")
+	}
+	if runtime.GOOS != "darwin" {
+		t.Skip("process-tree stress is currently macOS-only")
+	}
+	antigravityACP := "/Users/wei/.local/bin/antigravity-acp"
+	if resolved, err := exec.LookPath("antigravity-acp"); err == nil {
+		antigravityACP = resolved
+	}
+	if _, err := os.Stat(antigravityACP); err != nil {
+		t.Skip("antigravity-acp not installed")
+	}
+	versionBytes, err := exec.Command(antigravityACP, "--version").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(versionBytes)); got != "1.2.0-agentdock.5" {
+		t.Fatalf("antigravity-acp version=%q, want 1.2.0-agentdock.5", got)
+	}
+	agy := "/Users/wei/.local/bin/agy"
+	if resolved, err := exec.LookPath("agy"); err == nil {
+		agy = resolved
+	}
+	if _, err := os.Stat(agy); err != nil {
+		t.Skip("agy not installed")
+	}
+	t.Setenv("AGENTDOCK_STRESS_AGY_BIN", agy)
+	t.Setenv("AGENTDOCK_STRESS_AGY_SKIP_DOWNLOAD", "1")
+
+	for iteration := 0; iteration < 20; iteration++ {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("cycle %d listen: %v", iteration, err)
+		}
+		port := listener.Addr().(*net.TCPAddr).Port
+		workspace := t.TempDir()
+		cfg := config.Config{
+			AgentDockHome: t.TempDir(), AgentDockDefaultDir: workspace,
+			Host: "127.0.0.1", Port: port, BrowserEnabled: true, ACPEnabled: true,
+			ACPProfiles: []config.ACPProfile{{
+				ID: "antigravity", Kind: "custom", Command: antigravityACP, Enabled: true,
+				EnvFromEnv: map[string]string{
+					"AGY_BIN":           "AGENTDOCK_STRESS_AGY_BIN",
+					"AGY_SKIP_DOWNLOAD": "AGENTDOCK_STRESS_AGY_SKIP_DOWNLOAD",
+				},
+			}},
+			ACPDefaultProfile: "antigravity", ACPMaxPrompts: 1, ACPInteractionMS: 30_000,
+		}
+		if err := cfg.Normalize(); err != nil {
+			_ = listener.Close()
+			t.Fatalf("cycle %d normalize: %v", iteration, err)
+		}
+		rt, err := NewRuntime(cfg)
+		if err != nil {
+			_ = listener.Close()
+			t.Fatalf("cycle %d runtime: %v", iteration, err)
+		}
+		mux := http.NewServeMux()
+		if h := rt.ACPBrowserMCPHandler(); h != nil {
+			mux.Handle("/internal/acp-browser/mcp", h)
+		}
+		if h := rt.ACPComputerMCPHandler(); h != nil {
+			mux.Handle("/internal/acp-computer/mcp", h)
+		}
+		server := &http.Server{Handler: mux}
+		serverDone := make(chan error, 1)
+		go func() { serverDone <- server.Serve(listener) }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		result, sessionErr := rt.acp.Session(ctx, toolacp.SessionRequest{Action: "new", ProfileID: "antigravity", CWD: workspace})
+		cancel()
+		if sessionErr != nil {
+			_ = rt.Close()
+			_ = server.Close()
+			<-serverDone
+			t.Fatalf("cycle %d session/new: %v", iteration, sessionErr)
+		}
+		session, ok := result["session"].(acpruntime.SessionRecord)
+		if !ok || session.ID == "" {
+			_ = rt.Close()
+			_ = server.Close()
+			<-serverDone
+			t.Fatalf("cycle %d session result=%#v", iteration, result)
+		}
+		owners := rt.acpBrowser.Diagnostics().Owners
+		if len(owners) != 1 || owners[0].ACPSessionID != session.ID {
+			_ = rt.Close()
+			_ = server.Close()
+			<-serverDone
+			t.Fatalf("cycle %d browser owners=%+v session=%s", iteration, owners, session.ID)
+		}
+
+		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+		_, closeErr := rt.acp.Session(ctx, toolacp.SessionRequest{Action: "close", ProfileID: "antigravity", SessionID: session.ID})
+		cancel()
+		if closeErr != nil {
+			_ = rt.Close()
+			_ = server.Close()
+			<-serverDone
+			t.Fatalf("cycle %d session/close: %v", iteration, closeErr)
+		}
+		if owners := rt.acpBrowser.Diagnostics().Owners; len(owners) != 0 {
+			_ = rt.Close()
+			_ = server.Close()
+			<-serverDone
+			t.Fatalf("cycle %d capability owner leaked after close: %+v", iteration, owners)
+		}
+		if err := rt.Close(); err != nil {
+			t.Fatalf("cycle %d runtime close: %v", iteration, err)
+		}
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = server.Shutdown(shutdownCtx)
+		shutdownCancel()
+		<-serverDone
+
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			commands, err := descendantCommands(os.Getpid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			leaked := ""
+			for _, command := range commands {
+				for _, forbidden := range []string{"antigravity-acp", "chrome-devtools-mcp", "cua-repl", "/cua_node/bin/node_repl", "SkyComputerUseClient"} {
+					if strings.Contains(command, forbidden) {
+						leaked = command
+						break
+					}
+				}
+				if leaked != "" {
+					break
+				}
+			}
+			if leaked == "" {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("cycle %d leaked descendant after runtime close: %s", iteration, leaked)
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
