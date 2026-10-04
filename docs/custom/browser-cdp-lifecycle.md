@@ -562,43 +562,28 @@ UI 必須避免把：
 
 ## Current Implementation Checkpoint — 2026-10-04
 
-M6 Browser Broker 的實作狀態已固定為以下基線：
+M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownership runtime，現在進入 lifecycle hardening：
 
 | Step | Status | Commit / State |
 | --- | --- | --- |
 | Contract | Completed | `c14b21ca` |
 | Managed engine | Completed | `8edcecef` |
 | Profiles / route planner | Completed | `c08dc81b` |
-| Lease isolation | In progress | working tree changes on `feature/browser-broker` |
-| Concurrency / queue / TTL | Pending | next after leases |
-| External Edge attach safety | Pending | after concurrency |
-| ACP Broker integration | Pending | after external route |
-| Computer Control Broker integration | Pending | after ACP integration |
-| Lifecycle / diagnostics / stress | Pending | final M6 hardening |
+| Lease isolation | Completed | `449169aa` |
+| Concurrency / queue / TTL baseline | Completed | `bd010aa2` |
+| External Edge attach safety | Completed | `8c8db73b` |
+| ACP Broker integration | Completed | `2b0f58bd` |
+| Computer Control Broker integration | Completed | `13c9cd9a` |
+| Lifecycle / diagnostics / stress | In progress | next M6 hardening |
 
-目前 lease 階段的設計重點：
+目前已固定的 runtime 邊界：
 
-- 每個 lease 必須綁定 owner task/session/ACP identity；
-- 每次 page operation 都要顯式解析 lease-owned target，不依賴 MCP 的 shared selected-page state；
-- Page ID 屬於 engine-local opaque identity，不能跨 worker restart/generation 誤用；
-- named `isolatedContext` 與 native CDP BrowserContext ID 不可混為同一識別；
-- release 只能處理 lease-owned page/context/resource，不能碰其他 lease 或 user-owned targets；
-- `chrome-devtools-mcp@1.7.0` 若無法證明 named isolated context 可單獨完整銷毀，worker recycle 才是 managed resource 的完整 cleanup boundary；
-- owner mismatch 必須回傳 typed `BROWSER_LEASE_OWNER_MISMATCH`；
-- 不向 ACP 暴露可繞過 Broker 的 raw MCP worker call。
-
-Branch state：
-
-```text
-custom/main
-└─ 098301e0 docs(custom): define M6 browser broker routing
-
-feature/browser-broker
-├─ c14b21ca feat(browser): define broker routing contract
-├─ 8edcecef feat(browser): add managed MCP worker engine
-└─ c08dc81b feat(browser): plan workspace profile routes
-    └─ leases work in progress
-```
+- Browser / Computer capability 都由 AgentDock host 擁有，ACP 只拿 session-scoped loopback MCP capability；
+- Browser lease operation 不依賴 global selected page；company Edge 仍 fail closed，不 fallback 到 managed Chrome；
+- Codex / Antigravity ACP child 不再自帶 `chrome-devtools-mcp`、`cua-repl`、`node_repl` / Sky Computer Use；
+- Computer Control default provider 為 Orca，`foreground=forbidden` 預設 fail closed，Browser task 不會 silent fallback 到 Computer Use；
+- `antigravity-acp 1.2.0-agentdock.5` 支援 Browser + Computer 兩個 AgentDock host-owned MCP，standalone `agy` 全域能力不受影響；
+- 下一步集中處理 release / stale recovery / crash cleanup / connector dedupe / worker idle shutdown，再補 diagnostics 與 stress。
 
 ## Handoff Work Items
 

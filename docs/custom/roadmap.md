@@ -210,10 +210,18 @@ M6 已進入實作階段，工作分支為 `feature/browser-broker`。目前完�
   - non-company managed isolated Chrome route；
   - explicit user-requested external route；
   - runtime connector status 與 strict config validation。
-- 🚧 `leases` — 正在實作 lease-scoped BrowserContext/Page isolation、owner validation 與每次操作的 explicit target resolution。
-- ⏳ 後續順序：`concurrency` → `external` → `acp` → `computer` → `lifecycle` → `diagnostics` → `stress` → `handoff`。
+- ✅ `leases` — `449169aa feat(browser): add managed browser leases`
+- ✅ `concurrency` — `bd010aa2 feat(browser): bound managed browser concurrency`
+- ✅ `external` — `8c8db73b feat(browser): add external lease isolation`
+- ✅ `acp` — `2b0f58bd feat(browser): route ACP through browser broker`
+- ✅ `computer` — `13c9cd9a feat(computer): add Orca computer control broker`
+  - 上游 direct 與 ACP Computer Use 統一由 AgentDock Computer Control Broker routing；
+  - Orca 為 default provider，不 silent fallback 到 ChatGPT / Sky；
+  - foreground control 預設 forbidden，background observation 有 focus-change violation guard；
+  - `antigravity-acp 1.2.0-agentdock.5` 已支援 host-owned Browser + Computer MCP。
+- 🚧 後續順序：`lifecycle` → `diagnostics` → `stress` → `handoff`。
 
-目前 `custom/main` 仍停在 `098301e0 docs(custom): define M6 browser broker routing`；M6 runtime code 尚未合併回 `custom/main`。
+目前 M6 runtime 仍在 `feature/browser-broker` 收斂，尚未合併回 `custom/main`；`computer` 完成後進入 lifecycle / diagnostics / stress hardening。
 
 版本策略暫時維持 `chrome-devtools-mcp@1.7.0`。即使 upstream 已有較新版本，也必須先通過 managed-headless、persistent-profile、Chrome-live、Edge-live compatibility matrix 才能升級，避免破壞 company Edge / default-profile attach。
 
