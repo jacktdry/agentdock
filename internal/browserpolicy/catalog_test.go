@@ -113,3 +113,15 @@ func TestCatalogWorkspacePolicies(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogRejectsEquivalentCanonicalConnectorEndpoints(t *testing.T) {
+	d := catalogFixture()
+	d.Connectors = append(d.Connectors, ConnectorDefinition{
+		ID: "edge-ws-alias", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS,
+		Endpoint: "ws://LOCALHOST:09222/devtools/browser",
+	})
+	d.Connectors[0].Endpoint = "ws://localhost:9222/devtools/browser"
+	if _, err := NewCatalog(d); err == nil {
+		t.Fatal("equivalent canonical connector endpoint accepted")
+	}
+}

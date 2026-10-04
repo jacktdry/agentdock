@@ -38,6 +38,13 @@ type coordinatedLease struct {
 	permit *admissionWaiter
 }
 
+type orphanManagedWorker struct {
+	permit         *admissionWaiter
+	attempts       int
+	nextRecoveryAt time.Time
+	recovering     bool
+}
+
 // The coordinator owns its manager exclusively. All managed admission must use
 // this boundary; the public Broker and ACP adapters are deliberately unwired.
 type managedLeaseCoordinator struct {
@@ -46,13 +53,14 @@ type managedLeaseCoordinator struct {
 	queue   *admissionQueue
 	mu      sync.Mutex
 	active  map[string]coordinatedLease
+	orphans map[string]*orphanManagedWorker
 }
 
 func newManagedLeaseCoordinator(backend ManagedLeaseBackend, policy managedLeasePolicy) (*managedLeaseCoordinator, error) {
 	if backend == nil || policy.MaxConcurrency <= 0 || policy.QueueCapacity < 0 || policy.QueueTimeout <= 0 || policy.IdleTTL <= 0 || policy.CleanupTimeout <= 0 {
 		return nil, leaseError(ErrPolicyConflict, "", "invalid managed admission policy", nil)
 	}
-	return &managedLeaseCoordinator{manager: NewManagedLeaseManager(backend), policy: policy, queue: newAdmissionQueue(policy.MaxConcurrency, policy.QueueCapacity, policy.QueueTimeout), active: make(map[string]coordinatedLease)}, nil
+	return &managedLeaseCoordinator{manager: NewManagedLeaseManager(backend), policy: policy, queue: newAdmissionQueue(policy.MaxConcurrency, policy.QueueCapacity, policy.QueueTimeout), active: make(map[string]coordinatedLease), orphans: make(map[string]*orphanManagedWorker)}, nil
 }
 
 func (c *managedLeaseCoordinator) Acquire(ctx context.Context, scope RequestScope, start ResolvedStart, url string) (LeaseMetadata, EngineBinding, error) {
@@ -67,9 +75,11 @@ func (c *managedLeaseCoordinator) Acquire(ctx context.Context, scope RequestScop
 	meta, binding, err := c.manager.Acquire(ctx, scope, start, url)
 	if err != nil {
 		var cleanupErr *managedAcquireCleanupError
-		// An orphan whose Stop failed still occupies a slot. Recovery is a later
-		// lifecycle step; ordinary acquisition failures return their permit.
-		if !errors.As(err, &cleanupErr) {
+		if errors.As(err, &cleanupErr) {
+			c.mu.Lock()
+			c.orphans[cleanupErr.workerID] = &orphanManagedWorker{permit: permit, nextRecoveryAt: time.Now().UTC().Add(cleanupRecoveryBaseDelay)}
+			c.mu.Unlock()
+		} else {
 			permit.release()
 		}
 		return meta, binding, err
@@ -141,6 +151,73 @@ func (c *managedLeaseCoordinator) SweepExpired(now time.Time) error {
 		if err != nil {
 			failures = append(failures, err)
 		}
+	}
+	return errors.Join(failures...)
+}
+
+// RecoverFailed performs bounded recovery for AgentDock-owned worker cleanup
+// failures. It never touches user-owned browser processes or profiles. Failed
+// acquire cleanup is tracked as an orphan because no lease ID was published.
+func (c *managedLeaseCoordinator) RecoverFailed(now time.Time) error {
+	c.mu.Lock()
+	active := make(map[string]coordinatedLease, len(c.active))
+	for id, entry := range c.active {
+		active[id] = entry
+	}
+	orphanIDs := make([]string, 0, len(c.orphans))
+	for id, orphan := range c.orphans {
+		if orphan.recovering || orphan.attempts >= cleanupRecoveryMaxAttempts || now.Before(orphan.nextRecoveryAt) {
+			continue
+		}
+		orphan.recovering = true
+		orphanIDs = append(orphanIDs, id)
+	}
+	c.mu.Unlock()
+
+	var failures []error
+	for id := range active {
+		l, err := c.manager.lease(id)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if !l.mu.TryLock() {
+			continue
+		}
+		if l.metadata.CleanupState != CleanupFailed || l.cleanupRecoveryAttempts >= cleanupRecoveryMaxAttempts || now.Before(l.nextCleanupRecoveryAt) {
+			l.mu.Unlock()
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), c.policy.CleanupTimeout)
+		meta, recoverErr := c.manager.recoverFailedLocked(ctx, l)
+		cancel()
+		l.mu.Unlock()
+		c.returnCapacity(meta)
+		if recoverErr != nil {
+			failures = append(failures, recoverErr)
+		}
+	}
+
+	for _, workerID := range orphanIDs {
+		recoverErr := c.manager.backend.Stop(workerID)
+		c.mu.Lock()
+		orphan := c.orphans[workerID]
+		if orphan == nil {
+			c.mu.Unlock()
+			continue
+		}
+		orphan.recovering = false
+		orphan.attempts++
+		if recoverErr == nil {
+			delete(c.orphans, workerID)
+			permit := orphan.permit
+			c.mu.Unlock()
+			permit.release()
+			continue
+		}
+		orphan.nextRecoveryAt = now.Add(cleanupRecoveryDelay(orphan.attempts + 1))
+		c.mu.Unlock()
+		failures = append(failures, &managedAcquireCleanupError{workerID: workerID, cause: recoverErr})
 	}
 	return errors.Join(failures...)
 }

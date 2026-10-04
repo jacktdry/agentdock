@@ -28,10 +28,11 @@ type acpBrowserOwner struct {
 // neither chrome-devtools-mcp nor a browser process; they receive only a scoped
 // HTTP MCP capability token for this bridge.
 type ACPBridge struct {
-	planner  *RoutePlanner
-	registry *WorkerRegistry
-	managed  *managedLeaseCoordinator
-	external *ExternalLeaseManager
+	planner   *RoutePlanner
+	registry  *WorkerRegistry
+	managed   *managedLeaseCoordinator
+	external  *ExternalLeaseManager
+	lifecycle *browserLifecycleRunner
 
 	mu        sync.Mutex
 	byToken   map[string]*acpBrowserOwner
@@ -47,10 +48,24 @@ func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, 
 	if err != nil {
 		return nil, err
 	}
-	return &ACPBridge{
+	bridge := &ACPBridge{
 		planner: planner, registry: registry, managed: managed, external: NewExternalLeaseManager(registry),
 		byToken: make(map[string]*acpBrowserOwner), bySession: make(map[string]*acpBrowserOwner),
-	}, nil
+	}
+	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
+	return bridge, nil
+}
+
+func (b *ACPBridge) sweepLifecycle(now time.Time) error {
+	if b == nil {
+		return nil
+	}
+	return errors.Join(
+		b.managed.SweepExpired(now),
+		b.external.SweepExpired(now),
+		b.managed.RecoverFailed(now),
+		b.external.RecoverFailed(now),
+	)
 }
 
 func (b *ACPBridge) RegisterSession(sessionID, profileID, cwd string) (string, error) {
@@ -261,6 +276,9 @@ func (b *ACPBridge) Close() error {
 		sessions = append(sessions, id)
 	}
 	b.mu.Unlock()
+	if b.lifecycle != nil {
+		b.lifecycle.Close()
+	}
 	var failures []error
 	for _, id := range sessions {
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)

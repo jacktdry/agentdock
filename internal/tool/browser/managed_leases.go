@@ -22,11 +22,13 @@ type ManagedLeaseBackend interface {
 var _ ManagedLeaseBackend = (*WorkerRegistry)(nil)
 
 type managedLease struct {
-	mu       sync.Mutex // Held across backend calls, including release.
-	metadata LeaseMetadata
-	binding  EngineBinding
-	pageID   float64
-	idleTTL  time.Duration // Set only by the managed coordinator.
+	mu                      sync.Mutex // Held across backend calls, including release.
+	metadata                LeaseMetadata
+	binding                 EngineBinding
+	pageID                  float64
+	idleTTL                 time.Duration // Set only by the managed coordinator.
+	cleanupRecoveryAttempts int
+	nextCleanupRecoveryAt   time.Time
 }
 
 // ManagedLeaseManager does not reuse workers between leases. No public adapters,
@@ -200,10 +202,33 @@ func (m *ManagedLeaseManager) releaseLocked(ctx context.Context, scope RequestSc
 	if stopErr != nil {
 		l.metadata.CleanupState = CleanupFailed
 		l.metadata.CleanupReason = "exclusive managed worker cleanup failed"
+		l.nextCleanupRecoveryAt = time.Now().UTC().Add(cleanupRecoveryBaseDelay)
 		return l.metadata, leaseError(ErrActionFailed, id, l.metadata.CleanupReason, stopErr)
 	}
 	return l.metadata, nil
 }
+func (m *ManagedLeaseManager) recoverFailedLocked(ctx context.Context, l *managedLease) (LeaseMetadata, error) {
+	id := l.metadata.BrowserLeaseID
+	if l.metadata.CleanupState != CleanupFailed {
+		return l.metadata, nil
+	}
+	if l.cleanupRecoveryAttempts >= cleanupRecoveryMaxAttempts {
+		return l.metadata, nil
+	}
+	l.cleanupRecoveryAttempts++
+	stopErr := m.backend.Stop(l.binding.WorkerID)
+	if stopErr != nil {
+		l.metadata.CleanupReason = "exclusive managed worker recovery failed"
+		l.metadata.CleanupError = stopErr.Error()
+		l.nextCleanupRecoveryAt = time.Now().UTC().Add(cleanupRecoveryDelay(l.cleanupRecoveryAttempts + 1))
+		return l.metadata, leaseError(ErrActionFailed, id, l.metadata.CleanupReason, stopErr)
+	}
+	l.metadata.CleanupState = CleanupComplete
+	l.metadata.CleanupReason = "exclusive managed worker cleanup recovered"
+	l.nextCleanupRecoveryAt = time.Time{}
+	return l.metadata, nil
+}
+
 func leaseCallResultError(result map[string]any) error {
 	if failed, _ := result["isError"].(bool); failed {
 		return leaseError(ErrActionFailed, "", "MCP tool reported failure", nil)

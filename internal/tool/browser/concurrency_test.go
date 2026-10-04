@@ -551,3 +551,93 @@ func TestConcurrencyPolicyValidation(t *testing.T) {
 		assertBrowserCode(t, err, ErrPolicyConflict)
 	}
 }
+
+func TestManagedAcquireOrphanRecoveryReturnsCapacity(t *testing.T) {
+	b := &fakeLeaseBackend{newErr: errors.New("new page failed"), stopErr: errors.New("stop failed")}
+	p := defaultManagedLeasePolicy()
+	p.MaxConcurrency = 1
+	c := testCoordinator(t, b, p)
+	if _, _, err := c.Acquire(context.Background(), leaseScope(), leaseStart(t), ""); err == nil {
+		t.Fatal("acquire unexpectedly succeeded")
+	}
+	if active, _ := queueState(c.queue); active != 1 {
+		t.Fatalf("orphan did not retain capacity: %d", active)
+	}
+	c.mu.Lock()
+	if len(c.orphans) != 1 {
+		c.mu.Unlock()
+		t.Fatalf("orphans=%d", len(c.orphans))
+	}
+	c.mu.Unlock()
+	b.mu.Lock()
+	b.stopErr = nil
+	b.mu.Unlock()
+	if err := c.RecoverFailed(time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if active, _ := queueState(c.queue); active != 0 {
+		t.Fatalf("recovered orphan retained capacity: %d", active)
+	}
+	c.mu.Lock()
+	orphans := len(c.orphans)
+	c.mu.Unlock()
+	if orphans != 0 {
+		t.Fatalf("recovered orphan remained: %d", orphans)
+	}
+}
+
+func TestManagedFailedReleaseRecoveryReturnsCapacity(t *testing.T) {
+	b := &fakeLeaseBackend{}
+	p := defaultManagedLeasePolicy()
+	p.MaxConcurrency = 1
+	c := testCoordinator(t, b, p)
+	meta := coordinatorAcquire(t, c)
+	b.mu.Lock()
+	b.stopErr = errors.New("stop failed")
+	b.mu.Unlock()
+	if _, err := c.Release(context.Background(), leaseScope(), meta.BrowserLeaseID); err == nil {
+		t.Fatal("release cleanup failure hidden")
+	}
+	if active, _ := queueState(c.queue); active != 1 {
+		t.Fatalf("failed cleanup returned capacity: %d", active)
+	}
+	b.mu.Lock()
+	b.stopErr = nil
+	b.mu.Unlock()
+	if err := c.RecoverFailed(time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if active, _ := queueState(c.queue); active != 0 {
+		t.Fatalf("recovered cleanup retained capacity: %d", active)
+	}
+	l, _ := c.manager.lease(meta.BrowserLeaseID)
+	l.mu.Lock()
+	state := l.metadata.CleanupState
+	l.mu.Unlock()
+	if state != CleanupComplete {
+		t.Fatalf("cleanup state=%s", state)
+	}
+}
+
+func TestManagedOrphanRecoveryIsBounded(t *testing.T) {
+	b := &fakeLeaseBackend{newErr: errors.New("new page failed"), stopErr: errors.New("stop failed")}
+	p := defaultManagedLeasePolicy()
+	p.MaxConcurrency = 1
+	c := testCoordinator(t, b, p)
+	if _, _, err := c.Acquire(context.Background(), leaseScope(), leaseStart(t), ""); err == nil {
+		t.Fatal("acquire unexpectedly succeeded")
+	}
+	for i := 1; i <= cleanupRecoveryMaxAttempts+2; i++ {
+		_ = c.RecoverFailed(time.Now().Add(time.Duration(i) * 24 * time.Hour))
+	}
+	b.mu.Lock()
+	stops := len(b.stopped)
+	b.mu.Unlock()
+	// One acquire cleanup attempt plus the bounded recovery budget.
+	if stops != 1+cleanupRecoveryMaxAttempts {
+		t.Fatalf("stop attempts=%d", stops)
+	}
+	if active, _ := queueState(c.queue); active != 1 {
+		t.Fatal("unrecovered orphan returned capacity")
+	}
+}

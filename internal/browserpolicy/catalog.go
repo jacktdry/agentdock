@@ -114,6 +114,7 @@ func NewCatalog(def CatalogDefinition) (Catalog, error) {
 		c.profiles[p.ID] = p
 		c.definition.Profiles = append(c.definition.Profiles, p)
 	}
+	endpointOwners := make(map[string]string)
 	for _, connector := range def.Connectors {
 		if !validID(connector.ID) || connector.Driver != DriverChromeDevToolsMCPWS {
 			return Catalog{}, fmt.Errorf("invalid connector %q", connector.ID)
@@ -129,6 +130,10 @@ func NewCatalog(def CatalogDefinition) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("connector %q: %w", connector.ID, err)
 		}
 		connector.Endpoint = endpoint
+		if existingID, exists := endpointOwners[endpoint]; exists {
+			return Catalog{}, fmt.Errorf("connector %q duplicates canonical endpoint owned by %q", connector.ID, existingID)
+		}
+		endpointOwners[endpoint] = connector.ID
 		c.connectors[connector.ID] = connector
 		c.definition.Connectors = append(c.definition.Connectors, connector)
 	}

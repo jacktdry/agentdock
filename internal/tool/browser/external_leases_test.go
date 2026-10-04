@@ -708,3 +708,113 @@ func TestExternalCloseResultCompatibility(t *testing.T) {
 		t.Fatal("unrelated MCP failure accepted as close")
 	}
 }
+
+func externalCallCount(b *externalFakeBackend, tool string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	count := 0
+	for _, call := range b.calls {
+		if call.tool == tool {
+			count++
+		}
+	}
+	return count
+}
+
+func TestExternalIdleTTLSweepStopsOnlyOwnedConnectorAndPage(t *testing.T) {
+	b := &externalFakeBackend{}
+	policy := defaultExternalLeasePolicy()
+	policy.IdleTTL = time.Minute
+	m := newExternalLeaseManager(b, policy)
+	meta, _ := acquireExternal(t, m)
+	if !meta.ExpiresAt.Equal(meta.LastActiveAt.Add(policy.IdleTTL)) {
+		t.Fatalf("expires_at=%s last_active=%s", meta.ExpiresAt, meta.LastActiveAt)
+	}
+	l, err := m.lease(meta.BrowserLeaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.mu.Lock()
+	l.metadata.LastActiveAt = time.Now().UTC().Add(-2 * policy.IdleTTL)
+	l.metadata.ExpiresAt = l.metadata.LastActiveAt.Add(policy.IdleTTL)
+	l.mu.Unlock()
+	if err := m.SweepExpired(time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	l.mu.Lock()
+	cleaned := l.metadata
+	l.mu.Unlock()
+	if cleaned.CleanupState != CleanupComplete {
+		t.Fatalf("cleanup=%+v", cleaned)
+	}
+	if externalCallCount(b, "close_page") != 1 || externalCallCount(b, "stop") != 1 {
+		t.Fatalf("calls=%v", b.calls)
+	}
+	if cleaned.Ownership.Process != OwnerExternalPersistent || cleaned.Ownership.Profile != OwnerExternalPersistent {
+		t.Fatal("external user browser/profile ownership changed")
+	}
+}
+
+func TestExternalFailedCleanupRecoveryRetriesConnectorOnly(t *testing.T) {
+	b := &externalFakeBackend{}
+	m := NewExternalLeaseManager(b)
+	meta, _ := acquireExternal(t, m)
+	b.mu.Lock()
+	b.stopErr = errors.New("stop failed")
+	b.mu.Unlock()
+	if _, err := m.Release(context.Background(), leaseScope(), meta.BrowserLeaseID); err == nil {
+		t.Fatal("cleanup failure hidden")
+	}
+	closeCalls := externalCallCount(b, "close_page")
+	if closeCalls != 1 {
+		t.Fatalf("close page calls=%d", closeCalls)
+	}
+	b.mu.Lock()
+	b.stopErr = nil
+	b.mu.Unlock()
+	if err := m.RecoverFailed(time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if externalCallCount(b, "close_page") != closeCalls {
+		t.Fatal("recovery touched external page again")
+	}
+	if externalCallCount(b, "stop") != 2 {
+		t.Fatalf("connector stop calls=%d", externalCallCount(b, "stop"))
+	}
+	l, _ := m.lease(meta.BrowserLeaseID)
+	l.mu.Lock()
+	cleaned := l.metadata
+	l.mu.Unlock()
+	if cleaned.CleanupState != CleanupComplete || !strings.Contains(cleaned.CleanupReason, "external browser/profile preserved") {
+		t.Fatalf("cleanup=%+v", cleaned)
+	}
+}
+
+func TestExternalAcquireOrphanConnectorRecovery(t *testing.T) {
+	b := &externalFakeBackend{baselineErr: errors.New("baseline failed"), stopErr: errors.New("stop failed")}
+	m := NewExternalLeaseManager(b)
+	if _, _, err := m.Acquire(context.Background(), externalRoute(externalStart()), ""); err == nil {
+		t.Fatal("acquire unexpectedly succeeded")
+	}
+	m.mu.Lock()
+	orphans := len(m.orphans)
+	m.mu.Unlock()
+	if orphans != 1 {
+		t.Fatalf("orphans=%d", orphans)
+	}
+	b.mu.Lock()
+	b.stopErr = nil
+	b.mu.Unlock()
+	if err := m.RecoverFailed(time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	orphans = len(m.orphans)
+	m.mu.Unlock()
+	if orphans != 0 {
+		t.Fatalf("recovered orphans=%d", orphans)
+	}
+	if externalCallCount(b, "close_page") != 0 {
+		t.Fatal("orphan recovery touched a user/owned page without proven identity")
+	}
+}
