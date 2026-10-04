@@ -131,6 +131,7 @@ func TestValidateMacOSDesktopRuntimeRejectsUnsafeMenuAgent(t *testing.T) {
 }
 
 func TestMacOSDesktopUpdateInstallsAndRestoresApp(t *testing.T) {
+	isolateDesktopProcesses(t)
 	dir := t.TempDir()
 	target := writeSignedMacOSApp(t, filepath.Join(dir, "installed"), "0.7.0")
 	staged := writeSignedMacOSApp(t, filepath.Join(dir, "staged"), "0.7.1")
@@ -155,6 +156,7 @@ func TestMacOSDesktopUpdateInstallsAndRestoresApp(t *testing.T) {
 }
 
 func TestApplyPlatformUpdateRestoresCoreAndAppWhenSkillBootstrapFails(t *testing.T) {
+	isolateDesktopProcesses(t)
 	dir := t.TempDir()
 	coreTarget := filepath.Join(dir, "bin", "agentdock")
 	coreStaged := filepath.Join(dir, "staged-agentdock")
@@ -194,6 +196,7 @@ esac
 }
 
 func TestMacOSDesktopUpdateFinishAcceptsHandoffBeforeServiceRecovery(t *testing.T) {
+	isolateDesktopProcesses(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	target := writeHandoffTestMacOSApp(t, filepath.Join(t.TempDir(), "Applications"))
@@ -414,4 +417,13 @@ func runTestCommand(t *testing.T, path string, args ...string) {
 	if err != nil {
 		t.Fatalf("%s %v failed: %v: %s", path, args, err, strings.TrimSpace(string(output)))
 	}
+}
+
+func isolateDesktopProcesses(t *testing.T) {
+	t.Helper()
+	isolateUpdateHealth(t)
+	previousPIDs, previousOpen := runningMacOSAppPIDs, desktopOpenCommand
+	runningMacOSAppPIDs = func(context.Context, string) ([]int, error) { return nil, nil }
+	desktopOpenCommand = func(ctx context.Context, _ string) *exec.Cmd { return exec.CommandContext(ctx, "/usr/bin/true") }
+	t.Cleanup(func() { runningMacOSAppPIDs, desktopOpenCommand = previousPIDs, previousOpen })
 }

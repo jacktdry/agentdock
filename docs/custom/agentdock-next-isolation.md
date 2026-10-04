@@ -1,6 +1,6 @@
 # AgentDock Next Isolation
 
-> 狀態：Accepted durable decision / Phase 1 repository implementation completed / Phase 2 updater isolation next / live validation pending
+> 狀態：Accepted durable decision / Phase 1 and Phase 2 repository implementation completed / GUI updater gate retained / live validation pending
 >
 > 日期：2026-10-05
 >
@@ -26,7 +26,7 @@ Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service own
 
 ## Namespace matrix（proposed defaults）
 
-以下 defaults 已作為 Phase 1 repository identity/runtime contract 落地；installer/self-update generalization、實際安裝與 live runtime 仍待 Phase 2 / 後續驗證，因此不代表目前已安裝或正在運行。Stable identity 只記錄已知邊界，不以本文件要求現場探查。
+以下 defaults 已作為 Phase 1 repository identity/runtime contract 落地；updater/arbiter target isolation 已由 Phase 2 實作；實際安裝與 live runtime 仍待後續驗證，因此不代表目前已安裝或正在運行。Stable identity 只記錄已知邊界，不以本文件要求現場探查。
 
 | 項目 | Stable production plane | AgentDock Next development plane |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ zsh -n packaging/macos/build-app.sh packaging/macos/app-identity.sh scripts/test
 
 The fixture-only Swift mode runs configuration, identity, migration, and service validation tests plus packaging metadata tests; it skips preference persistence, permission checks, and artifact building/mounting. Legacy migration tests inject service probes. Go tests use the override above or test-local launchctl fakes; some tests need permission to bind ephemeral localhost HTTP fixture servers. Full app/helper Swift typechecking is also required. This phase has not built a signed ZIP/DMG or exercised live installation, registration, runtime activation, or connector/Memory cutover.
 
-Phase 2 must generalize `selfupdate` / `updateplatform` and the arbiter to validate Next artifact contents, bundle/signing identity, destination, service labels, transaction metadata, ownership, rollback, and recovery. Direct Go updater/global uninstall entry points are not generalized or approved for Next use by Phase 1. Next GUI updates must remain blocked until these boundaries have tests. Publishing Next artifacts, connector `mac-dev-next`, and shared Memory HTTP remain later work; no stable migration or retirement is implied.
+At the Phase 1 checkpoint, Phase 2 still needed to generalize `selfupdate` / `updateplatform` and the arbiter to validate Next artifact contents, bundle/signing identity, destination, service labels, transaction metadata, ownership, rollback, and recovery. Direct Go updater/global uninstall entry points are not generalized or approved for Next use by Phase 1. Next GUI updates must remain blocked until these boundaries have tests. Publishing Next artifacts, connector `mac-dev-next`, and shared Memory HTTP remain later work; no stable migration or retirement is implied.
 
 ## 2026-10-05 handoff checkpoint
 
@@ -103,7 +103,7 @@ Phase 2 must generalize `selfupdate` / `updateplatform` and the arbiter to valid
 - Next GUI update check / apply / transaction recovery 暫時在進入 stable-only updater 前 fail closed；因此 Phase 1 不會誤用 stable updater。
 - Phase 1 驗證通過：shell syntax、`scripts/test/test-macos-identity.py`、`scripts/test/test-macos-app.sh --fixtures-only`、完整 Swift source/helper typecheck、`go test ./internal/desktopruntime ./scripts/test`（測試中以 `/usr/bin/false` mask launchctl）。第二模型 Gemini 3.1 Pro cross-review 無 blocker。
 
-尚未完成 / 下一接手點：
+Phase 1 當時的下一接手點（已由下方 Phase 2 checkpoint 更新）：
 
 1. **Phase 2 updater / arbiter target isolation**：generalize `internal/selfupdate`、`internal/updateplatform`、`agentdock-arbiter`，使 Next artifact name、bundle/signing identity、destination `AgentDock Next.app`、service labels、transaction metadata、trial/new/backup path、rollback/recovery 都由明確 Next identity 決定；stable 行為保持相容。
 2. Next identity 缺失、unknown、source/destination mismatch 或 ownership 不明時必須 fail closed；不得以 basename、`/Applications/AgentDock.app` 或 stable service label 作 fallback。
@@ -111,3 +111,32 @@ Phase 2 must generalize `selfupdate` / `updateplatform` and the arbiter to valid
 4. Phase 2 後才進行 **Next-only** package / codesign / launch-smoke、Memory registry HTTP cutover 與 `mac-dev-next` connector；不要先做 stable migration/retirement。
 
 安全邊界仍不變：不得檢查、修改、停止、重啟或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services。所有驗證先用 repo fixture / temp dirs；需要 live runtime 時只可操作可證明為 Next-owned 的資源。
+
+## M7.5 Phase 2 checkpoint — 2026-10-05
+
+Repository updater / arbiter target isolation 已實作。**Next GUI check / apply / transaction recovery gate 仍關閉**；本次不是 live activation 或 M7.5 整體驗收。
+
+- `internal/updateidentity` 是 updater 的 closed stable/next contract：Next ZIP、bundle/display/executable identity、Core/Tunnel/Menu plist labels、arguments、environment 與四個 helper signing identifiers 必須一致。Unknown marker、unmarked Next bundle、明確 override 不符、stable-only payload 均停止，不 fallback 到 stable。
+- Next 只接受 `/Applications/AgentDock Next.app` 或使用者 `Applications/AgentDock Next.app`；runtime journal 固定在 Next Application Support。Transaction 保存 `variant=next` 與 source certificate designated requirement，trial/rollback slot 固定為同 parent 的 `.AgentDock Next.app.trial.<transaction-id>`，copied arbiter 與 coordination/result paths 均綁定 Next root。Symlink、hardlink、非可信 owner 或可被其他使用者寫入的路徑拒絕；標準 macOS `/tmp`、`/var` alias 與 root/admin-owned `/Applications` 有明確處理。
+- Next 使用 arbiter atomic swap；trial slot 本身就是 backup。Legacy `.new` / `.backup` updater、pre-Arbiter fallback、bootstrap migration 與 standalone Core replacement 對 Next fail closed，不產生 stable new/backup paths。Stable 舊版缺少 variant / Arbiter 的相容性保留；明確指定無效 App override 則不再搜尋其他 target。
+- 下載解壓階段不執行 Next helper。Apply/arbiter 先驗證 persisted source signer requirement，再執行 helper version/bootstrap。Next source 與 target 的 App、Core、arbiter、cloudflared、login helper 均須符合該 signer；stable 的 legacy ad-hoc continuity 例外不適用 Next。Ad-hoc Next package 可供 metadata/signature fixtures，但不能通過 updater activation。
+- Rollback/recovery 在停止 App、交換路徑、啟動或清理前驗證 identity、slots 與 signer；active App 遺失時只可從通過 source version/signature 驗證的 Next slot 恢復。Next Core health 固定 `127.0.0.1:8767`，確認 listener command 指向 Next Core 後才查 health；foreign/ambiguous listener fail closed。
+- Swift service-state/handoff 攜帶 Next variant；stable 舊 JSON 相容。Next skill bootstrap 子程序使用 `.agentdock-next` 與 Next work directory，跳過 legacy skill migration。GUI updater/recovery gate 未開啟。
+
+驗證（全部 repository fixture / temp directory）：
+
+```sh
+TMPDIR=/private/tmp GOCACHE=/private/tmp/agentdock-next-phase2-gocache \
+  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+  go test -race ./internal/updateidentity ./internal/updateengine \
+  ./internal/updateplatform ./internal/selfupdate ./cmd/agentdock-arbiter
+# Same five packages: go vet
+TMPDIR=/private/tmp zsh scripts/test/test-macos-app.sh --fixtures-only
+swiftc -swift-version 5 -typecheck desktop/macos/AgentDockApp/Sources/*.swift
+```
+
+Go unit/race、vet、Swift fixtures、packaging identity fixtures、完整 Swift typecheck（保留既有 AppDelegate implicit strong capture warning），以及 updater/arbiter Windows amd64 / Linux amd64 cross-build 通過。第一輪既有 Go test 因 `/var` / `/private/var` alias 比較失敗；改用 canonical `/private/tmp` 後通過。Commit / rollback / interrupted recovery / missing active fixtures 使用真實暫存 journal 與 atomic swap；process launch/stop 與 certificate acceptance 注入 fixture，另外以真實 ad-hoc codesign fixture 驗證 bundle/helper identifiers 與拒絕 ad-hoc continuity。測試不掃 live processes、不啟動 GUI、不呼叫 live launchd、不查 live Core health。
+
+尚未驗證：certificate-signed release ZIP/DMG、native update/service registration、live rollback/recovery、GUI updater gate 開啟、Memory HTTP cutover、`mac-dev-next`、stable migration。沒有操作 stable App/Core/state/registry/live services。本次 review 是本 session diff review，未進行額外 cross-model review。
+
+下一接手點：獨立 review Phase 2，準備 Next-only signed package/launch-smoke 與 GUI gate 啟用驗證；需要另行授權的 live 工作仍須先證明 Next ownership。Memory/connector 與 stable retirement 次序不變。

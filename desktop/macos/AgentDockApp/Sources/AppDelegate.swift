@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         AppVersion.display(pendingResult.targetVersion)
                     ))
                 }
-                guard let serviceState = try DesktopUpdateServiceState.load(from: service.paths.updateServiceState) else {
+                guard let serviceState = try DesktopUpdateServiceState.load(from: service.paths.updateServiceState, identity: service.paths.identity) else {
                     throw ValidationError(L10n.text("AgentDock update is missing background service recovery state."))
                 }
 
@@ -151,7 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         targetVersion: pendingResult.targetVersion,
                         transactionID: pendingResult.transactionID,
                         coreRegistration: registration.core,
-                        tunnelRegistration: registration.tunnel
+                        tunnelRegistration: registration.tunnel,
+                        identity: service.paths.identity
                     ).write(to: service.paths.updateHandoff)
                     handoffAcknowledged = true
                 } else if let transactionID = pendingResult.transactionID,
@@ -162,7 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         targetVersion: pendingResult.currentVersion,
                         transactionID: transactionID,
                         coreRegistration: registration.core,
-                        tunnelRegistration: registration.tunnel
+                        tunnelRegistration: registration.tunnel,
+                        identity: service.paths.identity
                     ).write(to: service.paths.updateHandoff)
                     handoffAcknowledged = true
                 }

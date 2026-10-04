@@ -12,6 +12,7 @@ import (
 )
 
 func TestApplyPlatformUpdateReplacesBinaryAndKeepsBackup(t *testing.T) {
+	isolateUpdateHealth(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "agentdock")
 	staged := filepath.Join(dir, "staged-agentdock")
@@ -37,6 +38,7 @@ func TestApplyPlatformUpdateReplacesBinaryAndKeepsBackup(t *testing.T) {
 }
 
 func TestApplyPlatformUpdateRestoresBackupWhenNewBinaryIsInvalid(t *testing.T) {
+	isolateUpdateHealth(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "agentdock")
 	staged := filepath.Join(dir, "staged-agentdock")
@@ -61,6 +63,7 @@ func TestApplyPlatformUpdateRestoresBackupWhenNewBinaryIsInvalid(t *testing.T) {
 }
 
 func TestApplyPlatformUpdateRestoresBackupWhenCoreSkillBootstrapFails(t *testing.T) {
+	isolateUpdateHealth(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "agentdock")
 	staged := filepath.Join(dir, "staged-agentdock")
@@ -90,6 +93,7 @@ esac
 }
 
 func TestApplyPlatformUpdateFinalizesSkillMigrationOnlyAfterSuccessfulBootstrap(t *testing.T) {
+	isolateUpdateHealth(t)
 	for _, test := range []struct {
 		name          string
 		bootstrapExit int
@@ -220,4 +224,13 @@ func assertVersionScript(t *testing.T, path, version string) {
 	if !strings.Contains(string(data), version) {
 		t.Fatalf("%s does not contain %s: %s", path, version, string(data))
 	}
+}
+
+// Filesystem update fixtures must never probe a developer's live Core.
+func isolateUpdateHealth(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	previous := probeUpdateHealth
+	probeUpdateHealth = func(context.Context, []string) string { return "" }
+	t.Cleanup(func() { probeUpdateHealth = previous })
 }

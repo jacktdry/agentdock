@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 type macOSDesktopUpdate struct {
@@ -37,6 +39,13 @@ func prepareDesktopUpdate(
 	stagedPath string,
 	targetVersion string,
 ) (desktopUpdateTransaction, error) {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return nil, err
+	}
+	if id.Variant == "next" {
+		return nil, errors.New("Next requires the identity-bound arbiter; legacy new/backup updates are disabled")
+	}
 	targetPath = strings.TrimSpace(targetPath)
 	stagedPath = strings.TrimSpace(stagedPath)
 	if targetPath == "" && stagedPath == "" {
@@ -185,7 +194,7 @@ func (update *macOSDesktopUpdate) Finish(ctx context.Context, outcome desktopUpd
 	// App Bundle 刚被原子替换后必须经 LaunchServices 启动。直接执行 Contents/MacOS/AgentDock
 	// 虽然能拉起 GUI，但系统可能还没有登记新版 Bundle；此时 GUI 内重新注册的
 	// SMAppService 会保留无法解析 BundleProgram 的 BTM 记录，Core/Tunnel 随后以 EX_CONFIG 退出。
-	command := exec.CommandContext(ctx, "/usr/bin/open", "-g", update.targetPath, "--args", "--background")
+	command := desktopOpenCommand(ctx, update.targetPath)
 	command.Env = os.Environ()
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("通过 LaunchServices 启动 macOS 控制面板失败: %w", err)
@@ -374,7 +383,13 @@ func (redirect *processOutputRedirect) Commit() {
 	}
 }
 
-func runningMacOSAppPIDs(ctx context.Context, appPath string) ([]int, error) {
+var desktopOpenCommand = func(ctx context.Context, target string) *exec.Cmd {
+	return exec.CommandContext(ctx, "/usr/bin/open", "-g", target, "--args", "--background")
+}
+
+var runningMacOSAppPIDs = readRunningMacOSAppPIDs
+
+func readRunningMacOSAppPIDs(ctx context.Context, appPath string) ([]int, error) {
 	executable := filepath.Join(filepath.Clean(appPath), "Contents", "MacOS", "AgentDock")
 	output, err := exec.CommandContext(ctx, "/bin/ps", "-axo", "pid=,command=").Output()
 	if err != nil {
@@ -461,7 +476,16 @@ func macOSDesktopUpdateDirectory() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("解析用户目录失败: %w", err)
 	}
-	directory := filepath.Join(home, "Library", "Application Support", "AgentDock")
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return "", err
+	}
+	directory := id.Root(home)
+	if id.Variant == "next" {
+		if err := updateidentity.SafePath(directory); err != nil {
+			return "", err
+		}
+	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("创建桌面更新状态目录失败: %w", err)
 	}

@@ -38,6 +38,9 @@ func run(ctx context.Context, args []string) error {
 		return errors.New("usage: agentdock-arbiter --root <install-root> --transaction-id <id>")
 	}
 
+	if err := validatePlatformRoot(*root); err != nil {
+		return err
+	}
 	store, err := updateengine.NewStore(*root)
 	if err != nil {
 		return err
@@ -48,6 +51,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	if transaction.TransactionID != strings.TrimSpace(*transactionID) {
 		return fmt.Errorf("update transaction changed: got %s, want %s", transaction.TransactionID, strings.TrimSpace(*transactionID))
+	}
+	if err := validatePlatformTransaction(*root, transaction); err != nil {
+		return err
 	}
 	if err := validateKnownGoodSource(transaction); err != nil {
 		return err

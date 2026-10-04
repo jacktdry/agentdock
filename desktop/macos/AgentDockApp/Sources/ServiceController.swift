@@ -392,7 +392,8 @@ final class ServiceController: @unchecked Sendable {
         let currentStatus = await status()
         let serviceState = DesktopUpdateServiceState(
             coreEnabled: currentStatus.autostartEnabled,
-            tunnelEnabled: tunnelEnabled()
+            tunnelEnabled: tunnelEnabled(),
+            identity: paths.identity
         )
         try serviceState.write(to: paths.updateServiceState)
 

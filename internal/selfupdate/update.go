@@ -25,6 +25,7 @@ import (
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/desktopruntime"
 	processcontrol "github.com/uvwt/agentdock/internal/process"
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 const (
@@ -171,6 +172,9 @@ func runtimeOptions(output io.Writer) (options, error) {
 	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 		executable = resolved
 	}
+	if err := validateUpdateCaller(executable); err != nil {
+		return options{}, err
+	}
 	desktopTarget := detectDesktopUpdateTarget()
 	return newOptions(output, executable, buildinfo.Version, desktopTarget), nil
 }
@@ -178,6 +182,9 @@ func runtimeOptions(output io.Writer) (options, error) {
 func runtimeOptionsForTarget(ctx context.Context, output io.Writer, executable, runtimeRoot string) (options, error) {
 	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 		executable = resolved
+	}
+	if err := validateUpdateCaller(executable); err != nil {
+		return options{}, err
 	}
 	version, err := readBinaryVersion(ctx, executable)
 	if err != nil {
@@ -410,6 +417,26 @@ func runDesktopOnlyUpdate(ctx context.Context, opts options, inspection updateIn
 }
 
 func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) {
+	archiveNameMacOS := macOSDesktopArchiveName
+	if opts.GOOS == "darwin" {
+		id, err := updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))
+		if err != nil {
+			return updateInspection{}, err
+		}
+		archiveNameMacOS = id.Artifact
+		if id.Variant == "next" {
+			if !opts.DesktopOnly || opts.DesktopTargetPath == "" {
+				return updateInspection{}, errors.New("Next requires an owned desktop update target")
+			}
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return updateInspection{}, err
+			}
+			if err := id.ValidateDestination(opts.DesktopTargetPath, home); err != nil {
+				return updateInspection{}, err
+			}
+		}
+	}
 	if opts.HTTPClient == nil {
 		return updateInspection{}, errors.New("更新 HTTP 客户端不能为空")
 	}
@@ -447,13 +474,13 @@ func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) 
 	}
 
 	if opts.DesktopOnly {
-		desktopArchiveAsset, ok := findAsset(latest.Assets, macOSDesktopArchiveName)
+		desktopArchiveAsset, ok := findAsset(latest.Assets, archiveNameMacOS)
 		if !ok {
-			return updateInspection{}, fmt.Errorf("Release %s 缺少 macOS 桌面更新文件 %s", targetVersion, macOSDesktopArchiveName)
+			return updateInspection{}, fmt.Errorf("Release %s 缺少 macOS 桌面更新文件 %s", targetVersion, archiveNameMacOS)
 		}
-		desktopChecksumAsset, ok := findAsset(latest.Assets, macOSDesktopArchiveName+".sha256")
+		desktopChecksumAsset, ok := findAsset(latest.Assets, archiveNameMacOS+".sha256")
 		if !ok {
-			return updateInspection{}, fmt.Errorf("Release %s 缺少校验文件 %s.sha256", targetVersion, macOSDesktopArchiveName)
+			return updateInspection{}, fmt.Errorf("Release %s 缺少校验文件 %s.sha256", targetVersion, archiveNameMacOS)
 		}
 		result.UpdateAvailable = true
 		result.DesktopUpdateAvailable = true
@@ -483,13 +510,13 @@ func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) 
 	if desktopNeedsUpdate {
 		switch opts.GOOS {
 		case "darwin":
-			desktopArchiveAsset, ok = findAsset(latest.Assets, macOSDesktopArchiveName)
+			desktopArchiveAsset, ok = findAsset(latest.Assets, archiveNameMacOS)
 			if !ok {
-				return updateInspection{}, fmt.Errorf("Release %s 缺少 macOS 桌面更新文件 %s", targetVersion, macOSDesktopArchiveName)
+				return updateInspection{}, fmt.Errorf("Release %s 缺少 macOS 桌面更新文件 %s", targetVersion, archiveNameMacOS)
 			}
-			desktopChecksumAsset, ok = findAsset(latest.Assets, macOSDesktopArchiveName+".sha256")
+			desktopChecksumAsset, ok = findAsset(latest.Assets, archiveNameMacOS+".sha256")
 			if !ok {
-				return updateInspection{}, fmt.Errorf("Release %s 缺少校验文件 %s.sha256", targetVersion, macOSDesktopArchiveName)
+				return updateInspection{}, fmt.Errorf("Release %s 缺少校验文件 %s.sha256", targetVersion, archiveNameMacOS)
 			}
 		case "windows":
 			// Windows 控制面板与核心位于同一个 Release ZIP；复用已经校验过的归档，

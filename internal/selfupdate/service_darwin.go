@@ -179,6 +179,10 @@ func containsPID(output string, pid int) bool {
 }
 
 func detectManagedService(ctx context.Context, targetPath string) managedService {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil || id.Variant != "stable" {
+		return nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
@@ -249,6 +253,10 @@ func readPlistString(ctx context.Context, plistPath, key string) (string, error)
 }
 
 func platformHealthCandidates(_ context.Context, targetPath string) []string {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil || id.Variant != "stable" {
+		return nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
@@ -261,6 +269,13 @@ func platformHealthCandidates(_ context.Context, targetPath string) []string {
 }
 
 func macOSConfiguredHealthCandidates() []string {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return nil
+	}
+	if id.Variant == "next" {
+		return []string{"http://127.0.0.1:8767/healthz"}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
@@ -277,6 +292,13 @@ func macOSHealthCandidatesFromEnv(serviceEnv string) []string {
 }
 
 func platformBackupPath(targetPath string) (string, error) {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return "", err
+	}
+	if id.Variant == "next" {
+		return "", fmt.Errorf("Next standalone Core backups are disabled")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("解析 macOS 用户目录失败: %w", err)
@@ -296,6 +318,13 @@ func platformBackupPath(targetPath string) (string, error) {
 }
 
 func signLocalReplacement(ctx context.Context, targetPath string) error {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return err
+	}
+	if id.Variant == "next" {
+		return fmt.Errorf("Next standalone Core signing is disabled")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err

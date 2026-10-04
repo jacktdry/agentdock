@@ -13,3 +13,6 @@ func newPlatformDriver(string) (updateengine.Driver, error) {
 }
 
 func expectedSourceArbiter(updateengine.Transaction) string { return "" }
+
+func validatePlatformRoot(string) error                                  { return nil }
+func validatePlatformTransaction(string, updateengine.Transaction) error { return nil }

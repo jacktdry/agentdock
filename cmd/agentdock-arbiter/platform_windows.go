@@ -19,3 +19,6 @@ func expectedSourceArbiter(transaction updateengine.Transaction) string {
 	}
 	return filepath.Join(transaction.Windows.SourceGeneration, updateengine.GenerationArbiterName)
 }
+
+func validatePlatformRoot(string) error                                  { return nil }
+func validatePlatformTransaction(string, updateengine.Transaction) error { return nil }

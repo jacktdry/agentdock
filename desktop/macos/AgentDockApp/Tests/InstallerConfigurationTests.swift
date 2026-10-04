@@ -220,6 +220,14 @@ struct InstallerConfigurationTests {
             .appendingPathComponent("AgentDockUpdateServiceStateTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let path = root.appendingPathComponent("update-services.json")
+        let nextState = DesktopUpdateServiceState(coreEnabled: true, tunnelEnabled: false, identity: .next)
+        try nextState.write(to: path)
+        let loadedNext = try DesktopUpdateServiceState.load(from: path, identity: .next)
+        precondition(loadedNext?.variant == "next")
+        do {
+            _ = try DesktopUpdateServiceState.load(from: path)
+            preconditionFailure("Stable must reject Next update service state")
+        } catch {}
         let expected = DesktopUpdateServiceState(coreEnabled: true, tunnelEnabled: false)
         try expected.write(to: path)
         let loaded = try DesktopUpdateServiceState.load(from: path)
@@ -247,6 +255,9 @@ struct InstallerConfigurationTests {
         let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o777
         precondition(permissions & 0o077 == 0)
 
+        try DesktopUpdateHandoff(targetVersion: "v0.7.1", identity: .next).write(to: path)
+        let nextPayload = try JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any]
+        precondition(nextPayload?["variant"] as? String == "next")
         DesktopUpdateHandoff.remove(at: path)
         precondition(!FileManager.default.fileExists(atPath: path.path))
     }

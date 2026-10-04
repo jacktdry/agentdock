@@ -9,8 +9,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 type desktopUpdateOutcome struct {
@@ -27,7 +30,12 @@ type desktopUpdateTransaction interface {
 	Commit() error
 }
 
+var probeUpdateHealth = findHealthyURL
+
 func applyPlatformUpdate(ctx context.Context, request applyRequest) (applyResult, error) {
+	if err := validateUpdateRequest(request); err != nil {
+		return applyResult{}, err
+	}
 	if request.DesktopOnly {
 		return applyDesktopOnlyUpdate(ctx, request)
 	}
@@ -40,7 +48,7 @@ func applyPlatformUpdate(ctx context.Context, request applyRequest) (applyResult
 	} else {
 		candidates = uniqueStrings(append(platformCandidates, healthCandidates(request.CurrentPath)...))
 	}
-	if healthyURL := findHealthyURL(ctx, candidates); healthyURL != "" {
+	if healthyURL := probeUpdateHealth(ctx, candidates); healthyURL != "" {
 		candidates = []string{healthyURL}
 	}
 
@@ -223,7 +231,14 @@ func validateDesktopUpdateCoordination() error {
 	if err != nil {
 		return fmt.Errorf("解析用户目录失败: %w", err)
 	}
-	path := filepath.Join(home, "Library", "Application Support", "AgentDock", "update-services.json")
+	id, err := updateidentity.Resolve("")
+	if runtime.GOOS == "darwin" {
+		id, err = updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))
+	}
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(id.Root(home), "update-services.json")
 	info, err := os.Lstat(path)
 	if err != nil {
 		return errors.New("macOS 桌面更新必须从 AgentDock 控制面板发起")
