@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,43 +14,57 @@ import (
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
+	toolcomputer "github.com/uvwt/agentdock/internal/tool/computer"
 )
 
-type acpBrowserSessionProvider struct {
+type acpHostCapabilityProvider struct {
 	bridge     *toolbrowser.ACPBridge
+	computer   *toolcomputer.ACPBridge
 	profileID  string
 	serverName string
 	port       int
 }
 
-func (p acpBrowserSessionProvider) Servers(_ context.Context, sessionID, cwd string, _ []string) ([]acpruntime.SessionMCPServer, error) {
-	if p.bridge == nil {
-		return []acpruntime.SessionMCPServer{}, nil
+func (p acpHostCapabilityProvider) Servers(ctx context.Context, sessionID, cwd string, _ []string) ([]acpruntime.SessionMCPServer, error) {
+	servers := make([]acpruntime.SessionMCPServer, 0, 2)
+	token := ""
+	if p.bridge != nil {
+		var err error
+		token, err = p.bridge.RegisterSession(sessionID, p.profileID, cwd)
+		if err != nil {
+			return nil, err
+		}
+		name := p.serverName
+		if name == "" {
+			name = "agentdock-browser"
+		}
+		servers = append(servers, acpruntime.SessionMCPServer{Name: name, Type: "http", URL: p.bridge.MCPServerURL(p.port), Headers: []acpruntime.SessionMCPHeader{{Name: "Authorization", Value: "Bearer " + token}}})
 	}
-	token, err := p.bridge.RegisterSession(sessionID, p.profileID, cwd)
-	if err != nil {
-		return nil, err
+	if p.computer != nil {
+		computerToken, err := p.computer.RegisterSessionWithToken(sessionID, p.profileID, token)
+		if err != nil {
+			if p.bridge != nil {
+				_ = p.bridge.ReleaseSession(ctx, sessionID)
+			}
+			return nil, err
+		}
+		if token == "" {
+			token = computerToken
+		}
+		servers = append(servers, acpruntime.SessionMCPServer{Name: "agentdock-computer", Type: "http", URL: p.computer.MCPServerURL(p.port), Headers: []acpruntime.SessionMCPHeader{{Name: "Authorization", Value: "Bearer " + token}}})
 	}
-	name := p.serverName
-	if name == "" {
-		name = "agentdock-browser"
-	}
-	return []acpruntime.SessionMCPServer{{
-		Name: name,
-		Type: "http",
-		URL:  p.bridge.MCPServerURL(p.port),
-		Headers: []acpruntime.SessionMCPHeader{{
-			Name:  "Authorization",
-			Value: "Bearer " + token,
-		}},
-	}}, nil
+	return servers, nil
 }
 
-func (p acpBrowserSessionProvider) ReleaseSession(ctx context.Context, sessionID string) error {
-	if p.bridge == nil {
-		return nil
+func (p acpHostCapabilityProvider) ReleaseSession(ctx context.Context, sessionID string) error {
+	var failures []error
+	if p.bridge != nil {
+		failures = append(failures, p.bridge.ReleaseSession(ctx, sessionID))
 	}
-	return p.bridge.ReleaseSession(ctx, sessionID)
+	if p.computer != nil {
+		failures = append(failures, p.computer.ReleaseSession(ctx, sessionID))
+	}
+	return errors.Join(failures...)
 }
 
 func acpBrowserServerName(config.ACPProfile) string { return "agentdock-browser" }
@@ -246,4 +261,11 @@ func (r *Runtime) ACPBrowserMCPHandler() http.Handler {
 		return nil
 	}
 	return r.acpBrowser.MCPHTTPHandler()
+}
+
+func (r *Runtime) ACPComputerMCPHandler() http.Handler {
+	if r == nil || r.acpComputer == nil {
+		return nil
+	}
+	return r.acpComputer.MCPHTTPHandler()
 }

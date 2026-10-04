@@ -54,6 +54,16 @@ func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, 
 }
 
 func (b *ACPBridge) RegisterSession(sessionID, profileID, cwd string) (string, error) {
+	return b.registerSession(sessionID, profileID, cwd, "")
+}
+
+// RegisterSessionWithToken lets the AgentDock parent bind multiple host-owned
+// MCP capabilities to one ACP session token without merging their tool surfaces.
+func (b *ACPBridge) RegisterSessionWithToken(sessionID, profileID, cwd, token string) (string, error) {
+	return b.registerSession(sessionID, profileID, cwd, token)
+}
+
+func (b *ACPBridge) registerSession(sessionID, profileID, cwd, token string) (string, error) {
 	if b == nil {
 		return "", browserError(ErrEngineUnavailable, "ACP browser bridge unavailable", "acp", nil, nil)
 	}
@@ -70,12 +80,17 @@ func (b *ACPBridge) RegisterSession(sessionID, profileID, cwd string) (string, e
 		return "", browserError(ErrEngineUnavailable, "ACP browser bridge is closed", "acp", nil, nil)
 	}
 	if existing := b.bySession[sessionID]; existing != nil {
-		if existing.scope.CanonicalWorkspaceRoot != root || existing.profileID != profileID {
+		if existing.scope.CanonicalWorkspaceRoot != root || existing.profileID != profileID || (token != "" && existing.token != token) {
 			return "", browserError(ErrLeaseOwnerMismatch, "ACP browser owner scope changed", "acp", &ErrorDetails{SessionID: sessionID}, nil)
 		}
 		return existing.token, nil
 	}
-	token := rand.Text()
+	if token == "" {
+		token = rand.Text()
+	}
+	if existing := b.byToken[token]; existing != nil {
+		return "", browserError(ErrLeaseOwnerMismatch, "ACP browser capability token already belongs to another session", "acp", &ErrorDetails{SessionID: existing.sessionID}, nil)
+	}
 	owner := &acpBrowserOwner{
 		sessionID: sessionID, profileID: profileID, token: token,
 		scope:  RequestScope{WorkspaceID: sessionID, CanonicalWorkspaceRoot: root, OwnerACPSessionID: sessionID, Provenance: ScopeACP},

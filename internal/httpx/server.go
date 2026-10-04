@@ -22,6 +22,10 @@ type acpBrowserMCPRuntime interface {
 	ACPBrowserMCPHandler() http.Handler
 }
 
+type acpComputerMCPRuntime interface {
+	ACPComputerMCPHandler() http.Handler
+}
+
 func Serve(ctx context.Context, server *mcp.Server, runtime runtimeapi.Runtime, cfg config.Config) error {
 	listenStartedAt := time.Now()
 	authRequired := cfg.AuthRequired()
@@ -48,6 +52,11 @@ func Serve(ctx context.Context, server *mcp.Server, runtime runtimeapi.Runtime, 
 	if browserRuntime, ok := runtime.(acpBrowserMCPRuntime); ok {
 		if handler := browserRuntime.ACPBrowserMCPHandler(); handler != nil {
 			mux.Handle("/internal/acp-browser/mcp", loopbackOnly(handler))
+		}
+	}
+	if computerRuntime, ok := runtime.(acpComputerMCPRuntime); ok {
+		if handler := computerRuntime.ACPComputerMCPHandler(); handler != nil {
+			mux.Handle("/internal/acp-computer/mcp", loopbackOnly(handler))
 		}
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {

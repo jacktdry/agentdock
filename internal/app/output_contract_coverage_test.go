@@ -46,6 +46,9 @@ var outputContractCoverageInventory = map[string]outputContractCoverageEntry{
 	"browser_session":  {Variants: []string{"start"}, IntegrationOnly: true},
 	"browser_act":      {Variants: []string{"success"}, IntegrationOnly: true},
 	"browser_snapshot": {Variants: []string{"success"}, IntegrationOnly: true},
+	"computer_session": {Variants: []string{"acquire"}},
+	"computer_observe": {Variants: []string{"capabilities"}},
+	"computer_act":     {Variants: []string{"click"}},
 	"file_publish":     {Variants: []string{"success"}},
 }
 

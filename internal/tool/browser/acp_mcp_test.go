@@ -221,3 +221,24 @@ func TestACPBridgeCompanyWithoutVerifiedStatusNeverStartsManaged(t *testing.T) {
 		t.Fatal("required external silently fell back managed")
 	}
 }
+
+func TestACPBrowserRegisterSessionWithTokenRequiresStableCapability(t *testing.T) {
+	bridge := newTestACPBridge(t)
+	root := t.TempDir()
+	got, err := bridge.RegisterSessionWithToken("owner", "codex", root, "shared-capability-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "shared-capability-token" {
+		t.Fatalf("token=%q", got)
+	}
+	got, err = bridge.RegisterSessionWithToken("owner", "codex", root, "shared-capability-token")
+	if err != nil || got != "shared-capability-token" {
+		t.Fatalf("stable registration token=%q err=%v", got, err)
+	}
+	if _, err := bridge.RegisterSessionWithToken("owner", "codex", root, "different-token"); err == nil {
+		t.Fatal("same ACP session accepted a different host capability token")
+	} else {
+		assertBrowserCode(t, err, ErrLeaseOwnerMismatch)
+	}
+}
