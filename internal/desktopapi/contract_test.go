@@ -45,8 +45,11 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 		t.Fatalf("activity stream capability = %#v", activityCapability.Streams)
 	}
 
+	acpCapability := seen[DomainACP]
+	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 3 {
+		t.Fatalf("ACP capability = %#v", acpCapability)
+	}
 	for _, domain := range []Domain{
-		DomainACP,
 		DomainBrowser,
 		DomainPermission,
 		DomainMCP,

@@ -180,7 +180,16 @@ func DefaultManifest() Manifest {
 			},
 			availableCapability(DomainConnection, "Tunnel configuration remains native-only; regenerate requires quick mode", "status", "start", "stop", "restart", "regenerate"),
 			availableCapability(DomainSettings, "Basic settings only; macOS autostart changes require native SMAppService", "read", "save"),
-			unavailableCapability(DomainACP, "ACP desktop contract is scheduled after the activity execution slice"),
+			{
+				Domain: DomainACP, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "status", Access: AccessRead},
+					{Name: "updateLifecycle", Access: AccessMutating, RequiresConfirmation: true},
+					{Name: "close", Access: AccessMutating, RequiresConfirmation: true},
+				},
+				Streams: []StreamCapability{},
+				Reason:  "ACP lifecycle, adapter health, Broker correlation and shared Memory health are available through the local Core control plane",
+			},
 			unavailableCapability(DomainBrowser, "browser routing contract is scheduled for the browser-routing milestone"),
 			{
 				Domain:       DomainActivity,
