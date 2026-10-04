@@ -147,3 +147,47 @@ func TestSetSessionLifecycleDoesNotStartAdapterProcess(t *testing.T) {
 		t.Fatalf("reloaded=%+v updated=%+v", reloaded, updated)
 	}
 }
+
+func TestLifecyclePolicyPersistsAcrossManagerRestartWithoutLoadingAdapter(t *testing.T) {
+	home := t.TempDir()
+	workspace := t.TempDir()
+	manager, err := newTestManager(home, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := manager.NewSessionWithLifecycle(context.Background(), workspace, nil, SessionLifecycleOptions{
+		Policy: LifecycleIdleManaged, IdleCloseAfter: 2 * time.Hour,
+	})
+	if err != nil {
+		_ = manager.Close()
+		t.Fatal(err)
+	}
+	id := created.Session.ID
+	remoteID := created.Session.RemoteSessionID
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := newTestManager(home, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = restarted.Close() }()
+	record, err := restarted.InspectSession(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.ID != id || record.RemoteSessionID != remoteID || record.LifecyclePolicy != LifecycleIdleManaged || record.IdleCloseAfterMS != (2*time.Hour).Milliseconds() {
+		t.Fatalf("restarted lifecycle record=%+v", record)
+	}
+	diagnostics := restarted.Diagnostics()
+	if diagnostics.Counts.Managed != 1 || diagnostics.Counts.Loaded != 0 || len(diagnostics.Sessions) != 1 || diagnostics.Sessions[0].Loaded {
+		t.Fatalf("restart diagnostics=%+v", diagnostics)
+	}
+	restarted.mu.RLock()
+	process := restarted.process
+	restarted.mu.RUnlock()
+	if process != nil {
+		t.Fatal("restart inspection loaded adapter process")
+	}
+}
