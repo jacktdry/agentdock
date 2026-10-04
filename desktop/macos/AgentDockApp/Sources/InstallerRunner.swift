@@ -103,7 +103,7 @@ final class InstallerRunner {
                 publicURL = currentQuickTunnelURL()
             }
 
-            let finalConfiguration = ServiceConfiguration.load(from: paths.environment)
+            let finalConfiguration = ServiceConfiguration.load(from: paths.environment, identity: paths.identity)
             guard let finalConfiguration,
                   let localMCPURL = finalConfiguration.localMCPURL?.absoluteString else {
                 throw ValidationError(L10n.text("AgentDock configuration was written, but the final local MCP address could not be read."))
@@ -146,7 +146,7 @@ final class InstallerRunner {
         }
     }
 
-    private struct PreparedConfiguration {
+    struct PreparedConfiguration {
         let environment: Data
         let tunnelEnvironment: Data
         let tunnelToken: String?
@@ -154,7 +154,7 @@ final class InstallerRunner {
         let oauthPassword: String
     }
 
-    private func prepareConfiguration(
+    func prepareConfiguration(
         request: InstallRequest,
         serverURL: String?,
         providedTunnelToken: String?
@@ -164,8 +164,13 @@ final class InstallerRunner {
             values = try ManagedEnvironment.load(from: paths.environment).values
         }
 
+        if paths.identity == .next {
+            values["AGENTDOCK_HOME"] = paths.stateDirectory.path
+            values["AGENTDOCK_DEFAULT_DIR"] = paths.workDirectory.path
+            values["AGENTDOCK_DESKTOP_VARIANT"] = paths.identity.rawValue
+        }
         values["AGENTDOCK_HOST"] = values["AGENTDOCK_HOST"]?.isEmpty == false ? values["AGENTDOCK_HOST"] : "127.0.0.1"
-        let port = validPort(values["AGENTDOCK_PORT"]) ?? 8765
+        let port = validPort(values["AGENTDOCK_PORT"]) ?? paths.identity.defaultPort
         values["AGENTDOCK_PORT"] = String(port)
         let logLevel = ServiceConfiguration.normalizedLogLevel(values["AGENTDOCK_LOG_LEVEL"] ?? "info")
         values["AGENTDOCK_LOG_LEVEL"] = ["debug", "info", "warn", "error"].contains(logLevel) ? logLevel : "info"
@@ -258,7 +263,8 @@ final class InstallerRunner {
     private func bootstrapCoreSkills() throws {
         let result = try runProcess(
             executable: paths.binary.path,
-            arguments: ["skill", "bootstrap", "--bundle", paths.coreSkillBundle.path]
+            arguments: ["skill", "bootstrap", "--bundle", paths.coreSkillBundle.path],
+            environment: paths.commandEnvironment
         )
         guard result.status == 0 else {
             throw ValidationError(result.output.isEmpty ? L10n.text("Official core Skill initialization failed.") : result.output)

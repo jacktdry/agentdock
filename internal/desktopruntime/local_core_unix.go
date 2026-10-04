@@ -29,7 +29,7 @@ func platformReadLocalCoreAccess(_ context.Context, runtimeRoot string) (LocalCo
 			return LocalCoreAccess{}, errors.New("AgentDock Core host is not loopback")
 		}
 	}
-	port := 8765
+	port := unixDefaultPort()
 	if raw := strings.TrimSpace(values["AGENTDOCK_PORT"]); raw != "" {
 		port, err = strconv.Atoi(raw)
 		if err != nil || port < 1 || port > 65535 {

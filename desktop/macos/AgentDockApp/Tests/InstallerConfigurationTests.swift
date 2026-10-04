@@ -61,11 +61,11 @@ struct InstallerConfigurationTests {
             .appendingPathComponent("agentdock-service-config-\(UUID().uuidString).env")
         defer { try? FileManager.default.removeItem(at: serviceEnvironmentURL) }
         try Data("AGENTDOCK_PORT=8765\n".utf8).write(to: serviceEnvironmentURL)
-        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.mcpAppsMode == .full)
+        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL, identity: .stable)?.mcpAppsMode == .full)
         try Data("AGENTDOCK_PORT=8765\nAGENTDOCK_MCP_APPS_ENABLED=false\n".utf8).write(to: serviceEnvironmentURL)
-        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.mcpAppsMode == .off)
+        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL, identity: .stable)?.mcpAppsMode == .off)
         try Data("AGENTDOCK_PORT=8765\nAGENTDOCK_MCP_APPS_ENABLED=false\nAGENTDOCK_MCP_APPS_MODE=compact\n".utf8).write(to: serviceEnvironmentURL)
-        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL)?.mcpAppsMode == .compact)
+        precondition(ServiceConfiguration.load(from: serviceEnvironmentURL, identity: .stable)?.mcpAppsMode == .compact)
 
         let nexusIdentityURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("agentdock-nexus-\(UUID().uuidString).json")
@@ -89,7 +89,7 @@ struct InstallerConfigurationTests {
         AGENTDOCK_ACP_ARGS_JSON='["agent","stdio"]'
         AGENTDOCK_ACP_ENV_FROM_ENV_JSON='{"ZCODE_API_KEY":"HOST_ZCODE_API_KEY"}'
         """.utf8).write(to: legacyACPEnvironmentURL)
-        let migratedACP = ServiceConfiguration.load(from: legacyACPEnvironmentURL)
+        let migratedACP = ServiceConfiguration.load(from: legacyACPEnvironmentURL, identity: .stable)
         precondition(migratedACP?.acpDefaultProfile == "grok")
         precondition(migratedACP?.acpProfiles == [ACPProfileConfiguration(
             id: "grok",
@@ -384,7 +384,7 @@ struct InstallerConfigurationTests {
             .appendingPathComponent("AgentDockTunnelTokenStoreTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let paths = AppPaths(home: root)
+        let paths = AppPaths(identity: .stable, home: root)
         try FileManager.default.createDirectory(at: paths.appSupport, withIntermediateDirectories: true)
         let namedEnvironment = """
         AGENTDOCK_TUNNEL_MODE='named'

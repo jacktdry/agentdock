@@ -87,33 +87,31 @@ struct ServiceStatus {
 }
 
 final class ServiceController: @unchecked Sendable {
-    static let coreLabel = "com.uvwt.agentdock.core"
-    static let tunnelLabel = "com.uvwt.agentdock.tunnel"
-    static let corePlistName = "com.uvwt.agentdock.core.plist"
-    static let tunnelPlistName = "com.uvwt.agentdock.tunnel.plist"
-
+    private let legacyServiceLoaded: (String) -> Bool
     let paths: AppPaths
 
-    init(paths: AppPaths = AppPaths()) {
+    init(paths: AppPaths = AppPaths(),
+         legacyServiceLoaded: @escaping (String) -> Bool = LegacyDesktopRuntimeMigration.launchdLoaded) {
         self.paths = paths
+        self.legacyServiceLoaded = legacyServiceLoaded
     }
 
     func status() async -> ServiceStatus {
         let fileManager = FileManager.default
-        let migrationRequired = LegacyDesktopRuntimeMigration.isPresent(paths: paths)
+        let migrationRequired = LegacyDesktopRuntimeMigration.isPresent(paths: paths, serviceLoaded: legacyServiceLoaded)
         let installed = fileManager.isExecutableFile(atPath: paths.binary.path)
             && fileManager.isExecutableFile(atPath: paths.cloudflared.path)
             && fileManager.fileExists(atPath: paths.coreSkillBundle.appendingPathComponent("manifest.json").path)
             && fileManager.fileExists(atPath: paths.environment.path)
         guard installed else { return .missing }
 
-        let configuration = ServiceConfiguration.load(from: paths.environment)
+        let configuration = ServiceConfiguration.load(from: paths.environment, identity: paths.identity)
         let nexusDevice = nexusDeviceStatus()
         let registration = coreService.status
         let requiresApproval = registration == .requiresApproval
         let enabled = registration == .enabled
         let registered = enabled || requiresApproval
-        let loaded = enabled && isLoaded(label: Self.coreLabel)
+        let loaded = enabled && isLoaded(label: paths.identity.coreLabel)
         let nexusConnected = loaded && nexusDevice.paired ? await fetchNexusConnected() : false
 
         guard loaded, let healthURL = configuration?.healthURL else {
@@ -146,25 +144,25 @@ final class ServiceController: @unchecked Sendable {
 
     func start() async throws {
         try registerCoreIfNeeded()
-        guard let configuration = ServiceConfiguration.load(from: paths.environment),
+        guard let configuration = ServiceConfiguration.load(from: paths.environment, identity: paths.identity),
               await waitForHealth(configuration: configuration) else {
             throw ValidationError(L10n.text("AgentDock background service is enabled, but the health check did not pass."))
         }
     }
 
     func stop() async throws {
-        try unregister(service: coreService, label: Self.coreLabel)
+        try unregister(service: coreService, label: paths.identity.coreLabel)
     }
 
     func unregisterManagedBackgroundServicesForUninstall() throws {
         var failures: [String] = []
         do {
-            try unregister(service: tunnelService, label: Self.tunnelLabel)
+            try unregister(service: tunnelService, label: paths.identity.tunnelLabel)
         } catch {
             failures.append("AgentDock Tunnel: \(error.localizedDescription)")
         }
         do {
-            try unregister(service: coreService, label: Self.coreLabel)
+            try unregister(service: coreService, label: paths.identity.coreLabel)
         } catch {
             failures.append("AgentDock Core: \(error.localizedDescription)")
         }
@@ -174,8 +172,8 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func restart() async throws {
-        try reregister(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
-        guard let configuration = ServiceConfiguration.load(from: paths.environment),
+        try reregister(service: coreService, label: paths.identity.coreLabel, displayName: "AgentDock Core")
+        guard let configuration = ServiceConfiguration.load(from: paths.environment, identity: paths.identity),
               await waitForHealth(configuration: configuration) else {
             throw ValidationError(L10n.text("AgentDock Core was re-registered, but the health check did not pass."))
         }
@@ -194,7 +192,8 @@ final class ServiceController: @unchecked Sendable {
         let result = try await runInBackground {
             try runProcess(
                 executable: self.paths.binary.path,
-                arguments: ["nexus", "pair", "--endpoint", endpoint, "--code", pairingCode]
+                arguments: ["nexus", "pair", "--endpoint", endpoint, "--code", pairingCode],
+                environment: self.paths.commandEnvironment
             )
         }
         guard result.status == 0 else {
@@ -229,7 +228,7 @@ final class ServiceController: @unchecked Sendable {
 
     func reconcileTunnelRegistrationFromConfiguration() throws {
         // 旧结构仍存在时必须先走迁移事务，不能在旁边提前注册第二套 Tunnel。
-        guard !LegacyDesktopRuntimeMigration.isPresent(paths: paths) else { return }
+        guard !LegacyDesktopRuntimeMigration.isPresent(paths: paths, serviceLoaded: legacyServiceLoaded) else { return }
 
         // 这里只收敛“是否应注册”的长期配置，不等待 cloudflared 或公网 ready。
         // 更新 handoff 已负责重新绑定目标 App；普通启动也不应因短暂网络状态重建 SMAppService。
@@ -245,28 +244,28 @@ final class ServiceController: @unchecked Sendable {
         if enabled {
             try register(
                 service: tunnelService,
-                plistName: Self.tunnelPlistName,
+                plistName: paths.identity.tunnelPlistName,
                 displayName: "AgentDock Tunnel"
             )
         } else {
-            try unregister(service: tunnelService, label: Self.tunnelLabel)
+            try unregister(service: tunnelService, label: paths.identity.tunnelLabel)
         }
     }
 
     func restartTunnel() throws {
-        try reregister(service: tunnelService, label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
+        try reregister(service: tunnelService, label: paths.identity.tunnelLabel, displayName: "AgentDock Tunnel")
     }
 
     func restoreBackgroundServiceRegistrations(coreEnabled: Bool, tunnelEnabled: Bool) throws {
         if coreEnabled {
-            try restoreRegistration(service: coreService, label: Self.coreLabel, displayName: "AgentDock Core")
+            try restoreRegistration(service: coreService, label: paths.identity.coreLabel, displayName: "AgentDock Core")
         } else {
-            try unregister(service: coreService, label: Self.coreLabel)
+            try unregister(service: coreService, label: paths.identity.coreLabel)
         }
         if tunnelEnabled {
-            try restoreRegistration(service: tunnelService, label: Self.tunnelLabel, displayName: "AgentDock Tunnel")
+            try restoreRegistration(service: tunnelService, label: paths.identity.tunnelLabel, displayName: "AgentDock Tunnel")
         } else {
-            try unregister(service: tunnelService, label: Self.tunnelLabel)
+            try unregister(service: tunnelService, label: paths.identity.tunnelLabel)
         }
     }
 
@@ -276,7 +275,7 @@ final class ServiceController: @unchecked Sendable {
     ) throws -> DesktopUpdateRegistrationState {
         let coreState = try restoreRegistrationForUpdate(
             service: coreService,
-            label: Self.coreLabel,
+            label: paths.identity.coreLabel,
             displayName: "AgentDock Core",
             expectedEnabled: coreEnabled
         )
@@ -284,7 +283,7 @@ final class ServiceController: @unchecked Sendable {
         do {
             tunnelState = try restoreRegistrationForUpdate(
                 service: tunnelService,
-                label: Self.tunnelLabel,
+                label: paths.identity.tunnelLabel,
                 displayName: "AgentDock Tunnel",
                 expectedEnabled: tunnelEnabled
             )
@@ -319,7 +318,7 @@ final class ServiceController: @unchecked Sendable {
         }
         if coreEnabled,
            coreService.status == .enabled,
-           let configuration = ServiceConfiguration.load(from: paths.environment),
+           let configuration = ServiceConfiguration.load(from: paths.environment, identity: paths.identity),
            !(await waitForHealth(configuration: configuration, timeout: 10)) {
             NSLog("AgentDock Core 注册显示 enabled 但健康检查未通过，开始自动重新注册。")
             do {
@@ -344,7 +343,7 @@ final class ServiceController: @unchecked Sendable {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: self.waitForStableLaunchdProcess(
-                    label: Self.tunnelLabel,
+                    label: self.paths.identity.tunnelLabel,
                     timeout: timeout
                 ))
             }
@@ -352,7 +351,7 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func isLoaded() -> Bool {
-        isLoaded(label: Self.coreLabel)
+        isLoaded(label: paths.identity.coreLabel)
     }
 
     func waitForHealth(configuration: ServiceConfiguration, timeout: TimeInterval = 30) async -> Bool {
@@ -364,7 +363,8 @@ final class ServiceController: @unchecked Sendable {
     }
 
     func checkForUpdates() async throws -> DesktopUpdateCheck {
-        try await runInBackground {
+        try validateUpdateIdentity()
+        return try await runInBackground {
             let result = try runProcess(
                 executable: self.paths.binary.path,
                 arguments: ["update", "--check"],
@@ -377,7 +377,14 @@ final class ServiceController: @unchecked Sendable {
         }
     }
 
+    private func validateUpdateIdentity() throws {
+        guard paths.identity == .stable else {
+            throw ValidationError("AgentDock Next updates are not available yet.")
+        }
+    }
+
     func applyUpdate(onProgress: @escaping (UpdateProgressEvent) -> Void) async throws -> String {
+        try validateUpdateIdentity()
         // 用户确认之后才检查后台服务写入能力并进入停服/替换阶段。
         // 纯版本检查不应该产生任何服务状态或更新事务副作用。
         try validateServiceManagementReadiness()
@@ -477,17 +484,17 @@ final class ServiceController: @unchecked Sendable {
     }
 
     private var coreService: SMAppService {
-        SMAppService.agent(plistName: Self.corePlistName)
+        SMAppService.agent(plistName: paths.identity.corePlistName)
     }
 
     private var tunnelService: SMAppService {
-        SMAppService.agent(plistName: Self.tunnelPlistName)
+        SMAppService.agent(plistName: paths.identity.tunnelPlistName)
     }
 
     private func registerCoreIfNeeded() throws {
         try register(
             service: coreService,
-            plistName: Self.corePlistName,
+            plistName: paths.identity.corePlistName,
             displayName: "AgentDock Core"
         )
     }
@@ -543,13 +550,13 @@ final class ServiceController: @unchecked Sendable {
 
     private func reregister(service: SMAppService, label: String, displayName: String) throws {
         try unregister(service: service, label: label)
-        let plistName = label == Self.coreLabel ? Self.corePlistName : Self.tunnelPlistName
+        let plistName = label == paths.identity.coreLabel ? paths.identity.corePlistName : paths.identity.tunnelPlistName
         try register(service: service, plistName: plistName, displayName: displayName)
     }
 
     private func restoreRegistration(service: SMAppService, label: String, displayName: String) throws {
         try validateServiceManagementReadiness()
-        let plistName = label == Self.coreLabel ? Self.corePlistName : Self.tunnelPlistName
+        let plistName = label == paths.identity.coreLabel ? paths.identity.corePlistName : paths.identity.tunnelPlistName
         try validateBundledServiceDefinition(plistName: plistName, displayName: displayName)
         try unregister(service: service, label: label)
         try register(service: service, plistName: plistName, displayName: displayName)
@@ -601,7 +608,7 @@ final class ServiceController: @unchecked Sendable {
 
     func validateServiceManagementReadiness() throws {
         try validatePersistentAppLocation()
-        if LegacyDesktopRuntimeMigration.isPresent(paths: paths) {
+        if LegacyDesktopRuntimeMigration.isPresent(paths: paths, serviceLoaded: legacyServiceLoaded) {
             throw ValidationError(L10n.text("A legacy AgentDock background layout was detected. Apply the current settings in the main panel to complete migration first."))
         }
     }
@@ -704,7 +711,8 @@ final class ServiceController: @unchecked Sendable {
             let result = try await runInBackground {
                 try runProcess(
                     executable: self.paths.binary.path,
-                    arguments: ["service", "status", "--runtime-root", self.paths.appSupport.path]
+                    arguments: ["service", "status", "--runtime-root", self.paths.appSupport.path],
+                    environment: self.paths.commandEnvironment
                 )
             }
             guard result.status == 0,

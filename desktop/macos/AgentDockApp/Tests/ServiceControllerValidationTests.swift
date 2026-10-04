@@ -3,7 +3,7 @@ import ServiceManagement
 
 @main
 struct ServiceControllerValidationTests {
-    static func main() throws {
+    static func main() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AgentDockServiceValidationTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -18,14 +18,14 @@ struct ServiceControllerValidationTests {
         let launchAgentBundle = appBundle
             .appendingPathComponent("Contents/Library/LaunchAgents", isDirectory: true)
         try FileManager.default.createDirectory(at: launchAgentBundle, withIntermediateDirectories: true)
-        let corePlist = launchAgentBundle.appendingPathComponent(ServiceController.corePlistName)
+        let corePlist = launchAgentBundle.appendingPathComponent(AppIdentity.stable.corePlistName)
         try Data("plist".utf8).write(to: corePlist)
 
-        let persistentPaths = AppPaths(
+        let persistentPaths = AppPaths(identity: .stable,
             home: root,
             appBundle: appBundle
         )
-        let service = ServiceController(paths: persistentPaths)
+        let service = ServiceController(paths: persistentPaths, legacyServiceLoaded: { _ in false })
 
         // 迁移入口必须允许旧结构存在，否则在 begin() 之前就会被自己拦住。
         try service.validatePersistentAppLocation()
@@ -35,7 +35,7 @@ struct ServiceControllerValidationTests {
             try service.validateServiceManagementReadiness()
         }
         try service.validateBundledServiceDefinition(
-            plistName: ServiceController.corePlistName,
+            plistName: AppIdentity.stable.corePlistName,
             displayName: "AgentDock Core"
         )
         try FileManager.default.removeItem(at: corePlist)
@@ -44,19 +44,21 @@ struct ServiceControllerValidationTests {
             "AgentDock Core"
         )) {
             try service.validateBundledServiceDefinition(
-                plistName: ServiceController.corePlistName,
+                plistName: AppIdentity.stable.corePlistName,
                 displayName: "AgentDock Core"
             )
         }
 
-        let mountedPaths = AppPaths(
+        let mountedPaths = AppPaths(identity: .stable,
             home: root,
             appBundle: URL(fileURLWithPath: "/Volumes/AgentDock/AgentDock.app", isDirectory: true)
         )
         expectFailure(L10n.text("Move AgentDock to the Applications folder before enabling the background service.")) {
-            try ServiceController(paths: mountedPaths).validatePersistentAppLocation()
+            try ServiceController(paths: mountedPaths, legacyServiceLoaded: { _ in false }).validatePersistentAppLocation()
         }
 
+        try testAppIdentity(root: root)
+        await testNextUpdateBoundary(root: root)
         try testConfiguredTunnelMode(root: root, appBundle: appBundle)
         try testLegacyRuntimeMigrationTransactions(root: root, appBundle: appBundle)
         testQuickTunnelBootstrap()
@@ -72,8 +74,8 @@ struct ServiceControllerValidationTests {
 
     private static func testConfiguredTunnelMode(root: URL, appBundle: URL) throws {
         let home = root.appendingPathComponent("tunnel-mode-home", isDirectory: true)
-        let paths = AppPaths(home: home, appBundle: appBundle)
-        let service = ServiceController(paths: paths)
+        let paths = AppPaths(identity: .stable, home: home, appBundle: appBundle)
+        let service = ServiceController(paths: paths, legacyServiceLoaded: { _ in false })
 
         let missingMode = try service.configuredTunnelMode()
         precondition(missingMode == .local)
@@ -103,7 +105,7 @@ struct ServiceControllerValidationTests {
     ) throws {
         let name = shouldCommit ? "commit" : "rollback"
         let home = root.appendingPathComponent("legacy-migration-\(name)", isDirectory: true)
-        let paths = AppPaths(home: home, appBundle: appBundle)
+        let paths = AppPaths(identity: .stable, home: home, appBundle: appBundle)
         let launchAgents = home.appendingPathComponent("Library/LaunchAgents", isDirectory: true)
         let localBin = home.appendingPathComponent(".local/bin", isDirectory: true)
         try FileManager.default.createDirectory(at: launchAgents, withIntermediateDirectories: true)
@@ -120,7 +122,7 @@ struct ServiceControllerValidationTests {
         try Data("state".utf8).write(to: stateMarker)
         try Data("workspace".utf8).write(to: workspaceMarker)
 
-        let migration = LegacyDesktopRuntimeMigration(paths: paths)
+        let migration = LegacyDesktopRuntimeMigration(paths: paths, serviceLoaded: { _ in false })
         guard let transaction = try migration.begin() else {
             preconditionFailure("legacy migration was not detected")
         }

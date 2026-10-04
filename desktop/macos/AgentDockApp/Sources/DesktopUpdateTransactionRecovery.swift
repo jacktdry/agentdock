@@ -24,6 +24,10 @@ private struct DesktopUpdateMacOSPlan: Decodable {
 
 enum DesktopUpdateTransactionRecovery {
     static func recoverIfNeeded(paths: AppPaths) -> Bool {
+        // Next cannot execute the stable-only updater/arbiter before Phase 2.
+        guard paths.identity == .stable else {
+            return !FileManager.default.fileExists(atPath: paths.updateTransaction.path)
+        }
         guard let data = try? Data(contentsOf: paths.updateTransaction),
               let transaction = try? JSONDecoder().decode(DesktopUpdateTransactionEnvelope.self, from: data),
               transaction.schemaVersion == 1,

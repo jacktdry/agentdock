@@ -54,7 +54,7 @@ func platformReadBasicSettings(ctx context.Context, root string) (BasicSettings,
 	if err != nil {
 		return BasicSettings{}, err
 	}
-	port := 8765
+	port := unixDefaultPort()
 	if raw := values["AGENTDOCK_PORT"]; raw != "" {
 		port, err = strconv.Atoi(raw)
 		if err != nil {

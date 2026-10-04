@@ -37,6 +37,16 @@ func darwinExecutableFromAppBundle(executable string) bool {
 }
 
 func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
+	if runtime.GOOS == "darwin" && strings.TrimSpace(runtimeRoot) == "" {
+		return unixRuntimeManifest{}, "", errors.New("runtime-root required")
+	}
+	if runtime.GOOS == "darwin" {
+		switch os.Getenv("AGENTDOCK_DESKTOP_VARIANT") {
+		case "", "stable", "next":
+		default:
+			return unixRuntimeManifest{}, "", errors.New("unknown desktop variant")
+		}
+	}
 	root, err := filepath.Abs(strings.TrimSpace(runtimeRoot))
 	if err != nil || root == "" {
 		return unixRuntimeManifest{}, "", errors.New("runtime-root 无效")
@@ -56,7 +66,7 @@ func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
 	}
 	fromApp := runtime.GOOS == "darwin" && darwinExecutableFromAppBundle(executable)
 	if runtime.GOOS == "darwin" {
-		if fromApp {
+		if fromApp || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
 			// App Bundle 的 Core/cloudflared 由 SMAppService 注册，路径必须跟随 Helper。
 			if executable != "" {
 				agentDockBinary = executable
@@ -65,6 +75,10 @@ func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
 			serviceManager = "smappservice"
 			serviceName = "com.uvwt.agentdock.core"
 			tunnelServiceName = "com.uvwt.agentdock.tunnel"
+			if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
+				serviceName = "dev.dropabit.agentdock.next.core"
+				tunnelServiceName = "dev.dropabit.agentdock.next.tunnel"
+			}
 		} else {
 			// CLI 安装把 LaunchAgent 写在用户目录，标签是 com.uvwt.agentdock / .cloudflared。
 			if executable != "" {
@@ -87,7 +101,7 @@ func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
 		TunnelEnvironment: filepath.Join(root, "cloudflared.env"),
 	}
 	// App Bundle 不允许外部清单改写已签名 Helper 路径。CLI / Linux 读取 desktop-runtime.json。
-	if runtime.GOOS != "darwin" || !fromApp {
+	if runtime.GOOS != "darwin" || (!fromApp && os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next") {
 		data, readErr := os.ReadFile(filepath.Join(root, "desktop-runtime.json"))
 		if readErr == nil {
 			if err := json.Unmarshal(data, &manifest); err != nil {
@@ -116,6 +130,15 @@ func platformPrepareCoreEnvironment(runtimeRoot string) error {
 			return err
 		}
 		values = map[string]string{}
+	}
+	if runtime.GOOS == "darwin" {
+		marker := os.Getenv("AGENTDOCK_DESKTOP_VARIANT")
+		if configured, ok := values["AGENTDOCK_DESKTOP_VARIANT"]; ok && configured != marker {
+			return errors.New("desktop variant conflicts with launch identity")
+		}
+		if marker == "next" && values["AGENTDOCK_PORT"] == "" {
+			values["AGENTDOCK_PORT"] = "8767"
+		}
 	}
 	for key, value := range values {
 		if err := os.Setenv(key, value); err != nil {
@@ -156,7 +179,7 @@ func healthURL(values map[string]string) string {
 	}
 	port, err := strconv.Atoi(values["AGENTDOCK_PORT"])
 	if err != nil || port < 1 || port > 65535 {
-		port = 8765
+		port = unixDefaultPort()
 	}
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/healthz"
 }
@@ -201,4 +224,17 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 		return message, fmt.Errorf("%s: %s", filepath.Base(name), message)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func unixDefaultPort() int {
+	if runtime.GOOS == "darwin" {
+		switch os.Getenv("AGENTDOCK_DESKTOP_VARIANT") {
+		case "", "stable":
+		case "next":
+			return 8767
+		default:
+			return 0
+		}
+	}
+	return 8765
 }

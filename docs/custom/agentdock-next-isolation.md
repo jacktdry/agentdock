@@ -1,6 +1,6 @@
 # AgentDock Next Isolation
 
-> 狀態：Accepted durable decision / implementation and validation pending
+> 狀態：Accepted durable decision / Phase 1 repository implementation; live validation pending
 >
 > 日期：2026-10-05
 >
@@ -68,3 +68,25 @@ Next LaunchAgent plist filenames 以各 label 加 `.plist` 對應；實作前須
 - 驗證證據明列 Next targets、實際執行 checks、失敗與未驗證部分；stable app / Core / state / registry / live services 未受操作。Stable migration / retirement 仍是後續另行授權的工作。
 
 相關文件：[Roadmap](roadmap.md)、[Architecture](architecture.md)、[ACP lifecycle / Memory](acp-lifecycle-memory.md)。
+
+## M7.5 Phase 1 implementation boundary
+
+Phase 1 adds a repository-only implementation of the identity contract; it does not authorize live activation or satisfy the later rollout gates above.
+
+- `packaging/macos/build-app.sh` sources the closed stable/next contract in `app-identity.sh`. `AGENTDOCK_MACOS_APP_VARIANT` defaults to `stable`; `next` produces `AgentDock Next.app`, `AgentDock-Next-macos-universal.zip`, and `AgentDock-Next-macos-universal.dmg`. Helper signing identifiers and all three bundled LaunchAgent labels follow the selected bundle ID. Unknown variants stop before output generation.
+- `AppIdentity` validates `AgentDockVariant`, bundle identifier, bundle name, and display name together. Older stable metadata may omit the variant only with matching stable identity. Next metadata cannot fall back to stable. Swift paths, service registration, configuration defaults, and direct Core subprocess environments carry this identity. Next installation writes explicit state/work paths and port 8767.
+- Next skips legacy filesystem/launchd migration and legacy login cleanup. Bundled Core/Tunnel receive `AGENTDOCK_DESKTOP_VARIANT` from their plists; Darwin runtime defaults, service labels, work directory, and logs use this marker. Unknown markers fail closed. Windows/Linux behavior is unchanged.
+- Next GUI update checks, update execution, and transaction recovery are blocked before entering the stable-only updater/arbiter. This is a temporary boundary, not a generalized updater implementation.
+
+Fixture validation entry points:
+
+```sh
+zsh scripts/test/test-macos-app.sh --fixtures-only
+python3 scripts/test/test-macos-identity.py
+AGENTDOCK_LAUNCHCTL_BIN=/usr/bin/false go test ./internal/desktopruntime ./scripts/test
+zsh -n packaging/macos/build-app.sh packaging/macos/app-identity.sh scripts/test/test-macos-app.sh
+```
+
+The fixture-only Swift mode runs configuration, identity, migration, and service validation tests plus packaging metadata tests; it skips preference persistence, permission checks, and artifact building/mounting. Legacy migration tests inject service probes. Go tests use the override above or test-local launchctl fakes; some tests need permission to bind ephemeral localhost HTTP fixture servers. Full app/helper Swift typechecking is also required. This phase has not built a signed ZIP/DMG or exercised live installation, registration, runtime activation, or connector/Memory cutover.
+
+Phase 2 must generalize `selfupdate` / `updateplatform` and the arbiter to validate Next artifact contents, bundle/signing identity, destination, service labels, transaction metadata, ownership, rollback, and recovery. Direct Go updater/global uninstall entry points are not generalized or approved for Next use by Phase 1. Next GUI updates must remain blocked until these boundaries have tests. Publishing Next artifacts, connector `mac-dev-next`, and shared Memory HTTP remain later work; no stable migration or retirement is implied.

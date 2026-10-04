@@ -1,21 +1,33 @@
 import Foundation
 
 struct AppPaths {
+    let identity: AppIdentity
     let home: URL
     let appBundle: URL
 
     init(
+        identity: AppIdentity = .current,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         appBundle: URL = Bundle.main.bundleURL
     ) {
+        self.identity = identity
         self.home = home
         self.appBundle = appBundle
+    }
+
+    var commandEnvironment: [String: String] {
+        var values = ["AGENTDOCK_DESKTOP_VARIANT": identity.rawValue]
+        if identity == .next {
+            values["AGENTDOCK_HOME"] = stateDirectory.path
+            values["AGENTDOCK_DEFAULT_DIR"] = workDirectory.path
+        }
+        return values
     }
 
     var binary: URL { appBundle.appendingPathComponent("Contents/Helpers/agentdock") }
     var cloudflared: URL { appBundle.appendingPathComponent("Contents/Helpers/cloudflared") }
     var coreSkillBundle: URL { appBundle.appendingPathComponent("Contents/Resources/core-skills") }
-    var appSupport: URL { home.appendingPathComponent("Library/Application Support/AgentDock") }
+    var appSupport: URL { home.appendingPathComponent("Library/Application Support/\(identity.name)") }
     var environment: URL { appSupport.appendingPathComponent("agentdock.env") }
     var tunnelEnvironment: URL { appSupport.appendingPathComponent("cloudflared.env") }
     var tunnelTokenStore: URL { appSupport.appendingPathComponent("cloudflare-tunnel-token") }
@@ -26,9 +38,9 @@ struct AppPaths {
     var updateTransaction: URL { appSupport.appendingPathComponent("update/transaction.json") }
     var updateTerminalResult: URL { appSupport.appendingPathComponent("update/result.json") }
     var updateLog: URL { appSupport.appendingPathComponent("update.log") }
-    var logs: URL { home.appendingPathComponent("Library/Logs/AgentDock") }
-    var workDirectory: URL { home.appendingPathComponent("AgentDock") }
-    var stateDirectory: URL { home.appendingPathComponent(".agentdock") }
+    var logs: URL { home.appendingPathComponent("Library/Logs/\(identity.name)") }
+    var workDirectory: URL { home.appendingPathComponent(identity.name) }
+    var stateDirectory: URL { home.appendingPathComponent(identity.stateName) }
     var nexusDeviceIdentity: URL {
         stateDirectory.appendingPathComponent("nexus").appendingPathComponent("device.json")
     }
@@ -103,11 +115,11 @@ struct ServiceConfiguration: Equatable {
         return components.url
     }
 
-    static func load(from path: URL) -> ServiceConfiguration? {
+    static func load(from path: URL, identity: AppIdentity = .current) -> ServiceConfiguration? {
         guard let environment = try? ManagedEnvironment.load(from: path) else { return nil }
         let values = environment.values
         let host = values["AGENTDOCK_HOST"] ?? "127.0.0.1"
-        guard let port = Int(values["AGENTDOCK_PORT"] ?? "8765"), (1...65535).contains(port) else { return nil }
+        guard let port = Int(values["AGENTDOCK_PORT"] ?? String(identity.defaultPort)), (1...65535).contains(port) else { return nil }
         let publicURL = values["AGENTDOCK_SERVER_URL"].flatMap { $0.isEmpty ? nil : $0 }
         let acpEnabled = parseBool(values["AGENTDOCK_ACP_ENABLED"])
         guard let mcpAppsMode = parseMCPAppsMode(values) else { return nil }

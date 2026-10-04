@@ -9,7 +9,14 @@ OUTPUT_DIR="${AGENTDOCK_MACOS_APP_OUTPUT_DIR:-$ROOT_DIR/dist/macos-app}"
 ARCH_LIST="${AGENTDOCK_MACOS_ARCHES:-$(uname -m)}"
 OFFLINE_PAYLOAD_DIR="${AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR:-}"
 MIN_VERSION="${AGENTDOCK_MACOS_MIN_VERSION:-13.0}"
-BUNDLE_ID="com.uvwt.agentdock"
+# Fixed flavor contract; shared with the metadata-only fixture path.
+source "$ROOT_DIR/packaging/macos/app-identity.sh"
+if [[ "${1:-}" == "--metadata-only" ]]; then
+  [[ $# == 2 ]] || { print -u2 -- "Usage: build-app.sh --metadata-only OUTPUT"; exit 1; }
+  VERSION="0.0.0"
+  write_app_metadata "$2/$APP_BUNDLE_NAME/Contents"
+  exit 0
+fi
 APP_ICON_SOURCE="$ROOT_DIR/packaging/assets/agentdock.png"
 CODESIGN_IDENTITY="${AGENTDOCK_CODESIGN_IDENTITY:-"-"}"
 CODESIGN_KEYCHAIN="${AGENTDOCK_CODESIGN_KEYCHAIN:-}"
@@ -22,6 +29,7 @@ usage() {
   packaging/macos/build-app.sh [版本]
 
 环境变量：
+  AGENTDOCK_MACOS_APP_VARIANT   stable（默认）或 next
   AGENTDOCK_MACOS_ARCHES        逗号分隔架构，默认当前架构；Release 使用 arm64,x86_64
   AGENTDOCK_MACOS_APP_OUTPUT_DIR 输出目录，默认 dist/macos-app
   AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR
@@ -85,11 +93,11 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$OUTPUT_DIR"
 rm -rf \
-  "$OUTPUT_DIR/AgentDock.app" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.dmg" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.dmg.sha256" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.zip" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.zip.sha256"
+  "$OUTPUT_DIR/$APP_BUNDLE_NAME" \
+  "$OUTPUT_DIR/$DMG_NAME" \
+  "$OUTPUT_DIR/${DMG_NAME}.sha256" \
+  "$OUTPUT_DIR/$ZIP_NAME" \
+  "$OUTPUT_DIR/${ZIP_NAME}.sha256"
 
 IFS=',' read -rA architectures <<< "$ARCH_LIST"
 (( ${#architectures[@]} > 0 )) || die "没有可构建的架构"
@@ -123,12 +131,13 @@ for architecture in "${architectures[@]}"; do
     -whole-module-optimization \
     -target "$architecture-apple-macosx$MIN_VERSION" \
     -sdk "$SDK_PATH" \
+    "$SOURCE_DIR/AppIdentity.swift" \
     "$LOGIN_HELPER_SOURCE" \
     -o "$login_helper"
   login_helper_binaries+=("$login_helper")
 done
 
-APP_DIR="$OUTPUT_DIR/AgentDock.app"
+APP_DIR="$OUTPUT_DIR/$APP_BUNDLE_NAME"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -258,123 +267,7 @@ find "$CORE_SKILL_BUNDLE" -type f -exec chmod 0644 {} +
 [[ -f "$CORE_SKILL_BUNDLE/manifest.json" && ! -L "$CORE_SKILL_BUNDLE/manifest.json" ]] || \
   die "App Bundle 缺少核心 Skill manifest"
 
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.core.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.core</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/agentdock</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>agentdock</string>
-    <string>service</string>
-    <string>launch-core</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>ThrottleInterval</key>
-  <integer>5</integer>
-</dict>
-</plist>
-PLIST
-
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.tunnel.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.tunnel</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/agentdock</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>agentdock</string>
-    <string>tunnel</string>
-    <string>launch</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>ThrottleInterval</key>
-  <integer>5</integer>
-</dict>
-</plist>
-PLIST
-
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.menu-login.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.menu-login</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/AgentDockLoginHelper</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>AgentDockLoginHelper</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>LimitLoadToSessionType</key>
-  <string>Aqua</string>
-</dict>
-</plist>
-PLIST
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.core.plist" >/dev/null
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.tunnel.plist" >/dev/null
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.menu-login.plist" >/dev/null
-
-cat > "$CONTENTS_DIR/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleDisplayName</key>
-  <string>AgentDock</string>
-  <key>CFBundleExecutable</key>
-  <string>AgentDock</string>
-  <key>CFBundleIdentifier</key>
-  <string>$BUNDLE_ID</string>
-  <key>CFBundleIconFile</key>
-  <string>AgentDock.icns</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>AgentDock</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundleVersion</key>
-  <string>$VERSION</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>$MIN_VERSION</string>
-  <key>LSUIElement</key>
-  <true/>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSAppleEventsUsageDescription</key>
-  <string>AgentDock needs to control System Events and Finder to perform desktop automation tasks you request.</string>
-  <key>NSHumanReadableCopyright</key>
-  <string>Copyright © AgentDock contributors</string>
-</dict>
-</plist>
-PLIST
-plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
+write_app_metadata "$CONTENTS_DIR"
 
 sign_macos_code() {
   local identifier="$1"
@@ -399,16 +292,16 @@ if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
 else
   print -- "==> 使用指定身份签名 AgentDock.app"
 fi
-sign_macos_code "com.uvwt.agentdock.login-helper" "$MENU_LOGIN_HELPER"
-sign_macos_code "com.uvwt.agentdock.core" "$HELPERS_DIR/agentdock"
-sign_macos_code "com.uvwt.agentdock.cloudflared" "$HELPERS_DIR/cloudflared"
-sign_macos_code "com.uvwt.agentdock.arbiter" "$HELPERS_DIR/agentdock-arbiter"
+sign_macos_code "$LOGIN_SIGN_ID" "$MENU_LOGIN_HELPER"
+sign_macos_code "$CORE_LABEL" "$HELPERS_DIR/agentdock"
+sign_macos_code "$CLOUDFLARED_SIGN_ID" "$HELPERS_DIR/cloudflared"
+sign_macos_code "$ARBITER_SIGN_ID" "$HELPERS_DIR/agentdock-arbiter"
 # 嵌套代码先分别签名，再签外层 App。不要用 --deep 做签名操作，否则会重新签
 # Core/cloudflared 并破坏它们的稳定代码身份；--deep 只用于最终递归验证。
 sign_macos_code "$BUNDLE_ID" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
-ZIP_PATH="$OUTPUT_DIR/AgentDock-macos-universal.zip"
+ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 print -- "==> 创建 AgentDock App 更新 ZIP"
 ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
 unzip -tq "$ZIP_PATH" >/dev/null
@@ -418,14 +311,14 @@ unzip -tq "$ZIP_PATH" >/dev/null
 )
 
 DMG_STAGE_DIR="$TMP_DIR/dmg-root"
-DMG_PATH="$OUTPUT_DIR/AgentDock-macos-universal.dmg"
+DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 mkdir -p "$DMG_STAGE_DIR"
-ditto "$APP_DIR" "$DMG_STAGE_DIR/AgentDock.app"
+ditto "$APP_DIR" "$DMG_STAGE_DIR/$APP_BUNDLE_NAME"
 ln -s /Applications "$DMG_STAGE_DIR/Applications"
 
 print -- "==> 创建 AgentDock DMG"
 hdiutil create \
-  -volname "AgentDock" \
+  -volname "$APP_NAME" \
   -srcfolder "$DMG_STAGE_DIR" \
   -ov \
   -format UDZO \
