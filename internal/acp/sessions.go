@@ -470,12 +470,12 @@ func (m *Manager) closeSessionClaimedWithProcess(ctx context.Context, record Ses
 	if record.ClosedReason == "" {
 		record.ClosedReason = "manual"
 	}
-	if auto {
-		if record.AutoCloseAttemptedAt == nil {
-			record.AutoCloseAttemptedAt = &now
-		}
-		record.AutoCloseError = ""
+	if auto && record.AutoCloseAttemptedAt == nil {
+		record.AutoCloseAttemptedAt = &now
 	}
+	// A successful close supersedes any previous auto-close failure. Keep the
+	// attempt timestamp for diagnostics, but clear the stale current error.
+	record.AutoCloseError = ""
 	if err := m.store.Save(record); err != nil {
 		return SessionRecord{}, err
 	}
