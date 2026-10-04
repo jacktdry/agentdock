@@ -71,6 +71,14 @@ func (s *Service) Session(ctx context.Context, request SessionRequest) (response
 		}
 		return result, nil
 
+	case "status":
+		diagnostics := manager.Diagnostics()
+		result := Result{"action": action, "diagnostics": diagnostics}
+		if pid := manager.AdapterProcessID(); pid > 0 {
+			result["adapter_pid"] = pid
+		}
+		return result, nil
+
 	case "new":
 		lifecycle, lifecycleErr := sessionLifecycleOptions(request)
 		if lifecycleErr != nil {

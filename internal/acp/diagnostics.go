@@ -148,3 +148,19 @@ func (m *Manager) idleManagedStateLocked(id string, record SessionRecord, now ti
 	}
 	return true, !now.Before(record.LastActiveAt.Add(ttl))
 }
+
+// AdapterProcessID returns the immutable root PID of the currently owned ACP
+// adapter process, or 0 when no adapter process has been started. It does not
+// probe, start, resume, or otherwise mutate the adapter lifecycle.
+func (m *Manager) AdapterProcessID() int {
+	if m == nil {
+		return 0
+	}
+	m.mu.RLock()
+	process := m.process
+	m.mu.RUnlock()
+	if process == nil {
+		return 0
+	}
+	return process.pid
+}

@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"sort"
 
+	processcontrol "github.com/uvwt/agentdock/internal/process"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
 	toolcomputer "github.com/uvwt/agentdock/internal/tool/computer"
 )
@@ -136,4 +138,36 @@ func acpStringSliceContains(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func (r *Runtime) enrichACPStatus(ctx context.Context, result Result) Result {
+	if r == nil || result == nil {
+		return result
+	}
+	profileID, _ := result["profile_id"].(string)
+	if pid, ok := result["adapter_pid"].(int); ok && pid > 0 {
+		result["adapter_process"] = processcontrol.Observe(ctx, pid)
+	}
+	var browserDiagnostics *toolbrowser.BrokerDiagnostics
+	if r.acpBrowser != nil {
+		diagnostics := r.acpBrowser.Diagnostics()
+		browserDiagnostics = &diagnostics
+	}
+	var computerDiagnostics *toolcomputer.BrokerDiagnostics
+	if r.computer != nil && r.computer.Broker() != nil {
+		diagnostics := r.computer.Broker().Diagnostics()
+		computerDiagnostics = &diagnostics
+	}
+	correlation := correlateACPBrokerResources(browserDiagnostics, computerDiagnostics)
+	if profileID != "" {
+		filtered := correlation.Sessions[:0]
+		for _, session := range correlation.Sessions {
+			if session.ProfileID == profileID {
+				filtered = append(filtered, session)
+			}
+		}
+		correlation.Sessions = filtered
+	}
+	result["broker_correlation"] = correlation
+	return result
 }

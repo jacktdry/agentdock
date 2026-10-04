@@ -23,7 +23,7 @@ func InputSchema(name string) (map[string]any, bool) {
 	switch name {
 	case ToolSession:
 		props["profile_id"] = stringProp("Configured ACP profile id. Omit to use the default profile.")
-		props["action"] = map[string]any{"type": "string", "description": "AgentDock ACP session management action.", "enum": []string{"info", "new", "list", "inspect", "open", "update", "close", "delete"}}
+		props["action"] = map[string]any{"type": "string", "description": "AgentDock ACP session management action.", "enum": []string{"info", "status", "new", "list", "inspect", "open", "update", "close", "delete"}}
 		props["auth_method_id"] = stringProp("Optional authentication method advertised by info. info authenticates and then returns refreshed agent metadata; other session actions authenticate before performing the requested action.")
 		props["session_id"] = stringProp("AgentDock managed session id for inspect, open, update, close, or delete.")
 		props["remote_session_id"] = stringProp("Adapter-native session id for inspect, open, or delete without requiring a prior AgentDock mapping.")
@@ -98,6 +98,10 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["steering_policy"] = objectProp("Capability-driven steering policy used internally by acp_prompt start.")
 		props["session"] = objectProp("AgentDock managed ACP session record.")
 		props["runtime_state"] = objectProp("Process-local projection of non-transcript ACP session/update state such as mode, config, commands, info, and usage.")
+		props["diagnostics"] = objectProp("Pure ACP lifecycle diagnostics snapshot for status, including managed/loaded/running/ready/idle/closed counts and per-session lifecycle state.")
+		props["adapter_pid"] = intProp("Immutable root PID of the currently owned ACP adapter process when one has been started.")
+		props["adapter_process"] = objectProp("Best-effort observation-only process tree/resource snapshot added by the AgentDock app runtime for status.")
+		props["broker_correlation"] = objectProp("M6 Browser/Computer Broker resources correlated to ACP sessions for the selected profile; capability tokens are never included.")
 		props["remote_session"] = objectProp("Adapter-native session metadata.")
 		props["sessions"] = arrayProp("Canonical session list combining managed AgentDock mappings and Adapter-native sessions. Each item declares source, managed, session_id, and remote_session_id as applicable.")
 		props["count"] = intProp("Number of unique session rows returned by list.")
