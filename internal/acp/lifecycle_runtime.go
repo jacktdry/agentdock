@@ -232,40 +232,14 @@ func (m *Manager) beginIdleAutoCloseTransition(ctx context.Context, id string, n
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed {
-		return SessionRecord{}, time.Time{}, nil, false, nil
-	}
-	if _, transitioning := m.terminalSessions[id]; transitioning {
-		return SessionRecord{}, time.Time{}, nil, false, nil
-	}
 	record, exists := m.sessions[id]
-	if !exists || record.Status != SessionReady || record.LifecyclePolicy != LifecycleIdleManaged {
+	if !exists {
 		return record, time.Time{}, nil, false, nil
 	}
-	if _, loaded := m.loaded[id]; !loaded {
+	if _, eligible := m.idleManagedStateLocked(id, record, now); !eligible {
 		return record, time.Time{}, nil, false, nil
-	}
-	ttl := time.Duration(record.IdleCloseAfterMS) * time.Millisecond
-	if ttl <= 0 || now.Before(record.LastActiveAt.Add(ttl)) {
-		return record, time.Time{}, nil, false, nil
-	}
-	if m.activeRunBySession[id] != "" || m.sessionOperations[id] > 0 {
-		return record, time.Time{}, nil, false, nil
-	}
-	for _, interaction := range m.interactions {
-		if interaction.SessionID == id && interaction.Status == InteractionPending {
-			return record, time.Time{}, nil, false, nil
-		}
 	}
 	process := m.process
-	if process == nil || process.connection == nil {
-		return record, time.Time{}, nil, false, nil
-	}
-	select {
-	case <-process.connection.Closed():
-		return record, time.Time{}, nil, false, nil
-	default:
-	}
 	m.terminalSessions[id] = SessionClosed
 	attemptedAt := time.Now().UTC()
 	record.AutoCloseAttemptedAt = &attemptedAt
