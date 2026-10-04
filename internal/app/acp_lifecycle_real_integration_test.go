@@ -5,6 +5,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"testing"
@@ -206,4 +208,184 @@ func TestRealCodexACPLifecyclePolicies(t *testing.T) {
 func TestRealAntigravityACPLifecyclePolicies(t *testing.T) {
 	requireRealACPIntegration(t)
 	runRealAdapterLifecycleSmoke(t, "antigravity")
+}
+
+func createRealIdleManagedSession(t *testing.T, rt *Runtime, profileID, workspace string) acpruntime.SessionRecord {
+	t.Helper()
+	idleMS := int(acpruntime.MinIdleCloseAfter / time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	result, err := rt.acp.Session(ctx, toolacp.SessionRequest{
+		Action: "new", ProfileID: profileID, CWD: workspace,
+		LifecyclePolicy: string(acpruntime.LifecycleIdleManaged), IdleCloseAfterMS: &idleMS,
+	})
+	if err != nil {
+		t.Fatalf("%s idle-managed session/new: %v", profileID, err)
+	}
+	session, ok := result["session"].(acpruntime.SessionRecord)
+	if !ok || session.ID == "" {
+		t.Fatalf("%s idle-managed result=%#v", profileID, result)
+	}
+	return session
+}
+
+func runRealAdapterIdleManagedSmoke(t *testing.T, profileID string) {
+	t.Helper()
+	rt, workspace := newRealACPRuntime(t, profileID)
+	session := createRealIdleManagedSession(t, rt, profileID, workspace)
+	waitRealPromptTerminal(t, rt, profileID, startRealPrompt(t, rt, profileID, session.ID))
+	ready := sessionDiagnostics(t, rt, profileID, session.ID)
+	if ready.Status != acpruntime.SessionReady || !ready.IdleManagedIdle || ready.IdleManagedEligible {
+		t.Fatalf("%s idle-managed post-prompt diagnostics=%+v", profileID, ready)
+	}
+
+	deadline := time.Now().Add(acpruntime.MinIdleCloseAfter + 75*time.Second)
+	var closed acpruntime.SessionDiagnostics
+	for time.Now().Before(deadline) {
+		closed = sessionDiagnostics(t, rt, profileID, session.ID)
+		if closed.Status == acpruntime.SessionClosed {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if closed.Status != acpruntime.SessionClosed || closed.ClosedReason != "idle_timeout" || closed.AutoCloseAttemptedAt == nil || closed.AutoCloseError != "" {
+		t.Fatalf("%s idle-managed did not close after TTL: %+v", profileID, closed)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	result, err := rt.acp.Session(ctx, toolacp.SessionRequest{Action: "open", ProfileID: profileID, SessionID: session.ID})
+	cancel()
+	if err != nil {
+		t.Fatalf("%s session/open after idle close: %v", profileID, err)
+	}
+	resumed, ok := result["session"].(acpruntime.SessionRecord)
+	if !ok || resumed.ID != session.ID || resumed.Status != acpruntime.SessionReady || resumed.ClosedAt != nil || resumed.LifecyclePolicy != acpruntime.LifecycleIdleManaged {
+		t.Fatalf("%s resumed session=%#v", profileID, result["session"])
+	}
+	closeRealSession(t, rt, profileID, session.ID)
+}
+
+func TestRealCodexACPIdleManagedCloseAndResume(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_IDLE") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_IDLE=1 to run real idle-managed integration")
+	}
+	runRealAdapterIdleManagedSmoke(t, "codex")
+}
+
+func TestRealAntigravityACPIdleManagedCloseAndResume(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_IDLE") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_IDLE=1 to run real idle-managed integration")
+	}
+	runRealAdapterIdleManagedSmoke(t, "antigravity")
+}
+
+func TestRealAntigravityACPModelAndEffortUpdate(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_CONFIG") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_CONFIG=1 to validate Antigravity model/effort config")
+	}
+	rt, workspace := newRealACPRuntime(t, "antigravity")
+	session := createRealSession(t, rt, "antigravity", workspace, acpruntime.LifecyclePersistent)
+	for _, update := range []toolacp.SessionRequest{
+		{Action: "update", ProfileID: "antigravity", SessionID: session.ID, ConfigID: "model", ConfigValue: "gemini-3.1-pro"},
+		{Action: "update", ProfileID: "antigravity", SessionID: session.ID, ConfigID: "reasoning_effort", ConfigValue: "high"},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		result, err := rt.acp.Session(ctx, update)
+		cancel()
+		if err != nil {
+			t.Fatalf("Antigravity config %s update: %v", update.ConfigID, err)
+		}
+		change, _ := result["change"].(map[string]any)
+		want := fmt.Sprint(update.ConfigValue)
+		if got := fmt.Sprint(change["after"]); got != want {
+			t.Fatalf("Antigravity config %s after=%q want=%q result=%#v", update.ConfigID, got, want, result)
+		}
+	}
+	waitRealPromptTerminal(t, rt, "antigravity", startRealPrompt(t, rt, "antigravity", session.ID))
+	if got := sessionDiagnostics(t, rt, "antigravity", session.ID); got.Status != acpruntime.SessionReady {
+		t.Fatalf("Antigravity configured session=%+v", got)
+	}
+	closeRealSession(t, rt, "antigravity", session.ID)
+}
+
+func runRealAdapterCapabilityReleaseSmoke(t *testing.T, profileID string) {
+	t.Helper()
+	profile := realACPProfile(t, profileID)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	workspace := t.TempDir()
+	cfg := config.Config{
+		AgentDockHome: t.TempDir(), AgentDockDefaultDir: workspace,
+		Host: "127.0.0.1", Port: port, BrowserEnabled: true, ACPEnabled: true,
+		ACPProfiles: []config.ACPProfile{profile}, ACPDefaultProfile: profile.ID,
+		ACPMaxPrompts: 1, ACPInteractionMS: 30_000,
+	}
+	if err := cfg.Normalize(); err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	rt, err := NewRuntime(cfg)
+	if err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	if h := rt.ACPBrowserMCPHandler(); h != nil {
+		mux.Handle("/internal/acp-browser/mcp", h)
+	}
+	if h := rt.ACPComputerMCPHandler(); h != nil {
+		mux.Handle("/internal/acp-computer/mcp", h)
+	}
+	server := &http.Server{Handler: mux}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = server.Shutdown(ctx)
+		cancel()
+		<-done
+		_ = rt.Close()
+	})
+
+	session := createRealSession(t, rt, profileID, workspace, acpruntime.LifecycleEphemeral)
+	owners := rt.acpBrowser.Diagnostics().Owners
+	if len(owners) != 1 || owners[0].ACPSessionID != session.ID || owners[0].ProfileID != profileID {
+		t.Fatalf("%s browser capability owners after new=%+v", profileID, owners)
+	}
+	if active := rt.computer.Broker().Diagnostics().ActiveSessions; len(active) != 0 {
+		t.Fatalf("%s unexpected active computer sessions before prompt=%+v", profileID, active)
+	}
+
+	waitRealPromptTerminal(t, rt, profileID, startRealPrompt(t, rt, profileID, session.ID))
+	closed := waitRealSessionStatus(t, rt, profileID, session.ID, acpruntime.SessionClosed)
+	if closed.ClosedReason != "ephemeral_prompt_terminal" {
+		t.Fatalf("%s closed=%+v", profileID, closed)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(rt.acpBrowser.Diagnostics().Owners) != 0 {
+		time.Sleep(25 * time.Millisecond)
+	}
+	if owners := rt.acpBrowser.Diagnostics().Owners; len(owners) != 0 {
+		t.Fatalf("%s browser capability owners leaked after auto-close=%+v", profileID, owners)
+	}
+	if active := rt.computer.Broker().Diagnostics().ActiveSessions; len(active) != 0 {
+		t.Fatalf("%s computer sessions leaked after auto-close=%+v", profileID, active)
+	}
+}
+
+func TestRealCodexACPEphemeralReleasesHostCapabilities(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_CAPABILITY") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_CAPABILITY=1 to validate host capability release")
+	}
+	runRealAdapterCapabilityReleaseSmoke(t, "codex")
+}
+
+func TestRealAntigravityACPEphemeralReleasesHostCapabilities(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_CAPABILITY") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_CAPABILITY=1 to validate host capability release")
+	}
+	runRealAdapterCapabilityReleaseSmoke(t, "antigravity")
 }
