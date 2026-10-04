@@ -43,6 +43,15 @@ func NewManagedLeaseManager(backend ManagedLeaseBackend) *ManagedLeaseManager {
 func leaseError(code, id, reason string, cause error) error {
 	return browserError(code, "managed browser lease rejected", "lease", &ErrorDetails{LeaseID: id, Reason: reason}, cause)
 }
+
+func safeLeasePageTool(tool string) bool {
+	switch tool {
+	case "navigate_page", "take_snapshot", "take_screenshot", "evaluate_script", "click", "fill", "press_key":
+		return true
+	default:
+		return false
+	}
+}
 func validLeaseScope(s RequestScope) bool {
 	return strings.TrimSpace(s.WorkspaceID) != "" && filepath.IsAbs(s.CanonicalWorkspaceRoot) && filepath.Clean(s.CanonicalWorkspaceRoot) == s.CanonicalWorkspaceRoot &&
 		(s.Provenance == ScopeRuntime || s.Provenance == ScopeUpstream || s.Provenance == ScopeACP) &&
@@ -126,9 +135,7 @@ func (m *ManagedLeaseManager) Call(ctx context.Context, scope RequestScope, id, 
 	if l.metadata.CleanupState != CleanupPending {
 		return nil, leaseError(ErrLeaseStateInvalid, id, "lease is not active", nil)
 	}
-	switch tool {
-	case "navigate_page", "take_snapshot", "take_screenshot", "evaluate_script", "click", "fill", "press_key":
-	default:
+	if !safeLeasePageTool(tool) {
 		return nil, leaseError(ErrActionInvalid, id, "tool outside lease operation contract", nil)
 	}
 	if _, exists := args["pageId"]; exists {

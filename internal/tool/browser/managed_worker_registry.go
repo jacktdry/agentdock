@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"reflect"
 	"sync"
 	"time"
 
@@ -69,10 +70,27 @@ func NewWorkerRegistry(deps WorkerDependencies) *WorkerRegistry {
 	}
 	if deps.Open == nil {
 		deps.Open = func(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerSession, error) {
-			return mcpclient.OpenStdioSession(ctx, cfg)
+			session, err := mcpclient.OpenStdioSession(ctx, cfg)
+			if session == nil {
+				return nil, err
+			}
+			return session, err
 		}
 	}
 	return &WorkerRegistry{workers: make(map[string]*managedWorker), deps: deps}
+}
+
+func workerSessionNil(session WorkerSession) bool {
+	if session == nil {
+		return true
+	}
+	v := reflect.ValueOf(session)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func workerError(code, id string, cause error) *Error {
@@ -80,7 +98,15 @@ func workerError(code, id string, cause error) *Error {
 }
 
 func (r *WorkerRegistry) StartManaged(ctx context.Context, options ManagedWorkerOptions) (WorkerInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	return r.startWorker(ctx, ManagedWorkerConfig(options.Cwd))
+}
+
+func (r *WorkerRegistry) startWorker(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerInfo, error) {
+	startTimeout := 30 * time.Second
+	if configured := time.Duration(cfg.TimeoutMS) * time.Millisecond; configured >= startTimeout {
+		startTimeout = configured + 5*time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	w := &managedWorker{info: WorkerInfo{WorkerID: rand.Text(), CreatedAt: time.Now().UTC(), State: WorkerStarting}, cancel: cancel, startDone: make(chan struct{}), stopDone: make(chan struct{})}
 	r.mu.Lock()
@@ -91,9 +117,8 @@ func (r *WorkerRegistry) StartManaged(ctx context.Context, options ManagedWorker
 	r.workers[w.info.WorkerID] = w
 	r.mu.Unlock()
 	defer close(w.startDone)
-	cfg := ManagedWorkerConfig(options.Cwd)
 	fail := func(err error) (WorkerInfo, error) {
-		if w.session != nil {
+		if !workerSessionNil(w.session) {
 			err = errors.Join(err, w.session.Close())
 		}
 		w.mu.Lock()
@@ -122,7 +147,7 @@ func (r *WorkerRegistry) StartManaged(ctx context.Context, options ManagedWorker
 		}
 		return fail(workerError(code, w.info.WorkerID, err))
 	}
-	if session == nil {
+	if workerSessionNil(session) {
 		return fail(workerError(ErrEngineUnavailable, w.info.WorkerID, errors.New("session missing")))
 	}
 	info := session.Info()
@@ -199,7 +224,7 @@ func (r *WorkerRegistry) stop(ctx context.Context, w *managedWorker) error {
 			session := w.session
 			w.mu.Unlock()
 			var err error
-			if session != nil {
+			if !workerSessionNil(session) {
 				err = session.Close()
 			}
 			w.mu.Lock()

@@ -90,6 +90,18 @@ func normalizeEndpoint(endpoint string) (string, error) {
 	return u.String(), nil
 }
 
+// ValidateCanonicalBrowserEndpoint rechecks a resolved endpoint at execution.
+func ValidateCanonicalBrowserEndpoint(endpoint string) error {
+	canonical, err := normalizeEndpoint(endpoint)
+	if err != nil {
+		return err
+	}
+	if canonical != endpoint {
+		return fmt.Errorf("browser endpoint is not canonical")
+	}
+	return nil
+}
+
 func NewCatalog(def CatalogDefinition) (Catalog, error) {
 	c := Catalog{profiles: make(map[string]ProfileDefinition), connectors: make(map[string]ConnectorDefinition)}
 	for _, p := range def.Profiles {
