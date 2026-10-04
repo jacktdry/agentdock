@@ -267,9 +267,19 @@ ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
 - idle-managed session 的 bounded TTL sweeper；
 - managed / loaded / running / idle session 分流與 adapter process diagnostics；
 - AgentDock Memory dynamic MCP 從 per-process stdio 遷移至本機 shared Streamable HTTP daemon；
-- Adapter-specific cleanup 留在 codex-acp / refined-antigravity-acp fork，不在 AgentDock Core 寫 agent-specific kill hack。
+- Adapter-specific cleanup 留在 codex-acp / antigravity-acp fork，不在 AgentDock Core 寫 agent-specific kill hack。
 
 完整設計與接手條件見 [acp-lifecycle-memory.md](acp-lifecycle-memory.md)。
+
+### M7 Antigravity provider baseline（2026-10-04）
+
+- AgentDock 的 AGY 路徑已收斂為單一 hardened `antigravity-acp` provider；不再經過 `refined-antigravity-acp`。
+- Fork：`jacktdry/antigravity-acp`，`main` 保持跟 upstream 對齊，AgentDock hardening 位於 `fix/agentdock-hardening`。
+- 目前部署版本：`1.2.0-agentdock.2`。
+- Adapter 已補強 `session/cancel`、`session/close`、`session/delete`、active child cleanup、同 session concurrent-turn guard，以及 Model / Reasoning effort 分離。
+- AgentDock profile 以 per-profile `env_from_env` 注入 isolated `HOME` 與明確 `AGY_BIN`；isolated HOME 只共享 Antigravity CLI auth / conversation state，不繼承使用者互動 AGY 的 MCP/plugin 設定。
+- 實測 AgentDock E2E：Gemini prompt、close、resume、delete、parallel sessions、cancel 均正常，且 task 結束後不殘留對應 AGY child。
+- Claude Sonnet 5.5 / Opus 5.5 透過同一 Antigravity profile 暴露，但 routing 視為獨立稀缺額度 specialist，只用於 context 已壓縮的窄範圍 review / architecture，預設 concurrency = 1。
 
 Browser / CDP child ownership、connector cleanup 與 Antigravity `localharness` / `chrome-devtools-mcp` 現場盤點另見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
 

@@ -4,6 +4,8 @@
 >
 > 日期：2026-10-03
 >
+> 更新：2026-10-04 — Antigravity 已切換到 hardened `antigravity-acp` 單一路徑
+>
 > 目標 Milestone：M7 — ACP Manager
 
 本文件只定義 AgentDock Custom 後續應採用的 session lifecycle 與 shared-memory contract；本輪不修改 AgentDock runtime code。
@@ -12,11 +14,21 @@
 
 目前 ACP 同時存在長期互動 session 與一次性 delegated worker。AgentDock 在 prompt 回傳 end_turn 後只把 session 從 running 改回 ready，不代表 Adapter runtime 已釋放，因此大量一次性 worker 會累積 loaded session 與 child process。
 
-2026-10-03 實測確認：
+2026-10-03 舊路徑實測確認：
 
 - Codex ACP dedicated app-server 會因 loaded thread 累積 stdio MCP / REPL child process。
-- Antigravity 的 session/close 實際可用但 capability 未宣告；logical close 後 localharness_external 仍可能留存。
+- 舊 Antigravity refined / Google ACP 路徑的 session/close 實際可用但 capability 未宣告；logical close 後 localharness_external 仍可能留存。
 - stdio mcp-memory-service 會讓每個 Agent/thread 各啟 Python + ONNX runtime。
+
+2026-10-04 新 baseline：
+
+- AgentDock 不再使用 `refined-antigravity-acp` / Google `agy_acp_server` 作為 AGY provider。
+- 單一路徑改為 hardened `jacktdry/antigravity-acp` → AGY CLI。
+- `session/cancel` 採 bounded SIGINT → SIGKILL fallback；`session/close` / `session/delete` 會先 drain active prompt。
+- Model 與 Reasoning effort 已分離，但 persisted session 仍保存 AGY 真實 concrete model ID。
+- Adapter 明確尊重 `AGY_BIN` override，AgentDock 可固定使用已登入、已更新的 system AGY。
+- AgentDock 以 isolated HOME 啟動 AGY；只共享 `~/.gemini/antigravity-cli` 狀態，不載入互動 AGY 的 `~/.gemini/config` MCP/plugin 設定。
+- 真實 AgentDock E2E 已驗證 prompt / close / resume / delete；底層 live smoke 另驗證兩個 session 並行、cancel < 1 秒，以及 task 結束後無殘留 AGY child。
 
 責任分層：
 
@@ -141,19 +153,24 @@ Branch：fix/session-lifecycle-recycle
 
 AgentDock 不直接 kill Codex app-server。
 
-### refined-antigravity-acp
+### antigravity-acp
 
-Fork：jacktdry/refined-antigravity-acp  
-Branch：fix/session-lifecycle-recycle
+Fork：jacktdry/antigravity-acp
+Branch：fix/agentdock-hardening
+Current deployment：1.2.0-agentdock.2
 
-- 補上實測存在但未宣告的 session/close capability
-- 不宣告實測不支援的 session/delete
-- lifecycle request 成功後才移除 session cache
-- 最後一個 session close 後 recycle Google ACP child，回收舊 localharness tree
+- `main` 保持跟 `shubzkothekar/antigravity-acp` upstream 對齊；AgentDock custom changes 不直接進 `main`。
+- cancel idempotent，non-Windows 先 SIGINT，bounded grace period 後仍存活才 SIGKILL。
+- session/close 與 session/delete 先停止 / drain active child，再 evict / delete session state。
+- `/usage` 也使用同一套 tracked child lifecycle。
+- 同一 session 同時第二個 prompt 會被拒絕，不覆蓋第一個 child 的 ownership。
+- ACP 對外顯示 base Model + Reasoning effort，但只組出 `agy models` 實際 advertised 的 concrete ID。
+- `AGY_BIN` 為真正 explicit override，優先於 adapter downloaded binary。
+- AgentDock profile 使用 isolated HOME，避免每個 delegated worker 自動啟動互動 AGY 的 browser / codebase / GitHub / GitLab MCP。
 
-AgentDock 不加入 Antigravity-specific kill hack。
+AgentDock 不加入 Antigravity-specific kill hack；adapter 自己負責 AGY child lifecycle。
 
-2026-10-03 現場另發現多個 `localharness_external` 同時持有 `chrome-devtools-mcp --isolated --headless` child，但目前 AgentDock / adapter diagnostics 無法可靠從 persisted `ready` session 判斷哪些 browser child 可安全回收。Browser ownership、CDP connector 與 temporary profile lifecycle 的完整設計見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+2026-10-03 的 `localharness_external` / `chrome-devtools-mcp` process count 屬於舊 refined / Google ACP 路徑的歷史證據。2026-10-04 單一路徑切換後，isolated HOME 下 `agy mcp list` 為空，AgentDock live prompt 不再為每個 AGY worker 啟動這批互動 MCP。Browser ownership、CDP connector 與 temporary profile lifecycle 的完整設計仍見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)，因為 ACP browser request 未來仍必須經 Browser Broker。
 
 後續架構不再讓每個 ACP / localharness 長期自行持有 browser backend。ACP browser 工作改成：
 
@@ -211,7 +228,7 @@ Shared Desktop UI：
 ## Acceptance Criteria
 
 1. 20 個 ephemeral Codex worker 完成後 loaded sessions 回到基線。
-2. 20 個 ephemeral Antigravity worker 完成後不留下對應 harness tree。
+2. 20 個 ephemeral Antigravity worker 完成後不留下對應 AGY task child / browser MCP tree。
 3. persistent session 不因 end_turn 被自動 close。
 4. idle-managed session TTL 到期才 close，重新 open 可 resume。
 5. close 與 prompt completion race 不造成 stale notification / double settlement。
@@ -245,15 +262,19 @@ Shared Desktop UI：
 
 ## Handoff Status
 
-截至 2026-10-03：
+截至 2026-10-04：
 
 - shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 stable/v11.14.0
 - Codex CLI → shared Memory HTTP：完成
 - AGY CLI → shared Memory HTTP：完成
 - AgentDock dynamic MCP → shared Memory HTTP：待 M7 / 安全切換
 - codex-acp fork：完成，branch fix/session-lifecycle-recycle，commit 630d7c6；已全域安裝
-- refined-antigravity-acp fork：完成，branch fix/session-lifecycle-recycle，commit 2b99cb4；wrapper 1.3.2 已全域安裝
-- Google Antigravity ACP runtime：已由 1.2.1 更新至 1.3.0
-- real lifecycle smoke：Codex 與 Antigravity 都已驗證最後一個 session/close 後底層 child PID 被替換
+- antigravity-acp fork：`jacktdry/antigravity-acp`，branch `fix/agentdock-hardening`；hardening commits `93ad102`、`5620dc4`
+- active Antigravity adapter：`1.2.0-agentdock.2`，已部署至 AgentDock profile
+- refined-antigravity-acp：已從 AgentDock profile 移除並解除全域 npm 安裝，不再是可執行 AGY 路徑
+- AgentDock Antigravity runtime：使用 system AGY 1.2.16，profile 注入 isolated HOME + `AGY_BIN`
+- real lifecycle smoke：Gemini prompt、parallel sessions、cancel、close、resume、delete 均通過；task 結束後 AGY child 回到基線
+- model discovery：Gemini 3.8/3.7/3.6 Flash、Gemini 3.1 Pro、Claude Opus 5.5、Claude Sonnet 5.5、GPT-OSS 120B；Model / Reasoning effort 已分離
+- Claude routing：Sonnet/Opus 5.5 視為獨立稀缺額度，只派 bounded + context-compacted review / architecture specialist，concurrency = 1
 - legacy stdio memory baseline：最終驗證仍有 53 個既有 .venv memory server process；本輪未終止，待 active session drain/restart 後再清理
 - AgentDock runtime lifecycle code：本輪刻意未修改，由後續 AgentDock session 接手

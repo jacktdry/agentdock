@@ -47,7 +47,7 @@ Browser Broker 負責：
 - 專案測試留下的 headless Chrome；
 - `/tmp` browser profile；
 - 多組 `chrome-devtools-mcp --isolated --headless`；
-- Antigravity `localharness_external` tree；
+- 舊 Antigravity refined / Google ACP 路徑的 `localharness_external` tree；
 - 同一 Edge CDP endpoint 的重複 connector；
 - 「session persisted」與「runtime still loaded」無法從現有 diagnostics 明確區分。
 
@@ -82,6 +82,20 @@ Browser Broker 負責：
 重要結論：**不能用 process age、0% CPU 或 `ready` 狀態直接判定 Antigravity browser tree 已過期。**
 
 因此本輪沒有對 Antigravity tree 做批量 kill，避免破壞仍可 resume 的 session。
+
+### 2026-10-04 Antigravity baseline 更新
+
+AgentDock 已停止使用上述 refined / Google ACP runtime 作為 AGY provider，改成 hardened `antigravity-acp` → AGY CLI 單一路徑。新的 AgentDock profile 使用 isolated HOME，只共享 Antigravity CLI authentication / conversation state，不載入互動 AGY 的 MCP config。
+
+實測：
+
+- isolated HOME 的 `agy mcp list` 為空；
+- 同一個 Gemini low prompt 在隔離前曾因互動 MCP 啟動超過 25 秒仍未完成，隔離後約 5–10 秒完成；
+- AgentDock E2E prompt 正常 `end_turn`；
+- session close/delete 後沒有對應 AGY task child；
+- 不再為每個 Antigravity delegated turn 預設 spawn `chrome-devtools-mcp` / codebase-memory MCP。
+
+因此 2026-10-03 的 30 個 `localharness_external` / 23 個 `chrome-devtools-mcp` 數量保留作**舊架構歷史證據**，不再代表目前 Antigravity runtime baseline。Browser Broker 的 ownership / lease 設計仍有效：未來 Antigravity 若需要 browser，必須像其他 ACP 一樣向 AgentDock Browser Broker 取得 lease，而不是恢復 per-session browser MCP。
 
 ## 2026-10-03 Browser Backend Bake-off
 
@@ -446,14 +460,15 @@ resolve explicit registered endpoint
 
 ```text
 ACP session new(ephemeral)
-→ adapter/localharness
+→ ACP adapter
+→ AGY CLI（預設不載入互動 MCP）
 → optional Browser Broker lease
 → prompt
 → end_turn
 → orchestrator completion verification
 → release browser lease
 → session/close
-→ adapter recycles localharness tree
+→ adapter drains AGY child
 → AgentDock diagnostics confirm loaded resources return to baseline
 ```
 
