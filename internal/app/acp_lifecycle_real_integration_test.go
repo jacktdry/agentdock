@@ -9,11 +9,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
+	processcontrol "github.com/uvwt/agentdock/internal/process"
 	toolacp "github.com/uvwt/agentdock/internal/tool/acp"
 )
 
@@ -388,4 +392,255 @@ func TestRealAntigravityACPEphemeralReleasesHostCapabilities(t *testing.T) {
 		t.Skip("set AGENTDOCK_RUN_REAL_ACP_CAPABILITY=1 to validate host capability release")
 	}
 	runRealAdapterCapabilityReleaseSmoke(t, "antigravity")
+}
+
+func realACPStatus(t *testing.T, rt *Runtime, profileID string) (acpruntime.DiagnosticsSnapshot, int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := rt.acp.Session(ctx, toolacp.SessionRequest{Action: "status", ProfileID: profileID})
+	if err != nil {
+		t.Fatalf("%s status: %v", profileID, err)
+	}
+	diagnostics, ok := result["diagnostics"].(acpruntime.DiagnosticsSnapshot)
+	if !ok {
+		t.Fatalf("%s status diagnostics type=%T result=%#v", profileID, result["diagnostics"], result)
+	}
+	pid, _ := result["adapter_pid"].(int)
+	return diagnostics, pid
+}
+
+func waitRealAdapterDescendantsAtMost(t *testing.T, pid, maximum int) processcontrol.Snapshot {
+	t.Helper()
+	deadline := time.Now().Add(8 * time.Second)
+	var snapshot processcontrol.Snapshot
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		snapshot = processcontrol.Observe(ctx, pid)
+		cancel()
+		if snapshot.Error == "" && snapshot.DescendantCount != nil && *snapshot.DescendantCount <= maximum {
+			return snapshot
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("adapter pid=%d descendants did not return to <=%d: %+v", pid, maximum, snapshot)
+	return snapshot
+}
+
+func waitRealAdapterStopped(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(8 * time.Second)
+	var snapshot processcontrol.Snapshot
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		snapshot = processcontrol.Observe(ctx, pid)
+		cancel()
+		if snapshot.State == "not_found" || (snapshot.Alive != nil && !*snapshot.Alive) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("adapter pid=%d still alive after runtime close: %+v", pid, snapshot)
+}
+
+func runRealAdapterTwentyPromptStress(t *testing.T, profileID string) {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		t.Skip("real adapter process baseline stress is currently macOS-only")
+	}
+	profile := realACPProfile(t, profileID)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	workspace := t.TempDir()
+	cfg := config.Config{
+		AgentDockHome: t.TempDir(), AgentDockDefaultDir: workspace,
+		Host: "127.0.0.1", Port: port, BrowserEnabled: true, ACPEnabled: true,
+		ACPProfiles: []config.ACPProfile{profile}, ACPDefaultProfile: profile.ID,
+		ACPMaxPrompts: 4, ACPInteractionMS: 30_000,
+	}
+	if err := cfg.Normalize(); err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	rt, err := NewRuntime(cfg)
+	if err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	if h := rt.ACPBrowserMCPHandler(); h != nil {
+		mux.Handle("/internal/acp-browser/mcp", h)
+	}
+	if h := rt.ACPComputerMCPHandler(); h != nil {
+		mux.Handle("/internal/acp-computer/mcp", h)
+	}
+	server := &http.Server{Handler: mux}
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.Serve(listener) }()
+	closed := false
+	shutdown := func() {
+		if closed {
+			return
+		}
+		closed = true
+		_ = rt.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = server.Shutdown(ctx)
+		cancel()
+		<-serverDone
+	}
+	t.Cleanup(shutdown)
+
+	const batchSize = 4
+	const batches = 5
+	adapterPID := 0
+	baselineDescendants := -1
+	for batch := 0; batch < batches; batch++ {
+		sessions := make([]acpruntime.SessionRecord, 0, batchSize)
+		runs := make([]string, 0, batchSize)
+		for i := 0; i < batchSize; i++ {
+			session := createRealSession(t, rt, profileID, workspace, acpruntime.LifecycleEphemeral)
+			sessions = append(sessions, session)
+		}
+		owners := rt.acpBrowser.Diagnostics().Owners
+		if len(owners) != batchSize {
+			t.Fatalf("%s batch %d browser owners before prompts=%d want=%d: %+v", profileID, batch+1, len(owners), batchSize, owners)
+		}
+		for _, session := range sessions {
+			runs = append(runs, startRealPrompt(t, rt, profileID, session.ID))
+		}
+		for i, runID := range runs {
+			waitRealPromptTerminal(t, rt, profileID, runID)
+			closedSession := waitRealSessionStatus(t, rt, profileID, sessions[i].ID, acpruntime.SessionClosed)
+			if closedSession.ClosedReason != "ephemeral_prompt_terminal" || closedSession.AutoCloseAttemptedAt == nil || closedSession.AutoCloseError != "" {
+				t.Fatalf("%s batch %d session %d close diagnostics=%+v", profileID, batch+1, i+1, closedSession)
+			}
+		}
+
+		diagnostics, pid := realACPStatus(t, rt, profileID)
+		expectedClosed := (batch + 1) * batchSize
+		if diagnostics.Counts.Managed != expectedClosed || diagnostics.Counts.Closed != expectedClosed || diagnostics.Counts.Loaded != 0 || diagnostics.Counts.Running != 0 || diagnostics.Counts.Ready != 0 || diagnostics.Counts.AutoCloseFailures != 0 {
+			t.Fatalf("%s batch %d diagnostics=%+v want managed/closed=%d loaded/running/ready/failures=0", profileID, batch+1, diagnostics.Counts, expectedClosed)
+		}
+		if owners := rt.acpBrowser.Diagnostics().Owners; len(owners) != 0 {
+			t.Fatalf("%s batch %d browser owners leaked: %+v", profileID, batch+1, owners)
+		}
+		if active := rt.computer.Broker().Diagnostics().ActiveSessions; len(active) != 0 {
+			t.Fatalf("%s batch %d computer sessions leaked: %+v", profileID, batch+1, active)
+		}
+		if pid <= 0 {
+			t.Fatalf("%s batch %d missing adapter pid", profileID, batch+1)
+		}
+		if adapterPID == 0 {
+			adapterPID = pid
+		} else if pid != adapterPID {
+			t.Fatalf("%s adapter pid changed during stress: got=%d want=%d", profileID, pid, adapterPID)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		snapshot := processcontrol.Observe(ctx, adapterPID)
+		cancel()
+		if snapshot.Error != "" || snapshot.DescendantCount == nil {
+			t.Fatalf("%s batch %d adapter observation unavailable: %+v", profileID, batch+1, snapshot)
+		}
+		if baselineDescendants < 0 {
+			baselineDescendants = *snapshot.DescendantCount
+		} else {
+			waitRealAdapterDescendantsAtMost(t, adapterPID, baselineDescendants)
+		}
+	}
+
+	shutdown()
+	waitRealAdapterStopped(t, adapterPID)
+}
+
+func TestRealCodexACPTwentyPromptEphemeralStress(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_STRESS") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_STRESS=1 to run 20-prompt Codex lifecycle stress")
+	}
+	runRealAdapterTwentyPromptStress(t, "codex")
+}
+
+func TestRealAntigravityACPTwentyPromptEphemeralStress(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_STRESS") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_STRESS=1 to run 20-prompt Antigravity lifecycle stress")
+	}
+	runRealAdapterTwentyPromptStress(t, "antigravity")
+}
+
+func realACPDescendantCommands(root int) ([]string, error) {
+	out, err := exec.Command("ps", "-axo", "pid=,ppid=,command=").Output()
+	if err != nil {
+		return nil, err
+	}
+	parents := map[int]int{}
+	commands := map[int]string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		pid, err1 := strconv.Atoi(fields[0])
+		ppid, err2 := strconv.Atoi(fields[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		parents[pid] = ppid
+		commands[pid] = strings.Join(fields[2:], " ")
+	}
+	isDescendant := func(pid int) bool {
+		seen := map[int]bool{}
+		for pid > 0 && !seen[pid] {
+			seen[pid] = true
+			parent, ok := parents[pid]
+			if !ok {
+				return false
+			}
+			if parent == root {
+				return true
+			}
+			pid = parent
+		}
+		return false
+	}
+	result := []string{}
+	for pid, command := range commands {
+		if isDescendant(pid) {
+			result = append(result, command)
+		}
+	}
+	return result, nil
+}
+
+func TestRealACPSessionsDoNotSpawnPerSessionMemoryStdio(t *testing.T) {
+	if os.Getenv("AGENTDOCK_RUN_REAL_ACP_MEMORY") != "1" {
+		t.Skip("set AGENTDOCK_RUN_REAL_ACP_MEMORY=1 to verify ACP Memory transport")
+	}
+	if runtime.GOOS != "darwin" {
+		t.Skip("process-tree Memory transport check is currently macOS-only")
+	}
+	for _, profileID := range []string{"codex", "antigravity"} {
+		profileID := profileID
+		t.Run(profileID, func(t *testing.T) {
+			rt, workspace := newRealACPRuntime(t, profileID)
+			session := createRealSession(t, rt, profileID, workspace, acpruntime.LifecyclePersistent)
+			waitRealPromptTerminal(t, rt, profileID, startRealPrompt(t, rt, profileID, session.ID))
+			if got := sessionDiagnostics(t, rt, profileID, session.ID); got.Status != acpruntime.SessionReady || !got.Loaded {
+				t.Fatalf("%s loaded persistent session diagnostics=%+v", profileID, got)
+			}
+			commands, err := realACPDescendantCommands(os.Getpid())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, command := range commands {
+				lower := strings.ToLower(command)
+				if strings.Contains(lower, "mcp-memory-service") || strings.Contains(lower, "/.venv/bin/memory server") || strings.Contains(lower, "/memory server") {
+					t.Fatalf("%s spawned per-session stdio Memory child: %s", profileID, command)
+				}
+			}
+			closeRealSession(t, rt, profileID, session.ID)
+		})
+	}
 }
