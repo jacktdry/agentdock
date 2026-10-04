@@ -13,6 +13,7 @@
 ## 文件索引
 
 - [architecture.md](architecture.md)：整體產品與技術架構。
+- [agentdock-next-isolation.md](agentdock-next-isolation.md)：AgentDock Next side-by-side 隔離、namespace、rollout 與驗收契約。
 - [branching-strategy.md](branching-strategy.md)：`main`、`custom/main`、feature、Workbench port 與 upstream PR 的 Git 規則。
 - [upstream-tracking.md](upstream-tracking.md)：AgentDock / Workbench 更新的追蹤與採用流程。
 - [workbench-adoption.md](workbench-adoption.md)：Workbench 功能採用、延後與排除清單。
@@ -35,3 +36,8 @@
 5. 準備回饋 upstream 的修正必須從乾淨的 `main` 建立。
 6. 新 Desktop 業務功能原則上只實作一次，不再長期維護 AppKit 與 WPF 兩套平行 UI。
 7. 使用者可見字串不得散落硬寫在 Swift、C#、Vue 或驗證腳本中。
+
+8. 目前連線中的 AgentDock 是 production control plane；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable 當 development target。
+9. 客製版以 **AgentDock Next** side-by-side 開發，app identity、服務、port、runtime/state/log/work roots 與 connector 必須隔離；installer / self-update 必須 Next-target-aware 並 fail closed，禁止 fallback 到 `AgentDock.app`。
+10. M7 code/stress 已於 `d8acb9be` 整合完成；下一步是 M7.5 Next isolation，stable live cutover 刻意延後。只有 Next 完整開發、測試並可獨立連上 ChatGPT 後，才可另行規劃與授權舊 AgentDock migration / retirement。
+11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。

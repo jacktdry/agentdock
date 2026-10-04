@@ -361,13 +361,29 @@ M7 feature branch 已完成 lifecycle、Memory client、diagnostics、Shared Des
 - M6 4-active bounded Browser queue、live managed Chrome isolation、resource lock、foreground Computer fail-closed 等 regression 全綠；
 - root tests / vet、ACP / Desktop / MCP race、Shared Desktop 30 frontend tests + build、macOS nested module test、Windows amd64 cross-build均通過。
 
-最後 rollout gate：目前執行中的 pre-M7 `AgentDock.app` 仍使用 stdio Memory registry；待 M7 整合並重建 / 重啟 App/Core 後，才切 live registry 到 `http://127.0.0.1:8766/mcp` 並確認舊 stdio Memory child 歸零。
+M7 feature code / stress 已於 `d8acb9be` 整合完成。舊 direct stable rollout gate 刻意撤回並延後：live activation 嘗試曾造成 ChatGPT Mac-Dev control channel 斷線。不得為完成 M7 重建 / 重啟 / 替換 stable App/Core 或切換 stable stdio Memory registry；下一步改為 M7.5 AgentDock Next isolation。
 
 ### M7 CBM lifecycle 技術債（2026-10-03）
 
 實測發現 Codebase Memory executable 更新後，舊 daemon / supervisor 仍存活時，新 index worker 可能因 build mismatch 被拒絕並形成連續 worker failure。這屬於 dynamic MCP service lifecycle / process ownership 問題，不應以全域 `pkill` 解決。
 
 M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、restart-pending、active work drain、pending re-index queue、bounded retry/backoff，以及 versioned executable / graceful restart 的責任邊界。完整現場證據與接手確認清單見 [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)。
+
+## M7.5 — AgentDock Next Isolation（pre-M8 gate）
+
+狀態：**待實作 / 驗證；M7 feature code / stress 已完成，stable live cutover 刻意延後**。
+
+目前連線的 AgentDock 是 production control plane，Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得以 stable 作 development target。
+
+工作與 Exit criteria：
+
+- 以 **AgentDock Next.app** side-by-side 實作獨立 bundle / LaunchAgent / runtime / log / state / work directory / port / connector namespace；精確 defaults 見 [agentdock-next-isolation.md](agentdock-next-isolation.md)。
+- Runtime / Connection / Settings / Update / Diagnostics、installer / self-update 僅能控制 Next；缺少或矛盾的 Next identity 必須 fail closed，禁止 fallback 到 `AgentDock.app`。
+- Memory HTTP cutover 先在 Next registry / ACP sessions 驗證，固定 `http://127.0.0.1:8766/mcp` 與 `protocol_version=2025-11-25`；stable stdio registry 與其 children 不列入 Next cleanup。
+- 通過隔離、Next lifecycle / update / rollback 與 M6/M7 regression；證據不得來自開發中操作 stable runtime。
+- Next 必須能以未來 `mac-dev-next` connector 獨立連上 ChatGPT，Next lifecycle 操作不能影響原 Mac-Dev control channel。
+
+此 gate 是 M8/M9 live migration 的必要前置；後續 feature 開發仍限 Next。只有 Next 完整開發、測試及獨立連線後，才另行提出 migration / retirement 計畫，不把舊 AgentDock cutover 當目前下一步。
 
 ## M8 — Permission / Approval
 
@@ -380,7 +396,7 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 Approval Reviewer 預設 defer。
 
-此 Milestone 同時完成剩餘 Browser / ACP / MCP / Plugin / Settings 的 shared UI parity 評估，決定哪些舊 native business views 可以 deprecated。
+本 Milestone 的 runtime 驗證限 Next；live migration 必須先通過 M7.5。此 Milestone 同時完成剩餘 Browser / ACP / MCP / Plugin / Settings 的 shared UI parity 評估，決定哪些舊 native business views 可以 deprecated。
 
 ## M9 — Release Migration
 
@@ -388,6 +404,8 @@ Approval Reviewer 預設 defer。
 
 前置工作：
 
+- 通過 M7.5，Next 完整開發 / 測試並能獨立連上 ChatGPT；stable retirement 必須另行規劃與授權。
+- Next packaging / installer / self-update identity 隔離與 fail-closed gate；未來更名作獨立 identity migration，不共用 stable runtime state。
 - 讓 custom release workflow 驗證 `custom/main`，而不是沿用官方只接受 `origin/main` 的 gate。
 - 定義 custom tag / `buildinfo.Version` / installer metadata / update channel 的一致版本契約。
 - 確保上述改動只存在 custom layer，不回寫污染 `main`。
@@ -427,7 +445,9 @@ M5
 ↓
 M6
 ↓
-M7
+M7 (code / stress complete)
+↓
+M7.5 (Next isolation / separate ChatGPT connection)
 ↓
 M8
 ↓

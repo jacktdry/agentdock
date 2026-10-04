@@ -1,14 +1,20 @@
 # ACP Session Lifecycle and Shared Memory
 
-> 狀態：M7 code + stress completed / final live AgentDock Memory cutover pending
+> 狀態：M7 code + stress completed / M7.5 Next isolation pending / stable cutover intentionally deferred
 >
 > 日期：2026-10-03
 >
-> 更新：2026-10-04 — M7 lifecycle / diagnostics / Shared Desktop / real-adapter stress 已完成；最後只剩已安裝 AgentDock.app 更新後的 live Memory registry cutover
+> 更新：2026-10-05 — M7 已於 d8acb9be 整合完成；Memory cutover 先在 AgentDock Next 驗證，stable control plane 保持原樣
 >
 > 目標 Milestone：M7 — ACP Manager
 
 本文件定義 M7 的 session lifecycle 與 shared-memory contract。Browser / Computer resource ownership 已由 M6 落地，M7 應沿用既有 Broker contract，不重新建立 adapter-owned browser/computer backend。
+
+## Development isolation boundary
+
+目前連線中的 AgentDock 是 production control plane。先前 live activation 導致 ChatGPT Mac-Dev channel 斷線，故 Next 開發禁止檢查、修改、重啟、停止、替換 stable App/Core，或操作 `~/.agentdock`、stable stdio Memory registry 與 live launchd services。Stable 不是 development target；舊 stdio Memory children 不可為 Next 驗收而 drain / kill / cleanup。
+
+下一步是 [M7.5 AgentDock Next isolation](agentdock-next-isolation.md)，不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
 
 ## 背景
 
@@ -42,7 +48,7 @@ macOS LaunchAgent
 └── mcp-memory-service 11.14.0+
     └── Streamable HTTP
         http://127.0.0.1:8766/mcp
-            ├── AgentDock
+            ├── AgentDock Next (proposed; Next registry only)
             ├── Codex CLI
             ├── Codex ACP
             ├── AGY CLI
@@ -61,7 +67,7 @@ storage:
 - quality device：cpu
 - Codex CLI 與 AGY CLI 已切 shared HTTP memory
 
-M7 branch 已完成 AgentDock dynamic MCP 的 shared HTTP client、`protocol_version=2025-11-25` compatibility pin 與 live integration test。**目前正在執行的 pre-M7 AgentDock.app 仍維持 stdio registry**，因舊 binary 使用 go-sdk 1.7.0；最終 cutover 必須在 M7 整合、重建並重啟 App/Core 後再進行，避免舊 runtime 對 Memory daemon 送出不相容的 `2026-07-28` protocol。
+M7 已完成 dynamic MCP shared HTTP client、`protocol_version=2025-11-25` compatibility pin 與 integration test，並於 `d8acb9be` 整合。**Stable pre-M7 AgentDock 保留 stdio registry，不做 live cutover。** Next 首先在 `~/.agentdock-next` 的獨立 registry/config 指向 `http://127.0.0.1:8766/mcp`，以固定 protocol 驗證 handshake / health / ACP lifecycle。這不要求重啟或重新設定 shared Memory daemon，更不能修改 stable registry。Next 使用 shared DB 不代表共享 AgentDock state 或 cleanup authority。
 
 HTTP mode 保留一般 store/search/retrieve/tag/delete 等能力。memory_harvest 與 memory_ingest 因可讀 server host filesystem path，被 upstream 刻意設為 local-only。未來若 UI 需要 Import / Harvest，應另建 trusted local maintenance path，不要因此退回 per-session stdio。
 
@@ -241,9 +247,11 @@ M7 code / stress 已完成：
 - M6 regression：8 owner = 4 active + 4 queued、4 live managed Chrome leases、same-resource lock、foreground Computer fail-closed、adapter-owned browser/computer backend 不復活；
 - Shared Memory：Codex CLI / AGY CLI 已指向 `http://127.0.0.1:8766/mcp`；新 ACP session 不產生 per-session stdio Memory child；daemon idle CPU 約 0.1%，stress 後未見 CoreML / `.mlmodelc` / partition bundle。
 
-尚未宣稱完成的唯一 live cutover：已安裝的 pre-M7 `AgentDock.app` 目前仍持有 stdio `memory` registry。需先讓 M7 binary 生效，再把 registry 切成 Streamable HTTP，確認舊 stdio Memory child 退出後才能關閉 M7。
+M7 feature code / stress 已完成；stable pre-M7 App 的 stdio `memory` registry 保持不動，舊 live cutover 刻意延後。新增 M7.5 驗證 Next-only HTTP registry 與新 Next ACP sessions 無 stdio Memory child；不要求 stable children 歸零。
 
 ## Acceptance Criteria
+
+以下 lifecycle / process / Memory 驗收適用於 isolated Next runtime；既有 M7 stress 為歷史完成證據，不宣稱 Next isolation 已通過。Stable sessions / children 不納入 cleanup 目標。
 
 1. 20 個 ephemeral Codex worker 完成後 loaded sessions 回到基線。
 2. 20 個 **prompt-driven ephemeral** Antigravity worker 完成後自動 close，loaded adapter state 回到基線；M6 已另完成 20 次真實 session new/close/runtime-close capability/process stress。
@@ -252,8 +260,8 @@ M7 code / stress 已完成：
 5. close 與 prompt completion race 不造成 stale notification / double settlement。
 6. close failure 不把 session 誤標 closed。
 7. runtime restart 不遺失 persisted mapping。
-8. Codex / AGY / AgentDock 使用同一份 Memory DB。
-9. 新 ACP session 不再 spawn mcp-memory-service stdio child。
+8. Next registry 以 protocol pin `2025-11-25` 連到 shared HTTP `http://127.0.0.1:8766/mcp`，與既有 Codex / AGY 使用同一份 Memory DB；stable stdio registry 保留。
+9. 新 Next ACP session 不再 spawn mcp-memory-service stdio child。
 10. shared memory daemon 不再建立 CoreML partition temp bundle。
 11. diagnostics 能區分 managed / loaded / active。
 12. M6 Browser regression invariant：4~8 個並行 ACP browser task 不互相改變 context / page target。
@@ -263,29 +271,25 @@ M7 code / stress 已完成：
 16. M6 routing invariant 持續成立：ACP 不 silent fallback 到 foreground Computer Use。
 17. relevant unit / integration / race / Desktop tests 通過。
 
-## Rollout / Cleanup
+## Next Rollout / Cleanup
 
-~~~text
-1. shared memory daemon healthy
-2. clients migrate to HTTP
-3. verify new ACP sessions no longer spawn stdio memory
-4. integrate ACP fork lifecycle fixes
-5. implement AgentDock lifecycle policy
-6. restart / drain old ACP adapters
-7. verify old memory/CoreML handles are zero
-8. clean stale ONNX/CoreML temp artifacts
-~~~
+1. 先完成 M7.5 namespace / target isolation；不得對 stable App/Core、registry 或 live launchd services 動作。
+2. 在 Next registry/config 設定 shared HTTP endpoint 與 `2025-11-25` pin；驗證既有 endpoint 可用，失敗則停止 Next rollout，不重新設定 / 重啟 shared daemon。
+3. 以 Next-owned ACP 驗證 Memory health、persistent / ephemeral / idle-managed、20 prompt-driven stress；只計算 Next-owned processes / resources。
+4. Drain / restart / cleanup 僅限可證明 Next ownership 的 adapters / children / temp artifacts；ownership 不明時 fail closed，不碰 stable stdio Memory children 或 shared daemon/model artifacts。
+5. Next lifecycle 與 Memory 驗證完成後，以獨立 `mac-dev-next` 連線 ChatGPT；確認原 Mac-Dev channel 持續可用。
+6. Next 完整開發 / 測試 / 獨立連線後，stable migration / retirement 才能作未來另行規劃與授權的工作。
 
-不要在舊 ACP process 還持有檔案 handles 時先刪除 temporary model directories。
+不要在 Next-owned process 還持有 handles 時刪除其 temporary directories；不以全域 process 清理或 stable children 歸零作驗收。
 
 ## Handoff Status
 
-截至 2026-10-04：
+2026-10-04 驗證紀錄，2026-10-05 更新 rollout 決策（未重新檢查 live runtime）：
 
 - shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 `stable/v11.14.0`；live idle CPU 約 0.1%，M7 stress 後沒有 CoreML / `.mlmodelc` / partition bundle；
 - Codex CLI → shared Memory HTTP：完成；
 - AGY CLI → shared Memory HTTP：完成；
-- AgentDock dynamic MCP → shared Memory HTTP：**程式碼 / integration test 完成，live pre-M7 App cutover 待 final handoff**；
+- AgentDock dynamic MCP → shared Memory HTTP：**程式碼 / integration test 已完成；先驗證 Next registry，stable live cutover 刻意延後**；
 - codex-acp：`2.1.1` 真實驗證 persistent / ephemeral / idle-managed、20 prompt-driven ephemeral stress、host capability release 均完成；
 - Antigravity ACP：`jacktdry/antigravity-acp` `fix/agentdock-hardening`，目前部署 `1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`；
 - refined-antigravity-acp：不再是 AgentDock 可執行 AGY 路徑；僅保留歷史/研究 repo；
@@ -294,7 +298,7 @@ M7 code / stress 已完成：
 - model discovery / routing：Model 與 Reasoning effort 分離；Claude Sonnet 5.5 / Opus 5.5 視為獨立稀缺額度 specialist，只派 bounded + context-compacted review / architecture，concurrency = 1；
 - M6 Browser Broker：lease isolation、4-active bounded admission、5 分鐘 TTL、30 秒 sweep、bounded recovery、external user-page protection、diagnostics 與 cleanup controls 已完成；
 - M6/M7 regression：8-owner Broker stress（4 active + 4 queued）、4 個真 managed MCP/Chrome concurrent lease、same-resource lock、managed host hard-crash cleanup、Orca no-focus、foreground fail-closed、Edge external safety、`chrome-devtools-mcp@1.7.0` pin/schema regression均通過；
-- M7 code / stress **已完成**：lifecycle policy、prompt-driven auto-close、idle-managed close/resume、diagnostics、Shared Desktop UI、Memory HTTP client / protocol pin 與 real-adapter stress；唯一 final blocker 是已安裝 pre-M7 AgentDock.app 的 live Memory registry cutover；
-- legacy stdio memory /舊 adapter process 數量應在 M7 drain/restart 時重新量測，不沿用 2026-10-03 的 process count 當現況。
+- M7 code / stress **已完成**：lifecycle policy、prompt-driven auto-close、idle-managed close/resume、diagnostics、Shared Desktop UI、Memory HTTP client / protocol pin 與 real-adapter stress；已於 `d8acb9be` 整合；下一 gate 為 M7.5 Next isolation，不再要求 stable live Memory cutover；
+- Next process baseline 在 Next-only 驗證時建立；不沿用 2026-10-03 的 process count，不 drain/restart 或檢查 stable legacy stdio memory / adapters。
 
 M7 的核心原則是「消費 M6 Broker capability，不重做 M6 ownership」。Browser / Computer physical resource cleanup 由 Broker 負責；M7 決定的是 ACP session 在何時 release 這些 capability、何時保留 adapter runtime，以及如何呈現 lifecycle diagnostics。

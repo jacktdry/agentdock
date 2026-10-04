@@ -8,7 +8,7 @@
 
 ## 1. 定位
 
-AgentDock Custom 是官方 AgentDock 的 workflow-oriented 客製版本，不是一個獨立 runtime，也不是 AgentDock Workbench 的重新包裝版本。
+AgentDock Custom 是官方 AgentDock 的 workflow-oriented 客製版本，不是 AgentDock Workbench 的重新包裝版本。客製開發產品名為 **AgentDock Next**；沿用 upstream Core 架構，但以獨立 app identity 與 runtime/state namespace 執行。
 
 我們保留官方 Core、Tool、MCP、Plugin、ACP、Browser 與平台 runtime 的演進能力，並在 `custom/main` 上加入只對實際工作流程有明確收益的功能。
 
@@ -21,6 +21,22 @@ AgentDock Custom 是官方 AgentDock 的 workflow-oriented 客製版本，不是
 - 任務執行中追加要求、ACK、有限重送與不中斷原任務的 attention semantics。
 - macOS / Windows Desktop 不再重複實作同一套業務 UI。
 - 多國語系成為 repo-level 可貢獻資產，不依附特定 Desktop framework。
+
+### Production control plane / Next development plane（2026-10-05）
+
+目前連線中的 AgentDock 是 ChatGPT Mac-Dev 的 production control plane。先前 live activation 嘗試造成 control channel 斷線，因此禁止在 Next 開發中檢查、修改、重啟、停止、替換 stable `AgentDock.app` / Core，或操作 `~/.agentdock`、stable Memory registry 與 live launchd services；stable 不得作為 development target。
+
+```text
+ChatGPT Mac-Dev → stable AgentDock → stable Core :8765 / stable state
+ChatGPT mac-dev-next (future) → AgentDock Next → Next Core :8767 / Next state
+                                                 │
+                                                 └─ shared Memory HTTP :8766/mcp
+                                                    protocol 2025-11-25
+```
+
+兩個 plane 不共用 lifecycle authority、registry/config、runtime state、tunnel identity 或 update target。Next Memory registry 位於 `~/.agentdock-next`；共用 Memory HTTP endpoint 不代表可以修改 stable stdio registry 或接管 shared daemon lifecycle。Shared Desktop Runtime / Connection / Settings / Update / Diagnostics 也必須只指向 Next，不能自動發現並控制 stable。
+
+隔離 namespace、installer fail-closed 契約與驗收以 [agentdock-next-isolation.md](agentdock-next-isolation.md) 為準。這是待實作的 M7.5 gate，不宣稱目前程式已具備全部隔離能力。M7 code/stress 在 `d8acb9be` 完成，stable cutover 延後至 Next 完整測試並獨立連線 ChatGPT 後的未來 migration；更名屬 packaging / identity migration，不得因此提早共用 state。
 
 ## 2. 上游關係
 
