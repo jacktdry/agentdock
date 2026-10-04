@@ -6,6 +6,7 @@ const (
 	ToolSession = "computer_session"
 	ToolObserve = "computer_observe"
 	ToolAct     = "computer_act"
+	ToolBroker  = "computer_broker"
 )
 
 func InputSchema(name string) (map[string]any, bool) {
@@ -22,6 +23,10 @@ func InputSchema(name string) (map[string]any, bool) {
 	}
 
 	switch name {
+	case ToolBroker:
+		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_acp_session"}, "description": "Computer Control Broker control-plane action."}
+		props["owner_acp_session_id"] = stringProp("ACP session owner to release for action=cleanup_acp_session.")
+		required = []string{"action"}
 	case ToolSession:
 		props["action"] = map[string]any{"type": "string", "enum": []string{"acquire", "release"}, "description": "Computer control session lifecycle action."}
 		props["session_id"] = stringProp("Computer control session id for action=release.")
@@ -80,6 +85,10 @@ func OutputSchema(name string) (map[string]any, bool) {
 		"foreground_policy":   stringProp("Session foreground policy: forbidden or allowed."),
 	}
 	switch name {
+	case ToolBroker:
+		props["computer_broker_ok"] = boolProp("Whether the Computer Control Broker control-plane operation completed successfully.")
+		props["diagnostics"] = objectProp("Computer Control Broker active/released sessions and bounded recent focus/provider events.")
+		props["cleanup_error"] = stringProp("Cleanup error summary when releasing an ACP-owned computer session failed.")
 	case ToolSession:
 		props["capability"] = stringProp("Maximum session capability: observe or act.")
 		props["owner"] = objectProp("Session owner metadata for diagnostics.")

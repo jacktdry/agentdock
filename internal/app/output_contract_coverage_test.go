@@ -43,9 +43,11 @@ var outputContractCoverageInventory = map[string]outputContractCoverageEntry{
 	"recall_maintain":          {Variants: []string{"list"}},
 	"private_note_manage":      {Variants: []string{"search", "read", "write", "delete", "status", "maintain"}},
 	// Browser 成功路径需要真实 Chromium；默认 CI 校验覆盖登记，browser_integration 再执行真实 runtime schema 校验。
+	"browser_broker":   {Variants: []string{"status", "cleanup_stale", "cleanup_acp_session"}},
 	"browser_session":  {Variants: []string{"start"}, IntegrationOnly: true},
 	"browser_act":      {Variants: []string{"success"}, IntegrationOnly: true},
 	"browser_snapshot": {Variants: []string{"success"}, IntegrationOnly: true},
+	"computer_broker":  {Variants: []string{"status", "cleanup_acp_session"}},
 	"computer_session": {Variants: []string{"acquire"}},
 	"computer_observe": {Variants: []string{"capabilities"}},
 	"computer_act":     {Variants: []string{"click"}},

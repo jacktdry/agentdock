@@ -3,6 +3,7 @@ package computer
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -210,5 +211,40 @@ func TestPermissionsRequireForegroundBeforeProviderCall(t *testing.T) {
 	provider.mu.Unlock()
 	if calls != 0 {
 		t.Fatalf("permissions provider calls=%d", calls)
+	}
+}
+
+type failingComputerProvider struct{}
+
+func (failingComputerProvider) ID() ProviderID { return ProviderOrca }
+func (failingComputerProvider) FrontmostApp(context.Context) (*AppIdentity, error) {
+	return &AppIdentity{Name: "ChatGPT", BundleID: "com.openai.codex", PID: 1}, nil
+}
+func (failingComputerProvider) Observe(context.Context, ObservationRequest) (map[string]any, error) {
+	return nil, errors.New("provider unavailable")
+}
+func (failingComputerProvider) Act(context.Context, ActionRequest) (map[string]any, error) {
+	return nil, errors.New("provider unavailable")
+}
+
+func TestComputerDiagnosticsRecordsFocusAndProviderFailures(t *testing.T) {
+	focusProvider := &fakeProvider{
+		before: &AppIdentity{Name: "ChatGPT", BundleID: "com.openai.codex", PID: 1},
+		after:  &AppIdentity{Name: "Target", BundleID: "example.target", PID: 2},
+	}
+	broker, _ := NewBroker(focusProvider)
+	meta, _ := broker.Acquire(AcquireRequest{Owner: OwnerScope{Kind: OwnerDirect, OwnerTaskID: "diag-task"}, Capability: CapabilityObserve, ForegroundPolicy: ForegroundForbidden})
+	_, _ = broker.ObserveDirect(context.Background(), meta.SessionID, ObservationRequest{Action: "get_app_state", App: "Target"})
+	diag := broker.Diagnostics()
+	if len(diag.ActiveSessions) != 1 || len(diag.RecentEvents) != 1 || diag.RecentEvents[0].Kind != "focus_violation" {
+		t.Fatalf("focus diagnostics=%+v", diag)
+	}
+
+	failed, _ := NewBroker(failingComputerProvider{})
+	failedMeta, _ := failed.Acquire(AcquireRequest{Owner: OwnerScope{Kind: OwnerDirect}, Capability: CapabilityObserve, ForegroundPolicy: ForegroundForbidden})
+	_, _ = failed.ObserveDirect(context.Background(), failedMeta.SessionID, ObservationRequest{Action: "capabilities"})
+	failedDiag := failed.Diagnostics()
+	if len(failedDiag.RecentEvents) != 1 || failedDiag.RecentEvents[0].Kind != "provider_failure" || !strings.Contains(failedDiag.RecentEvents[0].Message, "provider unavailable") {
+		t.Fatalf("provider diagnostics=%+v", failedDiag)
 	}
 }

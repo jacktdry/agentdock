@@ -153,3 +153,35 @@ func TestACPHostCapabilityProviderSharesTokenAcrossBrowserAndComputerSurfaces(t 
 		}
 	}
 }
+
+func TestComputerBrokerPublicStatusAndCleanupMatchOutputContract(t *testing.T) {
+	r := testComputerRuntime(t)
+	bridge, err := toolcomputer.NewACPBridge(r.computer.Broker())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.acpComputer = bridge
+	token, err := bridge.RegisterSession("computer-diag", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bridge.Acquire(token, toolcomputer.CapabilityObserve, toolcomputer.ForegroundForbidden); err != nil {
+		t.Fatal(err)
+	}
+	status, err := r.Call(context.Background(), "computer_broker", map[string]any{"action": "status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolResultMatchestestOutputSchema(t, "computer_broker", status)
+	if status["computer_broker_ok"] != true {
+		t.Fatalf("status=%#v", status)
+	}
+	cleaned, err := r.Call(context.Background(), "computer_broker", map[string]any{"action": "cleanup_acp_session", "owner_acp_session_id": "computer-diag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertToolResultMatchestestOutputSchema(t, "computer_broker", cleaned)
+	if cleaned["computer_broker_ok"] != true || len(r.computer.Broker().Diagnostics().ActiveSessions) != 0 {
+		t.Fatalf("cleanup=%#v diagnostics=%+v", cleaned, r.computer.Broker().Diagnostics())
+	}
+}

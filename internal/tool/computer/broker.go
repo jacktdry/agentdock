@@ -26,6 +26,9 @@ type Broker struct {
 	// Native GUI state is process-global from the user's point of view. Keep
 	// provider operations serialized until a provider proves stronger isolation.
 	providerMu sync.Mutex
+
+	diagMu     sync.Mutex
+	diagEvents []DiagnosticEvent
 }
 
 func NewBroker(provider Provider) (*Broker, error) {
@@ -98,7 +101,9 @@ func (b *Broker) observe(ctx context.Context, sessionID string, owner OwnerScope
 	}
 	foregroundRequired := req.RestoreWindow || req.Action == "permissions"
 	if foregroundRequired && s.metadata.ForegroundPolicy != ForegroundAllowed {
-		return OperationResult{}, foregroundRequiredError(s.metadata, req.Action)
+		err := foregroundRequiredError(s.metadata, req.Action)
+		b.recordDiagnostic(DiagnosticEvent{Kind: "foreground_denied", SessionID: sessionID, Action: req.Action, Message: err.Error()})
+		return OperationResult{}, err
 	}
 	opCtx, cancel := computerOperationContext(ctx, req.Timeout)
 	defer cancel()
@@ -107,13 +112,16 @@ func (b *Broker) observe(ctx context.Context, sessionID string, owner OwnerScope
 	before, _ := b.provider.FrontmostApp(opCtx)
 	providerResult, err := b.provider.Observe(opCtx, req)
 	if err != nil {
+		b.recordDiagnostic(DiagnosticEvent{Kind: "provider_failure", SessionID: sessionID, Action: req.Action, Message: err.Error(), ActiveAppBefore: before})
 		return OperationResult{}, err
 	}
 	after, _ := b.provider.FrontmostApp(opCtx)
 	focusChanged := appIdentityChanged(before, after)
 	s.metadata.LastActiveAt = time.Now().UTC()
 	if focusChanged && !foregroundRequired {
-		return OperationResult{}, computerError(ErrFocusViolation, "background computer observation changed the active app", "focus", &ErrorDetails{SessionID: sessionID, Provider: b.provider.ID(), Action: req.Action, ForegroundPolicy: s.metadata.ForegroundPolicy}, nil)
+		err := computerError(ErrFocusViolation, "background computer observation changed the active app", "focus", &ErrorDetails{SessionID: sessionID, Provider: b.provider.ID(), Action: req.Action, ForegroundPolicy: s.metadata.ForegroundPolicy}, nil)
+		b.recordDiagnostic(DiagnosticEvent{Kind: "focus_violation", SessionID: sessionID, Action: req.Action, Message: err.Error(), ActiveAppBefore: before, ActiveAppAfter: after})
+		return OperationResult{}, err
 	}
 	return OperationResult{
 		Provider: b.provider.ID(), SessionID: sessionID, Action: req.Action,
@@ -144,7 +152,9 @@ func (b *Broker) act(ctx context.Context, sessionID string, owner OwnerScope, ex
 		return OperationResult{}, computerError(ErrCapabilityDenied, "computer session was not acquired for actions", "policy", &ErrorDetails{SessionID: sessionID, Action: req.Action}, nil)
 	}
 	if s.metadata.ForegroundPolicy != ForegroundAllowed {
-		return OperationResult{}, foregroundRequiredError(s.metadata, req.Action)
+		err := foregroundRequiredError(s.metadata, req.Action)
+		b.recordDiagnostic(DiagnosticEvent{Kind: "foreground_denied", SessionID: sessionID, Action: req.Action, Message: err.Error()})
+		return OperationResult{}, err
 	}
 	opCtx, cancel := computerOperationContext(ctx, req.Timeout)
 	defer cancel()
@@ -153,6 +163,7 @@ func (b *Broker) act(ctx context.Context, sessionID string, owner OwnerScope, ex
 	before, _ := b.provider.FrontmostApp(opCtx)
 	providerResult, err := b.provider.Act(opCtx, req)
 	if err != nil {
+		b.recordDiagnostic(DiagnosticEvent{Kind: "provider_failure", SessionID: sessionID, Action: req.Action, Message: err.Error(), ActiveAppBefore: before})
 		return OperationResult{}, err
 	}
 	after, _ := b.provider.FrontmostApp(opCtx)
