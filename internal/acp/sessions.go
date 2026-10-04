@@ -403,6 +403,21 @@ func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool
 	if record.Status == SessionClosed {
 		return record, m.releaseSessionMCP(ctx, id)
 	}
+	previousTerminal, hadPreviousTerminal, err := m.beginTerminalTransition(ctx, id, SessionClosed)
+	if err != nil {
+		return SessionRecord{}, err
+	}
+	return m.closeSessionClaimed(ctx, record, reason, auto, previousTerminal, hadPreviousTerminal)
+}
+
+func (m *Manager) closeSessionClaimed(ctx context.Context, record SessionRecord, reason string, auto bool, previousTerminal SessionStatus, hadPreviousTerminal bool) (SessionRecord, error) {
+	id := record.ID
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			m.rollbackTerminalTransition(id, SessionClosed, previousTerminal, hadPreviousTerminal)
+		}
+	}()
 	process, err := m.ensureProcess(ctx)
 	if err != nil {
 		return SessionRecord{}, err
@@ -410,16 +425,6 @@ func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool
 	if !process.supportsSessionCapability("close") {
 		return SessionRecord{}, capabilityError("sessionCapabilities.close")
 	}
-	previousTerminal, hadPreviousTerminal, err := m.beginTerminalTransition(ctx, id, SessionClosed)
-	if err != nil {
-		return SessionRecord{}, err
-	}
-	succeeded := false
-	defer func() {
-		if !succeeded {
-			m.rollbackTerminalTransition(id, SessionClosed, previousTerminal, hadPreviousTerminal)
-		}
-	}()
 
 	_ = m.CancelPrompt(ctx, id, "")
 	if err := process.connection.Request(ctx, "session/close", map[string]any{"sessionId": record.RemoteSessionID}, nil); err != nil {
@@ -430,6 +435,12 @@ func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool
 	m.settleRunAfterRemoteClose(id)
 
 	now := time.Now().UTC()
+	m.mu.RLock()
+	current, exists := m.sessions[id]
+	m.mu.RUnlock()
+	if exists {
+		record = current
+	}
 	record.Status = SessionClosed
 	record.UpdatedAt = now
 	record.LastActiveAt = now
@@ -440,7 +451,9 @@ func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool
 		record.ClosedReason = "manual"
 	}
 	if auto {
-		record.AutoCloseAttemptedAt = &now
+		if record.AutoCloseAttemptedAt == nil {
+			record.AutoCloseAttemptedAt = &now
+		}
 		record.AutoCloseError = ""
 	}
 	if err := m.store.Save(record); err != nil {

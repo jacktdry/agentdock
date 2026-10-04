@@ -560,6 +560,9 @@ func (m *Manager) finishRun(run *Run, status RunStatus, stopReason string, err e
 	case <-m.runSlots:
 	default:
 	}
+	if !terminalTransition && recordExists {
+		m.scheduleEphemeralAutoClose(record, status)
+	}
 }
 
 func runStatus(run *Run) RunStatus {

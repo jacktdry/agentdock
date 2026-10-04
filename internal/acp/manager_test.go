@@ -845,7 +845,9 @@ func TestACPHelperProcess(t *testing.T) {
 				})
 			}
 		case "session/close":
-			if promptMode == "steering_reset_failure" {
+			if promptMode == "close_failure" {
+				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "close failed"}})
+			} else if promptMode == "steering_reset_failure" {
 				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "reset failed"}})
 			} else {
 				writeHelperResult(encoder, message.ID, map[string]any{})
