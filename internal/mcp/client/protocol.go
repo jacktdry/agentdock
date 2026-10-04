@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 	sdkjsonrpc "github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -24,6 +26,9 @@ import (
 // go-sdk 公开 jsonrpc 包未导出 ErrRejected，只能通过稳定的 wire code 识别。
 const sdkTransportRejectedCode int64 = -32005
 
+const stdioGracePeriod = 2500 * time.Millisecond
+const stdioTerminateWait = 3 * time.Second
+
 type protocolClient interface {
 	initialize(context.Context) error
 	listTools(context.Context) ([]Tool, error)
@@ -32,9 +37,11 @@ type protocolClient interface {
 }
 
 type sdkProtocolClient struct {
+	info       SessionInfo
 	cfg        ServerConfig
 	session    *mcpsdk.ClientSession
 	command    *exec.Cmd
+	stdin      io.WriteCloser
 	controller *processcontrol.Controller
 	stderr     *tailBuffer
 	oauth      sdkauth.OAuthHandler
@@ -61,14 +68,19 @@ func (c *sdkProtocolClient) initialize(ctx context.Context) error {
 	)
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		_ = c.cleanupProcess()
-		return c.wrapSDKError("initialize MCP session", err)
+		return errors.Join(c.wrapSDKError("initialize MCP session", err), c.cleanupProcess())
 	}
 	initialized := session.InitializeResult()
 	if initialized == nil || strings.TrimSpace(initialized.ProtocolVersion) == "" {
-		_ = session.Close()
-		_ = c.cleanupProcess()
-		return newError("MCP_INVALID_RESPONSE", "MCP initialize response omitted protocolVersion", false, map[string]any{"server": c.cfg.Name}, nil)
+		return errors.Join(newError("MCP_INVALID_RESPONSE", "MCP initialize response omitted protocolVersion", false, map[string]any{"server": c.cfg.Name}, nil), session.Close(), c.cleanupProcess())
+	}
+	c.info.ProtocolVersion = initialized.ProtocolVersion
+	if initialized.ServerInfo != nil {
+		c.info.ServerName = initialized.ServerInfo.Name
+		c.info.ServerVersion = initialized.ServerInfo.Version
+	}
+	if c.command != nil {
+		c.info.PID = c.command.Process.Pid
 	}
 	c.session = session
 	return nil
@@ -107,6 +119,7 @@ func (c *sdkProtocolClient) startStdioTransport() (mcpsdk.Transport, error) {
 		return nil, err
 	}
 	cmd := exec.Command(c.cfg.Command, c.cfg.Args...)
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = c.cfg.Cwd
 	cmd.Env = environment
 	cmd.Stderr = c.stderr
@@ -129,6 +142,7 @@ func (c *sdkProtocolClient) startStdioTransport() (mcpsdk.Transport, error) {
 		return nil, newError("MCP_START_FAILED", "attach MCP stdio process controller", false, map[string]any{"server": c.cfg.Name}, err)
 	}
 	c.command = cmd
+	c.stdin = stdin
 	c.controller = controller
 	return &mcpsdk.IOTransport{Reader: stdout, Writer: stdin}, nil
 }
@@ -144,7 +158,7 @@ func (c *sdkProtocolClient) listTools(ctx context.Context) ([]Tool, error) {
 		}
 		tool, err := convertSDKTool(remote)
 		if err != nil {
-			return nil, newError("MCP_INVALID_RESPONSE", "decode MCP tool definition", false, map[string]any{"server": c.cfg.Name, "tool": remote.Name}, err)
+			return nil, newError("MCP_INVALID_RESPONSE", "decode MCP tool definition", false, map[string]any{"server": c.cfg.Name}, err)
 		}
 		tools = append(tools, tool)
 	}
@@ -173,25 +187,78 @@ func (c *sdkProtocolClient) close() error {
 	return c.closeErr
 }
 
+// cleanupProcess has exactly one Wait owner, created only after protocol close.
+// It lets the server perform EOF cleanup before escalating within its owned tree.
 func (c *sdkProtocolClient) cleanupProcess() error {
 	var result error
-	if c.controller != nil {
-		// SDK 会先关闭 stdin 让服务自行退出；这里再收口整个进程树，避免
-		// MCP Server 派生的子进程遗留在 AgentDock 生命周期之外。
-		_ = c.controller.Terminate()
-		result = errors.Join(result, c.controller.Close())
-		c.controller = nil
-	}
-	if c.command != nil {
-		if err := c.command.Wait(); err != nil {
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) && !errors.Is(err, os.ErrProcessDone) {
-				result = errors.Join(result, err)
-			}
+	if c.stdin != nil {
+		if err := c.stdin.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			result = errors.Join(result, err)
 		}
-		c.command = nil
+		c.stdin = nil
 	}
-	return result
+	cmd, controller := c.command, c.controller
+	// Detach ownership here so initialize-failure cleanup followed by close cannot
+	// start another Wait, including when termination/reaping reports a timeout.
+	c.command, c.controller = nil, nil
+	if cmd == nil {
+		if controller != nil {
+			result = errors.Join(result, controller.Close())
+		}
+		return result
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	grace := time.NewTimer(stdioGracePeriod)
+	defer grace.Stop()
+	select {
+	case err := <-waited:
+		if !errors.Is(err, exec.ErrWaitDelay) {
+			// Natural exit: never SIGKILL the group. Windows Close still releases the
+			// owned job and enforces its existing kill-on-close descendant boundary.
+			if controller != nil {
+				result = errors.Join(result, controller.Close())
+			}
+			return errors.Join(result, processWaitError(err))
+		}
+		// Parent exited but descendant-held pipes failed to drain within WaitDelay.
+		// Wait is already complete; clean the owned tree and preserve the pipe error.
+		if controller != nil {
+			result = errors.Join(result, controller.Terminate(), controller.Close())
+		}
+		return errors.Join(result, err)
+	case <-grace.C:
+	}
+	var treeErr error
+	if controller != nil {
+		treeErr = errors.Join(controller.Terminate(), controller.Close())
+	} else {
+		treeErr = errors.New("MCP process cleanup has no owned process controller")
+	}
+	result = errors.Join(result, treeErr)
+	if treeErr != nil {
+		// Last resort solely to unblock this Wait. This does not establish successful
+		// tree cleanup; the controller error remains in the returned result.
+		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			result = errors.Join(result, err)
+		}
+	}
+	terminated := time.NewTimer(stdioTerminateWait)
+	defer terminated.Stop()
+	select {
+	case err := <-waited:
+		return errors.Join(result, processWaitError(err))
+	case <-terminated.C:
+		return errors.Join(result, errors.New("MCP owned process did not exit after bounded termination"))
+	}
+}
+
+func processWaitError(err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) || errors.Is(err, os.ErrProcessDone) {
+		return nil
+	}
+	return err
 }
 
 func (c *sdkProtocolClient) wrapSDKError(operation string, err error) error {

@@ -6,6 +6,7 @@ const (
 	ToolSession  = "browser_session"
 	ToolAct      = "browser_act"
 	ToolSnapshot = "browser_snapshot"
+	ToolBroker   = "browser_broker"
 )
 
 func InputSchema(name string) (map[string]any, bool) {
@@ -63,6 +64,10 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["close_after"] = boolProp("Close the session only after all actions, final snapshot, and screenshot Artifact publication succeed.")
 		props["timeout_ms"] = boundedIntProp("Overall operation timeout in milliseconds. Defaults to 30000 and is capped at 300000.", 1, 300000)
 		required = []string{"session_id", "actions"}
+	case ToolBroker:
+		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_stale", "cleanup_acp_session"}, "description": "Browser Broker control-plane action."}
+		props["owner_acp_session_id"] = stringProp("ACP session owner to clean up for action=cleanup_acp_session. Only AgentDock-owned leases/connectors/pages are released; external browser/profile processes are preserved.")
+		required = []string{"action"}
 	case ToolSnapshot:
 		props["session_id"] = stringProp("In-memory browser session id.")
 		props["page_id"] = stringProp("Optional CDP target id. Omit to use the active page.")
@@ -95,6 +100,10 @@ func OutputSchema(name string) (map[string]any, bool) {
 	}
 
 	switch name {
+	case ToolBroker:
+		props["browser_broker_ok"] = boolProp("Whether the Browser Broker control-plane operation completed without cleanup errors.")
+		props["diagnostics"] = objectProp("Browser Broker ownership/lease/worker/queue lifecycle snapshot. Capability tokens are never included.")
+		props["cleanup_error"] = stringProp("Cleanup error summary when a bounded cleanup operation failed.")
 	case ToolSession:
 		props["pages"] = arrayProp("Current page targets.")
 		props["url"] = stringProp("Active page URL after start.")

@@ -280,14 +280,17 @@ func TestMCPStdioHelperProcess(t *testing.T) {
 				"error":   map[string]any{"code": -32601, "message": "Method not found"},
 			})
 		case "initialize":
+			result := map[string]any{
+				"protocolVersion": "2025-06-18",
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+			}
+			if os.Getenv("MCP_HELPER_OMIT_SERVER_INFO") != "1" {
+				result["serverInfo"] = map[string]any{"name": "helper", "version": "1.0.0"}
+			}
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0",
 				"id":      request.ID,
-				"result": map[string]any{
-					"protocolVersion": "2025-06-18",
-					"capabilities":    map[string]any{"tools": map[string]any{}},
-					"serverInfo":      map[string]any{"name": "helper", "version": "1.0.0"},
-				},
+				"result":  result,
 			})
 		case "notifications/initialized":
 		case "tools/list":
@@ -314,6 +317,20 @@ func TestMCPStdioHelperProcess(t *testing.T) {
 					"structuredContent": map[string]any{"echo": echo},
 				},
 			})
+		}
+	}
+	if marker := os.Getenv("MCP_HELPER_EOF_MARKER"); marker != "" {
+		if err := os.WriteFile(marker, []byte("EOF"), 0600); err != nil {
+			os.Exit(3)
+		}
+		switch os.Getenv("MCP_HELPER_CLOSE_MODE") {
+		case "graceful":
+			time.Sleep(200 * time.Millisecond)
+			if err := os.Remove(os.Getenv("MCP_HELPER_OWNED_PROFILE")); err != nil {
+				os.Exit(4)
+			}
+		case "stubborn":
+			time.Sleep(time.Minute)
 		}
 	}
 	os.Exit(0)

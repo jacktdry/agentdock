@@ -37,7 +37,10 @@ func (m *Manager) EnsureSessionActive(ctx context.Context, id string) (SessionRe
 		return SessionResult{}, capabilityError("sessionCapabilities.additionalDirectories")
 	}
 
-	params := sessionActivationParams(record)
+	params, err := m.sessionActivationParams(ctx, record)
+	if err != nil {
+		return SessionResult{}, err
+	}
 	switch {
 	case process.supportsSessionCapability("resume"):
 		if err := process.connection.Request(ctx, "session/resume", params, &state); err != nil {

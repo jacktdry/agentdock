@@ -84,6 +84,8 @@ func TestInputSchemaPublishesRuntimeBounds(t *testing.T) {
 		{tool: "browser_session", property: "timeout_ms", minimum: 1, maximum: 300000},
 		{tool: "browser_act", property: "timeout_ms", minimum: 1, maximum: 300000},
 		{tool: "browser_snapshot", property: "timeout_ms", minimum: 1, maximum: 300000},
+		{tool: "computer_observe", property: "timeout_ms", minimum: 1, maximum: 300000},
+		{tool: "computer_act", property: "timeout_ms", minimum: 1, maximum: 300000},
 		{tool: "private_note_manage", property: "max_results", minimum: 1, maximum: toolrecall.MaxPrivateNoteSearchResults},
 		{tool: "private_note_manage", property: "max_bytes", minimum: 1, maximum: toolrecall.MaxPrivateNoteReadBytes},
 	}

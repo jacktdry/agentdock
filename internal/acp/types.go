@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,12 +28,34 @@ type AgentSpec struct {
 	Environment map[string]string
 }
 
+// SessionMCPServer is the host-owned MCP capability injected into an ACP
+// session. Agent adapters may connect to it, but they never own its backend.
+type SessionMCPServer struct {
+	Name    string             `json:"name"`
+	Type    string             `json:"type"`
+	URL     string             `json:"url"`
+	Headers []SessionMCPHeader `json:"headers"`
+}
+
+type SessionMCPHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// SessionMCPProvider binds host capabilities to stable AgentDock local session
+// IDs. ReleaseSession must be idempotent.
+type SessionMCPProvider interface {
+	Servers(context.Context, string, string, []string) ([]SessionMCPServer, error)
+	ReleaseSession(context.Context, string) error
+}
+
 type Options struct {
 	Home               string
 	DefaultCWD         string
 	Agent              AgentSpec
 	MaxConcurrentRuns  int
 	InteractionTimeout time.Duration
+	SessionMCPProvider SessionMCPProvider
 }
 
 type Error struct {

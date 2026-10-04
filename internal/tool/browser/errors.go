@@ -3,40 +3,59 @@ package browser
 import "fmt"
 
 const (
-	ErrNotFound        = "BROWSER_NOT_FOUND"
-	ErrLaunchFailed    = "LAUNCH_FAILED"
-	ErrProfileInUse    = "PROFILE_IN_USE"
-	ErrSessionNotFound = "SESSION_NOT_FOUND"
-	ErrPageNotFound    = "PAGE_NOT_FOUND"
-	ErrActionInvalid   = "ACTION_INVALID"
-	ErrActionFailed    = "ACTION_FAILED"
-	ErrTimeout         = "TIMEOUT"
-	ErrCDPFailed       = "CDP_FAILED"
-	ErrCDPAmbiguous    = "CDP_AMBIGUOUS"
+	ErrEngineUnavailable         = "BROWSER_ENGINE_UNAVAILABLE"
+	ErrEngineVersionIncompatible = "BROWSER_ENGINE_VERSION_INCOMPATIBLE"
+	ErrEngineSchemaIncompatible  = "BROWSER_ENGINE_SCHEMA_INCOMPATIBLE"
+	ErrWorkerNotFound            = "BROWSER_WORKER_NOT_FOUND"
+	ErrWorkerNotReady            = "BROWSER_WORKER_NOT_READY"
+	ErrScopeRequired             = "BROWSER_SCOPE_REQUIRED"
+	ErrPolicyConflict            = "BROWSER_POLICY_CONFLICT"
+	ErrRequiredRouteUnavailable  = "BROWSER_REQUIRED_ROUTE_UNAVAILABLE"
+	ErrLeaseNotFound             = "BROWSER_LEASE_NOT_FOUND"
+	ErrLeaseStateInvalid         = "BROWSER_LEASE_STATE_INVALID"
+	ErrLeaseTargetMismatch       = "BROWSER_LEASE_TARGET_MISMATCH"
+	ErrLeaseOwnerMismatch        = "BROWSER_LEASE_OWNER_MISMATCH"
+	ErrNotFound                  = "BROWSER_NOT_FOUND"
+	ErrLaunchFailed              = "LAUNCH_FAILED"
+	ErrProfileInUse              = "PROFILE_IN_USE"
+	ErrSessionNotFound           = "SESSION_NOT_FOUND"
+	ErrPageNotFound              = "PAGE_NOT_FOUND"
+	ErrActionInvalid             = "ACTION_INVALID"
+	ErrActionFailed              = "ACTION_FAILED"
+	ErrTimeout                   = "TIMEOUT"
+	ErrCDPFailed                 = "CDP_FAILED"
+	ErrCDPAmbiguous              = "CDP_AMBIGUOUS"
 )
 
 // ErrorDetails is deliberately typed so dynamic maps never cross the browser
 // service boundary. The app protocol layer converts it to MCP/JSON output.
 type ErrorDetails struct {
-	Path             string    `json:"path,omitempty"`
-	Browser          Kind      `json:"browser,omitempty"`
-	ProfileID        string    `json:"profile_id,omitempty"`
-	SessionID        string    `json:"session_id,omitempty"`
-	PageID           string    `json:"page_id,omitempty"`
-	AvailablePageIDs []string  `json:"available_page_ids,omitempty"`
-	ActionIndex      *int      `json:"action_index,omitempty"`
-	Action           string    `json:"action,omitempty"`
-	WaitUntil        WaitUntil `json:"wait_until,omitempty"`
-	Direction        int64     `json:"direction,omitempty"`
-	URL              string    `json:"url,omitempty"`
-	URLPattern       string    `json:"url_pattern,omitempty"`
-	Method           string    `json:"method,omitempty"`
-	Status           int       `json:"status,omitempty"`
-	Field            string    `json:"field,omitempty"`
-	Reason           string    `json:"reason,omitempty"`
-	Selector         string    `json:"selector,omitempty"`
-	ItemIndex        *int      `json:"index,omitempty"`
-	Count            int       `json:"count,omitempty"`
+	WorkerID             string                `json:"worker_id,omitempty"`
+	EngineVersion        string                `json:"engine_version,omitempty"`
+	WorkspaceID          string                `json:"workspace_id,omitempty"`
+	ConnectorID          string                `json:"connector_id,omitempty"`
+	LeaseID              string                `json:"lease_id,omitempty"`
+	OwnerTaskID          string                `json:"owner_task_id,omitempty"`
+	RequiredCapabilities []ConnectorCapability `json:"required_capabilities,omitempty"`
+	Path                 string                `json:"path,omitempty"`
+	Browser              Kind                  `json:"browser,omitempty"`
+	ProfileID            string                `json:"profile_id,omitempty"`
+	SessionID            string                `json:"session_id,omitempty"`
+	PageID               string                `json:"page_id,omitempty"`
+	AvailablePageIDs     []string              `json:"available_page_ids,omitempty"`
+	ActionIndex          *int                  `json:"action_index,omitempty"`
+	Action               string                `json:"action,omitempty"`
+	WaitUntil            WaitUntil             `json:"wait_until,omitempty"`
+	Direction            int64                 `json:"direction,omitempty"`
+	URL                  string                `json:"url,omitempty"`
+	URLPattern           string                `json:"url_pattern,omitempty"`
+	Method               string                `json:"method,omitempty"`
+	Status               int                   `json:"status,omitempty"`
+	Field                string                `json:"field,omitempty"`
+	Reason               string                `json:"reason,omitempty"`
+	Selector             string                `json:"selector,omitempty"`
+	ItemIndex            *int                  `json:"index,omitempty"`
+	Count                int                   `json:"count,omitempty"`
 }
 
 type Error struct {

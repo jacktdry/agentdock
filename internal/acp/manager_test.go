@@ -691,6 +691,27 @@ func pipeConnectionPair(t *testing.T) (*os.File, *os.File, func()) {
 	return reader, writer, cleanup
 }
 
+func requireHelperSessionMCP(message rpcMessage) {
+	if trace := os.Getenv("GO_ACP_HELPER_MCP_TRACE"); trace != "" {
+		f, err := os.OpenFile(trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			os.Exit(18)
+		}
+		_ = json.NewEncoder(f).Encode(message)
+		_ = f.Close()
+	}
+
+	if os.Getenv("GO_ACP_HELPER_REQUIRE_MCP") != "1" {
+		return
+	}
+	var params struct {
+		MCPServers []SessionMCPServer `json:"mcpServers"`
+	}
+	if json.Unmarshal(message.Params, &params) != nil || len(params.MCPServers) != 1 || params.MCPServers[0].Name != "agentdock-browser" || params.MCPServers[0].Type != "http" || len(params.MCPServers[0].Headers) != 1 {
+		os.Exit(17)
+	}
+}
+
 func TestACPHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_ACP_HELPER") != "1" {
 		return
@@ -741,6 +762,11 @@ func TestACPHelperProcess(t *testing.T) {
 		case "authenticate":
 			writeHelperResult(encoder, message.ID, map[string]any{})
 		case "session/new":
+			requireHelperSessionMCP(message)
+			if os.Getenv("GO_ACP_HELPER_FAIL_METHOD") == message.Method {
+				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "injected failure"}})
+				break
+			}
 			remoteCount++
 			writeHelperResult(encoder, message.ID, map[string]any{
 				"sessionId":     "remote-" + strconv.Itoa(remoteCount),
@@ -770,6 +796,7 @@ func TestACPHelperProcess(t *testing.T) {
 			}
 			writeHelperResult(encoder, message.ID, map[string]any{"sessions": sessions})
 		case "session/load":
+			requireHelperSessionMCP(message)
 			if promptMode == "codex_no_rollout" || promptMode == "codex_no_rollout_steer" {
 				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "Internal error", Data: testMarshalRaw(map[string]any{"details": "no rollout found for thread id remote"})}})
 			} else {
@@ -790,6 +817,7 @@ func TestACPHelperProcess(t *testing.T) {
 				})
 			}
 		case "session/resume":
+			requireHelperSessionMCP(message)
 			if promptMode == "codex_no_rollout" || promptMode == "codex_no_rollout_steer" {
 				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "Internal error", Data: testMarshalRaw(map[string]any{"details": "no rollout found for thread id remote"})}})
 			} else {
@@ -799,6 +827,11 @@ func TestACPHelperProcess(t *testing.T) {
 				})
 			}
 		case "session/fork":
+			requireHelperSessionMCP(message)
+			if os.Getenv("GO_ACP_HELPER_FAIL_METHOD") == message.Method {
+				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "injected failure"}})
+				break
+			}
 			remoteCount++
 			writeHelperResult(encoder, message.ID, map[string]any{"sessionId": "remote-" + strconv.Itoa(remoteCount)})
 		case "session/set_mode":

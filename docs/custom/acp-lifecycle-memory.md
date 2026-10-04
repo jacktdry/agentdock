@@ -1,34 +1,33 @@
 # ACP Session Lifecycle and Shared Memory
 
-> 狀態：Implementation plan / handoff
+> 狀態：M7 implementation plan / M6 Broker handoff integrated
 >
 > 日期：2026-10-03
 >
-> 更新：2026-10-04 — Antigravity 已切換到 hardened `antigravity-acp` 單一路徑
+> 更新：2026-10-04 — Antigravity 已切換到 hardened `antigravity-acp` 單一路徑；M6 Browser / Computer host capability 已完成
 >
 > 目標 Milestone：M7 — ACP Manager
 
-本文件只定義 AgentDock Custom 後續應採用的 session lifecycle 與 shared-memory contract；本輪不修改 AgentDock runtime code。
+本文件定義 M7 的 session lifecycle 與 shared-memory contract。Browser / Computer resource ownership 已由 M6 落地，M7 應沿用既有 Broker contract，不重新建立 adapter-owned browser/computer backend。
 
 ## 背景
 
 目前 ACP 同時存在長期互動 session 與一次性 delegated worker。AgentDock 在 prompt 回傳 end_turn 後只把 session 從 running 改回 ready，不代表 Adapter runtime 已釋放，因此大量一次性 worker 會累積 loaded session 與 child process。
 
-2026-10-03 舊路徑實測確認：
+2026-10-03 實測確認：
 
 - Codex ACP dedicated app-server 會因 loaded thread 累積 stdio MCP / REPL child process。
-- 舊 Antigravity refined / Google ACP 路徑的 session/close 實際可用但 capability 未宣告；logical close 後 localharness_external 仍可能留存。
+- Antigravity 的 session/close 實際可用但 capability 未宣告；logical close 後 localharness_external 仍可能留存。
 - stdio mcp-memory-service 會讓每個 Agent/thread 各啟 Python + ONNX runtime。
 
-2026-10-04 新 baseline：
+2026-10-04 現行 Antigravity baseline：
 
-- AgentDock 不再使用 `refined-antigravity-acp` / Google `agy_acp_server` 作為 AGY provider。
-- 單一路徑改為 hardened `jacktdry/antigravity-acp` → AGY CLI。
+- AgentDock 不再使用 `refined-antigravity-acp` / Google `agy_acp_server` 作為 AGY provider；單一路徑為 hardened `jacktdry/antigravity-acp` → system AGY CLI。
 - `session/cancel` 採 bounded SIGINT → SIGKILL fallback；`session/close` / `session/delete` 會先 drain active prompt。
-- Model 與 Reasoning effort 已分離，但 persisted session 仍保存 AGY 真實 concrete model ID。
-- Adapter 明確尊重 `AGY_BIN` override，AgentDock 可固定使用已登入、已更新的 system AGY。
-- AgentDock 以 isolated HOME 啟動 AGY；只共享 `~/.gemini/antigravity-cli` 狀態，不載入互動 AGY 的 `~/.gemini/config` MCP/plugin 設定。
-- 真實 AgentDock E2E 已驗證 prompt / close / resume / delete；底層 live smoke 另驗證兩個 session 並行、cancel < 1 秒，以及 task 結束後無殘留 AGY child。
+- Model 與 Reasoning effort 已分離，persisted session 保存 AGY 真實 concrete model ID。
+- `AGY_BIN` 是 explicit override；目前 system AGY 為 `1.2.16`。
+- AgentDock 以 isolated HOME 啟動 AGY，只共享 Antigravity CLI auth / conversation state，不載入互動 AGY 的 MCP/plugin 設定。
+- M6 再把 Browser / Computer 能力收斂成 AgentDock host-owned loopback MCP capability，不允許 ACP child 恢復自己的 browser / Computer Use backend。
 
 責任分層：
 
@@ -153,24 +152,26 @@ Branch：fix/session-lifecycle-recycle
 
 AgentDock 不直接 kill Codex app-server。
 
-### antigravity-acp
+### Antigravity ACP
 
-Fork：jacktdry/antigravity-acp
-Branch：fix/agentdock-hardening
-Current deployment：1.2.0-agentdock.2
+Fork：`jacktdry/antigravity-acp`
+Branch：`fix/agentdock-hardening`
+Current deployment：`1.2.0-agentdock.5`
+Current tip：`2bd8426 feat(agentdock): add computer control broker proxy`
+
+演進鏈：`93ad102` → `5620dc4` → `746b52e` → `05c53f3` → `2bd8426`。
 
 - `main` 保持跟 `shubzkothekar/antigravity-acp` upstream 對齊；AgentDock custom changes 不直接進 `main`。
-- cancel idempotent，non-Windows 先 SIGINT，bounded grace period 後仍存活才 SIGKILL。
-- session/close 與 session/delete 先停止 / drain active child，再 evict / delete session state。
-- `/usage` 也使用同一套 tracked child lifecycle。
-- 同一 session 同時第二個 prompt 會被拒絕，不覆蓋第一個 child 的 ownership。
-- ACP 對外顯示 base Model + Reasoning effort，但只組出 `agy models` 實際 advertised 的 concrete ID。
-- `AGY_BIN` 為真正 explicit override，優先於 adapter downloaded binary。
-- AgentDock profile 使用 isolated HOME，避免每個 delegated worker 自動啟動互動 AGY 的 browser / codebase / GitHub / GitLab MCP。
+- cancel idempotent；non-Windows 先 SIGINT，bounded grace period 後仍存活才 SIGKILL。
+- session/close 與 session/delete 先停止 / drain active child，再 evict / delete session state；`/usage` 也使用 tracked child lifecycle。
+- 同一 session 的第二個 concurrent prompt 會被拒絕，不覆蓋第一個 child ownership。
+- ACP 對外顯示 base Model + Reasoning effort，只組出 `agy models` 真實 advertised concrete ID。
+- `AGY_BIN` 為 explicit override，優先於 adapter downloaded binary；目前 AgentDock 使用 system AGY `1.2.16`。
+- AgentDock-launched ACP session 使用 isolated/private AGY HOME，不繼承互動 AGY 的 browser / codebase / GitHub / GitLab MCP/plugin 設定。
+- Browser 與 Computer 都由 AgentDock host 注入 loopback MCP capability，共用 per-session token 但工具面分離；`session/close` 後 capability 被 revoke。
+- 20 次真實 session new/close/runtime-close stress 已確認沒有殘留 `antigravity-acp`、`chrome-devtools-mcp`、`cua-repl`、`node_repl` 或 `SkyComputerUseClient` descendants。
 
-AgentDock 不加入 Antigravity-specific kill hack；adapter 自己負責 AGY child lifecycle。
-
-2026-10-03 的 `localharness_external` / `chrome-devtools-mcp` process count 屬於舊 refined / Google ACP 路徑的歷史證據。2026-10-04 單一路徑切換後，isolated HOME 下 `agy mcp list` 為空，AgentDock live prompt 不再為每個 AGY worker 啟動這批互動 MCP。Browser ownership、CDP connector 與 temporary profile lifecycle 的完整設計仍見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)，因為 ACP browser request 未來仍必須經 Browser Broker。
+2026-10-03 的 `refined-antigravity-acp` / Google ACP / `localharness_external` 路徑保留為歷史證據，不再是現行 AgentDock Browser/Computer ownership 路徑。該 repo 仍可存在於本機研究用途，但 AgentDock profile 不以它作為 AGY provider。AgentDock Core 不加入 Antigravity-specific kill hack；adapter 負責 AGY child lifecycle，Browser / Computer physical resource lifecycle 則由 M6 Broker 負責。
 
 後續架構不再讓每個 ACP / localharness 長期自行持有 browser backend。ACP browser 工作改成：
 
@@ -184,17 +185,18 @@ ACP session
 → release lease
 ```
 
-多 ACP 並行時，lease 必須以 `owner_acp_session_id` / `owner_task_id` 隔離，不得依賴 shared global selected page。Browser worker 可以共用，但 logical browser session 不可共用 target state。
+多 ACP 並行時，lease 以 `owner_acp_session_id` / `owner_task_id` 隔離，不依賴 shared global selected page。M6 實作採 **exclusive managed worker generation per lease**；external browser 也使用 per-lease AgentDock-owned connector generation，避免 MCP selected-page state 跨 lease。
 
-初始 concurrency policy 先採 bounded pool：
+目前 managed admission policy 已固定並通過 8-owner stress：
 
 ```text
-managed headless: 4
-persistent authenticated profile: 2
-external user-owned browser: 1~2
+managed headless active: 4
+managed queue capacity: 16
+idle TTL: 5 minutes
+lifecycle sweep: 30 seconds
 ```
 
-實際數值由 M6 4~8 ACP 並行壓測後調整；超出上限 queue，不以無界 spawn MCP / browser 擴充。
+8-owner stress 實際形成 4 active + 4 queued；即使每個 worker 都回傳相同 `pageId=1`，也沒有 cross-session target contamination。M7 不應把這個安全模型改回 shared worker selected-page state。
 
 同一 application resource 的 write race 另以 site / resource lock 處理，不能只靠 browser context isolation。
 
@@ -202,18 +204,16 @@ external user-owned browser: 1~2
 
 Backend：
 
-- session lifecycle policy model
-- ephemeral auto-close
-- idle-managed sweeper
-- close failure / retry state
-- resource diagnostics
-- Browser Broker lease acquire / release integration
-- session close / TTL / crash 時釋放 browser lease
-- browser lease / worker / context / page ownership diagnostics
-- 禁止 ACP adapter 預設 per-session 常駐 `chrome-devtools-mcp`
-- Computer Control request 經 AgentDock provider abstraction，不由 ACP 自行選 Orca / OpenAI Computer Use
-- AgentDock Memory dynamic MCP 改用 shared HTTP
-- ACP Manager API 暴露 lifecycle policy 與 diagnostics
+- session lifecycle policy model：`persistent | ephemeral | idle-managed`；
+- prompt terminal 後的 ephemeral auto-close；
+- idle-managed bounded sweeper；
+- close failure / retry state 與 persisted session mapping；
+- managed / loaded / running / idle adapter diagnostics；
+- session close / idle policy 透過既有 SessionMCPProvider release host-owned Browser / Computer capability；
+- 將 M6 `browser_broker` / `computer_broker` diagnostics 關聯到 ACP session view；
+- 維持「ACP adapter 不預設持有 browser/Computer Use backend」這個 M6 invariant，不重新實作 Browser Broker；
+- AgentDock Memory dynamic MCP 改用 shared HTTP；
+- ACP Manager API 暴露 lifecycle policy、adapter health 與 diagnostics。
 
 Shared Desktop UI：
 
@@ -228,7 +228,7 @@ Shared Desktop UI：
 ## Acceptance Criteria
 
 1. 20 個 ephemeral Codex worker 完成後 loaded sessions 回到基線。
-2. 20 個 ephemeral Antigravity worker 完成後不留下對應 AGY task child / browser MCP tree。
+2. 20 個 **prompt-driven ephemeral** Antigravity worker 完成後自動 close，loaded adapter state 回到基線；M6 已另完成 20 次真實 session new/close/runtime-close capability/process stress。
 3. persistent session 不因 end_turn 被自動 close。
 4. idle-managed session TTL 到期才 close，重新 open 可 resume。
 5. close 與 prompt completion race 不造成 stale notification / double settlement。
@@ -238,11 +238,11 @@ Shared Desktop UI：
 9. 新 ACP session 不再 spawn mcp-memory-service stdio child。
 10. shared memory daemon 不再建立 CoreML partition temp bundle。
 11. diagnostics 能區分 managed / loaded / active。
-12. 4~8 個並行 ACP browser task 不互相改變 context / page target。
-13. ACP browser concurrency 超額會 queue，不無界新增 `chrome-devtools-mcp` / Chrome process。
-14. ACP session close / crash / idle TTL 後，其 browser lease 可回收到基線。
-15. 同一 resource 的並行 write 可被 serialize。
-16. ACP 不 silent fallback 到 foreground Computer Use。
+12. M6 Browser regression invariant：4~8 個並行 ACP browser task 不互相改變 context / page target。
+13. M6 Browser regression invariant：concurrency 超額會 queue，不無界新增 `chrome-devtools-mcp` / Chrome process。
+14. M7 session close / idle-managed policy 必須觸發既有 host capability release，Browser/Computer owner 回到基線。
+15. M6 resource-lock invariant 持續成立：同一 resource 的並行 write 可被 serialize。
+16. M6 routing invariant 持續成立：ACP 不 silent fallback 到 foreground Computer Use。
 17. relevant unit / integration / race / Desktop tests 通過。
 
 ## Rollout / Cleanup
@@ -264,17 +264,19 @@ Shared Desktop UI：
 
 截至 2026-10-04：
 
-- shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 stable/v11.14.0
-- Codex CLI → shared Memory HTTP：完成
-- AGY CLI → shared Memory HTTP：完成
-- AgentDock dynamic MCP → shared Memory HTTP：待 M7 / 安全切換
-- codex-acp fork：完成，branch fix/session-lifecycle-recycle，commit 630d7c6；已全域安裝
-- antigravity-acp fork：`jacktdry/antigravity-acp`，branch `fix/agentdock-hardening`；hardening commits `93ad102`、`5620dc4`
-- active Antigravity adapter：`1.2.0-agentdock.2`，已部署至 AgentDock profile
-- refined-antigravity-acp：已從 AgentDock profile 移除並解除全域 npm 安裝，不再是可執行 AGY 路徑
-- AgentDock Antigravity runtime：使用 system AGY 1.2.16，profile 注入 isolated HOME + `AGY_BIN`
-- real lifecycle smoke：Gemini prompt、parallel sessions、cancel、close、resume、delete 均通過；task 結束後 AGY child 回到基線
-- model discovery：Gemini 3.8/3.7/3.6 Flash、Gemini 3.1 Pro、Claude Opus 5.5、Claude Sonnet 5.5、GPT-OSS 120B；Model / Reasoning effort 已分離
-- Claude routing：Sonnet/Opus 5.5 視為獨立稀缺額度，只派 bounded + context-compacted review / architecture specialist，concurrency = 1
-- legacy stdio memory baseline：最終驗證仍有 53 個既有 .venv memory server process；本輪未終止，待 active session drain/restart 後再清理
-- AgentDock runtime lifecycle code：本輪刻意未修改，由後續 AgentDock session 接手
+- shared Memory daemon：完成並運行，mcp-memory-service 11.14.0，repo 固定於 `stable/v11.14.0`；
+- Codex CLI → shared Memory HTTP：完成；
+- AGY CLI → shared Memory HTTP：完成；
+- AgentDock dynamic MCP → shared Memory HTTP：待 M7 / 安全切換；
+- codex-acp fork：既有 lifecycle recycle 工作可沿用，M7 仍需驗證 prompt-driven ephemeral / idle-managed policy；
+- Antigravity ACP：`jacktdry/antigravity-acp` `fix/agentdock-hardening`，目前部署 `1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`；
+- refined-antigravity-acp：不再是 AgentDock 可執行 AGY 路徑；僅保留歷史/研究 repo；
+- AgentDock Antigravity runtime：isolated HOME + `AGY_BIN`，不繼承互動 AGY MCP/plugin；Browser / Computer capability 由 AgentDock host 注入；
+- real adapter smoke：Gemini prompt、parallel sessions、cancel、close、resume、delete 均已驗證；M6 另跑 20 次真實 session new/close/runtime-close，task 結束後相關 descendants 回到基線；
+- model discovery / routing：Model 與 Reasoning effort 分離；Claude Sonnet 5.5 / Opus 5.5 視為獨立稀缺額度 specialist，只派 bounded + context-compacted review / architecture，concurrency = 1；
+- M6 Browser Broker：lease isolation、4-active bounded admission、5 分鐘 TTL、30 秒 sweep、bounded recovery、external user-page protection、diagnostics 與 cleanup controls 已完成；
+- M6 stress：8-owner Broker stress、4 個真 managed MCP/Chrome concurrent lease、managed host hard-crash cleanup、Orca no-focus、Edge external safety、`chrome-devtools-mcp@1.7.0` pin/schema regression均通過；
+- M7 **尚未完成**：per-session `persistent | ephemeral | idle-managed` policy、prompt-driven ephemeral auto-close、idle-managed adapter close、shared Memory migration 與對應 Desktop UI；
+- legacy stdio memory /舊 adapter process 數量應在 M7 drain/restart 時重新量測，不沿用 2026-10-03 的 process count 當現況。
+
+M7 的核心原則是「消費 M6 Broker capability，不重做 M6 ownership」。Browser / Computer physical resource cleanup 由 Broker 負責；M7 決定的是 ACP session 在何時 release 這些 capability、何時保留 adapter runtime，以及如何呈現 lifecycle diagnostics。

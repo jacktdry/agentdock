@@ -68,7 +68,20 @@ func (m *Manager) NewSession(ctx context.Context, cwd string, additionalDirector
 	if len(additional) > 0 && !process.supportsSessionCapability("additionalDirectories") {
 		return SessionResult{}, capabilityError("sessionCapabilities.additionalDirectories")
 	}
-	params := sessionCreationParams(resolved, additional)
+	id, err := newID("acps")
+	if err != nil {
+		return SessionResult{}, err
+	}
+	params, err := m.sessionCreationParams(ctx, id, resolved, additional)
+	if err != nil {
+		return SessionResult{}, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = m.releaseSessionMCP(context.Background(), id)
+		}
+	}()
 	var response sessionLifecycleResponse
 	if err := process.connection.Request(ctx, "session/new", params, &response); err != nil {
 		return SessionResult{}, process.wrapError("create ACP session", err)
@@ -76,10 +89,11 @@ func (m *Manager) NewSession(ctx context.Context, cwd string, additionalDirector
 	if strings.TrimSpace(response.SessionID) == "" {
 		return SessionResult{}, newError("ACP_INVALID_RESPONSE", "ACP session/new omitted sessionId", false, map[string]any{"agent": m.opts.Agent.Name}, nil)
 	}
-	record, err := m.persistNewSession(response, resolved, additional)
+	record, err := m.persistNewSessionWithID(id, response, resolved, additional)
 	if err != nil {
 		return SessionResult{}, err
 	}
+	committed = true
 	return SessionResult{Session: record, Modes: response.Modes, ConfigOptions: response.ConfigOptions, Agent: process.initialize.AgentInfo}, nil
 }
 
@@ -112,7 +126,11 @@ func (m *Manager) LoadSession(ctx context.Context, id string) (SessionResult, er
 		if err != nil {
 			return SessionResult{}, err
 		}
-		params := sessionActivationParams(record)
+		params, paramsErr := m.sessionActivationParams(ctx, record)
+		if paramsErr != nil {
+			finish()
+			return SessionResult{}, paramsErr
+		}
 		requestErr := process.connection.Request(ctx, "session/load", params, &response)
 		history = collector.snapshot()
 		finish()
@@ -164,8 +182,12 @@ func (m *Manager) ResumeSession(ctx context.Context, id string) (SessionResult, 
 	if len(record.AdditionalDirectories) > 0 && !process.supportsSessionCapability("additionalDirectories") {
 		return SessionResult{}, capabilityError("sessionCapabilities.additionalDirectories")
 	}
+	params, err := m.sessionActivationParams(ctx, record)
+	if err != nil {
+		return SessionResult{}, err
+	}
 	var response sessionLifecycleResponse
-	if err := process.connection.Request(ctx, "session/resume", sessionActivationParams(record), &response); err != nil {
+	if err := process.connection.Request(ctx, "session/resume", params, &response); err != nil {
 		wrapped := process.wrapError("resume ACP session", err)
 		if isCodexNoRolloutError(process.initialize.AgentInfo, wrapped) {
 			return SessionResult{}, newError("ACP_SESSION_NOT_PERSISTED", "ACP session has no persisted remote turn to resume", false, map[string]any{"session_id": id}, wrapped)
@@ -216,14 +238,21 @@ func (m *Manager) ForkSession(ctx context.Context, id, cwd string, additionalDir
 	if len(additional) > 0 && !process.supportsSessionCapability("additionalDirectories") {
 		return SessionResult{}, capabilityError("sessionCapabilities.additionalDirectories")
 	}
-	params := map[string]any{
-		"sessionId":  source.RemoteSessionID,
-		"cwd":        resolved,
-		"mcpServers": []any{},
+	newID, err := newID("acps")
+	if err != nil {
+		return SessionResult{}, err
 	}
-	if len(additional) > 0 {
-		params["additionalDirectories"] = additional
+	params, err := m.sessionCreationParams(ctx, newID, resolved, additional)
+	if err != nil {
+		return SessionResult{}, err
 	}
+	params["sessionId"] = source.RemoteSessionID
+	committed := false
+	defer func() {
+		if !committed {
+			_ = m.releaseSessionMCP(context.Background(), newID)
+		}
+	}()
 	var response sessionLifecycleResponse
 	if err := process.connection.Request(ctx, "session/fork", params, &response); err != nil {
 		return SessionResult{}, process.wrapError("fork ACP session", err)
@@ -231,10 +260,11 @@ func (m *Manager) ForkSession(ctx context.Context, id, cwd string, additionalDir
 	if strings.TrimSpace(response.SessionID) == "" {
 		return SessionResult{}, newError("ACP_INVALID_RESPONSE", "ACP session/fork omitted sessionId", false, map[string]any{"session_id": id}, nil)
 	}
-	record, err := m.persistNewSession(response, resolved, additional)
+	record, err := m.persistNewSessionWithID(newID, response, resolved, additional)
 	if err != nil {
 		return SessionResult{}, err
 	}
+	committed = true
 	return SessionResult{Session: record, Modes: response.Modes, ConfigOptions: response.ConfigOptions, Agent: process.initialize.AgentInfo}, nil
 }
 
@@ -339,7 +369,7 @@ func (m *Manager) CloseSession(ctx context.Context, id string) (SessionRecord, e
 		return SessionRecord{}, err
 	}
 	if record.Status == SessionClosed {
-		return record, nil
+		return record, m.releaseSessionMCP(ctx, id)
 	}
 	process, err := m.ensureProcess(ctx)
 	if err != nil {
@@ -384,6 +414,9 @@ func (m *Manager) CloseSession(ctx context.Context, id string) (SessionRecord, e
 	delete(m.terminalSessions, id)
 	m.mu.Unlock()
 	succeeded = true
+	if err := m.releaseSessionMCP(ctx, id); err != nil {
+		return record, err
+	}
 	return record, nil
 }
 
@@ -428,13 +461,20 @@ func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 	delete(m.terminalSessions, id)
 	m.mu.Unlock()
 	succeeded = true
-	return nil
+	return m.releaseSessionMCP(ctx, id)
 }
 
 func (m *Manager) persistNewSession(state sessionLifecycleResponse, cwd string, additional []string) (SessionRecord, error) {
 	id, err := newID("acps")
 	if err != nil {
 		return SessionRecord{}, err
+	}
+	return m.persistNewSessionWithID(id, state, cwd, additional)
+}
+
+func (m *Manager) persistNewSessionWithID(id string, state sessionLifecycleResponse, cwd string, additional []string) (SessionRecord, error) {
+	if strings.TrimSpace(id) == "" {
+		return SessionRecord{}, newError("ACP_ID_FAILED", "persist ACP session with empty local id", false, nil, nil)
 	}
 	now := time.Now().UTC()
 	record := SessionRecord{

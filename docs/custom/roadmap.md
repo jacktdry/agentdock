@@ -189,6 +189,65 @@ Exit criteria：
 
 實作 workspace-aware Browser Control Broker，而不是讓每個 ACP / session 自己選擇或啟動瀏覽器 backend。
 
+### Completion checkpoint — 2026-10-04
+
+M6 runtime、lifecycle、diagnostics 與 stress validation 已在 `feature/browser-broker` 完成。完成狀態：
+
+- ✅ `contract` — `c14b21ca feat(browser): define broker routing contract`
+  - canonical workspace root policy；
+  - company route 必須使用 authenticated external Edge，無法使用時 fail closed；
+  - Browser Broker / Engine / lease ownership contract；
+  - typed routing errors 與 compatibility matrix baseline。
+- ✅ `engine` — `8edcecef feat(browser): add managed MCP worker engine`
+  - 重用既有 Go MCP SDK / process controller 建立 ephemeral stdio MCP session；
+  - managed worker 固定使用 `chrome-devtools-mcp@1.7.0`；
+  - 啟用 `--isolated --headless --experimentalPageIdRouting`；
+  - 已驗證 handshake、background isolated page、owned Chrome descendants cleanup 與 temporary profile cleanup。
+- ✅ `profiles` — `c08dc81b feat(browser): plan workspace profile routes`
+  - browser/profile/connector catalog；
+  - loopback WebSocket endpoint canonicalization；
+  - company authenticated Edge route；
+  - non-company managed isolated Chrome route；
+  - explicit user-requested external route；
+  - runtime connector status 與 strict config validation。
+- ✅ `leases` — `449169aa feat(browser): add managed browser leases`
+- ✅ `concurrency` — `bd010aa2 feat(browser): bound managed browser concurrency`
+- ✅ `external` — `8c8db73b feat(browser): add external lease isolation`
+- ✅ `acp` — `2b0f58bd feat(browser): route ACP through browser broker`
+- ✅ `computer` — `13c9cd9a feat(computer): add Orca computer control broker`
+  - 上游 direct 與 ACP Computer Use 統一由 AgentDock Computer Control Broker routing；
+  - Orca 為 default provider，不 silent fallback 到 ChatGPT / Sky；
+  - foreground control 預設 forbidden，background observation 有 focus-change violation guard；
+  - `antigravity-acp 1.2.0-agentdock.5` 已支援 host-owned Browser + Computer MCP。
+- ✅ `lifecycle` — `9b6ece24 feat(browser): harden broker lifecycle recovery`
+  - managed / external 5 分鐘 idle TTL 與 30 秒 lifecycle sweep；
+  - bounded cleanup recovery、acquire orphan recovery；
+  - canonical-equivalent connector endpoint 在 catalog 層拒絕重複；
+  - external recovery 只處理 AgentDock-owned connector，不取得 user browser/profile/process kill authority。
+- ✅ `diagnostics` — `af49037b feat(browser): expose broker ownership diagnostics`
+  - `browser_broker` / `computer_broker` control-plane status 與 bounded cleanup；
+  - owner → lease → worker → page/context → connector/process ownership 可追蹤；
+  - capability token 不進 diagnostics；Computer focus/provider failure 使用 bounded event history。
+- ✅ `stress` — `dc46459e test(browser): stress ACP broker lifecycle`
+  - 8 個不同 ACP owner 實測 4 active + 4 queued，無 cross-token / target contamination；另以 4 個真 `chrome-devtools-mcp` / Chrome worker 同時 lease 驗證真 engine isolation；
+  - 20 次真實 `antigravity-acp 1.2.0-agentdock.5` session new/close/runtime close 回到 baseline；
+  - 真實 Orca no-focus observation、Microsoft Edge external user-page preservation、managed host hard-crash process-group cleanup、pin/schema regression 全部通過。
+- ✅ `handoff` — 本文件、[browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)、[computer-use-backends.md](computer-use-backends.md) 與 [acp-lifecycle-memory.md](acp-lifecycle-memory.md) 已同步 M6 完成基線。
+
+M6 code 目前仍位於 `feature/browser-broker`，尚未合併回 `custom/main`；功能完成不等於已完成 branch integration。合併應作為獨立 review / integration 動作，不在 handoff 文件更新時隱式進行。
+
+版本策略暫時維持 `chrome-devtools-mcp@1.7.0`。即使 upstream 已有較新版本，也必須先通過 managed-headless、persistent-profile、Chrome-live、Edge-live compatibility matrix 才能升級，避免破壞 company Edge / default-profile attach。
+
+M6 實作期間持續遵守以下硬限制：
+
+- 不以 global selected page 作為 ACP/browser 操作狀態；
+- 不以 global `pkill` 清理 browser/MCP；
+- external Edge/Chrome 的 PID 只可作 observation，不能被視為 kill authority；
+- company Edge 只操作 AgentDock-owned background leased target，使用者既有 tabs/profile/browser process 必須保留；
+- Browser Broker 不得 silent fallback 到 foreground Computer Use；
+- Computer Use 與 Browser automation 分開，Computer Use 統一走 AgentDock Computer Control Broker → Orca default。
+
+
 預設 policy：
 
 ```text
@@ -236,7 +295,7 @@ Browser engine 優先採 `chrome-devtools-mcp`，AgentDock Core 負責 routing /
 - 但目前 Chrome / Edge default-profile 新版 Remote Debugging 與較新 `chrome-devtools-mcp` 存在相容性風險，因此 existing browser attach 只能當 explicit compatibility backend，不可作唯一主路徑；
 - 不再採 `AGENTDOCK_BROWSER_REUSE_EXISTING_CDP=true` 這種「找到任意 CDP 就重用」的長期策略，因為目前同時可能存在 Chrome / Edge 多個 endpoint。
 
-M6 必須先建立 browser process / connector / profile / lease ownership contract，並避免以 process age 或全域 `pkill` 作清理判斷。完整現場證據、並行模型、lifecycle 與驗收條件見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+M6 已建立 browser process / connector / profile / lease ownership contract，並以 bounded lifecycle recovery 取代 process age / 全域 `pkill` 推測式清理。完整現場證據、並行模型、lifecycle 與驗收條件見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
 
 Computer Use 不屬於一般 browser routing；只有程式化工具與 Browser Broker 都做不到時才進入 Computer Control provider。無論是 ACP 請求 Computer Use，或上游 ChatGPT 自己需要直接操作本機 GUI，預設都必須經 AgentDock Computer Control Broker 使用 Orca；不得繞過 AgentDock 直接把 ChatGPT/OpenAI Computer Use 當一般執行路徑。只有使用者明確指定或未來正式 fallback policy 允許時，才考慮其他 provider。Provider / no-focus contract 見 [computer-use-backends.md](computer-use-backends.md)。
 
@@ -267,23 +326,24 @@ ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
 - idle-managed session 的 bounded TTL sweeper；
 - managed / loaded / running / idle session 分流與 adapter process diagnostics；
 - AgentDock Memory dynamic MCP 從 per-process stdio 遷移至本機 shared Streamable HTTP daemon；
-- Adapter-specific cleanup 留在 codex-acp / antigravity-acp fork，不在 AgentDock Core 寫 agent-specific kill hack。
+- Adapter-specific runtime recycle 留在自維護 codex-acp / antigravity-acp，不在 AgentDock Core 寫 agent-specific kill hack。
 
 完整設計與接手條件見 [acp-lifecycle-memory.md](acp-lifecycle-memory.md)。
 
 ### M7 Antigravity provider baseline（2026-10-04）
 
 - AgentDock 的 AGY 路徑已收斂為單一 hardened `antigravity-acp` provider；不再經過 `refined-antigravity-acp`。
-- Fork：`jacktdry/antigravity-acp`，`main` 保持跟 upstream 對齊，AgentDock hardening 位於 `fix/agentdock-hardening`。
-- 目前部署版本：`1.2.0-agentdock.2`。
-- Adapter 已補強 `session/cancel`、`session/close`、`session/delete`、active child cleanup、同 session concurrent-turn guard，以及 Model / Reasoning effort 分離。
-- AgentDock profile 以 per-profile `env_from_env` 注入 isolated `HOME` 與明確 `AGY_BIN`；isolated HOME 只共享 Antigravity CLI auth / conversation state，不繼承使用者互動 AGY 的 MCP/plugin 設定。
-- 實測 AgentDock E2E：Gemini prompt、close、resume、delete、parallel sessions、cancel 均正常，且 task 結束後不殘留對應 AGY child。
-- Claude Sonnet 5.5 / Opus 5.5 透過同一 Antigravity profile 暴露，但 routing 視為獨立稀缺額度 specialist，只用於 context 已壓縮的窄範圍 review / architecture，預設 concurrency = 1。
+- Fork：`jacktdry/antigravity-acp`；`main` 跟 upstream 對齊，AgentDock hardening 位於 `fix/agentdock-hardening`。
+- 目前部署版本：`1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`。
+- Adapter 已補強 cancel/close/delete、active child cleanup、同 session concurrent-turn guard，以及 Model / Reasoning effort 分離。
+- AgentDock profile 以 isolated HOME + `AGY_BIN` 啟動；不繼承互動 AGY 的 MCP/plugin 設定。
+- M6 再把 Browser / Computer 收斂成 host-owned loopback MCP capability；ACP child 不直接持有 browser/Computer Use backend。
+- 實測 AgentDock E2E：Gemini prompt、close、resume、delete、parallel sessions、cancel 均正常；M6 另完成 20-cycle 真實 Antigravity lifecycle stress。
+- Claude Sonnet 5.5 / Opus 5.5 視為獨立稀缺額度 specialist，只用於 context 已壓縮的窄範圍 review / architecture，預設 concurrency = 1。
 
-Browser / CDP child ownership、connector cleanup 與 Antigravity `localharness` / `chrome-devtools-mcp` 現場盤點另見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+Browser / CDP child ownership、connector cleanup 與舊 Antigravity `localharness` / `chrome-devtools-mcp` 現場盤點另見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)；這些舊 process tree 是歷史證據，不再是現行 Browser ownership 架構。
 
-M7 同時需確保 ACP 不再各自常駐重複 browser backend；ACP browser request 應轉成 AgentDock browser lease，並在 session close / TTL / crash recovery 時釋放。多 ACP browser concurrency、lease isolation 與 Browser Broker contract 見 [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)。
+M7 不重新實作 Browser Broker。M6 已完成 ACP browser request → AgentDock lease、bounded concurrency、TTL / cleanup recovery 與 ownership diagnostics；M7 只需讓 persistent / ephemeral / idle-managed session policy 在正確時機觸發既有 host capability release，並把 Broker diagnostics 納入 ACP session view。
 
 Computer Use 亦採 AgentDock provider abstraction；ACP 不自行選 Orca / OpenAI Computer Use。現階段 AgentDock primary provider 為 Orca，OpenAI Sky / ChatGPT Computer Use 僅保留 product fallback，完整決策見 [computer-use-backends.md](computer-use-backends.md)。
 

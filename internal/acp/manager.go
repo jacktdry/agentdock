@@ -34,6 +34,9 @@ type Manager struct {
 	closedCh  chan struct{}
 	closeOnce sync.Once
 	closeErr  error
+
+	sessionMCPMu       sync.Mutex
+	sessionMCPReleased map[string]struct{}
 }
 
 func NewManager(opts Options) (*Manager, error) {
@@ -71,6 +74,7 @@ func NewManager(opts Options) (*Manager, error) {
 		sessionOperations:  make(map[string]int),
 		runSlots:           make(chan struct{}, opts.MaxConcurrentRuns),
 		closedCh:           make(chan struct{}),
+		sessionMCPReleased: make(map[string]struct{}),
 	}
 	manager.operationsCond = sync.NewCond(&manager.mu)
 	records, err := store.List()
@@ -118,6 +122,10 @@ func (m *Manager) Close() error {
 			}
 		}
 		process := m.process
+		sessionIDs := make([]string, 0, len(m.sessions))
+		for sessionID := range m.sessions {
+			sessionIDs = append(sessionIDs, sessionID)
+		}
 		m.process = nil
 		m.loaded = make(map[string]sessionLifecycleResponse)
 		m.projections = make(map[string]SessionProjection)
@@ -136,6 +144,13 @@ func (m *Manager) Close() error {
 		}
 		if process != nil {
 			m.closeErr = process.Close()
+		}
+		if m.opts.SessionMCPProvider != nil {
+			for _, sessionID := range sessionIDs {
+				ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+				m.closeErr = errors.Join(m.closeErr, m.releaseSessionMCP(ctx, sessionID))
+				cancel()
+			}
 		}
 	})
 	return m.closeErr
