@@ -1,6 +1,6 @@
 # Computer Use Backend Strategy
 
-> 狀態：M6 runtime implemented / lifecycle hardening next
+> 狀態：M6 completed / M7 handoff
 > 建立日期：2026-10-03
 > 實作更新：2026-10-04
 > 主要 Milestone：M6 — Browser Broker、M7 — ACP Manager、M8 — Permission / Approval
@@ -9,7 +9,7 @@
 
 Computer Control Broker 已在 `13c9cd9a feat(computer): add Orca computer control broker` 落地：
 
-- 上游 AgentDock 公開 `computer_session`、`computer_observe`、`computer_act`；
+- 上游 AgentDock 公開 `computer_session`、`computer_observe`、`computer_act`，另提供 `computer_broker` control-plane diagnostics / ACP-owner cleanup；
 - ACP 取得獨立 `/internal/acp-computer/mcp`，與 Browser Broker 共用同一個 per-session bearer capability，但工具面彼此分離；
 - primary provider 固定為 Orca，現場驗證版本 `1.4.218`；不實作 ChatGPT / Sky 的 silent fallback；
 - `foreground=forbidden` 為預設，所有 native mutation 與 `permissions`、`restore_window` 都在 provider call 前 fail closed；
@@ -19,9 +19,11 @@ Computer Control Broker 已在 `13c9cd9a feat(computer): add Orca computer contr
 - Orca provider 保留結構化 provider error、action verification，set-value / type / paste 的文字以 stdin 傳送，不放入 process args；
 - macOS 真實 `capabilities`、`list_apps`、`get_app_state --no-screenshot` smoke 已驗證 background observation 不改變前景 app；
 - Windows amd64 已通過相同 Broker contract 的 cross-build，平台差異只留在 provider / active-app adapter；
-- 自維護 `antigravity-acp` 已升至 `1.2.0-agentdock.5`（`2bd8426`），AGY child 只取得 AgentDock 提供的 Browser / Computer MCP，不恢復 global browser / Computer Use plugin。
+- 自維護 `antigravity-acp` 已升至 `1.2.0-agentdock.5`（`2bd8426`），AGY child 只取得 AgentDock 提供的 Browser / Computer MCP，不恢復 global browser / Computer Use plugin；
+- `af49037b` 加入 bounded diagnostics：active/released session、`focus_violation`、`provider_failure`、`foreground_denied`；不保存文字輸入、screenshot 或 provider payload；
+- `dc46459e` stress validation 搭配真實 Orca background observation，確認 no-focus guard 與 20 次 Antigravity capability lifecycle 回到 baseline。
 
-尚未在本 step 完成的部分屬於後續 M6 hardening：session tombstone/TTL、crash recovery、完整 diagnostics 與 stress。
+M7 不需要重做 Computer provider routing；M7 只需讓 ACP persistent / ephemeral / idle-managed session policy 在 close/idle lifecycle 上正確釋放既有 Computer capability，並把 diagnostics 納入 session view。
 
 ## Goal
 

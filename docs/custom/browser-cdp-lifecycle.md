@@ -562,7 +562,7 @@ UI 必須避免把：
 
 ## Current Implementation Checkpoint — 2026-10-04
 
-M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownership runtime，現在進入 lifecycle hardening：
+M6 Browser Broker / Computer Control Broker 已完成 runtime、lifecycle、diagnostics 與 stress validation：
 
 | Step | Status | Commit / State |
 | --- | --- | --- |
@@ -574,7 +574,9 @@ M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownershi
 | External Edge attach safety | Completed | `8c8db73b` |
 | ACP Broker integration | Completed | `2b0f58bd` |
 | Computer Control Broker integration | Completed | `13c9cd9a` |
-| Lifecycle / diagnostics / stress | In progress | next M6 hardening |
+| Lifecycle hardening | Completed | `9b6ece24` |
+| Ownership diagnostics / manual cleanup | Completed | `af49037b` |
+| Concurrency / adapter lifecycle stress | Completed | `dc46459e` |
 
 目前已固定的 runtime 邊界：
 
@@ -583,43 +585,39 @@ M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownershi
 - Codex / Antigravity ACP child 不再自帶 `chrome-devtools-mcp`、`cua-repl`、`node_repl` / Sky Computer Use；
 - Computer Control default provider 為 Orca，`foreground=forbidden` 預設 fail closed，Browser task 不會 silent fallback 到 Computer Use；
 - `antigravity-acp 1.2.0-agentdock.5` 支援 Browser + Computer 兩個 AgentDock host-owned MCP，standalone `agy` 全域能力不受影響；
-- 下一步集中處理 release / stale recovery / crash cleanup / connector dedupe / worker idle shutdown，再補 diagnostics 與 stress。
+- 30 秒 lifecycle runner、managed/external 5 分鐘 idle TTL、bounded cleanup recovery 與 acquire-orphan recovery 已落地；
+- `browser_broker` diagnostics 可追 owner → lease → worker → page/context → connector/process ownership，且不輸出 capability token；
+- 8-owner Broker stress 驗證 4 active + 4 queued，另有 4 個真 managed MCP/Chrome 同時 lease 的 live isolation stress；20 次真實 Antigravity session lifecycle 驗證 capability/process descendants 回到 baseline；
+- Microsoft Edge external live test 驗證 user sentinel page 與 browser/CDP process 保留，只清 AgentDock-owned page/connector；Darwin hard-crash integration 另驗證 host 被強制終止後 managed MCP owned process group 自行回到 baseline，不需 global `pkill`。
 
 ## Handoff Work Items
 
-### M6 — Browser Broker
+### M6 — Browser Broker（completed）
 
-- browser ownership + lease model；
-- `chrome-devtools-mcp` engine integration；
-- tested browser-engine version policy / compatibility matrix；
-- managed headless / persistent authenticated browser routing；
-- external Chrome / Edge explicit compatibility routing；
-- external CDP endpoint canonicalization；
-- worker / connector deduplication；
-- worker pool / bounded concurrency / queue；
-- BrowserContext / Page isolation；
-- per-operation lease target resolution；
-- site / resource write lock；
-- no-focus / user-tab protection；
-- temporary profile registry；
-- process / profile cleanup state machine；
-- startup stale recovery；
-- Browser diagnostics；
-- manual “close AgentDock-owned browser resources” action；
-- 4~8 concurrent ACP browser isolation / stress tests；
-- unit / integration / race / crash-recovery tests。
+M6 已交付 browser ownership / lease model、`chrome-devtools-mcp@1.7.0` engine pin、company required external Edge routing、managed isolated Chrome、external user-tab protection、endpoint canonicalization、bounded admission/queue、lease-scoped page resolution、resource locks、TTL/stale recovery、Broker diagnostics 與 manual AgentDock-owned cleanup。
+
+重要實作細節：
+
+- managed route 使用 **exclusive worker generation per lease**；external route 同樣使用 per-lease AgentDock-owned connector generation，不因 endpoint dedupe 而共用 selected-page state；
+- endpoint dedupe 發生在 catalog identity 層：不同 connector ID 不得指向同一 canonical endpoint；
+- cleanup/recovery 只對 AgentDock-owned worker/connector/page 有 authority；external browser PID 永遠只是 observation；
+- terminal metadata 暫留供 idempotent release 與 diagnostics 使用，實體 browser/MCP resource 已回收；metadata retention/pruning 可在後續 observability policy 再定義。
 
 ### M7 — ACP Manager
 
-- 將 browser connector / adapter child count 納入 session diagnostics；
-- ACP 不再直接持有常駐 browser backend；
-- browser request 轉成 Broker lease；
-- ephemeral session/close 後驗證 active lease 回到 baseline；
-- idle-managed sweeper 觸發 adapter resource drain；
-- session close / crash / TTL 觸發 browser lease release；
+- 將既有 `browser_broker` / `computer_broker` diagnostics 納入 ACP session diagnostics；
+- persistent / ephemeral / idle-managed policy 決定何時保留或釋放 host-owned capability；
+- ephemeral session terminal 後自動 session/close，並驗證既有 Broker owner/lease 回到 baseline；
+- idle-managed sweeper 觸發 adapter resource drain 與既有 host capability release；
 - 明確區分 persisted / loaded / running / idle；
-- adapter 無 per-session child ownership 時顯示 capability limitation；
-- 不在 AgentDock Core 寫 Antigravity / Codex 專屬 process-name kill。
+- adapter process recycle 仍由 adapter fork 負責，不在 AgentDock Core 寫 Antigravity / Codex 專屬 process-name kill；
+- 不重新建立 ACP-owned browser backend，也不繞過 Computer Control Broker。
+
+## M6 Verification Result
+
+M6 code-level acceptance 已完成 unit / integration / race / cross-build / live-provider 驗證；managed route另有 4-worker live concurrency stress 與 host hard-crash process-group cleanup regression。真實 Microsoft Edge 測試已證明 external browser process 與 user sentinel page 不會被 AgentDock release；但「公司實際已登入 default-profile Edge」能否 attach 仍取決於部署時是否提供健康、已驗證、authenticated 的 configured connector。這是 runtime deployment qualification，不會以 managed Chrome fallback 掩蓋。
+
+此外，舊 public `browser_session` / `browser_act` / `browser_snapshot` native-CDP 工具仍保留作相容層；M6 的 host-owned Broker contract、ACP Browser capability 與 `browser_broker` control plane 已完成，但不宣稱所有 legacy browser callers 已在本 milestone 全數改寫成 Broker API。
 
 ## Acceptance Criteria
 
@@ -635,7 +633,7 @@ M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownershi
 10. company Edge user profile 與 user-owned tabs 永遠不被 cleanup / navigation / close；AgentDock 只操作自己 lease 的 background page。
 11. background page workflow 不改變 visible active tab / frontmost app。
 12. 同一 CDP endpoint 不會因重複設定長期啟動多套等價 connector。
-13. 20 個 ephemeral Antigravity workers 完成後 `localharness` 與 active browser lease 回到基線。
+13. 20 次真實 Antigravity ACP session new/close/runtime close 後，host capability owner 與 adapter/browser/computer-control descendants 回到基線；M7 另驗證 prompt-driven ephemeral auto-close policy。
 14. persistent / resumable session 不因 idle age 被誤殺。
 15. diagnostics 能從 ACP session → browser lease → worker → context/page → process 追蹤 ownership。
 16. cleanup failure 有 bounded retry 與可讀錯誤，不 silently leak。
@@ -654,4 +652,4 @@ M6 Browser Broker / Computer Control Broker 已完成主要 routing 與 ownershi
 - 把使用者 default-profile Remote Debugging 當唯一 browser backend；
 - 讓 Browser Broker 靜默升級成會搶焦點的 Computer Use；
 - 在 AgentDock Core 寫 Antigravity-specific / Codex-specific kill hack；
-- 本輪直接修改 runtime code。
+- 為了宣稱架構一致而刪除仍需相容的 legacy native-CDP public tools。
