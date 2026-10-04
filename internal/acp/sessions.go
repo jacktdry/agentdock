@@ -411,6 +411,10 @@ func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool
 }
 
 func (m *Manager) closeSessionClaimed(ctx context.Context, record SessionRecord, reason string, auto bool, previousTerminal SessionStatus, hadPreviousTerminal bool) (SessionRecord, error) {
+	return m.closeSessionClaimedWithProcess(ctx, record, reason, auto, previousTerminal, hadPreviousTerminal, nil)
+}
+
+func (m *Manager) closeSessionClaimedWithProcess(ctx context.Context, record SessionRecord, reason string, auto bool, previousTerminal SessionStatus, hadPreviousTerminal bool, existingProcess *agentProcess) (SessionRecord, error) {
 	id := record.ID
 	succeeded := false
 	defer func() {
@@ -418,9 +422,25 @@ func (m *Manager) closeSessionClaimed(ctx context.Context, record SessionRecord,
 			m.rollbackTerminalTransition(id, SessionClosed, previousTerminal, hadPreviousTerminal)
 		}
 	}()
-	process, err := m.ensureProcess(ctx)
-	if err != nil {
-		return SessionRecord{}, err
+	process := existingProcess
+	var err error
+	if process == nil {
+		process, err = m.ensureProcess(ctx)
+		if err != nil {
+			return SessionRecord{}, err
+		}
+	} else {
+		m.mu.RLock()
+		currentProcess := m.process
+		m.mu.RUnlock()
+		if currentProcess != process || process.connection == nil {
+			return SessionRecord{}, newError("ACP_SESSION_AUTO_CLOSE_STALE", "ACP adapter process changed before idle auto-close", true, map[string]any{"session_id": id}, nil)
+		}
+		select {
+		case <-process.connection.Closed():
+			return SessionRecord{}, newError("ACP_SESSION_AUTO_CLOSE_STALE", "ACP adapter process closed before idle auto-close", true, map[string]any{"session_id": id}, nil)
+		default:
+		}
 	}
 	if !process.supportsSessionCapability("close") {
 		return SessionRecord{}, capabilityError("sessionCapabilities.close")

@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -138,4 +139,142 @@ func (m *Manager) recordAutoCloseFailure(id string, attemptedAt time.Time, close
 	}
 	m.sessions[id] = record
 	return nil
+}
+
+const (
+	lifecycleSweepInterval = 30 * time.Second
+	maxIdleClosePerSweep   = 4
+)
+
+func (m *Manager) runLifecycleSweeper() {
+	if m == nil || m.lifecycleDone == nil {
+		return
+	}
+	defer close(m.lifecycleDone)
+	ticker := time.NewTicker(lifecycleSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-m.closedCh:
+			return
+		case now := <-ticker.C:
+			if err := m.SweepIdleManaged(now.UTC()); err != nil {
+				slog.Warn("ACP idle-managed lifecycle sweep failed", "agent", m.opts.Agent.Name, "error", err)
+			}
+		}
+	}
+}
+
+// SweepIdleManaged closes at most maxIdleClosePerSweep loaded idle-managed
+// sessions. It never starts or reloads an adapter merely to close an unloaded
+// persisted session.
+func (m *Manager) SweepIdleManaged(now time.Time) error {
+	if m == nil {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+	m.mu.RLock()
+	ids := make([]string, 0, maxIdleClosePerSweep)
+	for id, record := range m.sessions {
+		if len(ids) >= maxIdleClosePerSweep {
+			break
+		}
+		if record.LifecyclePolicy != LifecycleIdleManaged || record.Status != SessionReady {
+			continue
+		}
+		if _, loaded := m.loaded[id]; !loaded {
+			continue
+		}
+		ttl := time.Duration(record.IdleCloseAfterMS) * time.Millisecond
+		if ttl <= 0 || now.Before(record.LastActiveAt.Add(ttl)) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	m.mu.RUnlock()
+
+	var failures []error
+	for _, id := range ids {
+		ctx, cancel := context.WithTimeout(context.Background(), autoCloseTimeout)
+		record, attemptedAt, process, eligible, err := m.beginIdleAutoCloseTransition(ctx, id, now)
+		if err != nil {
+			failures = append(failures, err)
+			cancel()
+			continue
+		}
+		if !eligible {
+			cancel()
+			continue
+		}
+		_, closeErr := m.closeSessionClaimedWithProcess(ctx, record, "idle_timeout", true, "", false, process)
+		cancel()
+		if closeErr == nil {
+			continue
+		}
+		if persistErr := m.recordAutoCloseFailure(id, attemptedAt, closeErr); persistErr != nil {
+			failures = append(failures, persistErr)
+		}
+		failures = append(failures, closeErr)
+	}
+	return errors.Join(failures...)
+}
+
+func (m *Manager) beginIdleAutoCloseTransition(ctx context.Context, id string, now time.Time) (SessionRecord, time.Time, *agentProcess, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SessionRecord{}, time.Time{}, nil, false, newError("ACP_SESSION_TRANSITION_CANCELLED", "ACP idle-managed transition was cancelled", true, map[string]any{"session_id": id}, err)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return SessionRecord{}, time.Time{}, nil, false, nil
+	}
+	if _, transitioning := m.terminalSessions[id]; transitioning {
+		return SessionRecord{}, time.Time{}, nil, false, nil
+	}
+	record, exists := m.sessions[id]
+	if !exists || record.Status != SessionReady || record.LifecyclePolicy != LifecycleIdleManaged {
+		return record, time.Time{}, nil, false, nil
+	}
+	if _, loaded := m.loaded[id]; !loaded {
+		return record, time.Time{}, nil, false, nil
+	}
+	ttl := time.Duration(record.IdleCloseAfterMS) * time.Millisecond
+	if ttl <= 0 || now.Before(record.LastActiveAt.Add(ttl)) {
+		return record, time.Time{}, nil, false, nil
+	}
+	if m.activeRunBySession[id] != "" || m.sessionOperations[id] > 0 {
+		return record, time.Time{}, nil, false, nil
+	}
+	for _, interaction := range m.interactions {
+		if interaction.SessionID == id && interaction.Status == InteractionPending {
+			return record, time.Time{}, nil, false, nil
+		}
+	}
+	process := m.process
+	if process == nil || process.connection == nil {
+		return record, time.Time{}, nil, false, nil
+	}
+	select {
+	case <-process.connection.Closed():
+		return record, time.Time{}, nil, false, nil
+	default:
+	}
+	m.terminalSessions[id] = SessionClosed
+	attemptedAt := time.Now().UTC()
+	record.AutoCloseAttemptedAt = &attemptedAt
+	record.AutoCloseError = ""
+	record.UpdatedAt = attemptedAt
+	if err := m.store.Save(record); err != nil {
+		delete(m.terminalSessions, id)
+		return SessionRecord{}, time.Time{}, nil, false, err
+	}
+	m.sessions[id] = record
+	return record, attemptedAt, process, true, nil
 }
