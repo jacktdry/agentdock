@@ -10,6 +10,7 @@ import (
 	"time"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
@@ -46,6 +47,7 @@ type Runtime struct {
 	plugins        *toolplugin.Service
 	media          *toolmedia.Service
 	browser        *toolbrowser.Service
+	acpBrowser     *toolbrowser.ACPBridge
 	recall         *toolrecall.Service
 	evolution      *evolution.Service
 	taskTools      *tooltask.Service
@@ -157,6 +159,25 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime.taskTools = tooltask.New(func() config.Config { return runtime.cfg }, tasks, runtime.evolution)
 	runtime.tracing = observability.NewTracing(nil)
 
+	if cfg.ACPEnabled && cfg.BrowserEnabled && !cfg.Stdio {
+		catalog, catalogErr := browserpolicy.NewCatalog(cfg.BrowserCatalog)
+		if catalogErr != nil {
+			_ = runtime.Close()
+			return nil, fmt.Errorf("initialize ACP browser catalog: %w", catalogErr)
+		}
+		planner, plannerErr := toolbrowser.NewRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, nil)
+		if plannerErr != nil {
+			_ = runtime.Close()
+			return nil, fmt.Errorf("initialize ACP browser route planner: %w", plannerErr)
+		}
+		bridge, bridgeErr := toolbrowser.NewACPBridge(planner, toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{}))
+		if bridgeErr != nil {
+			_ = runtime.Close()
+			return nil, fmt.Errorf("initialize ACP browser bridge: %w", bridgeErr)
+		}
+		runtime.acpBrowser = bridge
+	}
+
 	if cfg.ACPEnabled {
 		managers := make(map[string]*acpruntime.Manager)
 		for _, profile := range cfg.EffectiveACPProfiles() {
@@ -170,6 +191,16 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 				}
 				acpEnvironment[childName] = value
 			}
+			acpEnvironment, err = prepareACPBrowserEnvironment(cfg.AgentDockHome, profile, acpEnvironment, runtime.acpBrowser != nil)
+			if err != nil {
+				_ = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers).Close()
+				_ = runtime.Close()
+				return nil, fmt.Errorf("prepare ACP profile %s environment: %w", profile.ID, err)
+			}
+			var sessionMCP acpruntime.SessionMCPProvider
+			if runtime.acpBrowser != nil {
+				sessionMCP = &acpBrowserSessionProvider{bridge: runtime.acpBrowser, profileID: profile.ID, serverName: acpBrowserServerName(profile), port: cfg.Port}
+			}
 			manager, err := acpruntime.NewManager(acpruntime.Options{
 				Home:       cfg.AgentDockHome,
 				DefaultCWD: cfg.AgentDockDefaultDir,
@@ -178,6 +209,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 				},
 				MaxConcurrentRuns:  cfg.ACPMaxPrompts,
 				InteractionTimeout: time.Duration(cfg.ACPInteractionMS) * time.Millisecond,
+				SessionMCPProvider: sessionMCP,
 			})
 			if err != nil {
 				_ = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers).Close()
@@ -220,6 +252,11 @@ func (r *Runtime) Close() error {
 		if r.acp != nil {
 			if err := r.acp.Close(); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close ACP runtime: %w", err))
+			}
+		}
+		if r.acpBrowser != nil {
+			if err := r.acpBrowser.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close ACP browser bridge: %w", err))
 			}
 		}
 		if r.browser != nil {

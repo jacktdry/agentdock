@@ -18,6 +18,10 @@ import (
 	"github.com/uvwt/agentdock/internal/startupdiag"
 )
 
+type acpBrowserMCPRuntime interface {
+	ACPBrowserMCPHandler() http.Handler
+}
+
 func Serve(ctx context.Context, server *mcp.Server, runtime runtimeapi.Runtime, cfg config.Config) error {
 	listenStartedAt := time.Now()
 	authRequired := cfg.AuthRequired()
@@ -41,6 +45,11 @@ func Serve(ctx context.Context, server *mcp.Server, runtime runtimeapi.Runtime, 
 	mux.HandleFunc("/", statusPageHandler(server, runtime, cfg))
 	mux.Handle("/analytics", loopbackOnly(analyticsPageHandler()))
 	mux.Handle("/analytics/data", loopbackOnly(analyticsDataHandler(runtime)))
+	if browserRuntime, ok := runtime.(acpBrowserMCPRuntime); ok {
+		if handler := browserRuntime.ACPBrowserMCPHandler(); handler != nil {
+			mux.Handle("/internal/acp-browser/mcp", loopbackOnly(handler))
+		}
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		writeJSON(w, map[string]any{"ok": true, "version": buildinfo.Version})

@@ -371,8 +371,13 @@ func (m *Manager) startHostOwnedSteering(ctx context.Context, process *agentProc
 			return nil, process.wrapError("reset ACP session after steering cancellation", err)
 		}
 		m.settleRunAfterRemoteClose(sessionID)
+		activationParams, paramsErr := m.sessionActivationParams(ctx, record)
+		if paramsErr != nil {
+			m.markSessionInterrupted(record, "steering_reload_failed")
+			return nil, paramsErr
+		}
 		var loaded sessionLifecycleResponse
-		if err := process.connection.Request(ctx, "session/load", sessionActivationParams(record), &loaded); err != nil {
+		if err := process.connection.Request(ctx, "session/load", activationParams, &loaded); err != nil {
 			wrapped := process.wrapError("reload ACP session after steering cancellation", err)
 			if !isCodexNoRolloutError(process.initialize.AgentInfo, wrapped) {
 				m.markSessionInterrupted(record, "steering_reload_failed")
@@ -382,7 +387,12 @@ func (m *Manager) startHostOwnedSteering(ctx context.Context, process *agentProc
 			// codex-acp 1.1.9 cannot reload a cancelled first turn before any
 			// rollout exists. The cancelled turn has no transcript to preserve, so
 			// recreate only the remote thread while keeping the AgentDock session.
-			if err := process.connection.Request(ctx, "session/new", sessionCreationParams(record.CWD, record.AdditionalDirectories), &loaded); err != nil {
+			recreateParams, paramsErr := m.sessionCreationParams(ctx, record.ID, record.CWD, record.AdditionalDirectories)
+			if paramsErr != nil {
+				m.markSessionInterrupted(record, "steering_recreate_failed")
+				return nil, paramsErr
+			}
+			if err := process.connection.Request(ctx, "session/new", recreateParams, &loaded); err != nil {
 				m.markSessionInterrupted(record, "steering_recreate_failed")
 				return nil, process.wrapError("recreate ACP session after unpersisted steering cancellation", err)
 			}
