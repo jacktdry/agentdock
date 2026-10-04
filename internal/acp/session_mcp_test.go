@@ -194,8 +194,15 @@ func TestSessionMCPCapabilityFailureAndShutdown(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, again := provider.snapshot()
-			if !reflect.DeepEqual(after, again) {
-				t.Fatal("repeated shutdown released twice")
+			if len(after) != len(again) {
+				t.Fatalf("repeated shutdown changed release count: before=%v after=%v", after, again)
+			}
+			againSorted := append([]string(nil), again...)
+			afterSorted := append([]string(nil), after...)
+			sort.Strings(againSorted)
+			sort.Strings(afterSorted)
+			if !reflect.DeepEqual(afterSorted, againSorted) {
+				t.Fatalf("repeated shutdown changed releases: before=%v after=%v", after, again)
 			}
 		})
 	}
