@@ -83,7 +83,7 @@ func assertBrowserCode(t *testing.T, err error, code string) {
 
 func TestManagedWorkerPinAndVersionProbe(t *testing.T) {
 	cfg := ManagedWorkerConfig("/workspace")
-	want := []string{"--yes", "chrome-devtools-mcp@1.7.0", "--isolated", "--headless", "--experimentalPageIdRouting", "--no-usage-statistics", "--no-performance-crux"}
+	want := []string{"--yes", "chrome-devtools-mcp@1.7.0", "--isolated", "--headless", "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}
 	if cfg.Command != "npx" || cfg.Cwd != "/workspace" || !reflect.DeepEqual(cfg.Args, want) {
 		t.Fatalf("config=%+v", cfg)
 	}

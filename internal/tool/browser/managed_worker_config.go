@@ -18,7 +18,7 @@ const ManagedEngineServerName = "chrome_devtools"
 const ManagedEnginePackageSpec = ManagedEnginePackage + "@" + ManagedEngineVersion
 
 func ManagedWorkerConfig(cwd string) mcpclient.ServerConfig {
-	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: "npx", Cwd: cwd, TimeoutMS: 30000, Args: []string{"--yes", ManagedEnginePackageSpec, "--isolated", "--headless", "--experimentalPageIdRouting", "--no-usage-statistics", "--no-performance-crux"}}
+	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: "npx", Cwd: cwd, TimeoutMS: 30000, Args: []string{"--yes", ManagedEnginePackageSpec, "--isolated", "--headless", "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}}
 }
 
 // VersionProbe is injectable; production executes only the exact pinned package.

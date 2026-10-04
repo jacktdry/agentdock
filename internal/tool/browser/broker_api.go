@@ -35,6 +35,8 @@ type EngineBinding struct {
 	WorkerID         string
 	// BrowserContextID is a native context ID, never an isolatedContext name.
 	BrowserContextID string
+	// IsolationContextName is the MCP named context, never a native context ID.
+	IsolationContextName string
 	// PageID is opaque and engine-local. The MCP adapter must later parse/bind
 	// numeric page IDs rather than interpreting this as a native CDP target ID.
 	PageID      string

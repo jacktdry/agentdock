@@ -153,7 +153,9 @@ type LeaseMetadata struct {
 	OwnerProfileID   string
 	WorkerID         string
 	BrowserContextID string
-	PageID           string
+	// IsolationContextName is the MCP named context, never a native context ID.
+	IsolationContextName string
+	PageID               string
 	// BrowserPID is observation only; external ownership never permits killing it.
 	BrowserPID       PIDObservation
 	ConnectorPID     PIDObservation
