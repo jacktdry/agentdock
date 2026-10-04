@@ -2,12 +2,15 @@
 
 package desktopruntime
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 func platformReadACPSettings(_ context.Context, runtimeRoot string) (ACPSettings, error) {
-	_, _, values, err := loadCoreEnvironment(runtimeRoot)
+	_, _, values, err := readBasicEnvironment(runtimeRoot)
 	if err != nil {
-		return ACPSettings{}, err
+		return ACPSettings{}, errors.New("protected ACP environment could not be read")
 	}
 	return acpSettingsFromEnvironment(values)
 }

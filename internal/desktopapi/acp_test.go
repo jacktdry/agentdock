@@ -100,3 +100,65 @@ func TestACPServiceRedactsRemoteFailures(t *testing.T) {
 		t.Fatalf("leaked remote error: %s", encoded)
 	}
 }
+
+func TestACPServiceRejectsMalformedMutationsBeforeReadingCredentials(t *testing.T) {
+	s, calls := testACPService(t)
+	s.readAccess = func(context.Context, string) (desktopruntime.LocalCoreAccess, error) {
+		t.Fatal("invalid mutation read credentials")
+		return desktopruntime.LocalCoreAccess{}, nil
+	}
+	for _, ids := range [][2]string{{"", "s"}, {"p", " "}} {
+		if got := s.Close(context.Background(), ids[0], ids[1]); got.Completed || got.Error == nil || got.Error.Category != ErrorCategoryValidation {
+			t.Fatalf("close = %+v", got)
+		}
+	}
+	for _, update := range []ACPLifecycleUpdate{
+		{SessionID: "s", Policy: "persistent"}, {ProfileID: "p", Policy: "persistent"},
+		{ProfileID: "p", SessionID: "s"}, {ProfileID: "p", SessionID: "s", Policy: "unknown"},
+		{ProfileID: "p", SessionID: "s", Policy: "idle-managed", IdleCloseAfterMS: -1},
+		{ProfileID: "p", SessionID: "s", Policy: "idle-managed", IdleCloseAfterMS: 1},
+		{ProfileID: "p", SessionID: "s", Policy: "idle-managed", IdleCloseAfterMS: 604800001},
+		{ProfileID: "p", SessionID: "s", Policy: "idle-managed", IdleCloseAfterMS: 1<<63 - 1},
+		{ProfileID: "p", SessionID: "s", Policy: "persistent", IdleCloseAfterMS: 60000},
+	} {
+		if got := s.UpdateLifecycle(context.Background(), update); got.Completed || got.Error == nil || got.Error.Category != ErrorCategoryValidation {
+			t.Fatalf("update = %+v", got)
+		}
+	}
+	if len(*calls) != 0 {
+		t.Fatal("invalid mutation called Core")
+	}
+}
+
+func TestACPServiceMemoryFailureDoesNotHideCoreAndSanitizesDiagnostics(t *testing.T) {
+	s, _ := testACPService(t)
+	call := s.call
+	s.call = func(ctx context.Context, cfg mcpclient.ServerConfig, tool string, args map[string]any) (map[string]any, error) {
+		if cfg.Name == "desktop-memory" {
+			if cfg.ProtocolVersion != "2025-11-25" || cfg.URL != defaultSharedMemoryMCPURL || len(cfg.StaticHeaders) != 0 {
+				t.Fatal("memory authority changed")
+			}
+			return nil, fmt.Errorf("private-memory-payload")
+		}
+		if tool != "acp_session" || args["action"] != "status" || args["profile_id"] != "codex" {
+			t.Fatal("unexpected Core call")
+		}
+		result, err := call(ctx, cfg, tool, args)
+		core := result["structuredContent"].(map[string]any)
+		core["adapter_process"].(map[string]any)["error"] = "private-adapter-payload super-secret-core-token"
+		session := core["diagnostics"].(map[string]any)["sessions"].([]any)[0].(map[string]any)
+		session["auto_close_error"] = "private-close-payload super-secret-core-token"
+		session["active_run_id"] = "super-secret-core-token"
+		return result, err
+	}
+	result := s.Status(context.Background())
+	if result.Error != nil || result.Memory.Error == nil || len(result.Profiles) != 1 || result.Profiles[0].Error != nil || result.Profiles[0].Counts.Managed != 2 {
+		t.Fatalf("status=%+v", result)
+	}
+	encoded, _ := json.Marshal(result)
+	for _, secret := range []string{"private-memory-payload", "private-adapter-payload", "private-close-payload", "super-secret-core-token"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("status leaks %q", secret)
+		}
+	}
+}

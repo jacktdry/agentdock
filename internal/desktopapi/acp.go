@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/desktopruntime"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 )
@@ -178,7 +179,7 @@ func (s *ACPService) Status(ctx context.Context) ACPStatusResult {
 			result.Profiles = append(result.Profiles, status)
 			continue
 		}
-		if err := decodeCoreACPStatus(structured, &status); err != nil {
+		if err := decodeCoreACPStatus(structured, &status, access.AuthToken); err != nil {
 			status.Error = safeACPServiceError("acp_status_decode_failed", err)
 		}
 		result.Profiles = append(result.Profiles, status)
@@ -191,6 +192,13 @@ func (s *ACPService) Close(ctx context.Context, profileID, sessionID string) ACP
 }
 
 func (s *ACPService) UpdateLifecycle(ctx context.Context, update ACPLifecycleUpdate) ACPMutationResult {
+	policy := strings.TrimSpace(update.Policy)
+	if policy == "" || update.IdleCloseAfterMS < 0 || update.IdleCloseAfterMS > acpruntime.MaxIdleCloseAfter.Milliseconds() {
+		return invalidACPMutation()
+	}
+	if _, err := acpruntime.NormalizeSessionLifecycleOptions(acpruntime.SessionLifecycleOptions{Policy: acpruntime.SessionLifecyclePolicy(policy), IdleCloseAfter: time.Duration(update.IdleCloseAfterMS) * time.Millisecond}); err != nil {
+		return invalidACPMutation()
+	}
 	args := map[string]any{"action": "update", "profile_id": strings.TrimSpace(update.ProfileID), "session_id": strings.TrimSpace(update.SessionID), "lifecycle_policy": strings.TrimSpace(update.Policy)}
 	if update.IdleCloseAfterMS > 0 {
 		args["idle_close_after_ms"] = update.IdleCloseAfterMS
@@ -199,6 +207,9 @@ func (s *ACPService) UpdateLifecycle(ctx context.Context, update ACPLifecycleUpd
 }
 
 func (s *ACPService) mutate(ctx context.Context, operation string, args map[string]any) ACPMutationResult {
+	if args["profile_id"] == "" || args["session_id"] == "" {
+		return invalidACPMutation()
+	}
 	if s.rootError != nil {
 		return ACPMutationResult{Error: safeServiceError("acp_root_unavailable", s.rootError)}
 	}
@@ -210,6 +221,10 @@ func (s *ACPService) mutate(ctx context.Context, operation string, args map[stri
 		return ACPMutationResult{Error: safeACPServiceError("acp_"+operation+"_failed", err)}
 	}
 	return ACPMutationResult{Completed: true}
+}
+
+func invalidACPMutation() ACPMutationResult {
+	return ACPMutationResult{Error: NewError("acp_mutation_invalid", "ACP profile, session and lifecycle arguments must be valid", ErrorCategoryValidation, false, nil)}
 }
 
 func (s *ACPService) callCore(ctx context.Context, access desktopruntime.LocalCoreAccess, tool string, args map[string]any) (map[string]any, error) {
@@ -316,14 +331,27 @@ type coreACPStatus struct {
 	} `json:"broker_correlation"`
 }
 
-func decodeCoreACPStatus(raw map[string]any, status *ACPProfileStatus) error {
+func decodeCoreACPStatus(raw map[string]any, status *ACPProfileStatus, token string) error {
 	data, err := json.Marshal(raw)
 	if err != nil {
 		return err
 	}
+	if token != "" {
+		encodedToken, _ := json.Marshal(token)
+		data = []byte(strings.ReplaceAll(string(data), string(encodedToken[1:len(encodedToken)-1]), "[redacted]"))
+	}
 	var core coreACPStatus
 	if err = json.Unmarshal(data, &core); err != nil {
 		return err
+	}
+	// Diagnostic errors can contain Adapter output or remote payloads.
+	for i := range core.Diagnostics.Sessions {
+		if core.Diagnostics.Sessions[i].AutoCloseError != "" {
+			core.Diagnostics.Sessions[i].AutoCloseError = "ACP automatic close failed"
+		}
+	}
+	if core.AdapterProcess != nil && core.AdapterProcess.Error != "" {
+		core.AdapterProcess.Error = "ACP adapter observation failed"
 	}
 	status.ObservedAt = core.Diagnostics.ObservedAt
 	status.Counts = ACPLifecycleCounts{Managed: core.Diagnostics.Counts.Managed, Loaded: core.Diagnostics.Counts.Loaded, Running: core.Diagnostics.Counts.Running, Ready: core.Diagnostics.Counts.Ready, IdleManagedIdle: core.Diagnostics.Counts.IdleManagedIdle, IdleManagedEligible: core.Diagnostics.Counts.IdleManagedEligible, Closed: core.Diagnostics.Counts.Closed, AutoCloseFailures: core.Diagnostics.Counts.AutoCloseFailures}
@@ -344,6 +372,10 @@ func (s *ACPService) memoryStatus(ctx context.Context) ACPMemoryStatus {
 	result, err := s.call(ctx, mcpclient.ServerConfig{Name: "desktop-memory", Description: "AgentDock shared Memory", Transport: mcpclient.TransportStreamableHTTP, ProtocolVersion: "2025-11-25", URL: s.memoryURL, Enabled: true, TimeoutMS: 5000}, "memory_health", map[string]any{})
 	if err != nil {
 		status.Error = safeACPServiceError("memory_health_failed", err)
+		return status
+	}
+	if isError, _ := result["isError"].(bool); isError {
+		status.Error = safeACPServiceError("memory_health_failed", nil)
 		return status
 	}
 	content, _ := result["content"].([]any)
@@ -387,6 +419,6 @@ func numberInt(v any) (int, bool) {
 		return 0, false
 	}
 }
-func safeACPServiceError(code string, _ error) *APIError {
-	return NewError(code, "ACP desktop operation failed", ErrorCategoryOperation, true, nil)
+func safeACPServiceError(code string, err error) *APIError {
+	return safeServiceError(code, err)
 }

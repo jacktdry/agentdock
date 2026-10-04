@@ -51,14 +51,14 @@ func acpSettingsFromEnvironment(values map[string]string) (ACPSettings, error) {
 	if raw := strings.TrimSpace(values["AGENTDOCK_ACP_ENABLED"]); raw != "" {
 		parsed, err := strconv.ParseBool(raw)
 		if err != nil {
-			return ACPSettings{}, fmt.Errorf("invalid AGENTDOCK_ACP_ENABLED: %w", err)
+			return ACPSettings{}, fmt.Errorf("invalid AGENTDOCK_ACP_ENABLED")
 		}
 		enabled = parsed
 	}
 	if raw := strings.TrimSpace(values["AGENTDOCK_ACP_PROFILES_JSON"]); raw != "" {
 		var profiles []agentconfig.ACPProfile
 		if err := json.Unmarshal([]byte(raw), &profiles); err != nil {
-			return ACPSettings{}, fmt.Errorf("parse AGENTDOCK_ACP_PROFILES_JSON: %w", err)
+			return ACPSettings{}, fmt.Errorf("invalid AGENTDOCK_ACP_PROFILES_JSON")
 		}
 		return acpSettingsFromProfiles(enabled, profiles, values["AGENTDOCK_ACP_DEFAULT_PROFILE"]), nil
 	}
@@ -78,7 +78,7 @@ func acpSettingsFromEnvironment(values map[string]string) (ACPSettings, error) {
 	var args []string
 	if raw := strings.TrimSpace(values["AGENTDOCK_ACP_ARGS_JSON"]); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &args); err != nil {
-			return ACPSettings{}, fmt.Errorf("parse AGENTDOCK_ACP_ARGS_JSON: %w", err)
+			return ACPSettings{}, fmt.Errorf("invalid AGENTDOCK_ACP_ARGS_JSON")
 		}
 	}
 	profiles := []agentconfig.ACPProfile{{ID: agent, Kind: kind, Command: strings.TrimSpace(values["AGENTDOCK_ACP_COMMAND"]), Args: args, Enabled: true}}

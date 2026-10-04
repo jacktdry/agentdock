@@ -3,16 +3,19 @@ package desktopruntime
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
 type LocalCoreAccess struct {
 	MCPURL    string
-	AuthToken string
+	AuthToken string `json:"-"`
 }
+
+func (a LocalCoreAccess) String() string   { return "LocalCoreAccess{credentials redacted}" }
+func (a LocalCoreAccess) GoString() string { return a.String() }
 
 func ReadLocalCoreAccess(ctx context.Context, runtimeRoot string) (LocalCoreAccess, error) {
 	if ctx == nil {
@@ -37,20 +40,21 @@ func ReadLocalCoreAccess(ctx context.Context, runtimeRoot string) (LocalCoreAcce
 func validateLocalMCPURL(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || parsed.Scheme != "http" || parsed.Host == "" {
-		return "", fmt.Errorf("local MCP URL must be absolute loopback HTTP: %q", raw)
+		return "", errors.New("local MCP URL must be absolute loopback HTTP")
 	}
-	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.EscapedPath() != "/mcp" {
-		return "", fmt.Errorf("local MCP URL must contain only the /mcp path: %q", raw)
+	if parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || strings.Contains(raw, "#") || parsed.EscapedPath() != "/mcp" {
+		return "", errors.New("local MCP URL must contain only the /mcp path")
 	}
 	host := parsed.Hostname()
 	if !strings.EqualFold(host, "localhost") {
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
-			return "", fmt.Errorf("local MCP URL must use a loopback host: %q", raw)
+			return "", errors.New("local MCP URL must use a loopback host")
 		}
 	}
-	if parsed.Port() == "" {
-		return "", fmt.Errorf("local MCP URL must include a port: %q", raw)
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return "", errors.New("local MCP URL must include a port between 1 and 65535")
 	}
 	return parsed.String(), nil
 }

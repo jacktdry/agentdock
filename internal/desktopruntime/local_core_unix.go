@@ -4,16 +4,16 @@ package desktopruntime
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net"
 	"strconv"
 	"strings"
 )
 
 func platformReadLocalCoreAccess(_ context.Context, runtimeRoot string) (LocalCoreAccess, error) {
-	_, _, values, err := loadCoreEnvironment(runtimeRoot)
+	_, _, values, err := readBasicEnvironment(runtimeRoot)
 	if err != nil {
-		return LocalCoreAccess{}, err
+		return LocalCoreAccess{}, errors.New("protected Core environment could not be read")
 	}
 	host := strings.TrimSpace(values["AGENTDOCK_HOST"])
 	switch host {
@@ -26,14 +26,14 @@ func platformReadLocalCoreAccess(_ context.Context, runtimeRoot string) (LocalCo
 		host = strings.Trim(host, "[]")
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
-			return LocalCoreAccess{}, fmt.Errorf("AgentDock Core host is not loopback: %q", host)
+			return LocalCoreAccess{}, errors.New("AgentDock Core host is not loopback")
 		}
 	}
 	port := 8765
 	if raw := strings.TrimSpace(values["AGENTDOCK_PORT"]); raw != "" {
 		port, err = strconv.Atoi(raw)
 		if err != nil || port < 1 || port > 65535 {
-			return LocalCoreAccess{}, fmt.Errorf("invalid AgentDock Core port %q", raw)
+			return LocalCoreAccess{}, errors.New("invalid AgentDock Core port")
 		}
 	}
 	return LocalCoreAccess{

@@ -58,6 +58,7 @@ type sdkProtocolClient struct {
 	controller *processcontrol.Controller
 	stderr     *tailBuffer
 	oauth      sdkauth.OAuthHandler
+	httpClient *http.Client
 	closeOnce  sync.Once
 	closeErr   error
 }
@@ -116,9 +117,14 @@ func (c *sdkProtocolClient) transport() (mcpsdk.Transport, error) {
 			// access token，也会在真正发请求前被静态 Header 覆盖。
 			oauth = nil
 		}
+		httpClient := c.httpClient
+		if httpClient == nil {
+			httpClient = &http.Client{}
+		}
+		httpClient.Transport = headerRoundTripper{headers: headers}
 		return &mcpsdk.StreamableClientTransport{
 			Endpoint:             c.cfg.URL,
-			HTTPClient:           &http.Client{Transport: headerRoundTripper{headers: headers}},
+			HTTPClient:           httpClient,
 			OAuthHandler:         oauth,
 			MaxRetries:           -1,
 			DisableStandaloneSSE: true,
