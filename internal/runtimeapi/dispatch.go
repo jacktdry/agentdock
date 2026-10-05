@@ -189,7 +189,7 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		result, err := runtime.RuntimeTasks(request.queryValue("status"), limit)
 		return map[string]any(result), err
 	case isTaskPath && method == http.MethodDelete:
-		result, err := runtime.RuntimeTaskDelete(taskID)
+		result, err := runtime.RuntimeTaskDelete(ctx, taskID)
 		return map[string]any(result), err
 	case isTaskPath:
 		result, err := runtime.RuntimeTask(taskID)

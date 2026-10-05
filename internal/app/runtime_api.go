@@ -89,34 +89,43 @@ func (r *Runtime) RuntimeInsertions(callID string) Result {
 	}
 }
 
-func (r *Runtime) RuntimeInsertionManage(_ context.Context, args map[string]any) (Result, error) {
+func (r *Runtime) RuntimeInsertionManage(ctx context.Context, args map[string]any) (Result, error) {
 	action, _ := args["action"].(string)
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "enqueue":
 		callID, _ := args["call_id"].(string)
 		text, _ := args["text"].(string)
-		item, err := r.execution.EnqueueInsertion(callID, text)
-		if err != nil {
-			switch {
-			case errors.Is(err, execution.ErrInsertionTarget):
-				return nil, toolError("INSERTION_TARGET_UNAVAILABLE", err.Error(), "not_found")
-			case errors.Is(err, execution.ErrInsertionCapacity):
-				return nil, toolError("INSERTION_CAPACITY", err.Error(), "runtime")
-			default:
-				return nil, toolError("INVALID_INSERTION", err.Error(), "validation")
+		return r.runRuntimeManagementMutation(ctx, "runtime_insertion", "enqueue", map[string]any{
+			"call_id": callID,
+			"text":    text,
+		}, func() (Result, error) {
+			item, err := r.execution.EnqueueInsertion(callID, text)
+			if err != nil {
+				switch {
+				case errors.Is(err, execution.ErrInsertionTarget):
+					return nil, toolError("INSERTION_TARGET_UNAVAILABLE", err.Error(), "not_found")
+				case errors.Is(err, execution.ErrInsertionCapacity):
+					return nil, toolError("INSERTION_CAPACITY", err.Error(), "runtime")
+				default:
+					return nil, toolError("INVALID_INSERTION", err.Error(), "validation")
+				}
 			}
-		}
-		return Result{"ok": true, "source": runtimeAPISource, "ack": true, "insertion": item}, nil
+			return Result{"ok": true, "source": runtimeAPISource, "ack": true, "insertion": item}, nil
+		})
 	case "cancel":
 		id, _ := args["insertion_id"].(string)
-		item, err := r.execution.CancelInsertion(id)
-		if err != nil {
-			if errors.Is(err, execution.ErrInsertionNotFound) {
-				return nil, toolError("INSERTION_NOT_FOUND", err.Error(), "not_found")
+		return r.runRuntimeManagementMutation(ctx, "runtime_insertion", "cancel", map[string]any{
+			"insertion_id": id,
+		}, func() (Result, error) {
+			item, err := r.execution.CancelInsertion(id)
+			if err != nil {
+				if errors.Is(err, execution.ErrInsertionNotFound) {
+					return nil, toolError("INSERTION_NOT_FOUND", err.Error(), "not_found")
+				}
+				return nil, toolError("INSERTION_CANCEL_FAILED", err.Error(), "runtime")
 			}
-			return nil, toolError("INSERTION_CANCEL_FAILED", err.Error(), "runtime")
-		}
-		return Result{"ok": true, "source": runtimeAPISource, "insertion": item}, nil
+			return Result{"ok": true, "source": runtimeAPISource, "insertion": item}, nil
+		})
 	default:
 		return nil, toolError("INVALID_INSERTION_ACTION", "unsupported insertion action", "validation")
 	}
@@ -179,8 +188,16 @@ func (r *Runtime) RuntimeTask(id string) (Result, error) {
 	return r.taskTools.RuntimeTask(id)
 }
 
-func (r *Runtime) RuntimeTaskDelete(id string) (Result, error) {
-	return r.taskTools.RuntimeTaskDelete(id)
+func (r *Runtime) RuntimeTaskDelete(ctx context.Context, id string) (Result, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return r.taskTools.RuntimeTaskDelete(id)
+	}
+	return r.runRuntimeManagementMutation(ctx, "runtime_task", "delete", map[string]any{
+		"task_id": id,
+	}, func() (Result, error) {
+		return r.taskTools.RuntimeTaskDelete(id)
+	})
 }
 
 func (r *Runtime) RuntimeCapabilities(ctx context.Context, refresh bool) (Result, error) {
@@ -201,17 +218,36 @@ func (r *Runtime) RuntimeMCPServer(ctx context.Context, name string) (Result, er
 }
 
 func (r *Runtime) RuntimeMCPManage(ctx context.Context, args map[string]any) (Result, error) {
-	return r.runtimeMCPManage(ctx, args)
+	request, err := r.prepareRuntimeMCPManage(args)
+	if err != nil {
+		return nil, err
+	}
+	action := strings.ToLower(strings.TrimSpace(request.Action))
+	return r.runRuntimeManagementMutation(ctx, "runtime_mcp", action, request, func() (Result, error) {
+		return r.dispatchRuntimeMCPManage(ctx, request)
+	})
 }
 
 func (r *Runtime) runtimeMCPManage(ctx context.Context, args map[string]any) (Result, error) {
-	if err := r.validateToolArguments(toolmcp.ToolManage, args); err != nil {
+	request, err := r.prepareRuntimeMCPManage(args)
+	if err != nil {
 		return nil, err
+	}
+	return r.dispatchRuntimeMCPManage(ctx, request)
+}
+
+func (r *Runtime) prepareRuntimeMCPManage(args map[string]any) (toolmcp.ManageRequest, error) {
+	if err := r.validateToolArguments(toolmcp.ToolManage, args); err != nil {
+		return toolmcp.ManageRequest{}, err
 	}
 	var request toolmcp.ManageRequest
 	if err := decodeToolInput("mcp_manage", args, &request); err != nil {
-		return nil, err
+		return toolmcp.ManageRequest{}, err
 	}
+	return request, nil
+}
+
+func (r *Runtime) dispatchRuntimeMCPManage(ctx context.Context, request toolmcp.ManageRequest) (Result, error) {
 	result, err := r.dynamicMCP.Manage(ctx, request)
 	if err != nil {
 		return nil, err

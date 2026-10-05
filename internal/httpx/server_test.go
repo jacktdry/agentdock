@@ -18,6 +18,7 @@ import (
 	"github.com/uvwt/agentdock/internal/auth"
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/execution"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/mcp"
 )
 
@@ -36,6 +37,16 @@ func newMCPRequest(method, target string, body io.Reader) *http.Request {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	return request
+}
+
+type runtimePrincipalCapture struct {
+	*app.Runtime
+	principal requestmeta.AuthPrincipal
+}
+
+func (r *runtimePrincipalCapture) RuntimeMCPManage(ctx context.Context, args map[string]any) (app.Result, error) {
+	r.principal, _ = requestmeta.AuthPrincipalFromContext(ctx)
+	return r.Runtime.RuntimeMCPManage(ctx, args)
 }
 
 func TestHTTPServerHasDefensiveConnectionLimits(t *testing.T) {
@@ -147,6 +158,32 @@ func TestRuntimeAPIStatusWithBearer(t *testing.T) {
 	}
 	if strings.Contains(body, "secret-token") {
 		t.Fatalf("status response leaked token: %s", body)
+	}
+}
+
+func TestRuntimeAPIMutationCarriesAuthenticatedPrincipal(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.AuthToken = "runtime-permission-secret"
+	base, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	t.Cleanup(func() { _ = base.Close() })
+	runtime := &runtimePrincipalCapture{Runtime: base}
+	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/mcp", strings.NewReader(
+		`{"action":"add","name":"principal-demo","description":"capture principal","transport":"stdio","command":"printf","args":["ok"]}`,
+	))
+	req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	want := requestmeta.NewStableAuthPrincipal("static_bearer", cfg.AuthToken)
+	if runtime.principal != want {
+		t.Fatalf("runtime principal = %#v, want %#v", runtime.principal, want)
 	}
 }
 

@@ -8,6 +8,7 @@ import "context"
 type HostOperation struct {
 	Tool          string
 	Action        string
+	Source        string
 	SessionID     string
 	ProfileID     string
 	WorkspaceRoot string

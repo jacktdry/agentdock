@@ -22,7 +22,7 @@ type Runtime interface {
 	RuntimePlugin(context.Context, string) (app.Result, error)
 	RuntimeTasks(status string, limit int) (app.Result, error)
 	RuntimeTask(id string) (app.Result, error)
-	RuntimeTaskDelete(id string) (app.Result, error)
+	RuntimeTaskDelete(context.Context, string) (app.Result, error)
 	RuntimeCapabilities(context.Context, bool) (app.Result, error)
 	RuntimeMCPServers(context.Context) (app.Result, error)
 	RuntimeMCPServer(context.Context, string) (app.Result, error)

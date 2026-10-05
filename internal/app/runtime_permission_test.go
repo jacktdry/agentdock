@@ -431,6 +431,203 @@ func TestHostOperationApproveOnceConsumesExactSamePrincipalRequest(t *testing.T)
 	}
 }
 
+func TestRuntimeManagementMutationAdmissionJournalsBeforeAndAfterDispatch(t *testing.T) {
+	t.Run("ask stops dispatch", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		ctx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("static_bearer", "runtime-api-test"))
+		dispatched := false
+		result, err := rt.runRuntimeManagementMutation(ctx, "runtime_task", "delete", map[string]any{"task_id": "task_demo"}, func() (Result, error) {
+			dispatched = true
+			return Result{"changed": true}, nil
+		})
+		if result != nil || dispatched {
+			t.Fatalf("approval-required runtime mutation dispatched=%v result=%#v", dispatched, result)
+		}
+		toolErr := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+		approvalID, _ := toolErr.Details["approval_id"].(string)
+		record, approvalErr := rt.permissions.Approval(approvalID)
+		if approvalErr != nil {
+			t.Fatal(approvalErr)
+		}
+		if record.Tool != "runtime_task" || record.Action != "delete" || record.Scope != "AgentDock Runtime management" {
+			t.Fatalf("runtime management approval=%#v", record)
+		}
+		call := lastExecutionCall(t, rt)
+		if call.Tool != "runtime_task" || call.Source != "internal" || call.Status != execution.StatusFailed ||
+			call.ErrorCode != "APPROVAL_REQUIRED" || call.ErrorCategory != "permission" {
+			t.Fatalf("runtime management denied call=%#v", call)
+		}
+	})
+
+	t.Run("success settles completion", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		dispatched := false
+		result, err := rt.runRuntimeManagementMutation(context.Background(), "runtime_task", "delete", map[string]any{"task_id": "task_demo"}, func() (Result, error) {
+			dispatched = true
+			return Result{"changed": true}, nil
+		})
+		if err != nil || !dispatched || result["changed"] != true {
+			t.Fatalf("successful runtime mutation dispatched=%v result=%#v err=%v", dispatched, result, err)
+		}
+		call := lastExecutionCall(t, rt)
+		if call.Tool != "runtime_task" || call.Source != "internal" || call.Status != execution.StatusCompleted ||
+			call.ErrorCode != "" || call.ErrorCategory != "" {
+			t.Fatalf("runtime management completed call=%#v", call)
+		}
+	})
+
+	t.Run("dispatch failure is truthful", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		dispatchErr := toolError("RUNTIME_TEST_FAILED", "runtime mutation failed", "runtime")
+		result, err := rt.runRuntimeManagementMutation(context.Background(), "runtime_task", "delete", map[string]any{"task_id": "task_demo"}, func() (Result, error) {
+			return nil, dispatchErr
+		})
+		if result != nil || !errors.Is(err, dispatchErr) {
+			t.Fatalf("failed runtime mutation result=%#v err=%v", result, err)
+		}
+		call := lastExecutionCall(t, rt)
+		if call.Status != execution.StatusFailed || call.ErrorCode != "RUNTIME_TEST_FAILED" || call.ErrorCategory != "runtime" {
+			t.Fatalf("runtime management failed call=%#v", call)
+		}
+	})
+}
+
+func TestRuntimeManagementEntrypointsShareAdmissionBoundary(t *testing.T) {
+	t.Run("insertion enqueue", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		_, target := rt.execution.Begin(context.Background(), execution.BeginInput{
+			Tool: "exec_command", Source: "mcp", InsertionSupported: true,
+		})
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		result, err := rt.RuntimeInsertionManage(context.Background(), map[string]any{
+			"action": "enqueue", "call_id": target.ID, "text": "must wait for approval",
+		})
+		if result != nil {
+			t.Fatalf("approval-required insertion result=%#v", result)
+		}
+		requirePermissionError(t, err, "APPROVAL_REQUIRED")
+		if got := rt.execution.Insertions(target.ID); len(got) != 0 {
+			t.Fatalf("insertion dispatched before approval: %#v", got)
+		}
+	})
+
+	t.Run("insertion cancel remains safe continuation", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		_, target := rt.execution.Begin(context.Background(), execution.BeginInput{
+			Tool: "exec_command", Source: "mcp", InsertionSupported: true,
+		})
+		item, err := rt.execution.EnqueueInsertion(target.ID, "cancel me")
+		if err != nil {
+			t.Fatal(err)
+		}
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		result, err := rt.RuntimeInsertionManage(context.Background(), map[string]any{
+			"action": "cancel", "insertion_id": item.ID,
+		})
+		if err != nil {
+			t.Fatalf("safe insertion cancel rejected: %v", err)
+		}
+		cancelled, ok := result["insertion"].(execution.Insertion)
+		if !ok || cancelled.Status != execution.InsertionCancelled {
+			t.Fatalf("cancel result=%#v", result)
+		}
+		call := lastExecutionCall(t, rt)
+		if call.Tool != "runtime_insertion" || call.Status != execution.StatusCompleted {
+			t.Fatalf("cancel journal=%#v", call)
+		}
+	})
+
+	t.Run("task delete", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		created, err := rt.Call(context.Background(), "task_manage", map[string]any{
+			"action": "create",
+			"title":  "Keep until approved",
+			"goal":   "verify runtime task admission",
+			"steps": []map[string]any{{
+				"id": "verify", "title": "Verify task remains",
+			}},
+			"completion_conditions": []string{"task remains before approval"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		taskID, _ := created["task_id"].(string)
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		result, err := rt.RuntimeTaskDelete(context.Background(), taskID)
+		if result != nil {
+			t.Fatalf("approval-required task delete result=%#v", result)
+		}
+		requirePermissionError(t, err, "APPROVAL_REQUIRED")
+		if _, lookupErr := rt.RuntimeTask(taskID); lookupErr != nil {
+			t.Fatalf("task deleted before approval: %v", lookupErr)
+		}
+	})
+
+	t.Run("mcp manage", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		result, err := rt.RuntimeMCPManage(context.Background(), map[string]any{
+			"action":      "add",
+			"name":        "permission-denied-demo",
+			"description": "must not be registered before approval",
+			"transport":   "streamable_http",
+			"url":         "http://127.0.0.1:65534/mcp",
+		})
+		if result != nil {
+			t.Fatalf("approval-required MCP manage result=%#v", result)
+		}
+		requirePermissionError(t, err, "APPROVAL_REQUIRED")
+		listed, listErr := rt.RuntimeMCPServers(context.Background())
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		var servers []struct {
+			Name string `json:"name"`
+		}
+		if err := remarshal(listed["servers"], &servers); err != nil {
+			t.Fatal(err)
+		}
+		for _, server := range servers {
+			if server.Name == "permission-denied-demo" {
+				t.Fatalf("MCP server registered before approval: %#v", server)
+			}
+		}
+	})
+
+	t.Run("evolution proposal", func(t *testing.T) {
+		rt := newPermissionRuntime(t)
+		replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+			policy.GlobalMode = permission.Rules
+		})
+		result, err := rt.RuntimeEvolve(context.Background(), map[string]any{
+			"intent": "propose",
+			"candidate": map[string]any{
+				"type": "preference", "statement": "permission gate comes before provider dispatch",
+				"project": "agentdock", "source": "user-explicit",
+			},
+		})
+		if result != nil {
+			t.Fatalf("approval-required evolution result=%#v", result)
+		}
+		requirePermissionError(t, err, "APPROVAL_REQUIRED")
+		call := lastExecutionCall(t, rt)
+		if call.Tool != "runtime_evolve" || call.Source != "internal" || call.Status != execution.StatusFailed {
+			t.Fatalf("evolution admission journal=%#v", call)
+		}
+	})
+}
+
 func permissionDetailUint64(t *testing.T, details map[string]any, key string) uint64 {
 	t.Helper()
 	switch value := details[key].(type) {

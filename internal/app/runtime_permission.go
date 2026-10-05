@@ -299,13 +299,17 @@ func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOper
 	}
 	tool := strings.TrimSpace(op.Tool)
 	action := strings.TrimSpace(op.Action)
+	source := strings.TrimSpace(op.Source)
+	if source == "" {
+		source = "acp_bridge"
+	}
 	if tool == "" || action == "" {
 		return nil, toolError("PERMISSION_STATE_ERROR", "host capability operation identity is incomplete", "permission")
 	}
 
 	parent := execution.ScopeFromContext(ctx).CallID
 	call := r.execution.BeginChild(parent, execution.BeginInput{
-		Tool: tool, Source: "acp_bridge", InsertionSupported: false,
+		Tool: tool, Source: source, InsertionSupported: false,
 	})
 	finishFailed := func(callErr error) {
 		code, category := observableError(callErr)
@@ -321,20 +325,22 @@ func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOper
 		finishFailed(callErr)
 		return nil, callErr
 	}
+	generations := map[string]string{}
+	if source == "acp_bridge" {
+		generations["acp_session"] = strings.TrimSpace(op.SessionID)
+		generations["acp_profile"] = strings.TrimSpace(op.ProfileID)
+	}
 	prepared := permission.PreparedRequest{
 		Fingerprint: fingerprint,
 		Binding:     facts.Binding,
-		Generations: map[string]string{
-			"acp_session": strings.TrimSpace(op.SessionID),
-			"acp_profile": strings.TrimSpace(op.ProfileID),
-		},
-		Tool: tool, Action: action, RuntimeEpoch: r.execution.Epoch(),
+		Generations: generations,
+		Tool:        tool, Action: action, RuntimeEpoch: r.execution.Epoch(),
 	}
 	admission, err := r.admission.Admit(ctx, permission.AdmissionRequest{
 		Audit: permission.AuditBinding{CallID: call.ID, ParentCallID: call.ParentCallID},
 		Facts: facts, Prepared: prepared,
 		Summary: permissionDisplaySummary(tool, action),
-		Scope:   "AgentDock ACP host capability",
+		Scope:   hostOperationScope(source),
 	})
 	if err != nil {
 		callErr := err
@@ -376,10 +382,41 @@ func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOper
 	return finish, nil
 }
 
+func (r *Runtime) runRuntimeManagementMutation(
+	ctx context.Context,
+	tool string,
+	action string,
+	payload any,
+	dispatch func() (Result, error),
+) (Result, error) {
+	if dispatch == nil {
+		return nil, toolError("PERMISSION_STATE_ERROR", "runtime management dispatch is unavailable", "permission")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	finish, err := r.admitHostOperation(ctx, permission.HostOperation{
+		Tool:    tool,
+		Action:  action,
+		Source:  "internal",
+		Payload: payload,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result, dispatchErr := dispatch()
+	finish(dispatchErr)
+	return result, dispatchErr
+}
+
 func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOperation) permission.PermissionFacts {
+	source := strings.TrimSpace(op.Source)
+	if source == "" {
+		source = "acp_bridge"
+	}
 	binding := permission.PermissionBinding{
 		RuntimeEpoch: r.execution.Epoch(),
-		Source:       "acp_bridge",
+		Source:       source,
 		ACPSessionID: strings.TrimSpace(op.SessionID),
 		Provider:     strings.TrimSpace(op.ProfileID),
 	}
@@ -459,6 +496,32 @@ func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOper
 			facts.OneShotEligible = true
 			facts.Reason = "computer host operation is not classified"
 		}
+	case "runtime_insertion":
+		if facts.Action == "cancel" {
+			facts.ReadOnly = true
+			facts.Reason = "cancelling a pending insertion reduces outstanding work"
+		} else {
+			facts.Management = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "runtime insertion changes an active execution"
+		}
+	case "runtime_task":
+		facts.Management = true
+		facts.Other = true
+		facts.OneShotEligible = true
+		facts.Reason = "runtime task deletion mutates durable task state"
+	case "runtime_mcp":
+		facts.Management = true
+		facts.MCP = true
+		facts.Network = true
+		facts.OneShotEligible = true
+		facts.Reason = "runtime MCP management changes provider configuration or credentials"
+	case "runtime_evolve":
+		facts.Management = true
+		facts.Other = true
+		facts.OneShotEligible = true
+		facts.Reason = "runtime evolution proposal mutates durable evolution state"
 	default:
 		facts.EffectsKnown = false
 		facts.Other = true
@@ -512,4 +575,11 @@ func computerObservationIsCoreReadOnly(payload any) bool {
 	default:
 		return false
 	}
+}
+
+func hostOperationScope(source string) string {
+	if strings.TrimSpace(source) == "acp_bridge" {
+		return "AgentDock ACP host capability"
+	}
+	return "AgentDock Runtime management"
 }

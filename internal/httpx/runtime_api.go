@@ -13,6 +13,7 @@ import (
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/auth"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/runtimeapi"
 )
 
@@ -38,7 +39,6 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 }
 
 func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore *auth.OAuthStore) http.HandlerFunc {
-	authorizer := auth.Bearer{Token: cfg.AuthToken}
 	authRequired := cfg.AuthRequired()
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !runtimeapi.MethodAllowed(r.Method, r.URL.Path) {
@@ -46,8 +46,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
 			return
 		}
-		staticOK := cfg.AuthToken != "" && authorizer.Authorized(r)
-		oauthOK := authorizedOAuth(r, cfg, oauthStore)
+		authn := authenticateRequest(r, cfg, oauthStore)
 		cleanPath := strings.TrimSuffix(r.URL.Path, "/")
 		if cleanPath == "/internal/runtime/analytics" && !authRequired && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
@@ -57,7 +56,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}
-		if authRequired && !staticOK && !oauthOK {
+		if authRequired && !authn.OK {
 			setBearerChallenge(w, cfg, r, strings.TrimSpace(r.Header.Get("Authorization")) != "")
 			writeRuntimeAPIError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 			return
@@ -70,6 +69,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
+		ctx = requestmeta.WithAuthPrincipal(ctx, authn.Principal)
 		result, err := runtimeapi.Dispatch(ctx, runtime, runtimeapi.Request{
 			Method: r.Method,
 			Path:   r.URL.Path,

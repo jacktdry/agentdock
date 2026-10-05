@@ -39,11 +39,13 @@ func (r *Runtime) RuntimeEvolve(ctx context.Context, args map[string]any) (Resul
 		return nil, toolError("STAGE3_PROPOSAL_ONLY", "Nexus Stage 3 may only propose evolution candidates", "validation")
 	}
 	request.Candidate.Source = "nexus-stage3"
-	result, err := r.evolution.Manage(ctx, request)
-	if err != nil {
-		return nil, toolErrorCause("EVOLVE_FAILED", err.Error(), "runtime", nil, err)
-	}
-	return evolutionResult(result), nil
+	return r.runRuntimeManagementMutation(ctx, "runtime_evolve", "propose", request, func() (Result, error) {
+		result, err := r.evolution.Manage(ctx, request)
+		if err != nil {
+			return nil, toolErrorCause("EVOLVE_FAILED", err.Error(), "runtime", nil, err)
+		}
+		return evolutionResult(result), nil
+	})
 }
 
 func decodeEvolutionRequest(args map[string]any) (evolution.Request, error) {
