@@ -818,6 +818,106 @@ func TestACPProviderContinuationRequiresCoreAdmissionBeforeProviderResume(t *tes
 	}
 }
 
+func TestDesktopPermissionControlAuthorityIsDistinctExactAndCoreAttributed(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	credential := rt.DesktopPermissionControlCredential()
+	if credential == "" {
+		t.Fatal("desktop permission control credential is empty")
+	}
+	if _, err := rt.BeginPermissionConfirmation("normal-mcp-bearer", permission.ControlMutationRequest{
+		Kind: permission.ControlMutationReject, ApprovalID: "not-used", ApprovalVersion: 1, PolicyRevision: rt.permissions.Policy().Revision,
+	}); !errors.Is(err, permission.ErrControlUnauthorized) {
+		t.Fatalf("normal MCP credential began desktop confirmation: %v", err)
+	}
+
+	policy := rt.permissions.Policy()
+	policy.GlobalMode = permission.Rules
+	update := permission.ControlMutationRequest{
+		Kind: permission.ControlMutationUpdatePolicy, PolicyRevision: policy.Revision, Policy: &policy,
+	}
+	challenge, err := rt.BeginPermissionConfirmation(credential, update)
+	if err != nil {
+		t.Fatalf("BeginPermissionConfirmation(update): %v", err)
+	}
+	wrong := update
+	wrongPolicy := policy
+	wrongPolicy.GlobalMode = permission.ReadOnly
+	wrong.Policy = &wrongPolicy
+	if _, err := rt.ApplyPermissionControlMutation(context.Background(), credential, challenge.ID, wrong); !errors.Is(err, permission.ErrConfirmationMismatch) {
+		t.Fatalf("mismatched policy mutation err=%v", err)
+	}
+	if _, err := rt.ApplyPermissionControlMutation(context.Background(), credential, challenge.ID, update); !errors.Is(err, permission.ErrConfirmationNotFound) {
+		t.Fatalf("mismatched challenge was reusable: %v", err)
+	}
+
+	challenge, err = rt.BeginPermissionConfirmation(credential, update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.ApplyPermissionControlMutation(context.Background(), credential, challenge.ID, update)
+	if err != nil {
+		t.Fatalf("desktop policy mutation: %v", err)
+	}
+	updated, ok := result["policy"].(permission.Policy)
+	if !ok || updated.GlobalMode != permission.Rules || updated.Revision != policy.Revision+1 {
+		t.Fatalf("updated policy=%#v", result["policy"])
+	}
+	if _, err := rt.ApplyPermissionControlMutation(context.Background(), credential, challenge.ID, update); !errors.Is(err, permission.ErrConfirmationNotFound) {
+		t.Fatalf("successful challenge was reusable: %v", err)
+	}
+
+	principalCtx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("static_bearer", "desktop-control-approval-test"))
+	target := filepath.Join(rt.ws.Root(), "desktop-control-approval.txt")
+	_, err = rt.Call(principalCtx, "file_edit", map[string]any{
+		"action": "add", "path": target, "content": "must not dispatch before retry\n",
+	})
+	toolErr := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	approvalID, _ := toolErr.Details["approval_id"].(string)
+	approvalVersion := permissionDetailUint64(t, toolErr.Details, "approval_version")
+	policyRevision := permissionDetailUint64(t, toolErr.Details, "policy_revision")
+	approve := permission.ControlMutationRequest{
+		Kind:       permission.ControlMutationApproveOnce,
+		ApprovalID: approvalID, ApprovalVersion: approvalVersion, PolicyRevision: policyRevision,
+	}
+	challenge, err = rt.BeginPermissionConfirmation(credential, approve)
+	if err != nil {
+		t.Fatalf("BeginPermissionConfirmation(approve): %v", err)
+	}
+	result, err = rt.ApplyPermissionControlMutation(context.Background(), credential, challenge.ID, approve)
+	if err != nil {
+		t.Fatalf("desktop approve once mutation: %v", err)
+	}
+	record, ok := result["approval"].(permission.ApprovalRecord)
+	if !ok || record.Status != permission.ApprovedOnce || record.DecidedBy != permission.DesktopControlActor {
+		t.Fatalf("desktop approval result=%#v", result["approval"])
+	}
+	if _, statErr := os.Stat(target); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("approval mutation dispatched original operation: %v", statErr)
+	}
+}
+
+func TestDesktopPermissionControlCredentialRotatesPerRuntime(t *testing.T) {
+	first := newPermissionRuntime(t)
+	second := newPermissionRuntime(t)
+	firstCredential := first.DesktopPermissionControlCredential()
+	secondCredential := second.DesktopPermissionControlCredential()
+	if firstCredential == "" || secondCredential == "" || firstCredential == secondCredential {
+		t.Fatalf("desktop control credential rotation invalid: first=%t second=%t equal=%t",
+			firstCredential != "", secondCredential != "", firstCredential == secondCredential)
+	}
+	request := permission.ControlMutationRequest{
+		Kind:           permission.ControlMutationUpdatePolicy,
+		PolicyRevision: second.permissions.Policy().Revision,
+		Policy: func() *permission.Policy {
+			policy := second.permissions.Policy()
+			return &policy
+		}(),
+	}
+	if _, err := second.BeginPermissionConfirmation(firstCredential, request); !errors.Is(err, permission.ErrControlUnauthorized) {
+		t.Fatalf("prior runtime credential authorized new runtime: %v", err)
+	}
+}
+
 func permissionDetailUint64(t *testing.T, details map[string]any, key string) uint64 {
 	t.Helper()
 	switch value := details[key].(type) {

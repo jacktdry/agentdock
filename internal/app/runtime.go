@@ -61,6 +61,7 @@ type Runtime struct {
 	execution      *execution.Store
 	permissions    *permission.Store
 	admission      *permission.AdmissionGate
+	permissionCtl  *permission.ControlAuthority
 	tracing        *observability.Tracing
 	lifecycleMu    sync.RWMutex
 	commandCtx     context.Context
@@ -88,6 +89,10 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize permission admission: %w", err)
 	}
+	permissionControl, err := permission.NewControlAuthority()
+	if err != nil {
+		return nil, fmt.Errorf("initialize desktop permission control authority: %w", err)
+	}
 	envs, err := envstore.New(cfg.AgentDockHome)
 	if err != nil {
 		return nil, err
@@ -113,11 +118,12 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime := &Runtime{
 		cfg: cfg, ws: ws, skills: skills,
 		toolNames: toolNames, toolValidators: toolValidators,
-		observer:    observability.NewRecorder(observability.DefaultRecentCapacity),
-		execution:   executionStore,
-		permissions: permissionStore,
-		admission:   admissionGate,
-		commandCtx:  commandCtx, commandCancel: commandCancel,
+		observer:      observability.NewRecorder(observability.DefaultRecentCapacity),
+		execution:     executionStore,
+		permissions:   permissionStore,
+		admission:     admissionGate,
+		permissionCtl: permissionControl,
+		commandCtx:    commandCtx, commandCancel: commandCancel,
 	}
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, func(ctx context.Context, skillRef string) (toolcommand.SkillLease, error) {
 		resolved, release, err := skills.Acquire(ctx, skillRef)
