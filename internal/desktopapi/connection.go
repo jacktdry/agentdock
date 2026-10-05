@@ -30,11 +30,12 @@ type ConnectionService struct {
 	runtimeRoot string
 	rootError   error
 	run         func(context.Context, []string, io.Writer, io.Writer) error
+	foundation  ConnectionDependencies
 }
 
 func NewConnectionService(root string) *ConnectionService {
 	root, err := resolveRuntimeRoot(root)
-	return &ConnectionService{runtimeRoot: root, rootError: err, run: desktopruntime.RunTunnelCommand}
+	return &ConnectionService{runtimeRoot: root, rootError: err, run: desktopruntime.RunTunnelCommand, foundation: defaultConnectionDependencies()}
 }
 func (s *ConnectionService) Status(ctx context.Context) ConnectionStatusResult {
 	if s.rootError != nil {
@@ -96,7 +97,7 @@ func (s *ConnectionService) Action(ctx context.Context, action string) Connectio
 // than letting a misconfigured runtime carry secrets across the binding.
 func publicOrigin(raw string) string {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.Opaque != "" || parsed.RawPath != "" || (parsed.Path != "" && parsed.Path != "/") {
 		return ""
 	}
 	return "https://" + parsed.Host
