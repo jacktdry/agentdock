@@ -16,6 +16,8 @@
 
 目前 M7.5 Phase 1 與 Phase 2 repository isolation 均已完成；Phase 2 獨立 review、Next-only launch/SMAppService smoke 與 Next Memory HTTP cutover 也已通過。Next registry 位於 `~/.agentdock-next`，Memory HTTP 以 `2025-11-25` pin 實際完成 tool search/inspect/health call；Codex / Antigravity 各一個 ephemeral prompt 均 auto-close 且沒有 Next-owned stdio Memory child。下一步是獨立 `mac-dev-next` connector 與完整 Next regression；certificate-bound updater transaction 等有效 Developer ID identity 可用後再驗證。這仍不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
 
+2026-10-05 補充：Next M6/M7 repository regression 與真實 Codex Browser Broker injection test 已再次通過。Antigravity 20-prompt stress 暫停於 macOS Keychain ACL prerequisite：官方 AGY 會從 `Antigravity CLI` Keychain item 讀 OAuth token；使用者觀察到只有啟動 AGY ACP 時才出現大量提示，Codex ACP 不會。ACL 未明確允許 `/Users/wei/.local/bin/agy` 前不得以壓測重複觸發提示，也不得由 AgentDock 自動修改 Keychain/trust。
+
 ## 背景
 
 目前 ACP 同時存在長期互動 session 與一次性 delegated worker。AgentDock 在 prompt 回傳 end_turn 後只把 session 從 running 改回 ready，不代表 Adapter runtime 已釋放，因此大量一次性 worker 會累積 loaded session 與 child process。
