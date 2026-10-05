@@ -164,8 +164,9 @@ AgentDock 不直接 kill Codex app-server。
 
 Fork：`jacktdry/antigravity-acp`
 Branch：`fix/agentdock-hardening`
-Current deployment：`1.2.0-agentdock.5`
-Current tip：`2bd8426 feat(agentdock): add computer control broker proxy`
+Stable/global deployment：`1.2.0-agentdock.5`
+AgentDock Next deployment：`1.2.0-agentdock.6`
+Current fork tip：`5cb54d2 chore(agentdock): bump fork version to 1.2.0-agentdock.6`（Keychain compatibility fix：`9f56b52`）
 
 演進鏈：`93ad102` → `5620dc4` → `746b52e` → `05c53f3` → `2bd8426`。
 
@@ -293,7 +294,7 @@ M7 feature code / stress 已完成；stable pre-M7 App 的 stdio `memory` regist
 - AGY CLI → shared Memory HTTP：完成；
 - AgentDock dynamic MCP → shared Memory HTTP：**程式碼 / integration test 已完成；先驗證 Next registry，stable live cutover 刻意延後**；
 - codex-acp：`2.1.1` 真實驗證 persistent / ephemeral / idle-managed、20 prompt-driven ephemeral stress、host capability release 均完成；
-- Antigravity ACP：`jacktdry/antigravity-acp` `fix/agentdock-hardening`，目前部署 `1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`；
+- Antigravity ACP：`jacktdry/antigravity-acp` `fix/agentdock-hardening`；stable/global 仍為 `1.2.0-agentdock.5`，AgentDock Next 已部署 `1.2.0-agentdock.6`，fork tip `5cb54d2`（Keychain compatibility fix `9f56b52`）；system AGY `1.2.16`；
 - refined-antigravity-acp：不再是 AgentDock 可執行 AGY 路徑；僅保留歷史/研究 repo；
 - AgentDock Antigravity runtime：isolated HOME + `AGY_BIN`，不繼承互動 AGY MCP/plugin；Browser / Computer capability 由 AgentDock host 注入；
 - real adapter：Codex / Antigravity 均完成 persistent / prompt-driven ephemeral / idle-managed TTL close+resume；兩邊各跑 20 prompt stress，同一 adapter PID 下 resources / descendants 回到 baseline；

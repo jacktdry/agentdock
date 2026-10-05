@@ -334,7 +334,7 @@ ACP Manager 同時承接 session resource lifecycle，而不只 package CRUD：
 
 - AgentDock 的 AGY 路徑已收斂為單一 hardened `antigravity-acp` provider；不再經過 `refined-antigravity-acp`。
 - Fork：`jacktdry/antigravity-acp`；`main` 跟 upstream 對齊，AgentDock hardening 位於 `fix/agentdock-hardening`。
-- 目前部署版本：`1.2.0-agentdock.5`，tip `2bd8426`；system AGY `1.2.16`。
+- stable/global 部署仍為 `1.2.0-agentdock.5`；AgentDock Next 已部署 `1.2.0-agentdock.6`，fork tip `5cb54d2`（Keychain compatibility fix `9f56b52`）；system AGY `1.2.16`。
 - Adapter 已補強 cancel/close/delete、active child cleanup、同 session concurrent-turn guard，以及 Model / Reasoning effort 分離。
 - AgentDock profile 以 isolated HOME + `AGY_BIN` 啟動；不繼承互動 AGY 的 MCP/plugin 設定。
 - M6 再把 Browser / Computer 收斂成 host-owned loopback MCP capability；ACP child 不直接持有 browser/Computer Use backend。

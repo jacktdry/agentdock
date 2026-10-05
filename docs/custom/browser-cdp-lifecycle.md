@@ -599,7 +599,7 @@ M6 Browser Broker / Computer Control Broker 已完成 runtime、lifecycle、diag
 - Browser lease operation 不依賴 global selected page；company Edge 仍 fail closed，不 fallback 到 managed Chrome；
 - Codex / Antigravity ACP child 不再自帶 `chrome-devtools-mcp`、`cua-repl`、`node_repl` / Sky Computer Use；
 - Computer Control default provider 為 Orca，`foreground=forbidden` 預設 fail closed，Browser task 不會 silent fallback 到 Computer Use；
-- `antigravity-acp 1.2.0-agentdock.5` 支援 Browser + Computer 兩個 AgentDock host-owned MCP，standalone `agy` 全域能力不受影響；
+- `antigravity-acp 1.2.0-agentdock.5` 起支援 Browser + Computer 兩個 AgentDock host-owned MCP；AgentDock Next 目前使用 `1.2.0-agentdock.6`（`5cb54d2`，含 `9f56b52` macOS Keychain compatibility fix），standalone `agy` 全域能力不受影響；
 - 30 秒 lifecycle runner、managed/external 5 分鐘 idle TTL、bounded cleanup recovery 與 acquire-orphan recovery 已落地；
 - `browser_broker` diagnostics 可追 owner → lease → worker → page/context → connector/process ownership，且不輸出 capability token；
 - 8-owner Broker stress 驗證 4 active + 4 queued，另有 4 個真 managed MCP/Chrome 同時 lease 的 live isolation stress；20 次真實 Antigravity session lifecycle 驗證 capability/process descendants 回到 baseline；
