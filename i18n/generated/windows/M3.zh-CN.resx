@@ -301,6 +301,9 @@
   <data name="basicsettings.confirm" xml:space="preserve">
     <value>保存这些基本设置？</value>
   </data>
+  <data name="basicsettings.connection_port" xml:space="preserve">
+    <value>AgentDock Next 端口请到“连接”页面修改，以便在变更前检查所有权与冲突。</value>
+  </data>
   <data name="basicsettings.log_debug" xml:space="preserve">
     <value>调试</value>
   </data>
@@ -409,44 +412,344 @@
   <data name="common.unavailable" xml:space="preserve">
     <value>不可用</value>
   </data>
+  <data name="common.unknown" xml:space="preserve">
+    <value>未知</value>
+  </data>
   <data name="common.yes" xml:space="preserve">
     <value>是</value>
   </data>
+  <data name="connection.advanced" xml:space="preserve">
+    <value>高级连接信息</value>
+  </data>
+  <data name="connection.apply_port" xml:space="preserve">
+    <value>应用端口</value>
+  </data>
+  <data name="connection.configure" xml:space="preserve">
+    <value>应用公网访问</value>
+  </data>
   <data name="connection.confirm" xml:space="preserve">
     <value>确认连接操作：{action}？</value>
+  </data>
+  <data name="connection.confirm_action" xml:space="preserve">
+    <value>确认连接操作：{action}？</value>
+  </data>
+  <data name="connection.confirm_autostart" xml:space="preserve">
+    <value>将 Tunnel 自动启动设为“{state}”？</value>
+  </data>
+  <data name="connection.confirm_port" xml:space="preserve">
+    <value>将 AgentDock Next Core 改为端口 {port}？</value>
+  </data>
+  <data name="connection.confirm_token_omitted" xml:space="preserve">
+    <value>出于安全考虑，此确认界面不会显示 Tunnel Token。</value>
+  </data>
+  <data name="connection.confirm_tunnel" xml:space="preserve">
+    <value>将公网访问改为“{mode}”？</value>
+  </data>
+  <data name="connection.connector_hint" xml:space="preserve">
+    <value>之后由你在 ChatGPT 手动创建 mac-dev-next 时，会使用 Public MCP URL 与 OAuth 密码。</value>
+  </data>
+  <data name="connection.connector_not_ready" xml:space="preserve">
+    <value>尚未就绪</value>
+  </data>
+  <data name="connection.connector_readiness" xml:space="preserve">
+    <value>ChatGPT Connector</value>
+  </data>
+  <data name="connection.connector_ready" xml:space="preserve">
+    <value>已就绪</value>
+  </data>
+  <data name="connection.connector_title" xml:space="preserve">
+    <value>ChatGPT Connector</value>
+  </data>
+  <data name="connection.copied" xml:space="preserve">
+    <value>已复制。</value>
+  </data>
+  <data name="connection.copy" xml:space="preserve">
+    <value>复制</value>
+  </data>
+  <data name="connection.copy_failed" xml:space="preserve">
+    <value>复制失败。</value>
+  </data>
+  <data name="connection.copy_password" xml:space="preserve">
+    <value>复制密码</value>
+  </data>
+  <data name="connection.core_health" xml:space="preserve">
+    <value>Core 健康状态</value>
+  </data>
+  <data name="connection.endpoint_checking" xml:space="preserve">
+    <value>检查中</value>
+  </data>
+  <data name="connection.endpoint_not_configured" xml:space="preserve">
+    <value>尚未配置</value>
+  </data>
+  <data name="connection.endpoint_reachable" xml:space="preserve">
+    <value>可连接</value>
+  </data>
+  <data name="connection.endpoint_stale" xml:space="preserve">
+    <value>结果已过期</value>
+  </data>
+  <data name="connection.endpoint_unchecked" xml:space="preserve">
+    <value>尚未检查</value>
+  </data>
+  <data name="connection.endpoint_unexpected" xml:space="preserve">
+    <value>端点内容不符合预期</value>
+  </data>
+  <data name="connection.endpoint_unreachable" xml:space="preserve">
+    <value>无法连接</value>
+  </data>
+  <data name="connection.eyebrow" xml:space="preserve">
+    <value>Connector 就绪状态</value>
+  </data>
+  <data name="connection.generation" xml:space="preserve">
+    <value>Tunnel 世代：{generation}</value>
+  </data>
+  <data name="connection.hide_password" xml:space="preserve">
+    <value>隐藏</value>
+  </data>
+  <data name="connection.local_core" xml:space="preserve">
+    <value>本地 Core</value>
+  </data>
+  <data name="connection.local_mcp_url" xml:space="preserve">
+    <value>Local MCP URL</value>
+  </data>
+  <data name="connection.local_not_ready" xml:space="preserve">
+    <value>本地 MCP 尚未就绪</value>
+  </data>
+  <data name="connection.local_ready" xml:space="preserve">
+    <value>本地 MCP 已就绪</value>
   </data>
   <data name="connection.mode" xml:space="preserve">
     <value>模式</value>
   </data>
   <data name="connection.mode_named" xml:space="preserve">
-    <value>命名隧道</value>
+    <value>Named Tunnel</value>
+  </data>
+  <data name="connection.mode_named_help" xml:space="preserve">
+    <value>使用专用、远程管理的 Cloudflare Tunnel 与固定 HTTPS hostname。</value>
   </data>
   <data name="connection.mode_none" xml:space="preserve">
-    <value>尚未配置</value>
+    <value>仅本机</value>
+  </data>
+  <data name="connection.mode_none_help" xml:space="preserve">
+    <value>不建立公网端点，本地 MCP 仍可使用。</value>
   </data>
   <data name="connection.mode_quick" xml:space="preserve">
-    <value>快速</value>
+    <value>Quick Tunnel</value>
+  </data>
+  <data name="connection.mode_quick_help" xml:space="preserve">
+    <value>使用临时 trycloudflare.com 地址，适合短期测试。</value>
   </data>
   <data name="connection.mode_tailscale" xml:space="preserve">
     <value>Tailscale</value>
   </data>
+  <data name="connection.named_origin" xml:space="preserve">
+    <value>公网 HTTPS Origin</value>
+  </data>
+  <data name="connection.named_origin_hint" xml:space="preserve">
+    <value>只输入 Origin；显示 Connector URL 时 AgentDock 会添加 /mcp。</value>
+  </data>
+  <data name="connection.named_origin_placeholder" xml:space="preserve">
+    <value>https://next.example.com</value>
+  </data>
+  <data name="connection.named_port_blocked" xml:space="preserve">
+    <value>Named Tunnel 在 Cloudflare route 尚未从外部更新前不能直接改用此自定义端口。请先离开 Named 模式。</value>
+  </data>
+  <data name="connection.named_route_manual" xml:space="preserve">
+    <value>AgentDock 不会修改远程管理的 Cloudflare route。mac-dev-next 的专用 route 必须指向此 Next Core，默认为 http://127.0.0.1:8767。</value>
+  </data>
   <data name="connection.native_only" xml:space="preserve">
-    <value>连接配置及命名隧道／Tailscale 凭据由原生 AgentDock 应用管理。</value>
+    <value>部分服务注册操作仍由原生平台机制处理。</value>
+  </data>
+  <data name="connection.oauth_password" xml:space="preserve">
+    <value>OAuth 密码</value>
+  </data>
+  <data name="connection.password_hint" xml:space="preserve">
+    <value>密码仅在明确请求时显示，短时间后或窗口失去焦点时会从界面内存中清除。</value>
+  </data>
+  <data name="connection.password_missing" xml:space="preserve">
+    <value>尚未设置密码</value>
+  </data>
+  <data name="connection.password_stored" xml:space="preserve">
+    <value>已保存密码</value>
+  </data>
+  <data name="connection.password_unavailable" xml:space="preserve">
+    <value>密码当前不可用</value>
+  </data>
+  <data name="connection.password_unreadable" xml:space="preserve">
+    <value>无法读取密码</value>
+  </data>
+  <data name="connection.port_available" xml:space="preserve">
+    <value>可使用</value>
+  </data>
+  <data name="connection.port_checking" xml:space="preserve">
+    <value>正在检查端口</value>
+  </data>
+  <data name="connection.port_conflict" xml:space="preserve">
+    <value>发生冲突</value>
+  </data>
+  <data name="connection.port_health" xml:space="preserve">
+    <value>端口</value>
+  </data>
+  <data name="connection.port_hint" xml:space="preserve">
+    <value>此设置由 AgentDock Next 管理。8765 保留给 stable AgentDock，8766 保留给 Shared Memory。</value>
+  </data>
+  <data name="connection.port_label" xml:space="preserve">
+    <value>端口</value>
+  </data>
+  <data name="connection.port_owned" xml:space="preserve">
+    <value>由 AgentDock Next 使用</value>
+  </data>
+  <data name="connection.port_reserved" xml:space="preserve">
+    <value>已保留</value>
+  </data>
+  <data name="connection.port_title" xml:space="preserve">
+    <value>Core 端口</value>
+  </data>
+  <data name="connection.port_unknown" xml:space="preserve">
+    <value>无法确认所有权</value>
+  </data>
+  <data name="connection.public_access" xml:space="preserve">
+    <value>公网访问</value>
+  </data>
+  <data name="connection.public_access_hint" xml:space="preserve">
+    <value>选择仅在本机使用、以临时 Quick Tunnel 测试，或使用专用 Named Tunnel。</value>
+  </data>
+  <data name="connection.public_access_title" xml:space="preserve">
+    <value>公网访问</value>
+  </data>
+  <data name="connection.public_endpoint" xml:space="preserve">
+    <value>公网端点</value>
+  </data>
+  <data name="connection.public_mcp_url" xml:space="preserve">
+    <value>Public MCP URL</value>
+  </data>
+  <data name="connection.public_not_ready" xml:space="preserve">
+    <value>公网 Connector 仍需处理</value>
+  </data>
+  <data name="connection.public_ready" xml:space="preserve">
+    <value>公网 Connector 已就绪</value>
   </data>
   <data name="connection.public_url" xml:space="preserve">
     <value>公开网址</value>
   </data>
   <data name="connection.quick_only" xml:space="preserve">
-    <value>只有快速模式可重新生成网址，此操作将更换公开网址。</value>
+    <value>只有 Quick Tunnel 模式可以重新生成网址。</value>
+  </data>
+  <data name="connection.quick_url_warning" xml:space="preserve">
+    <value>Quick Tunnel 地址是临时的，重新生成或重新启动后 Public URL 可能改变。</value>
   </data>
   <data name="connection.ready" xml:space="preserve">
     <value>已就绪</value>
   </data>
+  <data name="connection.reason_autostart" xml:space="preserve">
+    <value>此平台当前无法获取 Tunnel 自动启动状态。</value>
+  </data>
+  <data name="connection.reason_bind_available" xml:space="preserve">
+    <value>此端口可使用。</value>
+  </data>
+  <data name="connection.reason_check_cancelled" xml:space="preserve">
+    <value>端口检查已取消。</value>
+  </data>
+  <data name="connection.reason_foreign_listener" xml:space="preserve">
+    <value>此端口已被其他进程占用。</value>
+  </data>
+  <data name="connection.reason_identity" xml:space="preserve">
+    <value>无法证明 AgentDock Next 身份，因此已禁用此操作。</value>
+  </data>
+  <data name="connection.reason_invalid_port" xml:space="preserve">
+    <value>请输入 1 到 65535 之间的有效端口。</value>
+  </data>
+  <data name="connection.reason_listener_changed" xml:space="preserve">
+    <value>验证期间 listener 已改变，请重新检查。</value>
+  </data>
+  <data name="connection.reason_memory_reserved" xml:space="preserve">
+    <value>8766 已保留给 Shared Memory。</value>
+  </data>
+  <data name="connection.reason_mode_none" xml:space="preserve">
+    <value>请先配置公网访问模式，再启动 Tunnel。</value>
+  </data>
+  <data name="connection.reason_named_route" xml:space="preserve">
+    <value>使用自定义 Core 端口前，必须先从外部更新 Named Tunnel route。</value>
+  </data>
+  <data name="connection.reason_native" xml:space="preserve">
+    <value>此平台必须通过原生服务管理机制执行此操作。</value>
+  </data>
+  <data name="connection.reason_next_owner" xml:space="preserve">
+    <value>此 listener 为当前选定的 AgentDock Next Core。</value>
+  </data>
+  <data name="connection.reason_ownership" xml:space="preserve">
+    <value>检测到 listener，但无法证明它属于 AgentDock Next。</value>
+  </data>
+  <data name="connection.reason_probe_failed" xml:space="preserve">
+    <value>无法安全检查此端口。</value>
+  </data>
+  <data name="connection.reason_quick_only" xml:space="preserve">
+    <value>此操作仅适用于 Quick Tunnel。</value>
+  </data>
+  <data name="connection.reason_recovery" xml:space="preserve">
+    <value>上一次变更需要先恢复才能继续。</value>
+  </data>
+  <data name="connection.reason_stable_reserved" xml:space="preserve">
+    <value>8765 已保留给 stable AgentDock。</value>
+  </data>
+  <data name="connection.reason_token" xml:space="preserve">
+    <value>Named Tunnel 需要 Token。</value>
+  </data>
+  <data name="connection.reason_unavailable" xml:space="preserve">
+    <value>当前状态无法使用此操作。</value>
+  </data>
+  <data name="connection.recovery_required" xml:space="preserve">
+    <value>上一次变更需要先完成恢复，才能继续修改连接。</value>
+  </data>
   <data name="connection.regenerate" xml:space="preserve">
     <value>重新生成网址</value>
   </data>
+  <data name="connection.show_password" xml:space="preserve">
+    <value>显示</value>
+  </data>
+  <data name="connection.state_unavailable" xml:space="preserve">
+    <value>当前无法获取连接状态。AgentDock Next 身份和配置可用后请刷新。</value>
+  </data>
+  <data name="connection.summary" xml:space="preserve">
+    <value>就绪状态</value>
+  </data>
+  <data name="connection.summary_hint" xml:space="preserve">
+    <value>本地 Core、端口所有权、公网访问与 Connector 就绪状态会分别显示。</value>
+  </data>
+  <data name="connection.test_endpoint" xml:space="preserve">
+    <value>测试公网端点</value>
+  </data>
   <data name="connection.title" xml:space="preserve">
     <value>连接</value>
+  </data>
+  <data name="connection.token_missing" xml:space="preserve">
+    <value>当前没有可用的 Token。</value>
+  </data>
+  <data name="connection.token_stored" xml:space="preserve">
+    <value>已有保存的 Token。</value>
+  </data>
+  <data name="connection.token_write_only" xml:space="preserve">
+    <value>Token 只允许写入／替换，现有值永远不会在这里显示。</value>
+  </data>
+  <data name="connection.tunnel_autostart" xml:space="preserve">
+    <value>Tunnel 自动启动</value>
+  </data>
+  <data name="connection.tunnel_connected" xml:space="preserve">
+    <value>Cloudflare 已连接</value>
+  </data>
+  <data name="connection.tunnel_registered" xml:space="preserve">
+    <value>Tunnel 已注册</value>
+  </data>
+  <data name="connection.tunnel_running" xml:space="preserve">
+    <value>Tunnel 进程</value>
+  </data>
+  <data name="connection.tunnel_token" xml:space="preserve">
+    <value>Tunnel Token</value>
+  </data>
+  <data name="connection.tunnel_token_placeholder" xml:space="preserve">
+    <value>输入新的 Token 以替换现有值</value>
+  </data>
+  <data name="connection.waiting_readiness" xml:space="preserve">
+    <value>本地配置已应用，正在等待新的公网端点就绪。</value>
   </data>
   <data name="contract.eyebrow" xml:space="preserve">
     <value>控制平面契约</value>

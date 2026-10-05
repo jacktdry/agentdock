@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as desktopruntime$0 from "../desktopruntime/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as permission$0 from "../permission/models.js";
 
 export interface ACPBrokerResources {
@@ -157,6 +160,8 @@ export interface BasicSettings {
 export interface BasicSettingsResult {
     "settings": BasicSettings;
     "coreAutostartMutable": boolean;
+    "portMutable": boolean;
+    "portDisabledReason"?: string;
     "error"?: APIError | null;
 }
 
@@ -167,6 +172,47 @@ export interface BasicSettingsSaveResult {
 
 export interface ConnectionActionResult {
     "completed": boolean;
+    "operationId": string;
+    "phase": string;
+    "tunnelGeneration"?: string;
+    "configRevision"?: string;
+    "portObservation"?: desktopruntime$0.PortObservation | null;
+    "error"?: APIError | null;
+}
+
+export interface ConnectionAutostartRequest {
+    "enabled": boolean;
+    "configRevision": string;
+}
+
+export interface ConnectionPortRequest {
+    "candidatePort": number;
+    "configRevision": string;
+}
+
+export interface ConnectionPreflightResult {
+    "observation": desktopruntime$0.PortObservation;
+    "error"?: APIError | null;
+}
+
+export interface ConnectionSnapshot {
+    "portObservation": desktopruntime$0.PortObservation;
+    "coreRunning": boolean | null;
+    "coreHealth": string;
+    "tunnel": desktopruntime$0.TunnelObservation;
+    "operations": OperationCapability[] | null;
+    "localMCPURL"?: string;
+    "publicMCPURL"?: string;
+    "port": number;
+    "mode": string;
+    "oauthEnabled": boolean;
+    "oauthPasswordState": desktopruntime$0.OAuthPasswordState;
+    "configRevision": string;
+    "tunnelGeneration"?: string;
+}
+
+export interface ConnectionSnapshotResult {
+    "snapshot": ConnectionSnapshot;
     "error"?: APIError | null;
 }
 
@@ -181,6 +227,13 @@ export interface ConnectionStatus {
 export interface ConnectionStatusResult {
     "status": ConnectionStatus;
     "error"?: APIError | null;
+}
+
+export interface ConnectionTunnelRequest {
+    "mode": string;
+    "namedOrigin": string;
+    "newToken"?: string;
+    "configRevision": string;
 }
 
 export interface DiagnosticsResult {
@@ -262,10 +315,24 @@ export interface NegotiationResult {
     "error"?: APIError | null;
 }
 
+/**
+ * This type deliberately cannot be embedded in the ordinary snapshot.
+ */
+export interface OAuthPasswordRevealResult {
+    "password"?: string;
+    "state": desktopruntime$0.OAuthPasswordState;
+    "configRevision"?: string;
+    "tunnelGeneration"?: string;
+    "error"?: APIError | null;
+}
+
 export interface OperationCapability {
     "name": string;
     "access": AccessLevel;
     "requiresConfirmation": boolean;
+    "availability"?: Availability;
+    "disabledReason"?: string;
+    "nativeRequired"?: boolean;
 }
 
 /**
@@ -282,6 +349,15 @@ export interface PermissionResult {
     "approvals"?: permission$0.ApprovalRecord[] | null;
     "count"?: number;
     "confirmation"?: permission$0.ConfirmationChallenge | null;
+    "error"?: APIError | null;
+}
+
+export interface PublicEndpointResult {
+    "state": string;
+    "reasonCode"?: string;
+    "configRevision"?: string;
+    "tunnelGeneration"?: string;
+    "checkedAt": string;
     "error"?: APIError | null;
 }
 

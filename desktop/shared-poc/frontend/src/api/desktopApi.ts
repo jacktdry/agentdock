@@ -23,8 +23,18 @@ import {
 import type {
   APIError,
   BasicSettings,
+  ConnectionActionResult,
+  ConnectionAutostartRequest,
+  ConnectionPortRequest,
+  ConnectionPreflightResult,
+  ConnectionSnapshot,
+  ConnectionSnapshotResult,
   ConnectionStatus,
+  ConnectionTunnelRequest,
   DiagnosticsSnapshot,
+  OAuthPasswordRevealResult,
+  OperationCapability,
+  PublicEndpointResult,
   UpdateStatus,
   DomainCapability,
   Manifest,
@@ -33,6 +43,14 @@ import type {
   RuntimeStatus,
   RuntimeStatusResult,
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
+import {
+  OAuthPasswordState,
+  PortState,
+} from '../../bindings/github.com/uvwt/agentdock/internal/desktopruntime/models'
+import type {
+  PortObservation,
+  TunnelObservation,
+} from '../../bindings/github.com/uvwt/agentdock/internal/desktopruntime/models'
 import * as RuntimeService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/runtimeservice'
 import { parseActivityBatch, type ActivityBatch, type ActivityEnvelope } from './activityContract'
 import {
@@ -53,6 +71,8 @@ export {
   Availability,
   Domain,
   ErrorCategory,
+  OAuthPasswordState,
+  PortState,
 }
 export type {
   ActivityBatch,
@@ -67,8 +87,20 @@ export type {
   InsertionStatus,
   APIError,
   BasicSettings,
+  ConnectionActionResult,
+  ConnectionAutostartRequest,
+  ConnectionPortRequest,
+  ConnectionPreflightResult,
+  ConnectionSnapshot,
+  ConnectionSnapshotResult,
   ConnectionStatus,
+  ConnectionTunnelRequest,
   DiagnosticsSnapshot,
+  OAuthPasswordRevealResult,
+  OperationCapability,
+  PortObservation,
+  PublicEndpointResult,
+  TunnelObservation,
   UpdateStatus,
   DomainCapability,
   Manifest,
@@ -213,7 +245,14 @@ function openExecutionStream(
 
 export const desktopApi = {
   connectionStatus: () => ConnectionService.Status(),
-  connectionAction: (action: ConnectionActionName) => ConnectionService.Action(action),
+  connectionSnapshot: () => ConnectionService.Snapshot(),
+  connectionPreflightPort: (candidatePort: number) => ConnectionService.PreflightPort(candidatePort),
+  connectionUpdatePort: (request: ConnectionPortRequest) => ConnectionService.UpdatePort(request),
+  connectionConfigureTunnel: (request: ConnectionTunnelRequest) => ConnectionService.ConfigureTunnel(request),
+  connectionSetTunnelAutostart: (request: ConnectionAutostartRequest) => ConnectionService.SetTunnelAutostart(request),
+  connectionRevealOAuthPassword: () => ConnectionService.RevealOAuthPassword(),
+  connectionTestPublicEndpoint: () => ConnectionService.TestPublicEndpoint(),
+  connectionAction: (action: ConnectionActionName, configRevision: string) => ConnectionService.Action(action, configRevision),
   readBasicSettings: () => BasicSettingsService.Read(),
   saveBasicSettings: (settings: BasicSettings) => BasicSettingsService.Save(settings),
   checkUpdate: () => UpdateService.Check(),

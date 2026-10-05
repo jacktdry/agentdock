@@ -31,7 +31,9 @@ onMounted(() => { void contract.load(); void store.load() })
     <form class="settings-form" @submit.prevent="requestSave">
       <fieldset :disabled="store.busy || !store.current || !!confirmation">
         <label for="basic-port">{{ t('basicsettings.port') }}</label>
-        <input id="basic-port" v-model.number="store.draft.port" type="number" min="1" max="65535" step="1" required aria-describedby="settings-validation" />
+        <input id="basic-port" v-model.number="store.draft.port" type="number" min="1" max="65535" step="1" required
+          :disabled="!store.portMutable" :aria-describedby="store.portMutable ? 'settings-validation' : 'basic-port-hint settings-validation'" />
+        <p v-if="!store.portMutable" id="basic-port-hint" class="hint">{{ t('basicsettings.connection_port') }}</p>
         <label for="basic-log-level">{{ t('basicsettings.log_level') }}</label>
         <select id="basic-log-level" v-model="store.draft.logLevel">
           <option v-for="level in logLevels" :key="level" :value="level">{{ t(logKeys[level]) }}</option>

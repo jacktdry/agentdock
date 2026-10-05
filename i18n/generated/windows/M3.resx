@@ -301,6 +301,9 @@
   <data name="basicsettings.confirm" xml:space="preserve">
     <value>Save these basic settings?</value>
   </data>
+  <data name="basicsettings.connection_port" xml:space="preserve">
+    <value>AgentDock Next port is managed from Connection so ownership and conflicts can be checked before changes.</value>
+  </data>
   <data name="basicsettings.log_debug" xml:space="preserve">
     <value>Debug</value>
   </data>
@@ -409,44 +412,344 @@
   <data name="common.unavailable" xml:space="preserve">
     <value>Unavailable</value>
   </data>
+  <data name="common.unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
   <data name="common.yes" xml:space="preserve">
     <value>Yes</value>
   </data>
+  <data name="connection.advanced" xml:space="preserve">
+    <value>Advanced connection details</value>
+  </data>
+  <data name="connection.apply_port" xml:space="preserve">
+    <value>Apply port</value>
+  </data>
+  <data name="connection.configure" xml:space="preserve">
+    <value>Apply public access</value>
+  </data>
   <data name="connection.confirm" xml:space="preserve">
     <value>Confirm connection action: {action}?</value>
+  </data>
+  <data name="connection.confirm_action" xml:space="preserve">
+    <value>Confirm connection action: {action}?</value>
+  </data>
+  <data name="connection.confirm_autostart" xml:space="preserve">
+    <value>Set Tunnel autostart to {state}?</value>
+  </data>
+  <data name="connection.confirm_port" xml:space="preserve">
+    <value>Change AgentDock Next Core to port {port}?</value>
+  </data>
+  <data name="connection.confirm_token_omitted" xml:space="preserve">
+    <value>The Tunnel token is intentionally omitted from this confirmation.</value>
+  </data>
+  <data name="connection.confirm_tunnel" xml:space="preserve">
+    <value>Change public access to {mode}?</value>
+  </data>
+  <data name="connection.connector_hint" xml:space="preserve">
+    <value>Use the Public MCP URL and OAuth password when you manually create mac-dev-next in ChatGPT.</value>
+  </data>
+  <data name="connection.connector_not_ready" xml:space="preserve">
+    <value>Not ready</value>
+  </data>
+  <data name="connection.connector_readiness" xml:space="preserve">
+    <value>ChatGPT connector</value>
+  </data>
+  <data name="connection.connector_ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="connection.connector_title" xml:space="preserve">
+    <value>ChatGPT connector</value>
+  </data>
+  <data name="connection.copied" xml:space="preserve">
+    <value>Copied.</value>
+  </data>
+  <data name="connection.copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="connection.copy_failed" xml:space="preserve">
+    <value>Copy failed.</value>
+  </data>
+  <data name="connection.copy_password" xml:space="preserve">
+    <value>Copy password</value>
+  </data>
+  <data name="connection.core_health" xml:space="preserve">
+    <value>Core health</value>
+  </data>
+  <data name="connection.endpoint_checking" xml:space="preserve">
+    <value>Checking</value>
+  </data>
+  <data name="connection.endpoint_not_configured" xml:space="preserve">
+    <value>Not configured</value>
+  </data>
+  <data name="connection.endpoint_reachable" xml:space="preserve">
+    <value>Reachable</value>
+  </data>
+  <data name="connection.endpoint_stale" xml:space="preserve">
+    <value>Stale result</value>
+  </data>
+  <data name="connection.endpoint_unchecked" xml:space="preserve">
+    <value>Not checked</value>
+  </data>
+  <data name="connection.endpoint_unexpected" xml:space="preserve">
+    <value>Unexpected endpoint</value>
+  </data>
+  <data name="connection.endpoint_unreachable" xml:space="preserve">
+    <value>Unreachable</value>
+  </data>
+  <data name="connection.eyebrow" xml:space="preserve">
+    <value>Connector readiness</value>
+  </data>
+  <data name="connection.generation" xml:space="preserve">
+    <value>Tunnel generation: {generation}</value>
+  </data>
+  <data name="connection.hide_password" xml:space="preserve">
+    <value>Hide</value>
+  </data>
+  <data name="connection.local_core" xml:space="preserve">
+    <value>Local Core</value>
+  </data>
+  <data name="connection.local_mcp_url" xml:space="preserve">
+    <value>Local MCP URL</value>
+  </data>
+  <data name="connection.local_not_ready" xml:space="preserve">
+    <value>Local MCP is not ready</value>
+  </data>
+  <data name="connection.local_ready" xml:space="preserve">
+    <value>Local MCP is ready</value>
   </data>
   <data name="connection.mode" xml:space="preserve">
     <value>Mode</value>
   </data>
   <data name="connection.mode_named" xml:space="preserve">
-    <value>Named tunnel</value>
+    <value>Named Tunnel</value>
+  </data>
+  <data name="connection.mode_named_help" xml:space="preserve">
+    <value>Fixed HTTPS hostname using a dedicated remotely managed Cloudflare Tunnel.</value>
   </data>
   <data name="connection.mode_none" xml:space="preserve">
-    <value>Not configured</value>
+    <value>Local only</value>
+  </data>
+  <data name="connection.mode_none_help" xml:space="preserve">
+    <value>No public endpoint. Local MCP remains available.</value>
   </data>
   <data name="connection.mode_quick" xml:space="preserve">
-    <value>Quick</value>
+    <value>Quick Tunnel</value>
+  </data>
+  <data name="connection.mode_quick_help" xml:space="preserve">
+    <value>Temporary trycloudflare.com address for short-lived testing.</value>
   </data>
   <data name="connection.mode_tailscale" xml:space="preserve">
     <value>Tailscale</value>
   </data>
+  <data name="connection.named_origin" xml:space="preserve">
+    <value>Public HTTPS origin</value>
+  </data>
+  <data name="connection.named_origin_hint" xml:space="preserve">
+    <value>Enter the origin only. AgentDock adds /mcp when showing the connector URL.</value>
+  </data>
+  <data name="connection.named_origin_placeholder" xml:space="preserve">
+    <value>https://next.example.com</value>
+  </data>
+  <data name="connection.named_port_blocked" xml:space="preserve">
+    <value>Named Tunnel cannot use this custom port until its Cloudflare route is updated externally. Switch away from Named first.</value>
+  </data>
+  <data name="connection.named_route_manual" xml:space="preserve">
+    <value>AgentDock does not modify the remotely managed Cloudflare route. For mac-dev-next, the dedicated route must target this Next Core, normally http://127.0.0.1:8767.</value>
+  </data>
   <data name="connection.native_only" xml:space="preserve">
-    <value>Connection configuration and named tunnel / Tailscale credentials are managed in the native AgentDock app.</value>
+    <value>Some service-registration actions remain native-backed.</value>
+  </data>
+  <data name="connection.oauth_password" xml:space="preserve">
+    <value>OAuth password</value>
+  </data>
+  <data name="connection.password_hint" xml:space="preserve">
+    <value>The password is revealed only on request and is cleared from this view after a short time or when the window loses focus.</value>
+  </data>
+  <data name="connection.password_missing" xml:space="preserve">
+    <value>Password missing</value>
+  </data>
+  <data name="connection.password_stored" xml:space="preserve">
+    <value>Password stored</value>
+  </data>
+  <data name="connection.password_unavailable" xml:space="preserve">
+    <value>Password unavailable</value>
+  </data>
+  <data name="connection.password_unreadable" xml:space="preserve">
+    <value>Password cannot be read</value>
+  </data>
+  <data name="connection.port_available" xml:space="preserve">
+    <value>Available</value>
+  </data>
+  <data name="connection.port_checking" xml:space="preserve">
+    <value>Checking port</value>
+  </data>
+  <data name="connection.port_conflict" xml:space="preserve">
+    <value>Conflict</value>
+  </data>
+  <data name="connection.port_health" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="connection.port_hint" xml:space="preserve">
+    <value>AgentDock Next owns this setting. Port 8765 is reserved for stable AgentDock and 8766 is reserved for shared Memory.</value>
+  </data>
+  <data name="connection.port_label" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="connection.port_owned" xml:space="preserve">
+    <value>Owned by AgentDock Next</value>
+  </data>
+  <data name="connection.port_reserved" xml:space="preserve">
+    <value>Reserved</value>
+  </data>
+  <data name="connection.port_title" xml:space="preserve">
+    <value>Core port</value>
+  </data>
+  <data name="connection.port_unknown" xml:space="preserve">
+    <value>Ownership unknown</value>
+  </data>
+  <data name="connection.public_access" xml:space="preserve">
+    <value>Public access</value>
+  </data>
+  <data name="connection.public_access_hint" xml:space="preserve">
+    <value>Choose whether this Next instance stays local, uses a temporary Quick Tunnel, or uses a dedicated Named Tunnel.</value>
+  </data>
+  <data name="connection.public_access_title" xml:space="preserve">
+    <value>Public access</value>
+  </data>
+  <data name="connection.public_endpoint" xml:space="preserve">
+    <value>Public endpoint</value>
+  </data>
+  <data name="connection.public_mcp_url" xml:space="preserve">
+    <value>Public MCP URL</value>
+  </data>
+  <data name="connection.public_not_ready" xml:space="preserve">
+    <value>Public connector still needs attention</value>
+  </data>
+  <data name="connection.public_ready" xml:space="preserve">
+    <value>Public connector is ready</value>
   </data>
   <data name="connection.public_url" xml:space="preserve">
     <value>Public URL</value>
   </data>
   <data name="connection.quick_only" xml:space="preserve">
-    <value>Regenerate is available only in quick mode and replaces the public URL.</value>
+    <value>Regenerate is available only in Quick Tunnel mode.</value>
+  </data>
+  <data name="connection.quick_url_warning" xml:space="preserve">
+    <value>Quick Tunnel addresses are temporary. Regenerating or restarting can change the public URL.</value>
   </data>
   <data name="connection.ready" xml:space="preserve">
     <value>Ready</value>
   </data>
+  <data name="connection.reason_autostart" xml:space="preserve">
+    <value>Tunnel autostart state is unavailable on this platform.</value>
+  </data>
+  <data name="connection.reason_bind_available" xml:space="preserve">
+    <value>The port is available.</value>
+  </data>
+  <data name="connection.reason_check_cancelled" xml:space="preserve">
+    <value>The port check was canceled.</value>
+  </data>
+  <data name="connection.reason_foreign_listener" xml:space="preserve">
+    <value>Another process is using this port.</value>
+  </data>
+  <data name="connection.reason_identity" xml:space="preserve">
+    <value>AgentDock Next identity cannot be proven, so the operation is disabled.</value>
+  </data>
+  <data name="connection.reason_invalid_port" xml:space="preserve">
+    <value>Enter a valid port between 1 and 65535.</value>
+  </data>
+  <data name="connection.reason_listener_changed" xml:space="preserve">
+    <value>The listener changed while it was being verified. Check again.</value>
+  </data>
+  <data name="connection.reason_memory_reserved" xml:space="preserve">
+    <value>Port 8766 is reserved for shared Memory.</value>
+  </data>
+  <data name="connection.reason_mode_none" xml:space="preserve">
+    <value>Configure public access before starting the Tunnel.</value>
+  </data>
+  <data name="connection.reason_named_route" xml:space="preserve">
+    <value>The Named Tunnel route must be updated externally before using a custom Core port.</value>
+  </data>
+  <data name="connection.reason_native" xml:space="preserve">
+    <value>This action requires the native service-management path on this platform.</value>
+  </data>
+  <data name="connection.reason_next_owner" xml:space="preserve">
+    <value>The listener is the selected AgentDock Next Core.</value>
+  </data>
+  <data name="connection.reason_ownership" xml:space="preserve">
+    <value>The listener exists, but AgentDock Next ownership cannot be proven.</value>
+  </data>
+  <data name="connection.reason_probe_failed" xml:space="preserve">
+    <value>The port could not be checked safely.</value>
+  </data>
+  <data name="connection.reason_quick_only" xml:space="preserve">
+    <value>This action is available only in Quick Tunnel mode.</value>
+  </data>
+  <data name="connection.reason_recovery" xml:space="preserve">
+    <value>A previous mutation needs recovery before continuing.</value>
+  </data>
+  <data name="connection.reason_stable_reserved" xml:space="preserve">
+    <value>Port 8765 is reserved for stable AgentDock.</value>
+  </data>
+  <data name="connection.reason_token" xml:space="preserve">
+    <value>A Named Tunnel token is required.</value>
+  </data>
+  <data name="connection.reason_unavailable" xml:space="preserve">
+    <value>This operation is unavailable in the current state.</value>
+  </data>
+  <data name="connection.recovery_required" xml:space="preserve">
+    <value>Recovery is required before more connection changes can be made.</value>
+  </data>
   <data name="connection.regenerate" xml:space="preserve">
     <value>Regenerate URL</value>
   </data>
+  <data name="connection.show_password" xml:space="preserve">
+    <value>Show</value>
+  </data>
+  <data name="connection.state_unavailable" xml:space="preserve">
+    <value>Connection state is unavailable. Refresh after AgentDock Next identity and configuration are available.</value>
+  </data>
+  <data name="connection.summary" xml:space="preserve">
+    <value>Readiness</value>
+  </data>
+  <data name="connection.summary_hint" xml:space="preserve">
+    <value>Local Core, port ownership, public access and connector readiness are reported separately.</value>
+  </data>
+  <data name="connection.test_endpoint" xml:space="preserve">
+    <value>Test public endpoint</value>
+  </data>
   <data name="connection.title" xml:space="preserve">
     <value>Connection</value>
+  </data>
+  <data name="connection.token_missing" xml:space="preserve">
+    <value>No stored token is available.</value>
+  </data>
+  <data name="connection.token_stored" xml:space="preserve">
+    <value>A token is stored.</value>
+  </data>
+  <data name="connection.token_write_only" xml:space="preserve">
+    <value>Tokens are write-only: the current value can never be revealed here.</value>
+  </data>
+  <data name="connection.tunnel_autostart" xml:space="preserve">
+    <value>Tunnel autostart</value>
+  </data>
+  <data name="connection.tunnel_connected" xml:space="preserve">
+    <value>Cloudflare connected</value>
+  </data>
+  <data name="connection.tunnel_registered" xml:space="preserve">
+    <value>Tunnel registered</value>
+  </data>
+  <data name="connection.tunnel_running" xml:space="preserve">
+    <value>Tunnel process</value>
+  </data>
+  <data name="connection.tunnel_token" xml:space="preserve">
+    <value>Tunnel token</value>
+  </data>
+  <data name="connection.tunnel_token_placeholder" xml:space="preserve">
+    <value>Enter a replacement token</value>
+  </data>
+  <data name="connection.waiting_readiness" xml:space="preserve">
+    <value>Local changes are applied. Waiting for the new public endpoint to become ready.</value>
   </data>
   <data name="contract.eyebrow" xml:space="preserve">
     <value>Control-plane contract</value>

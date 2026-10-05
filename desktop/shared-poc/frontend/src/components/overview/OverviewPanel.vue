@@ -30,8 +30,12 @@ onMounted(() => {
       </article>
       <article class="panel">
         <h3>{{ t('connection.title') }}</h3>
-        <p>{{ connection.status ? t(connection.status.running ? 'common.running' : 'common.stopped') : t('common.unavailable') }}</p>
-        <p class="safe-url">{{ connection.publicURL || t('common.unavailable') }}</p>
+        <p>
+          {{ connection.snapshot?.coreRunning === null || connection.snapshot?.coreRunning === undefined
+            ? t('common.unavailable')
+            : t(connection.snapshot.coreRunning ? 'common.running' : 'common.stopped') }}
+        </p>
+        <p class="safe-url">{{ connection.snapshot?.publicMCPURL || t('common.unavailable') }}</p>
         <OperationStatus :busy="connection.busy" :error="connection.error" />
         <button type="button" @click="emit('navigate', 'connection')">{{ t('overview.open_connection') }}</button>
       </article>
