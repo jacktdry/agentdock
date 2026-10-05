@@ -37,6 +37,14 @@ func darwinExecutableFromAppBundle(executable string) bool {
 }
 
 func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
+	executable, _ := os.Executable()
+	if canonical, err := filepath.EvalSymlinks(executable); err == nil {
+		executable = canonical
+	}
+	return loadUnixRuntimeForExecutable(runtimeRoot, executable)
+}
+
+func loadUnixRuntimeForExecutable(runtimeRoot, executable string) (unixRuntimeManifest, string, error) {
 	if runtime.GOOS == "darwin" && strings.TrimSpace(runtimeRoot) == "" {
 		return unixRuntimeManifest{}, "", errors.New("runtime-root required")
 	}
@@ -57,20 +65,17 @@ func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
 	serviceName := "agentdock"
 	tunnelServiceName := "agentdock-cloudflared"
 	serviceManager := ""
-	executable := ""
-	if resolved, err := os.Executable(); err == nil {
-		if eval, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {
-			resolved = eval
-		}
-		executable = resolved
-	}
 	fromApp := runtime.GOOS == "darwin" && darwinExecutableFromAppBundle(executable)
 	if runtime.GOOS == "darwin" {
 		if fromApp || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
 			// App Bundle 的 Core/cloudflared 由 SMAppService 注册，路径必须跟随 Helper。
 			if executable != "" {
 				agentDockBinary = executable
-				cloudflaredBinary = filepath.Join(filepath.Dir(executable), "cloudflared")
+				if fromApp && os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
+					contents := strings.SplitN(executable, ".app/Contents/", 2)[0] + ".app/Contents"
+					agentDockBinary = filepath.Join(contents, "Helpers", "agentdock")
+				}
+				cloudflaredBinary = filepath.Join(filepath.Dir(agentDockBinary), "cloudflared")
 			}
 			serviceManager = "smappservice"
 			serviceName = "com.uvwt.agentdock.core"
@@ -101,14 +106,28 @@ func loadUnixRuntime(runtimeRoot string) (unixRuntimeManifest, string, error) {
 		TunnelEnvironment: filepath.Join(root, "cloudflared.env"),
 	}
 	// App Bundle 不允许外部清单改写已签名 Helper 路径。CLI / Linux 读取 desktop-runtime.json。
-	if runtime.GOOS != "darwin" || (!fromApp && os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next") {
+	if runtime.GOOS != "darwin" || !fromApp {
 		data, readErr := os.ReadFile(filepath.Join(root, "desktop-runtime.json"))
 		if readErr == nil {
 			if err := json.Unmarshal(data, &manifest); err != nil {
 				return unixRuntimeManifest{}, "", fmt.Errorf("解析桌面运行清单失败: %w", err)
 			}
-		} else if !errors.Is(readErr, os.ErrNotExist) {
+		} else if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" || !errors.Is(readErr, os.ErrNotExist) {
 			return unixRuntimeManifest{}, "", fmt.Errorf("读取桌面运行清单失败: %w", readErr)
+		}
+	}
+	if runtime.GOOS == "darwin" && os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && !fromApp {
+		if manifest.SchemaVersion != 1 || manifest.ServiceManager != "smappservice" ||
+			manifest.ServiceName != "dev.dropabit.agentdock.next.core" || manifest.TunnelServiceName != "dev.dropabit.agentdock.next.tunnel" ||
+			!filepath.IsAbs(manifest.AgentDockBinary) || !filepath.IsAbs(manifest.CloudflaredBinary) ||
+			strings.Contains(filepath.ToSlash(manifest.AgentDockBinary), "/AgentDock.app/") ||
+			strings.Contains(filepath.ToSlash(manifest.CloudflaredBinary), "/AgentDock.app/") ||
+			filepath.Clean(manifest.EnvironmentFile) != filepath.Join(root, "agentdock.env") ||
+			filepath.Clean(manifest.TunnelEnvironment) != filepath.Join(root, "cloudflared.env") {
+			return unixRuntimeManifest{}, "", ErrNextIdentityUnavailable
+		}
+		if err := validateNextDarwinHelpers(manifest); err != nil {
+			return unixRuntimeManifest{}, "", err
 		}
 	}
 	if manifest.AgentDockBinary == "" || manifest.EnvironmentFile == "" {

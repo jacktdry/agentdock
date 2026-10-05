@@ -235,7 +235,7 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 		}
 		values := map[string]string{"AGENTDOCK_TUNNEL_MODE": request.Mode}
 		delete(core, "AGENTDOCK_SERVER_URL")
-		core["AGENTDOCK_OAUTH_ENABLED"] = tunnelBool(request.Mode != "none")
+		core["AGENTDOCK_OAUTH_ENABLED"] = tunnelBool(request.Mode == "named")
 		if request.Mode == "quick" {
 			values["AGENTDOCK_TUNNEL_TARGET"] = strings.TrimSuffix(healthURL(core), "/healthz")
 		}
@@ -312,6 +312,7 @@ func invalidateQuickTunnelUnixLocked(root string) error {
 		return err
 	}
 	delete(core, "AGENTDOCK_SERVER_URL")
+	core["AGENTDOCK_OAUTH_ENABLED"] = "false"
 	return writeEnvironment(manifest.EnvironmentFile, core)
 }
 

@@ -28,10 +28,55 @@ type TunnelConfigureRequest struct {
 	TokenFile   string
 }
 
-// RunTunnelCommand mutation branches require the caller to serialize this runtime
-// with AcquireDesktopMutation. Shared callers already own that outer lock.
-// A successful legacy Completed result means local application, not public readiness.
+// RunTunnelCommand serializes public CLI mutations. Read/launch dispatch never
+// holds the lock for the lifetime of a supervisor process.
 func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	return runTunnelCommand(ctx, args, stdout, stderr, false)
+}
+
+// RunTunnelCommandLocked is only for a caller already holding Desktop mutation.
+func RunTunnelCommandLocked(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	return runTunnelCommand(ctx, args, stdout, stderr, true)
+}
+
+func runTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writer, locked bool) error {
+	acquire := func(root string) (func(), error) {
+		if locked {
+			return func() {}, nil
+		}
+		next := NextManagedRoot(root)
+		var before ConnectionConfig
+		if next {
+			if err := ValidateNextSettingsIdentity(ctx, root); err != nil {
+				return nil, err
+			}
+			var err error
+			before, err = ReadConnectionConfig(ctx, root)
+			if err != nil {
+				return nil, err
+			}
+		}
+		release, err := AcquireDesktopMutation(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		if next {
+			selected, err := SelectNextConnectionRuntime(ctx, root)
+			current, configErr := ReadConnectionConfig(ctx, root)
+			if err != nil || configErr != nil || current != before {
+				release()
+				return nil, ErrNextIdentityUnavailable
+			}
+			if args[0] == "start" || args[0] == "restart" || args[0] == "regenerate" || args[0] == "configure" {
+				if _, err := PreflightPortMutation(ctx, PortObservationRequest{Runtime: selected.PortRuntime, Host: selected.BindHost, ConfiguredPort: current.Port, CandidatePort: current.Port}); err != nil {
+					release()
+					return nil, err
+				}
+			}
+		}
+		return release, nil
+	}
+
 	if len(args) == 0 {
 		return tunnelCommandUsageError()
 	}
@@ -63,6 +108,11 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		if err != nil {
 			return err
 		}
+		release, err := acquire(runtimeRoot)
+		if err != nil {
+			return err
+		}
+		defer release()
 		// 写操作可能重启当前核心，必须由独立控制进程直接调用系统适配器；
 		// IPC 仅用于不会改变服务生命周期的状态读取。
 		if err := platformTunnelAction(ctx, runtimeRoot, action); err != nil {
@@ -92,6 +142,11 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 			ServerURL:   strings.TrimSpace(*serverURL),
 			TokenFile:   strings.TrimSpace(*tokenFile),
 		}
+		release, err := acquire(request.RuntimeRoot)
+		if err != nil {
+			return err
+		}
+		defer release()
 		if err := platformConfigureTunnel(ctx, request); err != nil {
 			return err
 		}
@@ -111,6 +166,11 @@ func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		if err != nil {
 			return err
 		}
+		release, err := acquire(*runtimeRoot)
+		if err != nil {
+			return err
+		}
+		defer release()
 		if err := platformSetTunnelAutostart(ctx, *runtimeRoot, shouldEnable); err != nil {
 			return err
 		}

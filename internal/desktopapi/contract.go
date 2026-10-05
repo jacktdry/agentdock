@@ -55,9 +55,12 @@ const (
 )
 
 type OperationCapability struct {
-	Name                 string      `json:"name"`
-	Access               AccessLevel `json:"access"`
-	RequiresConfirmation bool        `json:"requiresConfirmation"`
+	Name                 string       `json:"name"`
+	Access               AccessLevel  `json:"access"`
+	RequiresConfirmation bool         `json:"requiresConfirmation"`
+	Availability         Availability `json:"availability,omitempty"`
+	DisabledReason       string       `json:"disabledReason,omitempty"`
+	NativeRequired       bool         `json:"nativeRequired,omitempty"`
 }
 
 type StreamCapability struct {
@@ -178,7 +181,9 @@ func DefaultManifest() Manifest {
 				},
 				Streams: []StreamCapability{},
 			},
-			availableCapability(DomainConnection, "Tunnel configuration remains native-only; regenerate requires quick mode", "status", "start", "stop", "restart", "regenerate"),
+			{Domain: DomainConnection, Version: 1, Availability: AvailabilityAvailable,
+				Operations: frozenConnectionOperations(), Streams: []StreamCapability{},
+				Reason: "Snapshot capabilities govern selected Next support; mutations require configRevision; Named custom ports require manual routing; macOS registration, stop and autostart require native service management"},
 			availableCapability(DomainSettings, "Basic settings only; macOS autostart changes require native SMAppService", "read", "save"),
 			{
 				Domain: DomainACP, Version: 1, Availability: AvailabilityAvailable,

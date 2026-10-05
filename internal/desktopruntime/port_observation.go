@@ -57,6 +57,10 @@ var ErrPortPreflight = errors.New("port preflight rejected")
 // It temporarily binds the candidate scope to establish availability, but does
 // not change configuration, contact Core, or acquire the desktop mutation lock.
 func ObservePort(ctx context.Context, request PortObservationRequest) PortObservation {
+	if runtime.GOOS == "windows" && request.CandidatePort != 8765 && request.CandidatePort != 8766 {
+		return PortObservation{ConfiguredPort: request.ConfiguredPort, ObservedPort: request.CandidatePort,
+			ConfigRevision: request.ConfigRevision, State: PortUnknown, ReasonCode: "next_identity_unavailable", ObservedAt: time.Now().UTC()}
+	}
 	return observePort(ctx, request, platformPortOwner)
 }
 

@@ -15,6 +15,8 @@ type BasicSettings struct {
 type BasicSettingsResult struct {
 	Settings             BasicSettings `json:"settings"`
 	CoreAutostartMutable bool          `json:"coreAutostartMutable"`
+	PortMutable          bool          `json:"portMutable"`
+	PortDisabledReason   string        `json:"portDisabledReason,omitempty"`
 	Error                *APIError     `json:"error,omitempty"`
 }
 type BasicSettingsSaveResult struct {
@@ -22,13 +24,16 @@ type BasicSettingsSaveResult struct {
 	Error     *APIError `json:"error,omitempty"`
 }
 type BasicSettingsService struct {
-	runtimeRoot string
-	rootError   error
+	runtimeRoot      string
+	rootError        error
+	read             func(context.Context, string) (desktopruntime.BasicSettings, error)
+	update           func(context.Context, string, desktopruntime.BasicSettings) error
+	validateIdentity func(context.Context, string) error
 }
 
 func NewBasicSettingsService(root string) *BasicSettingsService {
 	root, err := resolveRuntimeRoot(root)
-	return &BasicSettingsService{runtimeRoot: root, rootError: err}
+	return &BasicSettingsService{runtimeRoot: root, rootError: err, read: desktopruntime.ReadBasicSettings, update: desktopruntime.UpdateBasicSettings, validateIdentity: desktopruntime.ValidateNextSettingsIdentity}
 }
 func (s *BasicSettingsService) Read(ctx context.Context) BasicSettingsResult {
 	if s.rootError != nil {
@@ -36,11 +41,19 @@ func (s *BasicSettingsService) Read(ctx context.Context) BasicSettingsResult {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	settings, err := desktopruntime.ReadBasicSettings(ctx, s.runtimeRoot)
+	if err := s.validateIdentity(ctx, s.runtimeRoot); err != nil {
+		return BasicSettingsResult{Error: connectionFailure("next_identity_unavailable")}
+	}
+	settings, err := s.read(ctx, s.runtimeRoot)
 	if err != nil {
 		return BasicSettingsResult{Error: safeContextServiceError(ctx, "settings_read_failed", err)}
 	}
+	reason := ""
+	if s.connectionManagedPort() {
+		reason = "port_managed_by_connection"
+	}
 	return BasicSettingsResult{
+		PortMutable: reason == "", PortDisabledReason: reason,
 		Settings:             BasicSettings{Port: settings.Port, LogLevel: settings.LogLevel, CoreAutostart: settings.CoreAutostart},
 		CoreAutostartMutable: desktopruntime.BasicAutostartMutable(),
 	}
@@ -49,12 +62,27 @@ func (s *BasicSettingsService) Save(ctx context.Context, settings BasicSettings)
 	if s.rootError != nil {
 		return BasicSettingsSaveResult{Error: safeServiceError("settings_root_unavailable", s.rootError)}
 	}
+	if err := s.validateIdentity(ctx, s.runtimeRoot); err != nil {
+		return BasicSettingsSaveResult{Error: connectionFailure("next_identity_unavailable")}
+	}
 	operationCtx, finish, err := beginRuntimeMutation(ctx, s.runtimeRoot)
 	if err != nil {
 		return BasicSettingsSaveResult{Error: safeContextServiceError(ctx, "settings_mutation_busy", err)}
 	}
 	defer finish()
-	err = desktopruntime.UpdateBasicSettings(operationCtx, s.runtimeRoot, desktopruntime.BasicSettings{Port: settings.Port, LogLevel: settings.LogLevel, CoreAutostart: settings.CoreAutostart})
+	if err := s.validateIdentity(operationCtx, s.runtimeRoot); err != nil {
+		return BasicSettingsSaveResult{Error: connectionFailure("next_identity_unavailable")}
+	}
+	if s.connectionManagedPort() {
+		current, err := s.read(operationCtx, s.runtimeRoot)
+		if err != nil {
+			return BasicSettingsSaveResult{Error: safeContextServiceError(operationCtx, "settings_read_failed", err)}
+		}
+		if current.Port != settings.Port {
+			return BasicSettingsSaveResult{Error: NewError("port_managed_by_connection", "Change the Next Core port through Connection", ErrorCategoryUnavailable, false, nil)}
+		}
+	}
+	err = s.update(operationCtx, s.runtimeRoot, desktopruntime.BasicSettings{Port: settings.Port, LogLevel: settings.LogLevel, CoreAutostart: settings.CoreAutostart})
 	if err != nil {
 		return BasicSettingsSaveResult{Error: safeContextServiceError(operationCtx, "settings_save_failed", err)}
 	}
@@ -84,4 +112,10 @@ func safeContextServiceError(ctx context.Context, code string, err error) *APIEr
 		err = ctx.Err()
 	}
 	return safeServiceError(code, err)
+}
+
+// Explicit Next launch selection and Next manifests both close the old Shared
+// port-write path. Stable selection retains the existing settings semantics.
+func (s *BasicSettingsService) connectionManagedPort() bool {
+	return desktopruntime.NextManagedRoot(s.runtimeRoot)
 }

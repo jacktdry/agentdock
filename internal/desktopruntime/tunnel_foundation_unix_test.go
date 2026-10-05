@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/uvwt/agentdock/internal/envstore"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,7 +47,7 @@ func tunnelStoppedFixture(t *testing.T) (string, unixRuntimeManifest, string) {
 	if err := os.WriteFile(filepath.Join(root, "desktop-runtime.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeEnvironment(manifest.EnvironmentFile, map[string]string{"AGENTDOCK_HOST": "127.0.0.1", "AGENTDOCK_PORT": "8765", "AGENTDOCK_SERVER_URL": "https://old.trycloudflare.com"}); err != nil {
+	if err := writeEnvironment(manifest.EnvironmentFile, map[string]string{"AGENTDOCK_HOST": "127.0.0.1", "AGENTDOCK_PORT": "8765", "AGENTDOCK_SERVER_URL": "https://old.trycloudflare.com", "AGENTDOCK_OAUTH_ENABLED": "true"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeEnvironment(manifest.TunnelEnvironment, map[string]string{"AGENTDOCK_TUNNEL_MODE": "quick", "AGENTDOCK_TUNNEL_TARGET": "http://127.0.0.1:8765"}); err != nil {
@@ -89,6 +90,9 @@ func TestTunnelConfigurePreservesStoppedServicesAndInvalidatesQuickURL(t *testin
 			}
 			if mode != "named" && core["AGENTDOCK_SERVER_URL"] != "" {
 				t.Fatal("stale OAuth origin retained")
+			}
+			if core["AGENTDOCK_OAUTH_ENABLED"] != tunnelBool(mode == "named") {
+				t.Fatal("invalid intermediate OAuth state")
 			}
 			gen, err := TunnelGeneration(root)
 			if err != nil || gen == "" {
@@ -276,5 +280,112 @@ func TestTunnelRecoveryStorageRejectsSymlinkRootAndMarker(t *testing.T) {
 	data, _ := os.ReadFile(foreign)
 	if string(data) != "untouched" {
 		t.Fatal("symlink marker target changed")
+	}
+}
+
+func TestTunnelCLIWaitsForDesktopMutationAndCancellationHasNoEffects(t *testing.T) {
+	root, manifest, actions := tunnelStoppedFixture(t)
+	before, _ := os.ReadFile(manifest.EnvironmentFile)
+	release, err := AcquireDesktopMutation(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 70*time.Millisecond)
+	defer cancel()
+	if err := RunTunnelCommand(ctx, []string{"configure", "--runtime-root", root, "--mode", "quick"}, io.Discard, io.Discard); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("CLI bypassed Shared lock", err)
+	}
+	after, _ := os.ReadFile(manifest.EnvironmentFile)
+	if string(before) != string(after) {
+		t.Fatal("CLI changed locked config")
+	}
+	if _, err := os.Stat(actions); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("CLI changed service")
+	}
+	release()
+	if err := RunTunnelCommand(context.Background(), []string{"configure", "--runtime-root", root, "--mode", "quick"}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	core, _ := envstore.ParseFile(manifest.EnvironmentFile)
+	if core["AGENTDOCK_SERVER_URL"] != "" || core["AGENTDOCK_OAUTH_ENABLED"] != "false" {
+		t.Fatal("Quick intermediate OAuth invalid")
+	}
+}
+
+func TestQuickInvalidationDisablesOAuthUntilCurrentCallback(t *testing.T) {
+	root, manifest, _ := tunnelStoppedFixture(t)
+	gen, err := AdvanceTunnelGenerationLocked(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := invalidateQuickTunnelUnixLocked(root); err != nil {
+		t.Fatal(err)
+	}
+	core, _ := envstore.ParseFile(manifest.EnvironmentFile)
+	if core["AGENTDOCK_SERVER_URL"] != "" || core["AGENTDOCK_OAUTH_ENABLED"] != "false" {
+		t.Fatal("invalidated origin left OAuth enabled")
+	}
+	if err := applyQuickTunnelURLUnixGeneration(context.Background(), manifest, root, root, "https://fresh.trycloudflare.com", gen, "http://127.0.0.1:8765"); err != nil {
+		t.Fatal(err)
+	}
+	core, _ = envstore.ParseFile(manifest.EnvironmentFile)
+	if core["AGENTDOCK_SERVER_URL"] != "https://fresh.trycloudflare.com" || core["AGENTDOCK_OAUTH_ENABLED"] != "true" {
+		t.Fatal("current generation did not publish OAuth atomically")
+	}
+}
+
+func TestTunnelCLIRejectsNextBeforeLockOrEffects(t *testing.T) {
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	root := t.TempDir()
+	for _, action := range []string{"start", "stop", "restart", "regenerate", "configure", "autostart"} {
+		args := []string{action, "--runtime-root", root}
+		if action == "configure" {
+			args = append(args, "--mode", "quick")
+		}
+		if action == "autostart" {
+			args = append(args, "--enabled", "true")
+		}
+		if err := RunTunnelCommand(context.Background(), args, io.Discard, io.Discard); !errors.Is(err, ErrNextIdentityUnavailable) {
+			t.Fatal("unowned Next accepted", action)
+		}
+		entries, err := os.ReadDir(root)
+		if err != nil || len(entries) != 0 {
+			t.Fatal("rejected root received mutation files", action, entries, err)
+		}
+	}
+}
+
+func TestQuickPortChangeInvalidatesOriginAndDisablesOAuth(t *testing.T) {
+	root, manifest, actions := tunnelStoppedFixture(t)
+	if runtime.GOOS == "darwin" {
+		// Select only signed fixture helpers; all service calls use fake launchctl.
+		canonical, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		root = canonical
+		manifest.AgentDockBinary, manifest.CloudflaredBinary = nextHelperFixture(t, root)
+		manifest.ServiceName = "dev.dropabit.agentdock.next.core"
+		manifest.TunnelServiceName = "dev.dropabit.agentdock.next.tunnel"
+		manifest.ServiceManager = "smappservice"
+		manifest.EnvironmentFile = filepath.Join(root, "agentdock.env")
+		manifest.TunnelEnvironment = filepath.Join(root, "cloudflared.env")
+		data, _ := json.Marshal(manifest)
+		if err := os.WriteFile(filepath.Join(root, "desktop-runtime.json"), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	if err := platformUpdateBasicSettings(context.Background(), root, BasicSettings{Port: 19000, LogLevel: "info"}); err != nil {
+		t.Fatal(err)
+	}
+	core, _ := envstore.ParseFile(manifest.EnvironmentFile)
+	tunnel, _ := envstore.ParseFile(manifest.TunnelEnvironment)
+	if core["AGENTDOCK_SERVER_URL"] != "" || core["AGENTDOCK_OAUTH_ENABLED"] != "false" || tunnel["AGENTDOCK_TUNNEL_TARGET"] != "http://127.0.0.1:19000" {
+		t.Fatal("port change left invalid Quick OAuth state")
+	}
+	if _, err := os.Stat(actions); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("port save started stopped fixture")
 	}
 }

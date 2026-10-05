@@ -50,6 +50,12 @@ final class InstallerRunner {
         try validateBundledRuntime()
         try service.validatePersistentAppLocation()
 
+        // Next shares the Go owner-directory mutation protocol. Stable retains
+        // its existing installation behavior.
+        let mutationLock = paths.identity == .next
+            ? try await NextDesktopMutationLock.acquire(root: paths.appSupport) : nil
+        defer { mutationLock?.release() }
+
         // 旧桌面版把 Named Tunnel Token 放在 cloudflared.env。先迁入独立 token store，
         // 后面的运行时清理只删除程序入口，不触碰用户凭据。
         try TunnelTokenStore(paths: paths).captureExistingTokenIfPresent()
@@ -223,12 +229,29 @@ final class InstallerRunner {
 
     private func writePreparedConfiguration(_ prepared: PreparedConfiguration) throws {
         try createRuntimeDirectories()
+        if paths.identity == .next {
+            try writePrivateAtomically(nextRuntimeManifest(), to: paths.desktopRuntimeManifest)
+        }
         try writePrivateAtomically(prepared.environment, to: paths.environment)
         try writePrivateAtomically(prepared.tunnelEnvironment, to: paths.tunnelEnvironment)
         try? fileManager.removeItem(at: paths.quickTunnelURL)
         if let token = prepared.tunnelToken {
             try TunnelTokenStore(paths: paths).persist(token)
         }
+    }
+
+    func nextRuntimeManifest() throws -> Data {
+        precondition(paths.identity == .next)
+        return try JSONSerialization.data(withJSONObject: [
+            "schema_version": 1,
+            "service_manager": "smappservice",
+            "service_name": paths.identity.coreLabel,
+            "tunnel_service_name": paths.identity.tunnelLabel,
+            "agentdock_binary": paths.binary.path,
+            "cloudflared_binary": paths.cloudflared.path,
+            "environment_file": paths.environment.path,
+            "tunnel_environment": paths.tunnelEnvironment.path,
+        ], options: [.sortedKeys])
     }
 
     private func validateBundledRuntime() throws {
@@ -286,13 +309,15 @@ final class InstallerRunner {
         }
     }
 
-    private struct FileSnapshot {
+    struct FileSnapshot {
         let url: URL
         let data: Data?
     }
 
-    private func snapshotManagedFiles() throws -> [FileSnapshot] {
-        try [paths.environment, paths.tunnelEnvironment, paths.tunnelTokenStore, paths.quickTunnelURL].map { url in
+    func snapshotManagedFiles() throws -> [FileSnapshot] {
+        var managed = [paths.environment, paths.tunnelEnvironment, paths.tunnelTokenStore, paths.quickTunnelURL]
+        if paths.identity == .next { managed.append(paths.desktopRuntimeManifest) }
+        return try managed.map { url in
             guard fileManager.fileExists(atPath: url.path) else {
                 return FileSnapshot(url: url, data: nil)
             }
@@ -304,7 +329,7 @@ final class InstallerRunner {
         }
     }
 
-    private func restoreManagedFiles(_ snapshots: [FileSnapshot]) throws {
+    func restoreManagedFiles(_ snapshots: [FileSnapshot]) throws {
         for snapshot in snapshots {
             if let data = snapshot.data {
                 try writePrivateAtomically(data, to: snapshot.url)
@@ -505,4 +530,62 @@ private func decodeUpdateProgressLine(
     } catch {
         warnings.append("Unable to decode AgentDock update progress event: \(error.localizedDescription)")
     }
+}
+
+// No stale-lock reclamation in the native installer: unknown ownership fails
+// closed after a bounded wait. Go may reclaim an owner only after its PID exits.
+final class NextDesktopMutationLock {
+    private let directory: URL
+    private let owner: URL
+    private var held = true
+
+    private init(directory: URL, owner: URL) {
+        self.directory = directory
+        self.owner = owner
+    }
+
+    static func acquire(root: URL, timeout: TimeInterval = 5) async throws -> NextDesktopMutationLock {
+        let fm = FileManager.default
+        let canonical = root.resolvingSymlinksInPath().standardizedFileURL
+        guard canonical.path == root.standardizedFileURL.path else {
+            throw ValidationError("Next runtime root is not canonical")
+        }
+        try fm.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let directory = root.appendingPathComponent(".desktop-mutation.lock")
+        let owner = directory.appendingPathComponent("owner-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            try Task.checkCancellation()
+            if Darwin.mkdir(directory.path, 0o700) == 0 {
+                let fd = Darwin.open(owner.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+                guard fd >= 0 else {
+                    _ = Darwin.rmdir(directory.path)
+                    throw ValidationError("Unable to initialize Next mutation lock")
+                }
+                let data = Data("\(getpid())\n".utf8)
+                let written = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+                let closeResult = Darwin.close(fd)
+                guard written == data.count, closeResult == 0 else {
+                    _ = Darwin.unlink(owner.path)
+                    _ = Darwin.rmdir(directory.path)
+                    throw ValidationError("Unable to write Next mutation lock owner")
+                }
+                return NextDesktopMutationLock(directory: directory, owner: owner)
+            }
+            guard errno == EEXIST, Date() < deadline else {
+                throw ValidationError("Next desktop mutation is busy or unavailable")
+            }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+    }
+
+    func release() {
+        guard held else { return }
+        held = false
+        // Remove only our unique owner and an empty directory, never another
+        // owner's files or an unknown lock shape.
+        if Darwin.unlink(owner.path) == 0 { _ = Darwin.rmdir(directory.path) }
+    }
+
+    deinit { release() }
 }

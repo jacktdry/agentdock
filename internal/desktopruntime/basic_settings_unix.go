@@ -106,6 +106,55 @@ func platformUpdateBasicSettings(ctx context.Context, root string, settings Basi
 	if running {
 		restartCore = func(ctx context.Context) error { return platformServiceAction(ctx, root, "restart") }
 	}
+	if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && oldOrigin != newOrigin {
+		snapshots, err := captureTunnelFiles(manifest.EnvironmentFile, manifest.TunnelEnvironment)
+		if err != nil {
+			return err
+		}
+		// Invalidate the old public address in the same bounded transaction.
+		// The launcher callback reacquires Desktop mutation only after we return.
+		for i := range changes {
+			if changes[i].path == manifest.EnvironmentFile {
+				updated, err := envstore.Parse(changes[i].updated)
+				if err != nil {
+					return err
+				}
+				if len(changes) > 1 {
+					delete(updated, "AGENTDOCK_SERVER_URL")
+					updated["AGENTDOCK_OAUTH_ENABLED"] = "false"
+				}
+				changes[i].updated = envstore.Marshal(updated)
+			}
+		}
+		return runTunnelTransactionLocked(ctx, root, snapshots, func(ctx context.Context) error {
+			if _, err := AdvanceTunnelGenerationLocked(root); err != nil {
+				return err
+			}
+			if len(changes) > 1 {
+				if err := removeQuickURL(root); err != nil {
+					return err
+				}
+			}
+			return replaceBasicEnvironments(ctx, changes, restartCore, restartTunnel)
+		}, func(ctx context.Context) error {
+			if _, err := AdvanceTunnelGenerationLocked(root); err != nil {
+				return err
+			}
+			if len(changes) > 1 {
+				if err := invalidateQuickTunnelUnixLocked(root); err != nil {
+					return err
+				}
+			}
+			for _, restart := range []func(context.Context) error{restartCore, restartTunnel} {
+				if restart != nil {
+					if err := restart(ctx); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+	}
 	return replaceBasicEnvironments(ctx, changes, restartCore, restartTunnel)
 }
 

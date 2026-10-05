@@ -28,7 +28,7 @@ func TestMacOSVariantIsolation(t *testing.T) {
 				t.Fatalf("logs %q: %v", logs, err)
 			}
 			if tc.marker == "next" {
-				manifest, _, err := loadUnixRuntime(want)
+				manifest, _, err := loadUnixRuntimeForExecutable(want, filepath.Join(home, "AgentDock Next.app/Contents/Helpers/agentdock"))
 				if err != nil || manifest.ServiceName != tc.label+".core" || manifest.TunnelServiceName != tc.label+".tunnel" || manifest.ServiceManager != "smappservice" {
 					t.Fatalf("Next manifest: %+v %v", manifest, err)
 				}

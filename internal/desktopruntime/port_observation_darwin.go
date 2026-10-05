@@ -13,6 +13,16 @@ import (
 )
 
 func darwinPortSelection(selection NextPortRuntime) bool {
+	// Bundled selection derives authority from its own signed helpers, without
+	// consulting an external manifest that could redirect those helpers.
+	executable, _ := os.Executable()
+	if canonical, err := filepath.EvalSymlinks(executable); err == nil {
+		executable = canonical
+	}
+	if darwinExecutableFromAppBundle(executable) {
+		manifest, err := explicitNextDarwinRuntimeForExecutable(selection.Root, executable)
+		return err == nil && portBinaryMatches(manifest.AgentDockBinary, selection.Binary)
+	}
 	// Read only the explicitly selected manifest; never use loadUnixRuntime's
 	// caller-executable or stable defaults and never query launchd.
 	data, err := os.ReadFile(filepath.Join(selection.Root, "desktop-runtime.json"))

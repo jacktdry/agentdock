@@ -28,6 +28,7 @@ struct AppPaths {
     var cloudflared: URL { appBundle.appendingPathComponent("Contents/Helpers/cloudflared") }
     var coreSkillBundle: URL { appBundle.appendingPathComponent("Contents/Resources/core-skills") }
     var appSupport: URL { home.appendingPathComponent("Library/Application Support/\(identity.name)") }
+    var desktopRuntimeManifest: URL { appSupport.appendingPathComponent("desktop-runtime.json") }
     var environment: URL { appSupport.appendingPathComponent("agentdock.env") }
     var tunnelEnvironment: URL { appSupport.appendingPathComponent("cloudflared.env") }
     var tunnelTokenStore: URL { appSupport.appendingPathComponent("cloudflare-tunnel-token") }

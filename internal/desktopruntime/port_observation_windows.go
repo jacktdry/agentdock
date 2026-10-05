@@ -6,39 +6,16 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
-	"path/filepath"
 	"unsafe"
 
-	"github.com/uvwt/agentdock/internal/updateengine"
 	"golang.org/x/sys/windows"
 )
 
 var portTCPTable = windows.NewLazySystemDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 
-func windowsPortSelection(selection NextPortRuntime) bool {
-	manifest, err := Load(filepath.Join(selection.Root, "runtime.json"))
-	if err != nil || !samePath(manifest.InstallRoot, selection.Root) {
-		return false
-	}
-	// Do not use ActiveCoreBinary: its legacy fallback must never prove Next
-	// ownership when an active generation is missing or unreadable.
-	store, err := updateengine.NewStore(selection.Root)
-	if err != nil {
-		return false
-	}
-	active, err := store.ReadActive()
-	if err != nil {
-		return false
-	}
-	layout, err := updateengine.NewWindowsLayout(selection.Root)
-	if err != nil {
-		return false
-	}
-	selected := layout.GenerationCore(active.ActiveVersion)
-	info, err := os.Stat(selected)
-	return err == nil && info.Mode().IsRegular() && samePath(selected, selection.Binary)
-}
+// Manifest has no stable/Next variant. An active generation proves a selected
+// binary, not Next authority; never enable ownership from this evidence alone.
+func windowsPortSelection(selection NextPortRuntime) bool { return false }
 
 func platformPortProcess(pid int) (string, string, error) {
 	if pid <= 0 {

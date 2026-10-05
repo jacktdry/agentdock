@@ -40,8 +40,8 @@ func TestPortWindowsRequiresSelectedActiveGeneration(t *testing.T) {
 	if err := store.WriteActive(updateengine.ActiveVersion{SchemaVersion: updateengine.SchemaVersion, ActiveVersion: "v0.9.0", State: updateengine.StateCommitted, UpdatedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	if !windowsPortSelection(request.Runtime) {
-		t.Fatal("selected generation rejected")
+	if windowsPortSelection(request.Runtime) {
+		t.Fatal("generation without explicit Next variant accepted")
 	}
 	request.Runtime.Binary = layout.CoreShim()
 	if windowsPortSelection(request.Runtime) {

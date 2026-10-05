@@ -552,3 +552,20 @@ func TestValidateAuthTreatsEmptyHostAsWildcard(t *testing.T) {
 		t.Fatalf("ValidateAuth() error = %v, want wildcard authentication error", err)
 	}
 }
+
+func TestValidateAuthQuickIntermediateAndPublishedOrigin(t *testing.T) {
+	t.Setenv("AGENTDOCK_OAUTH_PASSWORD", "strong-password")
+	t.Setenv("AGENTDOCK_OAUTH_TOKEN_SECRET", "0123456789abcdef0123456789abcdef")
+	pending := Config{Host: "127.0.0.1", OAuthEnabled: false}
+	if err := pending.ValidateAuth(); err != nil {
+		t.Fatal("Quick must boot before URL publication", err)
+	}
+	pending.OAuthEnabled = true
+	if err := pending.ValidateAuth(); err == nil {
+		t.Fatal("OAuth enabled before URL publication")
+	}
+	pending.OAuthServerURL = "https://fresh.trycloudflare.com"
+	if err := pending.ValidateAuth(); err != nil {
+		t.Fatal("published Quick OAuth invalid", err)
+	}
+}

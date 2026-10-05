@@ -58,6 +58,8 @@ struct ServiceControllerValidationTests {
         }
 
         try testAppIdentity(root: root)
+        try await testNextInstallerMutationLock(root: root)
+        try testNextInstallerManifestRollback(root: root)
         await testNextUpdateBoundary(root: root)
         try testConfiguredTunnelMode(root: root, appBundle: appBundle)
         try testLegacyRuntimeMigrationTransactions(root: root, appBundle: appBundle)

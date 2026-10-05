@@ -154,7 +154,7 @@ func TestPortPlatformSourcesDoNotUseCommandPrefixOrLegacyFallback(t *testing.T) 
 		}
 	}
 	for file, proofs := range map[string][]string{
-		"port_observation_windows.go":    {"GetExtendedTcpTable", "QueryFullProcessImageName", "GetProcessTimes", "store.ReadActive()", "layout.GenerationCore(active.ActiveVersion)", "classifyPortOwner"},
+		"port_observation_windows.go":    {"GetExtendedTcpTable", "QueryFullProcessImageName", "GetProcessTimes", "classifyPortOwner"},
 		"port_observation_darwin_cgo.go": {"proc_pidpath", "PROC_PIDTBSDINFO", "pbi_start_tvsec", "pbi_start_tvusec"},
 	} {
 		source, err := os.ReadFile(file)

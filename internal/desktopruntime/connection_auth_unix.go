@@ -113,10 +113,15 @@ func platformReadConnectionConfig(ctx context.Context, root string) (ConnectionC
 	default:
 		return ConnectionConfig{}, errConnectionUnavailable
 	}
+	generation, err := TunnelGeneration(root)
+	if err != nil {
+		return ConnectionConfig{}, errConnectionUnavailable
+	}
 	return ConnectionConfig{
 		CoreEndpoint: "http://" + net.JoinHostPort(host, strconv.Itoa(port)),
 		Port:         port, PublicOrigin: values["AGENTDOCK_SERVER_URL"], Mode: mode,
-		OAuthEnabled: strings.EqualFold(values["AGENTDOCK_OAUTH_ENABLED"], "true"),
+		OAuthEnabled:     strings.EqualFold(values["AGENTDOCK_OAUTH_ENABLED"], "true"),
+		TunnelGeneration: generation,
 	}, nil
 }
 

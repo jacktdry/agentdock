@@ -21,11 +21,21 @@ type ConnectionDependencies struct {
 	ReadPasswordState func(context.Context, string) desktopruntime.OAuthPasswordState
 	ReadPassword      func(context.Context, string) (string, desktopruntime.OAuthPasswordState)
 	Transport         http.RoundTripper
+	SelectRuntime     func(context.Context, string) (desktopruntime.NextConnectionRuntime, error)
+	ObservePort       func(context.Context, desktopruntime.PortObservationRequest) desktopruntime.PortObservation
+	PreflightPort     func(context.Context, desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error)
+	ReadBasic         func(context.Context, string) (desktopruntime.BasicSettings, error)
+	UpdateBasic       func(context.Context, string, desktopruntime.BasicSettings) error
 }
 
 func defaultConnectionDependencies() ConnectionDependencies {
 	return ConnectionDependencies{
 		ReadConfig:        desktopruntime.ReadConnectionConfig,
+		SelectRuntime:     desktopruntime.SelectNextConnectionRuntime,
+		ObservePort:       desktopruntime.ObservePort,
+		PreflightPort:     desktopruntime.PreflightPortMutation,
+		ReadBasic:         desktopruntime.ReadBasicSettings,
+		UpdateBasic:       desktopruntime.UpdateBasicSettings,
 		ReadPasswordState: desktopruntime.ReadOAuthPasswordState,
 		ReadPassword:      desktopruntime.ReadOAuthPassword,
 		// No environment proxy, cookie jar, auth middleware or client certificate.
@@ -44,6 +54,21 @@ func NewConnectionServiceWithDependencies(root string, deps ConnectionDependenci
 	if deps.ReadPasswordState != nil {
 		s.foundation.ReadPasswordState = deps.ReadPasswordState
 	}
+	if deps.SelectRuntime != nil {
+		s.foundation.SelectRuntime = deps.SelectRuntime
+	}
+	if deps.ObservePort != nil {
+		s.foundation.ObservePort = deps.ObservePort
+	}
+	if deps.PreflightPort != nil {
+		s.foundation.PreflightPort = deps.PreflightPort
+	}
+	if deps.ReadBasic != nil {
+		s.foundation.ReadBasic = deps.ReadBasic
+	}
+	if deps.UpdateBasic != nil {
+		s.foundation.UpdateBasic = deps.UpdateBasic
+	}
 	if deps.Transport != nil {
 		s.foundation.Transport = deps.Transport
 	}
@@ -51,6 +76,11 @@ func NewConnectionServiceWithDependencies(root string, deps ConnectionDependenci
 }
 
 type ConnectionSnapshot struct {
+	PortObservation    desktopruntime.PortObservation    `json:"portObservation"`
+	CoreRunning        *bool                             `json:"coreRunning"`
+	CoreHealth         string                            `json:"coreHealth"`
+	Tunnel             desktopruntime.TunnelObservation  `json:"tunnel"`
+	Operations         []OperationCapability             `json:"operations"`
 	LocalMCPURL        string                            `json:"localMCPURL,omitempty"`
 	PublicMCPURL       string                            `json:"publicMCPURL,omitempty"`
 	Port               int                               `json:"port"`
@@ -157,6 +187,14 @@ func (s *ConnectionService) Snapshot(ctx context.Context) ConnectionSnapshotResu
 		return ConnectionSnapshotResult{Error: err}
 	}
 	state := s.foundation.ReadPasswordState(ctx, s.runtimeRoot)
+	selected, selectionErr := s.foundation.SelectRuntime(ctx, s.runtimeRoot)
+	observation := s.observePort(ctx, c, revision, c.Port, selected, selectionErr)
+	tunnel := s.tunnelObservation(ctx, selectionErr)
+	tunnel.Generation = c.TunnelGeneration
+	if c.Mode == "named" {
+		tunnel.RemoteRoute = "manual_route_required"
+	}
+	operations := connectionOperations(c, selected, selectionErr, tunnel)
 	if !s.unchanged(ctx, revision) {
 		return ConnectionSnapshotResult{Error: connectionReadError()}
 	}
@@ -168,6 +206,8 @@ func (s *ConnectionService) Snapshot(ctx context.Context) ConnectionSnapshotResu
 		public += "/mcp"
 	}
 	return ConnectionSnapshotResult{Snapshot: ConnectionSnapshot{
+		PortObservation: observation, CoreRunning: selected.Running, CoreHealth: safeCoreHealth(selected.Health),
+		Tunnel: tunnel, Operations: operations,
 		LocalMCPURL: localMCPURL(c.CoreEndpoint, c.Port), PublicMCPURL: public,
 		Port: c.Port, Mode: c.Mode, OAuthEnabled: c.OAuthEnabled,
 		OAuthPasswordState: safePasswordState(state), ConfigRevision: revision, TunnelGeneration: c.TunnelGeneration,

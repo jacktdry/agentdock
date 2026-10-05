@@ -16,7 +16,7 @@ import (
 )
 
 func TestM4Manifest(t *testing.T) {
-	expected := map[Domain][]string{DomainConnection: {"status", "start", "stop", "restart", "regenerate"}, DomainSettings: {"read", "save"}, DomainUpdate: {"check"}, DomainDiagnostics: {"snapshot"}}
+	expected := map[Domain][]string{DomainConnection: {"snapshot", "preflightPort", "revealOAuthPassword", "testPublicEndpoint", "updatePort", "configureTunnel", "setTunnelAutostart", "start", "stop", "restart", "regenerate"}, DomainSettings: {"read", "save"}, DomainUpdate: {"check"}, DomainDiagnostics: {"snapshot"}}
 	for _, cap := range DefaultManifest().Capabilities {
 		names, ok := expected[cap.Domain]
 		if !ok {
@@ -26,12 +26,12 @@ func TestM4Manifest(t *testing.T) {
 			t.Fatalf("capability: %#v", cap)
 		}
 		for i, op := range cap.Operations {
-			mutating := op.Name == "save" || (cap.Domain == DomainConnection && op.Name != "status")
+			mutating := op.Name == "save" || (cap.Domain == DomainConnection && i >= 4)
 			want := AccessRead
 			if mutating {
 				want = AccessMutating
 			}
-			if op.Name != names[i] || op.Access != want || op.RequiresConfirmation != mutating {
+			if op.Name != names[i] || op.Access != want || op.RequiresConfirmation != (mutating && op.Name != "start" && op.Name != "setTunnelAutostart") {
 				t.Fatalf("operation: %#v", op)
 			}
 		}
@@ -57,7 +57,7 @@ func TestConnectionValidationAndSecretSafety(t *testing.T) {
 		return errors.New("SECRET")
 	}
 	for _, action := range []string{"invalid", "configure", "named", "launch", "autostart"} {
-		result := service.Action(context.Background(), action)
+		result := service.Action(context.Background(), action, "")
 		if result.Completed || result.Error == nil || result.Error.Category != ErrorCategoryValidation {
 			t.Fatalf("%s: %#v", action, result)
 		}
@@ -70,14 +70,14 @@ func TestConnectionValidationAndSecretSafety(t *testing.T) {
 		t.Fatalf("status: %#v", result)
 	}
 	for _, action := range []string{"start", "stop", "restart", "regenerate"} {
-		result := service.Action(context.Background(), action)
+		result := service.Action(context.Background(), action, "")
 		data, _ := json.Marshal(result)
 		if result.Completed || result.Error == nil || strings.Contains(string(data), "SECRET") {
 			t.Fatalf("unsafe result: %s", data)
 		}
 	}
 	service.run = func(context.Context, []string, io.Writer, io.Writer) error { return context.DeadlineExceeded }
-	if result := service.Action(context.Background(), "start"); result.Error.Category != ErrorCategoryTimeout {
+	if result := service.Action(context.Background(), "start", ""); result.Error.Category != ErrorCategoryUnavailable {
 		t.Fatal(result)
 	}
 	for _, raw := range []string{"https://example.com/?token=SECRET", "https://example.com/SECRET", "https://example.com/#SECRET", "http://example.com", "https://user:SECRET@example.com"} {
@@ -160,42 +160,15 @@ func TestM4SharedModelsContainOnlyAllowedFields(t *testing.T) {
 }
 
 func TestConnectionRegenerateRequiresQuickMode(t *testing.T) {
-	service := NewConnectionService(t.TempDir())
-	var actions []string
-	service.run = func(ctx context.Context, args []string, out, stderr io.Writer) error {
-		actions = append(actions, args[0])
-		switch args[0] {
-		case "status":
-			_, err := io.WriteString(out, "{\"mode\":\"named\",\"running\":true,\"ready\":true}")
-			return err
-		case "regenerate":
-			t.Fatal("regenerate adapter must not run outside quick mode")
-		}
-		return nil
+	service, c := integratedConnectionFixture(t)
+	c.Mode = "named"
+	result := service.Action(context.Background(), "regenerate", ConnectionConfigRevision(*c))
+	if result.Error == nil || result.Error.Code != "quick_only" {
+		t.Fatal(result)
 	}
-
-	result := service.Action(context.Background(), "regenerate")
-	if result.Completed || result.Error == nil || result.Error.Category != ErrorCategoryUnavailable {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	if !reflect.DeepEqual(actions, []string{"status"}) {
-		t.Fatalf("unexpected adapter calls: %#v", actions)
-	}
-
-	actions = nil
-	service.run = func(ctx context.Context, args []string, out, stderr io.Writer) error {
-		actions = append(actions, args[0])
-		if args[0] == "status" {
-			_, err := io.WriteString(out, "{\"mode\":\"quick\",\"running\":true,\"ready\":true}")
-			return err
-		}
-		return nil
-	}
-	result = service.Action(context.Background(), "regenerate")
-	if !result.Completed || result.Error != nil {
-		t.Fatalf("quick regenerate failed: %#v", result)
-	}
-	if !reflect.DeepEqual(actions, []string{"status", "regenerate"}) {
-		t.Fatalf("unexpected quick adapter calls: %#v", actions)
+	c.Mode = "quick"
+	result = service.Action(context.Background(), "regenerate", ConnectionConfigRevision(*c))
+	if !result.Completed || result.Phase != "waiting_readiness" {
+		t.Fatal(result)
 	}
 }
