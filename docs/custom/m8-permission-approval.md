@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: Core implementation in progress — admission, Desktop control authority and control-path protection complete
+> Status: Core implementation in progress — versioned Runtime / Shared Desktop API complete; Permission UI pending
 >
 > Date: 2026-10-05
 >
@@ -33,18 +33,38 @@ ACP continuation-specific `-race` coverage also passes. Full `go test ./... -cou
 
 The prior Runtime-management preparation in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go` is now part of committed checkpoint `832018c3`; there is no longer a classifier-only uncommitted slice. Handler-before/after tests prove the covered mutations are gated before dispatch and that success/failure/permission outcomes are reflected in the M5 execution journal.
 
-Current uncommitted next slice is the **versioned Runtime / Shared Desktop permission API** and must be preserved:
+## Runtime / Shared Desktop API checkpoint — 2026-10-05
 
-- `internal/app/runtime_permission_api.go`
-- `internal/runtimeapi/dispatch.go`
-- `internal/runtimeapi/runtime.go`
+Code checkpoint: `652331ed` (`feat(permission): complete versioned Desktop control API`).
+The three files preserved from handoff `d330ecd4` are now included in this completed checkpoint; no earlier Core checkpoint was redone.
 
-This slice currently contains the read-side Core projection for `GET /internal/runtime/permissions` and `GET /internal/runtime/approvals`, approval status/limit validation, plus Runtime interface preparation for Desktop-control permission mutations. It is **not a completed checkpoint yet**: the distinct Desktop-control mutation route group, strict request decoding, confirmation/mutation dispatch, conflict/error mapping, handler tests and Shared Desktop contract wiring still need to be completed before commit/closeout. Do not reset or discard these three working-tree files.
+- Registered direct-loopback permission/approval read routes with normal Runtime auth and bounded status/limit validation.
+- Added the separate Desktop-control POST route group. Ordinary MCP bearer, OAuth, Nexus/provider credentials and loopback alone cannot authorize mutations, including when normal Core auth is disabled. Normal Runtime/Nexus dispatch cannot enter these routes.
+- Mutation bodies are limited to 64 KiB, require a JSON object and exactly one value, and reject unknown fields recursively, including actor/credential fields and unknown policy fields.
+- Confirmation issuance and policy/approve-once/approve-workspace/reject dispatch use the existing Core authority. Challenge mismatch, expiry, replay and policy/approval CAS conflicts fail closed. Core retains `decided_by=desktop-control`; decisions never dispatch the original operation.
+- Core native IPC handles `permission.bootstrap` on the existing permissioned Unix socket / current-user Windows named pipe. The Go Desktop backend obtains the per-Core-start secret through that channel and sends it only on direct local HTTP control requests. No credential file, ordinary bearer fallback, frontend credential getter, automatic confirmation or automatic retry is added. Redirects and proxies are disabled in the permission client.
+- Registered `PermissionService`, advertised all eight `DomainPermission` v1 operations and generated Wails TypeScript service/state bindings. Policy and approval projections come from Core; UI capability metadata remains separate from authority.
+- HTTP mapping: authentication 401, validation 400, missing approval 404, challenge/revision/version conflicts 409, ineligible grant/permission denial 403, capacity 429, sanitized state failure 500. `APPROVAL_REQUIRED` returns 409 with allowlisted non-executed retry binding metadata.
 
-Still required before the Core step can be marked complete:
+Validation actually run on isolated temporary fixtures:
 
-- expose versioned Runtime / Shared Desktop permission operations;
-- then implement the Shared Desktop Permission UI and run the complete cross-platform / Next-only validation gates.
+- `TMPDIR=/private/tmp go test ./internal/permission ./internal/execution ./internal/runtimeapi ./internal/httpx ./internal/desktopapi ./internal/app ./cmd/agentdock ./internal/nexusbridge ./internal/tool/browser ./internal/tool/computer -count=1`: pass.
+- `TMPDIR=/private/tmp go test -race ./internal/permission ./internal/runtimeapi ./internal/httpx ./internal/desktopapi ./internal/app ./internal/execution -count=1`: pass.
+- `go vet` for the ten targeted packages and `git diff --check`: pass.
+- Regression covers handler-before/after, ordinary credentials with normal auth enabled/disabled, proxy rejection, strict nested bodies, missing/replayed/mismatched challenges, policy/approval conflicts, Core controlled-clock expiry plus HTTP expiry mapping, ineligible workspace grants, Core attribution and exact retry dispatch.
+- Real fixture Unix IPC bootstrap → Go permission service → HTTP control → Core mutation: pass; response projection omits both credentials and raw remote errors, and missing bootstrap fails closed.
+- Shared Desktop nested Go module tests, Wails beta.27 binding generation, frontend 48 tests / typecheck / production build: pass. Native linker emits inherited macOS deployment-target warnings.
+- Windows amd64 Core cross-build: pass; this is compile evidence, not native Windows runtime/UAT.
+
+Limits and next gate:
+
+- Current built-in classifiers do not set `WorkspaceRuleEligible`. The `approveWorkspace` API preserves the existing store eligibility checks and returns `APPROVAL_NOT_ELIGIBLE` for current built-in requests, even an in-workspace file edit. Do not broaden this eligibility just to enable a UI button; eligible synthetic store coverage remains in `internal/permission`.
+- Permission Profile / Approval Policy / effective permission / approval history UI is the next checkpoint. Reviewer remains `defer`.
+- This checkpoint does not claim full `go test ./...`, native permission UI UAT, Windows native IPC execution or live Next rollout. The known `packaging/macos/app-identity.sh` script inventory baseline remains separate.
+- An initial path-protection regression used macOS `/var` temporary paths and failed comparison against canonical `/private/var`. Re-running the final test set with canonical `/private/tmp` passed without changing product code or the inherited test.
+- Stable App/Core/state/registry and the live stable `mac-dev` control channel were not used. All HTTP/IPC resources created by regression fixtures are closed by test cleanup.
+
+Handoff maintenance: AgentDock Next task `tsk_9c4e5c21c4c24c53` records API completed / UI pending in `~/.agentdock-next/tasks`; the empty Next store required a dedicated task rather than editing stable tasks. Engineering Memory received an additive checkpoint note. Codebase Memory project `Users-wei-sideProject-agentdock-m8-permission-approval` was re-indexed (17,061 nodes / 80,082 edges), with an API ADR; four existing script/packaging files have partial parse coverage and intentional excluded paths remain reported.
 
 Stable AgentDock remains outside the M8 development target. Runtime validation continues on AgentDock Next only.
 

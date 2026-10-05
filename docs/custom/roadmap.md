@@ -415,10 +415,12 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - ✅ distinct per-Core-start Desktop control authority + exact one-time confirmation challenge：`dbf86e17`
 - ✅ permission/control-plane Host + WSL file/media path protection：`f2a6a70f`
 
-目前進行中：versioned Runtime / Shared Desktop `DomainPermission` API。工作樹刻意保留 `internal/app/runtime_permission_api.go`、`internal/runtimeapi/dispatch.go`、`internal/runtimeapi/runtime.go` 三個未提交檔案；目前只有 permission/approval read API 與 Desktop-control mutation interface preparation，尚未完成 mutation routes、strict decode、confirmation dispatch、conflict/error mapping 與完整 handler tests，**不可 reset，也不可視為完成 checkpoint**。
+2026-10-05 API checkpoint：`652331ed` 已完成 versioned Runtime / Shared Desktop `DomainPermission` v1 API，包含 distinct Desktop-control routes、64 KiB strict JSON、confirmation / policy / approval dispatch、revision/version conflict 與 sanitized error mapping。Native IPC bootstrap 讓 Go backend 持有 per-Core-start credential；前端只有 typed state/challenge metadata。交接的 3 個未提交檔案已納入此 checkpoint。Targeted Go tests、race、vet、Shared Desktop Go tests、48 frontend tests/typecheck/build、Windows Core cross-build、diff check 通過，未操作 stable runtime/state。
+
+目前內建 classifier 未標記 `WorkspaceRuleEligible`，`approveWorkspace` 對內建請求維持 fail closed；本 API checkpoint 不新增 grant eligibility，也不宣稱 Permission UI 或 live Next rollout 已完成。
 
 後續 gate：
-- versioned Runtime / Shared Desktop `DomainPermission` API；
+- ✅ versioned Runtime / Shared Desktop `DomainPermission` API：`652331ed`；
 - Shared Desktop Permission Profile / Approval Policy / effective permission / approval history UI；
 - Approval Reviewer 維持 `defer`，M8 不啟動自動 reviewer；
 - permission/race/vet、Browser/Computer hard-constraint、ACP/MCP/plugin/settings、Shared Desktop、i18n、macOS/Windows 與 AgentDock Next-only runtime smoke 全部通過後才 closeout。
