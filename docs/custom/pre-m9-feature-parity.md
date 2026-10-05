@@ -315,3 +315,142 @@ M9 closeout
 P12 duplicated native business UI deprecation
 ```
 
+## Parallel execution plan
+
+Pre-M9 可以大量並行，但不能跨過 dependency gate。原則是「先凍結 contract，再平行 implementation」，而不是一次啟動所有 domain。
+
+### Wave 0 — Audit / Design（可平行）
+
+第一波以 read-only / planning worker 為主：
+
+- **A — Feature parity inventory**：盤點 stable native → Next backend → Shared UI；
+- **B — UX / IA**：導航、分類、頁面層級、progressive disclosure、help / warning；
+- **C — Security / operator UX**：Permission、credentials、Tunnel、destructive actions；
+- **D — Technical architecture**：Desktop API / native adapter / Core contract / missing backend mapping。
+
+Round 1 可完全平行；之後由主 orchestrator 整合共識、分歧與遺漏，再做 targeted Round 2 challenge。**未完成圓桌收斂前，不開始 Shared UI implementation。**
+
+### Wave 1 — Connection foundation（部分平行）
+
+P1/P2 是同一個 dependency cluster：
+
+```text
+Port ownership
+  ↓
+Local MCP URL
+  ↓
+Tunnel origin
+  ↓
+Public URL
+  ↓
+Public MCP URL
+  ↓
+ChatGPT connector
+```
+
+可拆成三個 backend worker：
+
+- **Port / ownership**：reserved ports、occupancy、listener ownership、conflict、port-change atomicity；
+- **Connection/Auth API**：Local/Public MCP URL、OAuth password safe reveal、health/test；
+- **Tunnel backend**：Local/Quick/Named、token、autostart、Next-only Named Tunnel isolation、target synchronization。
+
+三者可平行，但 schema / mutation semantics 必須先由主 orchestrator 做 integration review 並 **contract freeze**；Connection UI 在 contract freeze 後再實作，避免多個 worker 各自發明 API。
+
+### Wave 2 — User connector gate（序列）
+
+P1/P2 完成並驗證後停止：
+
+1. AgentDock Next UI 顯示完整 Public MCP URL + OAuth password；
+2. Next Named Tunnel / port readiness 完成；
+3. **由使用者手動建立 `mac-dev-next` ChatGPT connector**；
+4. 驗證 stable `mac-dev` + `mac-dev-next` side-by-side。
+
+這個 gate 不可由 worker 自動跨越。
+
+### Wave 3 — Domain parity（高度可平行）
+
+`mac-dev-next` 建立後，可用獨立 worktree / branch 平行推進：
+
+- ACP Manager；
+- MCP Management；
+- Plugin Management；
+- Browser Broker UI；
+- Nexus / Platform Essentials。
+
+每個 domain 原則上自行完成：
+
+```text
+Desktop API
+→ store / service
+→ Vue components
+→ i18n
+→ tests
+```
+
+建議同時 active writing workers **3–4 個為上限**。再更多會因 `navigation`、Desktop API bindings、i18n、common components、styles/design tokens 等共享檔案產生 merge conflict，抵銷並行收益。
+
+Browser Broker 的風險與架構複雜度高於一般 CRUD domain，應獨立用較強 worker / review；不可和 ACP/MCP/Plugin 視為同等簡單的管理頁。
+
+### Wave 4 — Hardening side lane（可與 Wave 3 並行）
+
+以下不必等所有 UI parity 完成：
+
+- `app-identity.sh` governance debt；
+- Codebase Memory lifecycle bounded triage。
+
+兩者可在獨立 worktree 同步進行。CBM 只有被證明會阻塞 AgentDock install/update/release 時才進入 Pre-M9 fix scope。
+
+### Wave 5 — M9（序列 integration gate）
+
+必要 parity + P9 hardening 收斂並通過 integration review 後，才開始 M9 Release Migration。不要讓單一 domain worker自行提前修改 release pipeline。
+
+### Wave 6 — Release-native UAT（按平台平行）
+
+release candidate artifact 凍結後可平行：
+
+- macOS signed/update/rollback/recovery；
+- Windows native UAT；
+- WSL native UAT；
+- Linux helper native execution。
+
+平台驗證可並行，但共同 release blocker / version contract / artifact identity 由主 orchestrator 統一裁決。
+
+## Non-crossable gates
+
+以下三個 gate 不得用「平行化」繞過：
+
+1. **AI UX/IA roundtable → UI implementation**
+   先收斂 page / interaction contract，才開始各 domain UI。
+2. **P1/P2 → USER creates `mac-dev-next` → Next-native validation**
+   connector 由使用者建立；未建立前不可假裝 gate 已完成。
+3. **Required parity + hardening → M9 → release candidate → native UAT**
+   cross-build / source-tree smoke 不能當作 release-native acceptance。
+
+## Integration ownership
+
+平行 worker 不是獨立產品 owner。主 session / orchestrator 必須負責：
+
+- worktree / branch scope；
+- contract freeze；
+- shared-file serialization；
+- cross-domain navigation / design consistency；
+- merge / conflict resolution；
+- full Shared Desktop regression；
+- security / UX cross-review；
+- final acceptance。
+
+Worker 成功不等於 Pre-M9 step 完成。
+
+## New-session entrypoint
+
+新 session 接手時：
+
+1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
+2. 確認 branch / clean worktree / latest docs commit；
+3. **從 Wave 0 / P0 開始**，先做完整 parity inventory 與 AI UX/IA Design Workshop；
+4. 圓桌收斂後才建立 Wave 1 implementation tasks；
+5. P1/P2 完成時停下交給使用者建立 `mac-dev-next`；
+6. connector 驗證完成後才進 Wave 3 大量平行 parity implementation。
+
+除非 repo 文件已被後續 commit 明確 supersede，這個順序是 Pre-M9 的 source of truth。
+

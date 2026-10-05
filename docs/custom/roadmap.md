@@ -433,6 +433,8 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 重要：`mac-dev-next` **不等待全部 parity 完成**。Connection/Auth/Tunnel readiness 完成後就先建立 Next connector，讓後續 parity 開發可以直接透過獨立 Next control plane 驗證；stable 仍保留 production fallback，且不可作 Next development target。
 
+並行策略：Pre-M9 採 wave-based execution。Wave 0 的 parity inventory / UX-IA / Security UX / architecture mapping 可平行；Wave 1 的 port ownership、Connection/Auth API、Tunnel backend 可平行但需 contract freeze 後才做 UI；P1/P2 後由使用者手動建立 `mac-dev-next`；之後 ACP/MCP/Plugin/Browser/Nexus 可用獨立 worktree 以 3–4 個 writing workers 並行，`app-identity.sh` debt / CBM lifecycle triage 可走 side lane。M9 只能在必要 parity + hardening integration review 完成後啟動；release candidate 凍結後 macOS/Windows/WSL/Linux helper native UAT 才按平台平行。完整 gate / worktree / integration ownership 見 [Pre-M9 parallel execution plan](pre-m9-feature-parity.md#parallel-execution-plan)。
+
 ## M9 — Release Migration
 
 建立從 `custom/main` 的正式 cross-platform release pipeline。
