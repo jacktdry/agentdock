@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/execution"
 	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
@@ -626,6 +628,194 @@ func TestRuntimeManagementEntrypointsShareAdmissionBoundary(t *testing.T) {
 			t.Fatalf("evolution admission journal=%#v", call)
 		}
 	})
+}
+
+func TestACPProviderContinuationRequiresCoreAdmissionBeforeProviderResume(t *testing.T) {
+	t.Setenv("GO_OUTPUT_CONTRACT_ACP_PERMISSION", "1")
+	rt := newOutputContractACPRuntime(t, false)
+	t.Cleanup(func() { _ = rt.Close() })
+	principal := requestmeta.NewStableAuthPrincipal("static_bearer", "provider-continuation-test")
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), principal)
+
+	created, err := rt.Call(ctx, "acp_session", map[string]any{"action": "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, ok := created["session"].(acpruntime.SessionRecord)
+	if !ok || session.ID == "" {
+		t.Fatalf("created ACP session=%#v", created)
+	}
+	started, err := rt.Call(ctx, "acp_prompt", map[string]any{
+		"action": "start", "session_id": session.ID,
+		"prompt": []map[string]any{{"type": "text", "text": "request permission"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, _ := started["run_id"].(string)
+	if runID == "" {
+		t.Fatalf("prompt start=%#v", started)
+	}
+
+	var interaction acpruntime.Interaction
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		listed, listErr := rt.Call(ctx, "acp_interaction", map[string]any{
+			"action": "list", "session_id": session.ID, "pending_only": true,
+		})
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		var items []acpruntime.Interaction
+		if err := remarshal(listed["interactions"], &items); err != nil {
+			t.Fatal(err)
+		}
+		if len(items) == 1 {
+			interaction = items[0]
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if interaction.ID == "" {
+		t.Fatal("provider permission interaction did not become pending")
+	}
+	if len(interaction.Options) != 2 {
+		t.Fatalf("always option was not filtered: %#v", interaction.Options)
+	}
+
+	replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+		policy.GlobalMode = permission.Rules
+	})
+	respondArgs := map[string]any{
+		"action": "respond", "interaction_id": interaction.ID,
+		"response": map[string]any{"option_id": "reject-once"},
+	}
+	result, err := rt.Call(ctx, "acp_interaction", respondArgs)
+	if result != nil {
+		t.Fatalf("approval-required provider continuation result=%#v", result)
+	}
+	toolErr := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	approvalID, _ := toolErr.Details["approval_id"].(string)
+	version := permissionDetailUint64(t, toolErr.Details, "approval_version")
+	revision := permissionDetailUint64(t, toolErr.Details, "policy_revision")
+	record, err := rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Tool != "acp_provider_continuation" || record.Action != "select" ||
+		record.Binding.Source != "acp_bridge" || record.Scope != "AgentDock ACP provider continuation" ||
+		record.Status != permission.Pending {
+		t.Fatalf("provider continuation approval=%#v", record)
+	}
+
+	listed, err := rt.Call(ctx, "acp_interaction", map[string]any{
+		"action": "list", "session_id": session.ID, "pending_only": true,
+	})
+	if err != nil {
+		t.Fatalf("rules-mode interaction list should remain read-only: %v", err)
+	}
+	var stillPending []acpruntime.Interaction
+	if err := remarshal(listed["interactions"], &stillPending); err != nil {
+		t.Fatal(err)
+	}
+	if len(stillPending) != 1 || stillPending[0].ID != interaction.ID || stillPending[0].Status != acpruntime.InteractionPending {
+		t.Fatalf("provider resumed before approval: %#v", stillPending)
+	}
+	events, err := rt.Call(ctx, "acp_prompt", map[string]any{"action": "events", "run_id": runID})
+	if err != nil {
+		t.Fatalf("rules-mode prompt events should remain read-only: %v", err)
+	}
+	if events["status"] != acpruntime.RunRunning {
+		t.Fatalf("provider run status before approval=%#v", events)
+	}
+
+	if _, err := rt.permissions.ApproveOnce(context.Background(), permission.Mutation{
+		ApprovalID: approvalID, ApprovalVersion: version, PolicyRevision: revision, Actor: "test-desktop-control",
+	}); err != nil {
+		t.Fatalf("ApproveOnce: %v", err)
+	}
+
+	if finish, differentErr := rt.admitHostOperation(ctx, permission.HostOperation{
+		Tool: "acp_provider_continuation", Action: "select", Source: "acp_bridge",
+		SessionID: session.ID, ProfileID: "output-contract-helper", WorkspaceRoot: session.CWD,
+		Payload: map[string]any{
+			"interaction_id": "different-interaction",
+			"option_id":      "reject-once",
+			"tool_call":      map[string]any{"toolCallId": "tool-1", "title": "write file", "kind": "edit"},
+		},
+	}); finish != nil || differentErr == nil {
+		t.Fatalf("different interaction consumed exact grant: finish=%v err=%v", finish != nil, differentErr)
+	} else {
+		requirePermissionError(t, differentErr, "APPROVAL_REQUIRED")
+	}
+	original, err := rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if original.Status != permission.ApprovedOnce || original.RetryCallID != "" {
+		t.Fatalf("different interaction consumed original approval=%#v", original)
+	}
+
+	otherCtx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("static_bearer", "other-provider-continuation-test"))
+	if otherResult, otherErr := rt.Call(otherCtx, "acp_interaction", respondArgs); otherResult != nil || otherErr == nil {
+		t.Fatalf("different principal resumed provider: result=%#v err=%v", otherResult, otherErr)
+	} else {
+		requirePermissionError(t, otherErr, "APPROVAL_REQUIRED")
+	}
+	original, err = rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if original.Status != permission.ApprovedOnce || original.RetryCallID != "" {
+		t.Fatalf("different principal consumed original approval=%#v", original)
+	}
+
+	result, err = rt.Call(ctx, "acp_interaction", respondArgs)
+	if err != nil {
+		t.Fatalf("same-principal provider continuation retry failed: %v", err)
+	}
+	if result["responded"] != true {
+		t.Fatalf("provider continuation retry result=%#v", result)
+	}
+	record, err = rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != permission.Consumed || record.DispatchOutcome != permission.Succeeded || record.RetryCallID == "" {
+		t.Fatalf("consumed provider continuation approval=%#v", record)
+	}
+
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		events, err = rt.Call(ctx, "acp_prompt", map[string]any{"action": "events", "run_id": runID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if events["status"] == acpruntime.RunCompleted {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if events["status"] != acpruntime.RunCompleted {
+		t.Fatalf("provider did not resume after approved retry: %#v", events)
+	}
+
+	snapshot := rt.execution.Snapshot()
+	failedAdmission, completedAdmission := false, false
+	for _, call := range snapshot.Calls {
+		if call.Tool != "acp_provider_continuation" {
+			continue
+		}
+		if call.Status == execution.StatusFailed && call.ErrorCode == "APPROVAL_REQUIRED" && call.ErrorCategory == "permission" {
+			failedAdmission = true
+		}
+		if call.Status == execution.StatusCompleted && call.ErrorCode == "" {
+			completedAdmission = true
+		}
+	}
+	if !failedAdmission || !completedAdmission {
+		t.Fatalf("provider continuation journal failed=%v completed=%v calls=%#v", failedAdmission, completedAdmission, snapshot.Calls)
+	}
 }
 
 func permissionDetailUint64(t *testing.T, details map[string]any, key string) uint64 {

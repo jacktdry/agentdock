@@ -496,7 +496,7 @@ func localSessionTitle(manager *acpruntime.Manager, sessionID string) string {
 	return strings.TrimSpace(session.Title)
 }
 
-func (s *Service) Interaction(_ context.Context, request InteractionRequest) (response Result, returnErr error) {
+func (s *Service) Interaction(ctx context.Context, request InteractionRequest) (response Result, returnErr error) {
 	manager, profileID, err := s.managerFor(request.ProfileID)
 	if err != nil {
 		return nil, err
@@ -526,7 +526,7 @@ func (s *Service) Interaction(_ context.Context, request InteractionRequest) (re
 		if cancelled == (optionID != "") {
 			return nil, validationError("ACP_INTERACTION_RESPONSE_INVALID", "provide exactly one of response.option_id or response.action=cancel", nil)
 		}
-		interaction, err := manager.RespondInteraction(request.InteractionID, optionID, cancelled)
+		interaction, err := manager.RespondInteraction(ctx, request.InteractionID, optionID, cancelled)
 		if err != nil {
 			return nil, acpToolError(err)
 		}

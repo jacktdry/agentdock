@@ -214,6 +214,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	if cfg.ACPEnabled {
 		managers := make(map[string]*acpruntime.Manager)
 		for _, profile := range cfg.EffectiveACPProfiles() {
+			profile := profile
 			acpEnvironment := make(map[string]string, len(profile.EnvFromEnv))
 			for childName, hostName := range profile.EnvFromEnv {
 				value, exists := os.LookupEnv(hostName)
@@ -243,6 +244,25 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 				MaxConcurrentRuns:  cfg.ACPMaxPrompts,
 				InteractionTimeout: time.Duration(cfg.ACPInteractionMS) * time.Millisecond,
 				SessionMCPProvider: sessionMCP,
+				PermissionContinuationAdmission: func(ctx context.Context, continuation acpruntime.PermissionContinuation) (acpruntime.PermissionContinuationFinish, error) {
+					finish, admissionErr := runtime.admitHostOperation(ctx, permission.HostOperation{
+						Tool:          "acp_provider_continuation",
+						Action:        "select",
+						Source:        "acp_bridge",
+						SessionID:     continuation.SessionID,
+						ProfileID:     profile.ID,
+						WorkspaceRoot: continuation.WorkspaceRoot,
+						Payload: map[string]any{
+							"interaction_id": continuation.InteractionID,
+							"option_id":      continuation.OptionID,
+							"tool_call":      continuation.ToolCall,
+						},
+					})
+					if admissionErr != nil {
+						return nil, admissionErr
+					}
+					return acpruntime.PermissionContinuationFinish(finish), nil
+				},
 			})
 			if err != nil {
 				_ = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers).Close()

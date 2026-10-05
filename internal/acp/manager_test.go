@@ -70,11 +70,11 @@ func TestManagerPromptEventsPermissionAndPersistence(t *testing.T) {
 		_ = manager.Close()
 		t.Fatalf("policy did not filter always option: %#v", permission.Options)
 	}
-	if _, err := manager.RespondInteraction(permission.ID, "allow-always", false); err == nil {
+	if _, err := manager.RespondInteraction(context.Background(), permission.ID, "allow-always", false); err == nil {
 		_ = manager.Close()
 		t.Fatal("always option was accepted")
 	}
-	if _, err := manager.RespondInteraction(permission.ID, "allow-once", false); err != nil {
+	if _, err := manager.RespondInteraction(context.Background(), permission.ID, "allow-once", false); err != nil {
 		_ = manager.Close()
 		t.Fatal(err)
 	}
@@ -609,6 +609,9 @@ func newTestManagerWithAgent(home, workspace, agentInfoName, agentVersion, promp
 			},
 		},
 		MaxConcurrentRuns: 2, InteractionTimeout: 3 * time.Second,
+		PermissionContinuationAdmission: func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error) {
+			return func(error) {}, nil
+		},
 	})
 }
 

@@ -47,7 +47,10 @@ func (m *Manager) InspectInteraction(id string) (Interaction, error) {
 	return result, nil
 }
 
-func (m *Manager) RespondInteraction(id, optionID string, cancelled bool) (Interaction, error) {
+func (m *Manager) RespondInteraction(ctx context.Context, id, optionID string, cancelled bool) (Interaction, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	m.mu.Lock()
 	interaction := m.interactions[id]
 	if interaction == nil {
@@ -72,6 +75,43 @@ func (m *Manager) RespondInteraction(id, optionID string, cancelled bool) (Inter
 			return Interaction{}, newError("ACP_PERMISSION_OPTION_INVALID", "permission option is not offered by the agent policy", false, map[string]any{"interaction_id": id, "option_id": optionID}, nil)
 		}
 	}
+	var finish PermissionContinuationFinish
+	if !cancelled {
+		admit := m.opts.PermissionContinuationAdmission
+		if admit == nil {
+			m.mu.Unlock()
+			return Interaction{}, newError("ACP_PERMISSION_ADMISSION_UNAVAILABLE", "ACP permission continuation admission is unavailable", false, map[string]any{"interaction_id": id}, nil)
+		}
+		session := m.sessions[interaction.SessionID]
+		continuation := PermissionContinuation{
+			InteractionID: id, SessionID: interaction.SessionID, WorkspaceRoot: session.CWD,
+			OptionID: optionID, ToolCall: cloneMap(interaction.ToolCall),
+		}
+		m.mu.Unlock()
+		var err error
+		finish, err = admit(ctx, continuation)
+		if err != nil {
+			return Interaction{}, err
+		}
+		m.mu.Lock()
+		interaction = m.interactions[id]
+		if interaction == nil {
+			m.mu.Unlock()
+			if finish != nil {
+				finish(newError("ACP_INTERACTION_NOT_FOUND", "ACP interaction was not found", false, map[string]any{"interaction_id": id}, nil))
+			}
+			return Interaction{}, newError("ACP_INTERACTION_NOT_FOUND", "ACP interaction was not found", false, map[string]any{"interaction_id": id}, nil)
+		}
+		if interaction.Status != InteractionPending {
+			result := interaction.public()
+			m.mu.Unlock()
+			err := newError("ACP_INTERACTION_SETTLED", "ACP interaction is no longer pending", false, map[string]any{"interaction_id": id, "status": interaction.Status}, nil)
+			if finish != nil {
+				finish(err)
+			}
+			return result, err
+		}
+	}
 	response := interactionResponse{optionID: optionID, cancelled: cancelled}
 	select {
 	case interaction.respond <- response:
@@ -82,11 +122,18 @@ func (m *Manager) RespondInteraction(id, optionID string, cancelled bool) (Inter
 		}
 		result := interaction.public()
 		m.mu.Unlock()
+		if finish != nil {
+			finish(nil)
+		}
 		return result, nil
 	default:
 		result := interaction.public()
 		m.mu.Unlock()
-		return result, newError("ACP_INTERACTION_SETTLED", "ACP interaction response channel is already settled", false, map[string]any{"interaction_id": id}, nil)
+		err := newError("ACP_INTERACTION_SETTLED", "ACP interaction response channel is already settled", false, map[string]any{"interaction_id": id}, nil)
+		if finish != nil {
+			finish(err)
+		}
+		return result, err
 	}
 }
 

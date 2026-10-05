@@ -49,13 +49,34 @@ type SessionMCPProvider interface {
 	ReleaseSession(context.Context, string) error
 }
 
+// PermissionContinuation is the Core-owned view of a provider-side
+// session/request_permission option selection. Provider labels/kinds are not
+// authorization facts; any non-cancel option is opaque continuation until the
+// injected admission hook permits it.
+type PermissionContinuation struct {
+	InteractionID string
+	SessionID     string
+	WorkspaceRoot string
+	OptionID      string
+	ToolCall      map[string]any
+}
+
+// PermissionContinuationFinish settles the host admission record after the
+// provider continuation is actually handed back to the ACP request.
+type PermissionContinuationFinish func(error)
+
+// PermissionContinuationAdmission is injected by AgentDock Core. A nil hook
+// fails closed for non-cancel provider continuation.
+type PermissionContinuationAdmission func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error)
+
 type Options struct {
-	Home               string
-	DefaultCWD         string
-	Agent              AgentSpec
-	MaxConcurrentRuns  int
-	InteractionTimeout time.Duration
-	SessionMCPProvider SessionMCPProvider
+	Home                            string
+	DefaultCWD                      string
+	Agent                           AgentSpec
+	MaxConcurrentRuns               int
+	InteractionTimeout              time.Duration
+	SessionMCPProvider              SessionMCPProvider
+	PermissionContinuationAdmission PermissionContinuationAdmission
 }
 
 type Error struct {

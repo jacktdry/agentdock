@@ -241,13 +241,58 @@ func (r *Runtime) runtimePermissionFacts(ctx context.Context, name, action strin
 		facts.Other = false
 		facts.OneShotEligible = true
 		facts.Reason = "dynamic MCP management changes Core/provider state"
-	case "acp_session", "acp_prompt", "acp_interaction":
+	case "acp_session":
 		facts.EffectsKnown = false
 		facts.ReadOnly = false
 		facts.OpaqueProviderExecution = true
 		facts.Other = true
 		facts.OneShotEligible = true
-		facts.Reason = "ACP provider continuation can have opaque downstream effects"
+		facts.Reason = "ACP session operation can have opaque provider effects"
+	case "acp_prompt":
+		switch action {
+		case "events":
+			facts.EffectsKnown = true
+			facts.ReadOnly = true
+			facts.Other = false
+			facts.Reason = "ACP prompt event inspection is read-only"
+		case "cancel":
+			facts.EffectsKnown = true
+			facts.ReadOnly = true
+			facts.Other = false
+			facts.Reason = "ACP prompt cancellation only reduces outstanding provider work"
+		default:
+			facts.EffectsKnown = false
+			facts.ReadOnly = false
+			facts.OpaqueProviderExecution = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "ACP prompt continuation can have opaque provider effects"
+		}
+	case "acp_interaction":
+		switch action {
+		case "list":
+			facts.EffectsKnown = true
+			facts.ReadOnly = true
+			facts.Other = false
+			facts.Reason = "ACP interaction inspection is read-only"
+		case "respond":
+			// The outer Runtime.Call only reaches the Manager boundary. Cancellation
+			// is intrinsically safe, while every provider option selection is
+			// separately admitted immediately before the response resumes the
+			// provider. Treating this wrapper as opaque would require two approvals
+			// for the same continuation and consume the one-shot grant too early.
+			facts.EffectsKnown = true
+			facts.ReadOnly = true
+			facts.Other = false
+			facts.Reason = "ACP interaction response is a Core-controlled wrapper around separately admitted provider continuation"
+		default:
+			facts.EffectsKnown = false
+			facts.ReadOnly = false
+			facts.OpaqueProviderExecution = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "ACP interaction operation is not classified"
+		}
 	}
 
 	return facts
@@ -340,7 +385,7 @@ func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOper
 		Audit: permission.AuditBinding{CallID: call.ID, ParentCallID: call.ParentCallID},
 		Facts: facts, Prepared: prepared,
 		Summary: permissionDisplaySummary(tool, action),
-		Scope:   hostOperationScope(source),
+		Scope:   hostOperationScope(source, tool),
 	})
 	if err != nil {
 		callErr := err
@@ -522,6 +567,13 @@ func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOper
 		facts.Other = true
 		facts.OneShotEligible = true
 		facts.Reason = "runtime evolution proposal mutates durable evolution state"
+	case "acp_provider_continuation":
+		facts.EffectsKnown = false
+		facts.ReadOnly = false
+		facts.OpaqueProviderExecution = true
+		facts.Other = true
+		facts.OneShotEligible = true
+		facts.Reason = "ACP permission option selection resumes opaque provider execution"
 	default:
 		facts.EffectsKnown = false
 		facts.Other = true
@@ -577,7 +629,10 @@ func computerObservationIsCoreReadOnly(payload any) bool {
 	}
 }
 
-func hostOperationScope(source string) string {
+func hostOperationScope(source, tool string) string {
+	if strings.TrimSpace(tool) == "acp_provider_continuation" {
+		return "AgentDock ACP provider continuation"
+	}
 	if strings.TrimSpace(source) == "acp_bridge" {
 		return "AgentDock ACP host capability"
 	}
