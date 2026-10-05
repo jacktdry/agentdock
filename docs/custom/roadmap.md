@@ -399,7 +399,7 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 ## M8 — Permission / Approval
 
-狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、`Runtime.Call` admission、MCP/Nexus/ACP principal binding 與 ACP Browser/Computer host-capability gate 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
+狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、`Runtime.Call` admission、MCP/Nexus/ACP principal binding、ACP Browser/Computer host-capability gate 與 Runtime management admission 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
 
 目前完成：
 - ✅ M5 execution identity prerequisite：`cbdabeef`
@@ -410,11 +410,11 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - ✅ stable opaque MCP authorization principals：`4c1c9274`
 - ✅ Nexus / ACP capability principal propagation：`c8c10053`
 - ✅ ACP Browser / Computer host-capability admission：`ef9c29ce`
+- ✅ Runtime insertion / task / MCP / evolution management admission + handler-before/after / M5 journal truthfulness：`832018c3`
 
-目前進行中：Runtime management mutations 的 shared admission wiring。工作樹目前只有 classifier/source preparation，尚未視為完成 checkpoint。
+目前進行中：關閉 ACP provider-continuation 與 permissive `requestPermission` 可繞過正常 `Runtime.Call` 的路徑。
 
 後續 gate：
-- Runtime management handler-before/after + M5 journal truthfulness；
 - ACP provider-continuation / permissive `requestPermission` bypass closure；
 - distinct Desktop control authority + one-time confirmation challenge；
 - permission/control-plane file-path protection；

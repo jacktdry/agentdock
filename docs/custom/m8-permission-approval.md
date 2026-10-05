@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: Core implementation in progress — evaluator/state/Runtime/ACP host admission checkpoints complete
+> Status: Core implementation in progress — evaluator/state/Runtime/ACP host/Runtime-management admission checkpoints complete
 >
 > Date: 2026-10-05
 >
@@ -23,14 +23,14 @@ M8 is now past the contract-only stage. The current branch has the following rev
 - `4c1c9274` — bound normal MCP authorization to stable opaque principals: configured static bearer credentials use a domain-separated fingerprint and OAuth uses the authenticated client/grant identity, remaining stable across access-token refresh without persisting raw credentials.
 - `c8c10053` — propagated Core-owned opaque principals through Nexus and the ACP Browser / Computer capability transports. Capability-token rotation does not become authorization identity.
 - `ef9c29ce` — gated ACP Browser / Computer host capabilities through the same Core admission boundary while preserving their independent ownership, foreground, routing and provider constraints.
+- `832018c3` — wired Runtime insertion/task/MCP/evolution mutations through the same `AdmissionGate`. Input validation/normalization happens before admission, Ask/Deny never reaches the underlying mutation handler, allow/error dispatch settles the M5 child call truthfully, and authenticated Runtime API callers now preserve the same stable opaque principal used by normal Core admission. Runtime MCP list/inspect remain explicit read-only exceptions.
 
 Current targeted regression is green for `internal/permission`, `internal/execution`, `internal/app`, `internal/httpx/requestmeta`, `internal/httpx`, `internal/nexusbridge`, `internal/tool/browser`, and `internal/tool/computer`. `go test ... -count=1`, `go vet ...` and `git diff --check` pass for that set.
 
-The current uncommitted next slice is only **Runtime management admission preparation** in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go`. It adds source-aware host-operation classification for insertion/task/MCP/evolution mutations but has **not** yet wired those management entrypoints. It must not be treated as a completed checkpoint until handler-before/after tests prove dispatch is actually gated.
+The prior Runtime-management preparation in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go` is now part of committed checkpoint `832018c3`; there is no longer a classifier-only uncommitted slice. Handler-before/after tests prove the covered mutations are gated before dispatch and that success/failure/permission outcomes are reflected in the M5 execution journal.
 
 Still required before the Core step can be marked complete:
 
-- wire every covered Runtime management mutation through `AdmissionGate`;
 - close remaining ACP provider-continuation / permissive `requestPermission` paths that can bypass normal `Runtime.Call`;
 - implement the distinct Desktop control authority and confirmation challenge for permission mutations;
 - protect permission/control credential paths from normal AgentDock file APIs;
