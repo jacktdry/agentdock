@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: Core implementation in progress — evaluator/state/Runtime/ACP host/Runtime-management/provider-continuation admission checkpoints complete
+> Status: Core implementation in progress — admission checkpoints and Desktop control authority complete
 >
 > Date: 2026-10-05
 >
@@ -25,6 +25,7 @@ M8 is now past the contract-only stage. The current branch has the following rev
 - `ef9c29ce` — gated ACP Browser / Computer host capabilities through the same Core admission boundary while preserving their independent ownership, foreground, routing and provider constraints.
 - `832018c3` — wired Runtime insertion/task/MCP/evolution mutations through the same `AdmissionGate`. Input validation/normalization happens before admission, Ask/Deny never reaches the underlying mutation handler, allow/error dispatch settles the M5 child call truthfully, and authenticated Runtime API callers now preserve the same stable opaque principal used by normal Core admission. Runtime MCP list/inspect remain explicit read-only exceptions.
 - `8e469fe0` — closed the ACP provider-continuation / permissive `session/request_permission` bypass. Any provider `option_id` selection now passes an injected Core continuation gate inside `acp.Manager` immediately before the response can resume the provider; a missing hook fails closed. Core cancellation bypasses the gate, while provider-supplied labels/kinds such as `reject_once` are not trusted as cancellation. One-shot matching is bound to principal + ACP session/profile + exact interaction ID + option/tool-call fingerprint, and the outer `acp_interaction respond` wrapper no longer consumes a separate approval before the nested continuation gate.
+- `dbf86e17` — added the distinct process-local Desktop control authority. Every Core start generates a fresh credential; normal MCP credentials cannot authenticate it. Permission mutations require an exact bounded one-time confirmation challenge bound to mutation kind, approval id/version, expected policy revision and normalized payload fingerprint. Mismatch/expiry/replay fail closed, concurrent consumption is at-most-once, and Core supplies `decided_by=desktop-control` instead of accepting an actor from request data.
 
 Current targeted regression is green for `internal/permission`, `internal/execution`, `internal/app`, `internal/httpx/requestmeta`, `internal/httpx`, `internal/nexusbridge`, `internal/tool/browser`, and `internal/tool/computer`. `go test ... -count=1`, `go vet ...` and `git diff --check` pass for that set.
 ACP continuation-specific `-race` coverage also passes. Full `go test ./... -count=1` passes every package except the pre-existing script-governance inventory failure for `packaging/macos/app-identity.sh`, unchanged from the prior M8 baseline.
@@ -33,7 +34,6 @@ The prior Runtime-management preparation in `internal/app/runtime_permission.go`
 
 Still required before the Core step can be marked complete:
 
-- implement the distinct Desktop control authority and confirmation challenge for permission mutations;
 - protect permission/control credential paths from normal AgentDock file APIs;
 - expose versioned Runtime / Shared Desktop permission operations;
 - then implement the Shared Desktop Permission UI and run the complete cross-platform / Next-only validation gates.
