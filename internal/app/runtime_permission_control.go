@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 
 	"github.com/uvwt/agentdock/internal/permission"
 )
@@ -14,6 +17,10 @@ func (r *Runtime) DesktopPermissionControlCredential() string {
 		return ""
 	}
 	return r.permissionCtl.Credential()
+}
+
+func (r *Runtime) AuthenticateDesktopPermissionControl(credential string) bool {
+	return r != nil && r.permissionCtl != nil && r.permissionCtl.Authenticate(credential)
 }
 
 func (r *Runtime) BeginPermissionConfirmation(credential string, request permission.ControlMutationRequest) (permission.ConfirmationChallenge, error) {
@@ -76,4 +83,32 @@ func desktopPermissionMutation(request permission.ControlMutationRequest) permis
 		PolicyRevision:  request.PolicyRevision,
 		Actor:           permission.DesktopControlActor,
 	}
+}
+
+// DesktopPermissionBootstrap is reachable only from the permissioned native IPC
+// listener. Never forward this through HTTP, MCP, Nexus or frontend bindings.
+func (r *Runtime) DesktopPermissionBootstrap(params []byte) (Result, error) {
+	if len(params) > 1024 {
+		return nil, permission.ErrControlMutation
+	}
+	if len(params) != 0 {
+		if !bytes.HasPrefix(bytes.TrimSpace(params), []byte("{")) {
+			return nil, permission.ErrControlMutation
+		}
+		decoder := json.NewDecoder(bytes.NewReader(params))
+		decoder.DisallowUnknownFields()
+		var empty struct{}
+		if err := decoder.Decode(&empty); err != nil {
+			return nil, permission.ErrControlMutation
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			return nil, permission.ErrControlMutation
+		}
+	}
+	credential := r.DesktopPermissionControlCredential()
+	if credential == "" {
+		return nil, permission.ErrControlUnauthorized
+	}
+	return Result{"credential": credential}, nil
 }

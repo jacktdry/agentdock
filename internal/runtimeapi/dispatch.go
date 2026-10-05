@@ -11,6 +11,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 // MethodAllowed 返回指定 Runtime API 路径允许当前方法与否。
@@ -104,6 +105,24 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 			return nil, err
 		}
 		result, err := executionRuntime.RuntimeInsertionManage(ctx, args)
+		return map[string]any(result), err
+	case path == "/internal/runtime/permissions":
+		permissionRuntime, ok := runtime.(PermissionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "PERMISSION_UNSUPPORTED", Message: "runtime does not support permission state", Category: "not_found"}
+		}
+		result, err := permissionRuntime.RuntimePermissions()
+		return map[string]any(result), err
+	case path == "/internal/runtime/approvals":
+		permissionRuntime, ok := runtime.(PermissionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "PERMISSION_UNSUPPORTED", Message: "runtime does not support permission approvals", Category: "not_found"}
+		}
+		limit, err := parseRuntimeApprovalLimit(request.queryValue("limit"))
+		if err != nil {
+			return nil, err
+		}
+		result, err := permissionRuntime.RuntimeApprovals(request.queryValue("approval_id"), request.queryValue("status"), limit)
 		return map[string]any(result), err
 	case path == "/internal/runtime/capabilities":
 		refresh := strings.EqualFold(request.queryValue("refresh"), "true") || method == http.MethodPost
@@ -426,6 +445,21 @@ func parseRuntimeActivityLimit(raw string) (int, error) {
 		return 0, &app.ToolError{
 			Code: "INVALID_ACTIVITY_LIMIT", Message: "limit must be an integer between 1 and 500", Category: "validation",
 			Details: map[string]any{"limit": raw, "minimum": 1, "maximum": 500},
+		}
+	}
+	return limit, nil
+}
+
+func parseRuntimeApprovalLimit(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 200, nil
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > permission.MaxHistory {
+		return 0, &app.ToolError{
+			Code: "INVALID_APPROVAL_LIMIT", Message: "limit must be an integer between 1 and 512", Category: "validation",
+			Details: map[string]any{"limit": raw, "minimum": 1, "maximum": permission.MaxHistory},
 		}
 	}
 	return limit, nil

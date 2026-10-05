@@ -65,7 +65,6 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 	}
 	for _, domain := range []Domain{
 		DomainBrowser,
-		DomainPermission,
 		DomainMCP,
 		DomainPlugin,
 	} {

@@ -149,6 +149,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	go func() { done <- httpx.Serve(serviceCtx, server, runtime, cfg) }()
 	go func() {
 		done <- desktopcontrol.Serve(serviceCtx, runtimeRoot, func(controlCtx context.Context, request desktopcontrol.Request) (any, error) {
+			if request.Method == "permission.bootstrap" {
+				return runtime.DesktopPermissionBootstrap(request.Params)
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,

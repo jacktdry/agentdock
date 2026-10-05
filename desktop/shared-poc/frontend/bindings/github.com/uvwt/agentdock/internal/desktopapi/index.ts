@@ -6,6 +6,7 @@ import * as BasicSettingsService from "./basicsettingsservice.js";
 import * as ConnectionService from "./connectionservice.js";
 import * as ContractService from "./contractservice.js";
 import * as DiagnosticsService from "./diagnosticsservice.js";
+import * as PermissionService from "./permissionservice.js";
 import * as RuntimeService from "./runtimeservice.js";
 import * as UpdateService from "./updateservice.js";
 export {
@@ -14,6 +15,7 @@ export {
     ConnectionService,
     ContractService,
     DiagnosticsService,
+    PermissionService,
     RuntimeService,
     UpdateService
 };
@@ -53,6 +55,7 @@ export type {
     NegotiationRequest,
     NegotiationResult,
     OperationCapability,
+    PermissionResult,
     RuntimeActionResult,
     RuntimeStatus,
     RuntimeStatusResult,

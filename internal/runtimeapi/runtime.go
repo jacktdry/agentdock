@@ -7,6 +7,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 // Runtime 定义 Runtime API 路由真正需要的应用能力。
@@ -47,6 +48,17 @@ type ExecutionRuntime interface {
 	RuntimeActivityWait(context.Context, uint64) error
 	RuntimeInsertions(string) app.Result
 	RuntimeInsertionManage(context.Context, map[string]any) (app.Result, error)
+}
+
+type PermissionRuntime interface {
+	RuntimePermissions() (app.Result, error)
+	RuntimeApprovals(approvalID, status string, limit int) (app.Result, error)
+}
+
+type DesktopPermissionControlRuntime interface {
+	AuthenticateDesktopPermissionControl(string) bool
+	BeginPermissionConfirmation(string, permission.ControlMutationRequest) (permission.ConfirmationChallenge, error)
+	ApplyPermissionControlMutation(context.Context, string, string, permission.ControlMutationRequest) (app.Result, error)
 }
 
 type MCPOAuthRuntime interface {

@@ -21,6 +21,12 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 	h := runtimeAPIHandler(runtime, cfg, oauthStore)
 	mux.HandleFunc("/internal/runtime/activity/stream", runtimeActivityStreamHandler(runtime, cfg, oauthStore))
 	mux.HandleFunc("/internal/runtime/status", h)
+	mux.HandleFunc("/internal/runtime/permissions", h)
+	mux.HandleFunc("/internal/runtime/approvals", h)
+	control := desktopPermissionControlHandler(runtime)
+	for _, path := range []string{"/internal/desktop-control/permission-confirmations", "/internal/desktop-control/permissions", "/internal/desktop-control/approvals"} {
+		mux.HandleFunc(path, control)
+	}
 	mux.HandleFunc("/internal/runtime/analytics", h)
 	mux.HandleFunc("/internal/runtime/diagnostics", h)
 	mux.HandleFunc("/internal/runtime/execution", h)
@@ -52,7 +58,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
 			return
 		}
-		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions") && !isDirectLoopbackRequest(r) {
+		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals") && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}
@@ -97,10 +103,32 @@ func writeRuntimeAPIHandlerError(w http.ResponseWriter, err error) {
 	if errors.As(err, &toolErr) {
 		status := http.StatusInternalServerError
 		switch toolErr.Category {
+		case "authentication":
+			status = http.StatusUnauthorized
+		case "permission":
+			status = http.StatusForbidden
+		case "conflict":
+			status = http.StatusConflict
+		case "capacity":
+			status = http.StatusTooManyRequests
 		case "validation":
 			status = http.StatusBadRequest
 		case "not_found":
 			status = http.StatusNotFound
+		}
+		if toolErr.Code == "APPROVAL_REQUIRED" {
+			w.Header().Set("content-type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			details := map[string]any{}
+			for _, key := range []string{"approval_id", "approval_version", "policy_revision", "executed", "retry"} {
+				if value, ok := toolErr.Details[key]; ok {
+					details[key] = value
+				}
+			}
+			if err := json.NewEncoder(w).Encode(map[string]any{"ok": false, "code": toolErr.Code, "error": toolErr.Message, "details": details}); err != nil {
+				slog.Warn("write runtime approval error failed", "error", err)
+			}
+			return
 		}
 		writeRuntimeAPIError(w, status, toolErr.Code, toolErr.Message)
 		return

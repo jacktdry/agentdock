@@ -207,7 +207,17 @@ func DefaultManifest() Manifest {
 				},
 				Reason: "wire contract is defined; production execution source is scheduled for M5",
 			},
-			unavailableCapability(DomainPermission, "permission parity is not implemented in the shared shell yet"),
+			{
+				Domain: DomainPermission, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "status", Access: AccessRead}, {Name: "history", Access: AccessRead}, {Name: "approval", Access: AccessRead},
+					{Name: "beginConfirmation", Access: AccessPrivileged},
+					{Name: "updatePolicy", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "approveOnce", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "approveWorkspace", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "reject", Access: AccessPrivileged, RequiresConfirmation: true},
+				}, Streams: []StreamCapability{}, Reason: "Core-owned permission state and distinct native Desktop control; Permission UI remains pending",
+			},
 			unavailableCapability(DomainMCP, "MCP management has not been adapted to the shared desktop API yet"),
 			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),
 			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
