@@ -413,7 +413,7 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 ## Pre-M9 — Feature Parity / Connection Readiness
 
-狀態：**Wave 0 contract frozen；Wave 1 ready（2026-10-05）**。M8 後不直接進 M9；先補齊 Next 可獨立使用所需的 connection/auth surface 與必要 Shared Desktop parity。執行順序與完整矩陣見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)；P1/P2 的 UX / security / port ownership / Tunnel state / mutation contract 見 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。
+狀態：**P1/P2 complete；等待使用者建立 `mac-dev-next`（2026-10-06）**。Wave 0 contract 已凍結；Wave 1 backend integration（`94367b74`）、Connection UI（`80eeed53`）與 final port rollback lifecycle hardening（`b7e440cc`）已完成 repository verification。現在依 gate **停止在 P3**：由使用者透過 ChatGPT 手動建立 `mac-dev-next`，完成 connector / side-by-side validation 後才可進 Wave 3；不得直接進 M9。執行順序與完整矩陣見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)；P1/P2 contract 見 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)，整合與驗證證據見 [Wave 1 integration evidence](pre-m9-wave1-integration.md)。
 
 執行順序：
 

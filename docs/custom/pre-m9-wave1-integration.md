@@ -1,8 +1,11 @@
 # Wave 1 integration evidence
 
-Repository-only integration on `feature/pre-m9-wave1-integration`, 2026-10-05.
-The frozen contract remains [Wave 0](pre-m9-wave0-contract.md); runtime boundaries
-remain [Next isolation](agentdock-next-isolation.md). Shared Vue UI is unchanged.
+Backend integration originated on `feature/pre-m9-wave1-integration` and is now
+integrated into `feature/m8-permission-approval`. The frozen contract remains
+[Wave 0](pre-m9-wave0-contract.md); runtime boundaries remain
+[Next isolation](agentdock-next-isolation.md). Shared Connection UI is now implemented
+under the same contract. **P1/P2 repository verification is complete; execution stops
+at the user-owned `mac-dev-next` connector gate.**
 
 - Quick invalidation disables OAuth until the current generation publishes its
   origin and enables OAuth in the same environment write. Real auth validation
@@ -42,13 +45,15 @@ remain unavailable without an authoritative supported identity adapter.
 Verification completed on repository fixtures:
 
 - focused Connection / port / Tunnel regression tests: pass;
-- `go test ./internal/desktopapi ./internal/desktopruntime`: pass;
+- `go test ./internal/desktopapi ./internal/desktopruntime`: pass on integration and again on the final main branch;
 - `go test -race ./internal/desktopruntime`: pass;
 - focused `desktopapi -race`: bounded at 120 seconds and remained in compilation
   with no tests started / no test failure; recorded as a verification limitation;
 - macOS `scripts/test/test-macos-app.sh --fixtures-only`: pass with launchctl masked;
 - Windows amd64 and Linux amd64 compile-only checks for both `desktopapi` and
-  `desktopruntime`: pass.
+  `desktopruntime`: pass;
+- Shared Desktop frontend: `pnpm test` **70/70 pass**;
+- Shared Desktop frontend: `pnpm build:dev` passes Vue typecheck and Vite development build.
 
 ## Native installer concurrency debt
 

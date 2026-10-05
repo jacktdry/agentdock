@@ -1,10 +1,10 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**Wave 0 contract frozen；Wave 1 backend implementation ready（2026-10-05）**
+> 狀態：**P1/P2 repository implementation + verification complete；STOP at P3 user connector gate（2026-10-06）**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
-> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 implementation 不得自行偏離該 contract。
+> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。P1/P2 現在依 contract 停在 **P3：由使用者手動建立 `mac-dev-next`**；不得自動進 Wave 3 或 M9。
 
 ## 為什麼需要這一層
 
@@ -90,7 +90,7 @@ Port UX / validation 必須做到：
 - foreign listener / ownership 不明時 fail closed，UI 明確顯示 port conflict；
 - port 變更後 Tunnel target / Local MCP URL / Public endpoint health 必須同步更新，不可留下 stale target。
 
-目前 Shared Connection UI 只顯示 sanitized HTTPS origin，OAuth password 仍只存在 native macOS/Windows UI；P1 要補齊這個 parity gap。
+P1 已完成：Shared Connection UI 現在顯示 Local MCP URL、完整 Public MCP URL（含 `/mcp`）、explicit OAuth password Show / Hide / Copy、public endpoint test 與 ownership-aware port state；ordinary snapshot 不含 password / tunnel token / Desktop-control credential。
 
 安全要求：
 
@@ -256,17 +256,17 @@ Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external
 
 保留真正需要 native 的 platform adapters，例如 OS permissions、credential store、startup/elevation、installer/updater/signing integration。
 
-## Initial parity matrix
+## Current parity matrix
 
 | Domain / 功能 | Stable native | Next backend | Shared UI | 決策 |
 | --- | --- | --- | --- | --- |
 | Runtime | 有 | 有 | 有 | Complete |
 | Activity / Execution | 舊版較少 | 有 | 有 | Complete / Next-enhanced |
 | Permission / Approval | OS/native 為主 | 有 | 有 | Complete / Next-enhanced |
-| Connection status | 有 | 有 | 有 | Complete；需補 port ownership health |
-| Public MCP URL | 有 | 有 | **只顯示 origin** | P1 Port |
-| OAuth password | 有 | 有 | **未提供** | P1 Port with secret-safe UX |
-| Tunnel configuration | 有 | 有 | 部分 | P2 Port；Next 使用獨立 Named Tunnel |
+| Connection status / port ownership | 有 | 有 | 有 | **P1 Complete**；reserved / available / owned / conflict / unknown fail-closed |
+| Public MCP URL | 有 | 有 | **完整 `/mcp` URL** | **P1 Complete** |
+| OAuth password | 有 | 有 | **explicit Show / Hide / Copy** | **P1 Complete**；ordinary snapshot 不含 secret |
+| Tunnel configuration | 有 | 有 | Local / Quick / Named + write-only token + endpoint + advanced autostart | **P2 Complete**；Named remote route 保持 manual prerequisite |
 | ACP lifecycle/health | 部分 | 有 | 有 | Complete / Next-enhanced |
 | ACP profile/package CRUD | 有 | 有/部分 | 未完整 | P4 Port |
 | MCP management | Core/native | 有 | unavailable | P5 Port |
