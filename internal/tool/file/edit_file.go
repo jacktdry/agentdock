@@ -14,6 +14,9 @@ func (svc *Service) editFile(request EditRequest) (Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(p.Abs, p.Display, true); err != nil {
+		return nil, err
+	}
 	read, err := readBoundedFile(p.Abs, int64(maxTextFileReadBytes))
 	if err != nil {
 		return nil, err

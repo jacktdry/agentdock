@@ -58,6 +58,9 @@ func (svc *Service) fileEditAdd(request EditRequest) (Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(p.Abs, p.Display, true); err != nil {
+		return nil, err
+	}
 	if p.Exists && !overwrite {
 		return nil, toolErrorDetails("FILE_EXISTS", "file already exists; set overwrite=true to replace it", "validation", map[string]any{"path": p.Display})
 	}
@@ -125,6 +128,9 @@ func (svc *Service) fileEditDelete(request EditRequest) (Result, error) {
 	recursive := request.Recursive
 	p, err := svc.ws.ResolveExisting(path)
 	if err != nil {
+		return nil, err
+	}
+	if err := svc.guardProtectedPath(p.Abs, p.Display, true); err != nil {
 		return nil, err
 	}
 	snapshot, err := captureFileSnapshot(p.Abs)
@@ -196,8 +202,14 @@ func (svc *Service) fileEditMove(request EditRequest) (Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(src.Abs, src.Display, true); err != nil {
+		return nil, err
+	}
 	dest, err := svc.ws.ResolveForWrite(newPath)
 	if err != nil {
+		return nil, err
+	}
+	if err := svc.guardProtectedPath(dest.Abs, dest.Display, true); err != nil {
 		return nil, err
 	}
 	if dest.Exists && !overwrite {

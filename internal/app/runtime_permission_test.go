@@ -918,6 +918,120 @@ func TestDesktopPermissionControlCredentialRotatesPerRuntime(t *testing.T) {
 	}
 }
 
+func TestProtectedControlPathsAreBlockedAcrossFileAndMediaSurfaces(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	statePath := rt.permissions.StatePath()
+	permissionsDir := filepath.Dir(statePath)
+	home := filepath.Dir(permissionsDir)
+
+	cases := []struct {
+		name string
+		tool string
+		args map[string]any
+	}{
+		{name: "read state", tool: "read_file", args: map[string]any{"path": statePath}},
+		{name: "list permissions", tool: "list_dir", args: map[string]any{"path": permissionsDir}},
+		{name: "search permissions", tool: "search_text", args: map[string]any{"path": permissionsDir, "query": "global_mode"}},
+		{name: "replace state", tool: "file_edit", args: map[string]any{"action": "replace", "path": statePath, "old": "x", "new": "y"}},
+		{name: "add protected sibling", tool: "file_edit", args: map[string]any{"action": "add", "path": filepath.Join(permissionsDir, "credential.txt"), "content": "blocked"}},
+		{name: "structured patch state", tool: "file_edit", args: map[string]any{
+			"action": "patch", "workdir": home,
+			"patch": "*** Begin Patch\n*** Update File: permissions/state.json\n@@\n bogus\n*** End Patch",
+		}},
+		{name: "unified patch state", tool: "file_edit", args: map[string]any{
+			"action": "patch", "workdir": home,
+			"patch": "diff --git a/permissions/state.json b/permissions/state.json\n--- a/permissions/state.json\n+++ b/permissions/state.json\n@@ -1 +1 @@\n-x\n+y\n",
+		}},
+		{name: "delete home ancestor", tool: "file_edit", args: map[string]any{"action": "delete", "path": home, "recursive": true}},
+		{name: "publish state", tool: "file_publish", args: map[string]any{"path": statePath}},
+		{name: "publish home ancestor", tool: "file_publish", args: map[string]any{"path": home}},
+		{name: "view state as image", tool: "view_image", args: map[string]any{"path": statePath}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := rt.Call(context.Background(), test.tool, test.args)
+			if result != nil {
+				t.Fatalf("protected operation result=%#v", result)
+			}
+			requirePermissionError(t, err, "PROTECTED_CONTROL_PATH")
+		})
+	}
+
+	alias := filepath.Join(rt.ws.Root(), "permission-state-alias")
+	if err := os.Symlink(permissionsDir, alias); err == nil {
+		result, err := rt.Call(context.Background(), "read_file", map[string]any{"path": filepath.Join(alias, "state.json")})
+		if result != nil {
+			t.Fatalf("symlink protected read result=%#v", result)
+		}
+		requirePermissionError(t, err, "PROTECTED_CONTROL_PATH")
+	}
+}
+
+func TestProtectedControlPathsAreSkippedFromAncestorListAndSearch(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	permissionsDir := filepath.Dir(rt.permissions.StatePath())
+	home := filepath.Dir(permissionsDir)
+	visible := filepath.Join(home, "visible.txt")
+	if err := os.WriteFile(visible, []byte("visible marker\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := rt.Call(context.Background(), "list_dir", map[string]any{
+		"path": home, "max_depth": 3, "include_hidden": true, "include_ignored": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []map[string]any
+	if err := remarshal(listed["entries"], &entries); err != nil {
+		t.Fatal(err)
+	}
+	visibleFound := false
+	for _, entry := range entries {
+		path, _ := entry["path"].(string)
+		if path == "visible.txt" {
+			visibleFound = true
+		}
+		if path == "permissions" || strings.HasPrefix(path, "permissions/") {
+			t.Fatalf("protected control path leaked through list_dir: %#v", entries)
+		}
+	}
+	if !visibleFound {
+		t.Fatalf("ordinary home file disappeared from list_dir: %#v", entries)
+	}
+	if partial, _ := listed["partial"].(bool); !partial {
+		t.Fatalf("list_dir did not report skipped protected path: %#v", listed)
+	}
+
+	searched, err := rt.Call(context.Background(), "search_text", map[string]any{
+		"path": home, "query": "global_mode", "include_hidden": true, "include_ignored": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var matches []map[string]any
+	if err := remarshal(searched["matches"], &matches); err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("protected permission state leaked through search_text: %#v", matches)
+	}
+
+	searched, err = rt.Call(context.Background(), "search_text", map[string]any{
+		"path": home, "query": "visible marker", "include_hidden": true, "include_ignored": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches = nil
+	if err := remarshal(searched["matches"], &matches); err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0]["path"] != filepath.Clean(visible) {
+		t.Fatalf("ordinary search result changed by protected path filtering: %#v", matches)
+	}
+}
+
 func permissionDetailUint64(t *testing.T, details map[string]any, key string) uint64 {
 	t.Helper()
 	switch value := details[key].(type) {

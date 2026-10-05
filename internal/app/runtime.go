@@ -12,6 +12,7 @@ import (
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/controlplane"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
 	"github.com/uvwt/agentdock/internal/execution"
@@ -93,6 +94,10 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize desktop permission control authority: %w", err)
 	}
+	protectedControlPaths, err := controlplane.NewPathSet(filepath.Join(cfg.AgentDockHome, "permissions"))
+	if err != nil {
+		return nil, fmt.Errorf("initialize protected control paths: %w", err)
+	}
 	envs, err := envstore.New(cfg.AgentDockHome)
 	if err != nil {
 		return nil, err
@@ -164,6 +169,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	}, runtime.commandExecutionContext)
 	runtime.command.SetSessionLifecycleHook(runtime.observeCommandSession)
 	runtime.files = toolfile.New(ws, skills.ResolveResource, runtime.command.CommandEnv)
+	runtime.files.SetProtectedPathSet(protectedControlPaths)
 	runtime.dynamicMCP = toolmcp.New(mcpClients, envs)
 	runtime.dynamicMCP.SetExecutionStore(runtime.execution)
 	if err := runtime.configureMCPOAuthCallbacks(); err != nil {
@@ -178,6 +184,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		return nil, fmt.Errorf("initialize Plugin MCP runtime: %w", err)
 	}
 	runtime.media = toolmedia.New(cfg, ws, runtime.command.InternalCommandEnv)
+	runtime.media.SetProtectedPathSet(protectedControlPaths)
 	runtime.browser = toolbrowser.New(
 		toolbrowser.Config{AgentDockHome: cfg.AgentDockHome, ExecutablePath: cfg.BrowserExecutablePath, CDPURL: cfg.BrowserCDPURL, ReuseExistingCDP: cfg.BrowserReuseExistingCDP},
 		runtime.media.PublishBrowserScreenshot,

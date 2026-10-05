@@ -48,6 +48,9 @@ func (svc *Service) ReadFile(ctx context.Context, request ReadRequest) (Result, 
 		absPath = p.Abs
 		displayPath = p.Display
 	}
+	if err := svc.guardProtectedPath(absPath, displayPath, false); err != nil {
+		return nil, err
+	}
 	read, err := readBoundedFile(absPath, int64(maxTextFileReadBytes))
 	if err != nil {
 		return nil, err
@@ -141,6 +144,9 @@ func (svc *Service) ListDir(ctx context.Context, request ListRequest) (Result, e
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(root.Abs, root.Display, false); err != nil {
+		return nil, err
+	}
 	rootInfo, err := os.Stat(root.Abs)
 	if err != nil {
 		return nil, err
@@ -174,6 +180,15 @@ func (svc *Service) ListDir(ctx context.Context, request ListRequest) (Result, e
 			return walkErr
 		}
 		if abs == root.Abs {
+			return nil
+		}
+		if svc.protected != nil && svc.protected.Contains(abs) {
+			if rel, relErr := relativePathFromRoot(root.Abs, abs); relErr == nil {
+				skippedPaths = append(skippedPaths, rel)
+			}
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 

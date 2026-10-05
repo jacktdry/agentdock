@@ -15,6 +15,9 @@ func (s *Service) FilePublish(ctx context.Context, request FilePublishRequest) (
 	if err != nil {
 		return nil, err
 	}
+	if err := s.guardProtectedLocalPath(pathValue, pathValue, true); err != nil {
+		return nil, err
+	}
 	store := publicartifacts.New(s.cfg.AgentDockHome, s.cfg.OAuthServerURL, s.cfg.Port)
 	published, err := store.Publish(publicartifacts.PublishRequest{Path: pathValue, RetentionSeconds: intValue(request.RetentionSeconds, 0), BaseURL: requestmeta.BaseURL(ctx)})
 	if err != nil {

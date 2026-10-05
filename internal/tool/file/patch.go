@@ -44,6 +44,9 @@ func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath strin
 			if err != nil {
 				return nil, err
 			}
+			if err := svc.guardProtectedPath(target.Abs, target.Display, true); err != nil {
+				return nil, err
+			}
 			if target.Exists {
 				return nil, toolError("PATCH_FAILED", "cannot add file that already exists", "validation")
 			}
@@ -63,6 +66,9 @@ func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath strin
 			if err != nil {
 				return nil, err
 			}
+			if err := svc.guardProtectedPath(target.Abs, target.Display, true); err != nil {
+				return nil, err
+			}
 			if err := ensurePatchPathUnused(staged, target.Abs, target.Display); err != nil {
 				return nil, err
 			}
@@ -80,6 +86,9 @@ func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath strin
 			}
 			source, err := svc.ws.ResolveExisting(sourcePath)
 			if err != nil {
+				return nil, err
+			}
+			if err := svc.guardProtectedPath(source.Abs, source.Display, true); err != nil {
 				return nil, err
 			}
 			current, exists := staged[source.Abs]
@@ -112,6 +121,9 @@ func (svc *Service) applyEnvelopePatch(patch string, dryRun bool, basePath strin
 			}
 			dest, err := svc.ws.ResolveForWrite(destPath)
 			if err != nil {
+				return nil, err
+			}
+			if err := svc.guardProtectedPath(dest.Abs, dest.Display, true); err != nil {
 				return nil, err
 			}
 			if dest.Abs == source.Abs {

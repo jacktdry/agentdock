@@ -166,6 +166,9 @@ func (svc *Service) readFileWSL(ctx context.Context, request ReadRequest, select
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, false); err != nil {
+		return nil, err
+	}
 	loaded, err := svc.callWSLFileHelper(ctx, selection, map[string]any{"action": "read", "path": path})
 	if err != nil {
 		return nil, err
@@ -200,13 +203,20 @@ func (svc *Service) listDirWSL(ctx context.Context, request ListRequest, selecti
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, false); err != nil {
+		return nil, err
+	}
+	excludePatterns := append([]string(nil), opts.ExcludePatterns...)
+	for _, rel := range svc.protectedWSLRelativeDescendants(path) {
+		excludePatterns = append(excludePatterns, rel, strings.TrimSuffix(rel, "/")+"/**")
+	}
 	return svc.callWSLFileHelper(ctx, selection, map[string]any{
 		"action":           "list_dir",
 		"path":             path,
 		"max_depth":        opts.MaxDepth,
 		"max_entries":      opts.MaxEntries,
 		"patterns":         opts.Patterns,
-		"exclude_patterns": opts.ExcludePatterns,
+		"exclude_patterns": excludePatterns,
 		"entry_type":       opts.EntryType,
 		"include_hidden":   opts.IncludeHidden,
 		"include_ignored":  opts.IncludeIgnored,
@@ -221,9 +231,16 @@ func (svc *Service) searchTextWSL(ctx context.Context, request SearchRequest, se
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, false); err != nil {
+		return nil, err
+	}
 	includeGlobs := append([]string(nil), request.IncludeGlobs...)
 	if request.Glob != "" {
 		includeGlobs = append(includeGlobs, request.Glob)
+	}
+	excludeGlobs := append([]string(nil), request.ExcludeGlobs...)
+	for _, rel := range svc.protectedWSLRelativeDescendants(path) {
+		excludeGlobs = append(excludeGlobs, rel, strings.TrimSuffix(rel, "/")+"/**")
 	}
 	return svc.callWSLFileHelper(ctx, selection, map[string]any{
 		"action":          "search_text",
@@ -234,7 +251,7 @@ func (svc *Service) searchTextWSL(ctx context.Context, request SearchRequest, se
 		"include_hidden":  request.IncludeHidden,
 		"include_ignored": request.IncludeIgnored,
 		"include_globs":   includeGlobs,
-		"exclude_globs":   append([]string(nil), request.ExcludeGlobs...),
+		"exclude_globs":   excludeGlobs,
 		"context_lines":   boundedInt(intValue(request.ContextLines, 0), 0, 0, 20),
 		"max_results":     boundedInt(intValue(request.MaxResults, 100), 100, 1, 1000),
 	})

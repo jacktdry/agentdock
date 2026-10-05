@@ -73,6 +73,9 @@ func (svc *Service) SearchText(ctx context.Context, request SearchRequest) (Resu
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(p.Abs, p.Display, false); err != nil {
+		return nil, err
+	}
 	includeGlobs := append([]string(nil), request.IncludeGlobs...)
 	if request.Glob != "" {
 		includeGlobs = append(includeGlobs, request.Glob)
@@ -115,6 +118,9 @@ func (svc *Service) searchTextRG(ctx context.Context, p workspace.Path, opts Sea
 	}
 	if opts.ContextLines > 0 {
 		args = append(args, "--context", strconv.Itoa(opts.ContextLines))
+	}
+	for _, rel := range svc.protectedRelativeDescendants(p.Abs) {
+		args = append(args, "--glob", "!"+rel, "--glob", "!"+strings.TrimSuffix(rel, "/")+"/**")
 	}
 	args = append(args, opts.Query, p.Abs)
 
@@ -172,6 +178,9 @@ func (svc *Service) parseRGJSON(output []byte, searchRoot string, opts SearchOpt
 		eventPath := event.Data.Path.Text
 		if !filepath.IsAbs(eventPath) {
 			eventPath = filepath.Join(searchRoot, eventPath)
+		}
+		if svc.protected != nil && svc.protected.Contains(eventPath) {
+			continue
 		}
 		requestRel, err := relativePathFromRoot(searchRoot, eventPath)
 		if err != nil {
@@ -266,6 +275,12 @@ func (svc *Service) searchTextGoWithLimits(ctx context.Context, p workspace.Path
 		if walkErr != nil {
 			if abs == p.Abs {
 				return walkErr
+			}
+			return nil
+		}
+		if svc.protected != nil && svc.protected.Contains(abs) {
+			if d.IsDir() {
+				return filepath.SkipDir
 			}
 			return nil
 		}

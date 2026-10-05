@@ -37,6 +37,9 @@ func (svc *Service) fileEditReplaceWSL(ctx context.Context, request EditRequest,
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, true); err != nil {
+		return nil, err
+	}
 	loaded, err := svc.callWSLFileHelper(ctx, selection, map[string]any{"action": "read", "path": path, "reject_symlink": true})
 	if err != nil {
 		return nil, err
@@ -58,6 +61,9 @@ func (svc *Service) fileEditReplaceWSL(ctx context.Context, request EditRequest,
 func (svc *Service) fileEditAddWSL(ctx context.Context, request EditRequest, selection fileRuntimeSelection) (Result, error) {
 	path, err := resolveWSLFilePath(request.Path)
 	if err != nil {
+		return nil, err
+	}
+	if err := svc.guardProtectedWSLPath(path, true); err != nil {
 		return nil, err
 	}
 	overwrite := request.Overwrite
@@ -88,6 +94,9 @@ func (svc *Service) fileEditDeleteWSL(ctx context.Context, request EditRequest, 
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, true); err != nil {
+		return nil, err
+	}
 	if request.Recursive {
 		return nil, toolError("INVALID_ARGUMENT", "runtime=wsl file_edit only deletes regular UTF-8 files; recursive directory deletion is not supported", "validation")
 	}
@@ -109,8 +118,14 @@ func (svc *Service) fileEditMoveWSL(ctx context.Context, request EditRequest, se
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(path, true); err != nil {
+		return nil, err
+	}
 	newPath, err := resolveWSLFilePath(request.NewPath)
 	if err != nil {
+		return nil, err
+	}
+	if err := svc.guardProtectedWSLPath(newPath, true); err != nil {
 		return nil, err
 	}
 	if _, err := svc.callWSLFileHelper(ctx, selection, map[string]any{"action": "read", "path": path, "reject_symlink": true}); err != nil {
@@ -191,6 +206,9 @@ func (svc *Service) fileEditPatchWSL(ctx context.Context, request EditRequest, s
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedWSLPath(workdir, false); err != nil {
+		return nil, err
+	}
 	operations, err := parseEnvelopePatch(patch)
 	if err != nil {
 		return nil, err
@@ -205,6 +223,9 @@ func (svc *Service) fileEditPatchWSL(ctx context.Context, request EditRequest, s
 	for _, operation := range operations {
 		sourcePath, err := resolveWSLPatchPath(workdir, operation.Path)
 		if err != nil {
+			return nil, err
+		}
+		if err := svc.guardProtectedWSLPath(sourcePath, true); err != nil {
 			return nil, err
 		}
 		switch operation.Kind {
@@ -262,6 +283,9 @@ func (svc *Service) fileEditPatchWSL(ctx context.Context, request EditRequest, s
 			}
 			destinationPath, err := resolveWSLPatchPath(workdir, operation.MoveTo)
 			if err != nil {
+				return nil, err
+			}
+			if err := svc.guardProtectedWSLPath(destinationPath, true); err != nil {
 				return nil, err
 			}
 			if destinationPath == sourcePath {
