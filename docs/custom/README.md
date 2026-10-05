@@ -24,6 +24,7 @@
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
 - [m8-permission-approval.md](m8-permission-approval.md)：M8 Core-owned Permission / Approval authority、binding、retry、history 與 implementation checkpoint。
 - [pre-m9-feature-parity.md](pre-m9-feature-parity.md)：M8 closeout 後的 feature parity audit、Next Connection/Auth/Tunnel readiness、`mac-dev-next` 手動建立 gate 與 M9 前工作順序。
+- [pre-m9-wave0-contract.md](pre-m9-wave0-contract.md)：Wave 0 roundtable 收斂後凍結的 P1/P2 UX、secret、port ownership、Tunnel state/mutation 與 Wave 1 backend integration contract。
 - [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 - [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)：Browser / CDP process ownership、stale cleanup、Edge connector 去重與 ACP browser child lifecycle。
 - [computer-use-backends.md](computer-use-backends.md)：Computer Use provider 選型、Orca / OpenAI Sky 實測、no-focus policy 與 ACP Computer Control Broker 邊界。

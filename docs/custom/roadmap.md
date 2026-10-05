@@ -413,7 +413,7 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 ## Pre-M9 — Feature Parity / Connection Readiness
 
-狀態：**Accepted execution order（2026-10-05）**。M8 後不直接進 M9；先補齊 Next 可獨立使用所需的 connection/auth surface 與必要 Shared Desktop parity。完整矩陣與 acceptance 見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+狀態：**Wave 0 contract frozen；Wave 1 ready（2026-10-05）**。M8 後不直接進 M9；先補齊 Next 可獨立使用所需的 connection/auth surface 與必要 Shared Desktop parity。執行順序與完整矩陣見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)；P1/P2 的 UX / security / port ownership / Tunnel state / mutation contract 見 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。
 
 執行順序：
 

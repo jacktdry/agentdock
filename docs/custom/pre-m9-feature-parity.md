@@ -1,8 +1,10 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：Accepted execution order（2026-10-05）
+> 狀態：**Wave 0 contract frozen；Wave 1 backend implementation ready（2026-10-05）**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
+>
+> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 implementation 不得自行偏離該 contract。
 
 ## 為什麼需要這一層
 
@@ -130,7 +132,7 @@ Next tunnel 必須使用 Next-owned service/config/state，例如 `dev.dropabit.
 - dedicated Next Cloudflare Tunnel identity；
 - dedicated hostname / route；
 - dedicated token / credential storage；
-- origin 指向 Next Core port（預設 `127.0.0.1:8767`，若使用者合法改 port 則同步更新）；
+- dedicated Named route 的 Service URL 必須指向 Next Core port（正式 connector 預設 `127.0.0.1:8767`）；current token-only remotely-managed backend **無法**自動改寫 Cloudflare route 的 Service URL，因此 custom-port transition 必須依 [Wave 0 contract](pre-m9-wave0-contract.md#12-named-tunnel-remote-route-limitation) fail closed / 先解除 Named exposure，再由使用者更新 dedicated route 後重新驗證；
 - Next-owned tunnel service label / logs / state；
 - stable tunnel/token/hostname 不可作 fallback；
 - Public MCP URL 顯示為該 hostname + `/mcp`。
