@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: contract defined / implementation pending
+> Status: Core implementation in progress — evaluator/state/Runtime/ACP host admission checkpoints complete
 >
 > Date: 2026-10-05
 >
@@ -9,6 +9,35 @@
 > Base: AgentDock Next isolation `b4ef0945`
 >
 > Prerequisite repaired on this branch: M5 Activity Center / execution model integrated as `cbdabeef` from original `a505898a`
+
+
+## Implementation checkpoint — 2026-10-05
+
+M8 is now past the contract-only stage. The current branch has the following reviewable checkpoints:
+
+- `cbdabeef` — repaired the M5 execution prerequisite so M8 uses the existing execution call graph / epoch rather than inventing a second identity model.
+- `0a6e93c8` — defined the blocker-cleared M8 authority, binding, retry, approval-history and validation contract.
+- `9ed469f1` — implemented the Core Permission Profile / Approval Policy / rule evaluator and decision trace.
+- `4abc9376` — implemented bounded durable policy + approval/history state, atomic persistence, expiry/invalidation and one-shot grant consumption.
+- `9bc8065c` — added the shared `AdmissionGate` to `Runtime.Call` after schema validation and immutable argument snapshotting, before handler dispatch. Ask/Deny do not call the handler and M5 records the permission error code / category truthfully.
+- `4c1c9274` — bound normal MCP authorization to stable opaque principals: configured static bearer credentials use a domain-separated fingerprint and OAuth uses the authenticated client/grant identity, remaining stable across access-token refresh without persisting raw credentials.
+- `c8c10053` — propagated Core-owned opaque principals through Nexus and the ACP Browser / Computer capability transports. Capability-token rotation does not become authorization identity.
+- `ef9c29ce` — gated ACP Browser / Computer host capabilities through the same Core admission boundary while preserving their independent ownership, foreground, routing and provider constraints.
+
+Current targeted regression is green for `internal/permission`, `internal/execution`, `internal/app`, `internal/httpx/requestmeta`, `internal/httpx`, `internal/nexusbridge`, `internal/tool/browser`, and `internal/tool/computer`. `go test ... -count=1`, `go vet ...` and `git diff --check` pass for that set.
+
+The current uncommitted next slice is only **Runtime management admission preparation** in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go`. It adds source-aware host-operation classification for insertion/task/MCP/evolution mutations but has **not** yet wired those management entrypoints. It must not be treated as a completed checkpoint until handler-before/after tests prove dispatch is actually gated.
+
+Still required before the Core step can be marked complete:
+
+- wire every covered Runtime management mutation through `AdmissionGate`;
+- close remaining ACP provider-continuation / permissive `requestPermission` paths that can bypass normal `Runtime.Call`;
+- implement the distinct Desktop control authority and confirmation challenge for permission mutations;
+- protect permission/control credential paths from normal AgentDock file APIs;
+- expose versioned Runtime / Shared Desktop permission operations;
+- then implement the Shared Desktop Permission UI and run the complete cross-platform / Next-only validation gates.
+
+Stable AgentDock remains outside the M8 development target. Runtime validation continues on AgentDock Next only.
 
 ## Goal
 

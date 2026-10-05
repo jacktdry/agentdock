@@ -399,16 +399,31 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 ## M8 — Permission / Approval
 
-評估並最小化引入：
+狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、`Runtime.Call` admission、MCP/Nexus/ACP principal binding 與 ACP Browser/Computer host-capability gate 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
 
-- Permission Profile
-- Approval Policy
-- effective permission source
-- approval history
+目前完成：
+- ✅ M5 execution identity prerequisite：`cbdabeef`
+- ✅ M8 authority / binding / retry contract：`0a6e93c8`
+- ✅ Permission Profile / Approval Policy / rules evaluator：`9ed469f1`
+- ✅ bounded durable approval/history store + one-shot consumption：`4abc9376`
+- ✅ `Runtime.Call` shared admission boundary：`9bc8065c`
+- ✅ stable opaque MCP authorization principals：`4c1c9274`
+- ✅ Nexus / ACP capability principal propagation：`c8c10053`
+- ✅ ACP Browser / Computer host-capability admission：`ef9c29ce`
 
-Approval Reviewer 預設 defer。
+目前進行中：Runtime management mutations 的 shared admission wiring。工作樹目前只有 classifier/source preparation，尚未視為完成 checkpoint。
 
-本 Milestone 的 runtime 驗證限 Next；live migration 必須先通過 M7.5。此 Milestone 同時完成剩餘 Browser / ACP / MCP / Plugin / Settings 的 shared UI parity 評估，決定哪些舊 native business views 可以 deprecated。
+後續 gate：
+- Runtime management handler-before/after + M5 journal truthfulness；
+- ACP provider-continuation / permissive `requestPermission` bypass closure；
+- distinct Desktop control authority + one-time confirmation challenge；
+- permission/control-plane file-path protection；
+- versioned Runtime / Shared Desktop `DomainPermission` API；
+- Shared Desktop Permission Profile / Approval Policy / effective permission / approval history UI；
+- Approval Reviewer 維持 `defer`，M8 不啟動自動 reviewer；
+- permission/race/vet、Browser/Computer hard-constraint、ACP/MCP/plugin/settings、Shared Desktop、i18n、macOS/Windows 與 AgentDock Next-only runtime smoke 全部通過後才 closeout。
+
+本 Milestone 的 runtime 驗證限 Next；stable AgentDock 不是開發或驗證 target。Shared UI parity 評估仍需在 M8 後段決定哪些舊 native business views 可以 deprecated。
 
 ## M9 — Release Migration
 

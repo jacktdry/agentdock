@@ -22,6 +22,7 @@
 - [m3-i18n-foundation.md](m3-i18n-foundation.md)：M3 實作、native bridge、migration boundary 與驗證方式。
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
+- [m8-permission-approval.md](m8-permission-approval.md)：M8 Core-owned Permission / Approval authority、binding、retry、history 與 implementation checkpoint。
 - [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 - [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)：Browser / CDP process ownership、stale cleanup、Edge connector 去重與 ACP browser child lifecycle。
 - [computer-use-backends.md](computer-use-backends.md)：Computer Use provider 選型、Orca / OpenAI Sky 實測、no-focus policy 與 ACP Computer Control Broker 邊界。
@@ -39,5 +40,5 @@
 
 8. 目前連線中的 AgentDock 是 production control plane；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable 當 development target。
 9. 客製版以 **AgentDock Next** side-by-side 開發，app identity、服務、port、runtime/state/log/work roots 與 connector 必須隔離；installer / self-update 必須 Next-target-aware 並 fail closed，禁止 fallback 到 `AgentDock.app`。
-10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 Phase 1 identity/runtime isolation 已於 `b189ee5` 完成，Phase 2 updater/arbiter repository isolation 已於 `8f2aa6c1` 完成並通過 Go race/vet、Swift fixture/typecheck 與 updater/arbiter isolation tests。Next GUI updater gate 仍保留，下一步是獨立 review 與 Next-only signed package / codesign / launch-smoke，再進入 Memory HTTP cutover 與 `mac-dev-next`；stable live cutover 仍刻意延後。
+10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 AgentDock Next isolation 的 repository/runtime validation 與 handoff 已完成，stable live cutover 仍刻意延後。剩餘外部 follow-up gate 是 `mac-dev-next` client connector 註冊與有效 Developer ID signing identity 下的 certificate-bound GUI updater transaction；不得為此操作 stable AgentDock。M8 現於 `feature/m8-permission-approval` 進行，最新已提交 checkpoint 為 ACP Browser/Computer host-capability admission `ef9c29ce`，Runtime management admission 仍在下一小步。
 11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。
