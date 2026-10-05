@@ -276,6 +276,10 @@ func TestRuntimePermissionApproveOnceRequiresSameStablePrincipalAndExactRetry(t 
 			t.Fatalf("approval version = %#v", first.Details["approval_version"])
 		}
 	}
+	metadata, readErr := rt.permissions.Approval(approvalID)
+	if readErr != nil || metadata.Decision == nil || len(metadata.Decision.Sources) == 0 || !metadata.CanApproveOnce || metadata.CanApproveWorkspace || metadata.WorkspaceUnavailableReason == "" {
+		t.Fatalf("built-in workspace approval metadata must remain truthful: %#v, %v", metadata, readErr)
+	}
 	policyRevision, ok := first.Details["policy_revision"].(uint64)
 	if !ok {
 		if raw, numeric := first.Details["policy_revision"].(float64); numeric {

@@ -1396,8 +1396,8 @@ try {
     }
     try {
         $wslHelperManifest = Get-Content -LiteralPath $sourceWSLHelperManifestPath -Raw | ConvertFrom-Json
-        if ([string] $wslHelperManifest.protocol_version -ne '1') {
-            throw 'WSL helper manifest protocol_version must be 1.'
+        if ([string] $wslHelperManifest.protocol_version -ne '2') {
+            throw 'WSL helper manifest protocol_version must be 2.'
         }
         $helperChecks = @(
             @{

@@ -216,7 +216,7 @@ func DefaultManifest() Manifest {
 					{Name: "approveOnce", Access: AccessPrivileged, RequiresConfirmation: true},
 					{Name: "approveWorkspace", Access: AccessPrivileged, RequiresConfirmation: true},
 					{Name: "reject", Access: AccessPrivileged, RequiresConfirmation: true},
-				}, Streams: []StreamCapability{}, Reason: "Core-owned permission state and distinct native Desktop control; Permission UI remains pending",
+				}, Streams: []StreamCapability{}, Reason: "Core-owned permission state and distinct native Desktop control; explicit confirmation and caller retry",
 			},
 			unavailableCapability(DomainMCP, "MCP management has not been adapted to the shared desktop API yet"),
 			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),

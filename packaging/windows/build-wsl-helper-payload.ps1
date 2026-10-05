@@ -47,7 +47,7 @@ try {
     }
 
     $manifest = [ordered]@{
-        protocol_version = '1'
+        protocol_version = '2'
         helpers = $helpers
     }
     $manifestPath = Join-Path $OutputDirectory 'manifest.json'

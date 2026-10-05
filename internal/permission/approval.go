@@ -58,25 +58,34 @@ func (s *Store) CreateApproval(ctx context.Context, input CreateApprovalInput) (
 		}
 	}
 
+	decision, err := Evaluate(s.state.Policy, input.Facts)
+	if err != nil {
+		return ApprovalRecord{}, err
+	}
+	workspaceReason := workspaceGrantUnavailable(s.state.Policy, input.Facts, input.Prepared.Binding)
 	record := ApprovalRecord{
-		SchemaVersion:   SchemaVersion,
-		Version:         1,
-		ID:              id,
-		Audit:           input.Audit,
-		Binding:         AuditBindingFor(input.Binding),
-		Tool:            strings.TrimSpace(input.Prepared.Tool),
-		Action:          strings.TrimSpace(input.Prepared.Action),
-		Summary:         strings.TrimSpace(input.Summary),
-		Scope:           strings.TrimSpace(input.Scope),
-		Reason:          strings.TrimSpace(input.Reason),
-		RuleID:          strings.TrimSpace(input.RuleID),
-		PolicyRevision:  s.state.Policy.Revision,
-		RuntimeEpoch:    s.epoch,
-		Status:          Pending,
-		CreatedAt:       now,
-		ExpiresAt:       expiresAt,
-		GrantKind:       "none",
-		DispatchOutcome: NotDispatched,
+		Decision:                   &decision,
+		CanApproveOnce:             stablePrincipal(input.Prepared.Binding.Principal),
+		CanApproveWorkspace:        workspaceReason == "",
+		WorkspaceUnavailableReason: workspaceReason,
+		SchemaVersion:              SchemaVersion,
+		Version:                    1,
+		ID:                         id,
+		Audit:                      input.Audit,
+		Binding:                    AuditBindingFor(input.Binding),
+		Tool:                       strings.TrimSpace(input.Prepared.Tool),
+		Action:                     strings.TrimSpace(input.Prepared.Action),
+		Summary:                    strings.TrimSpace(input.Summary),
+		Scope:                      strings.TrimSpace(input.Scope),
+		Reason:                     strings.TrimSpace(input.Reason),
+		RuleID:                     strings.TrimSpace(input.RuleID),
+		PolicyRevision:             s.state.Policy.Revision,
+		RuntimeEpoch:               s.epoch,
+		Status:                     Pending,
+		CreatedAt:                  now,
+		ExpiresAt:                  expiresAt,
+		GrantKind:                  "none",
+		DispatchOutcome:            NotDispatched,
 	}
 
 	candidate := cloneState(s.state)
@@ -94,7 +103,7 @@ func (s *Store) CreateApproval(ctx context.Context, input CreateApprovalInput) (
 		prepared: clonePrepared(input.Prepared),
 		facts:    cloneFacts(input.Facts),
 	}
-	return record, nil
+	return cloneApprovalRecord(record), nil
 }
 
 func (s *Store) validateCreateInput(input CreateApprovalInput) error {
@@ -198,7 +207,7 @@ func (s *Store) ApproveOnce(ctx context.Context, mutation Mutation) (ApprovalRec
 		return ApprovalRecord{}, err
 	}
 	s.state = candidate
-	return record, nil
+	return cloneApprovalRecord(record), nil
 }
 
 func approvalForMutation(history []ApprovalRecord, mutation Mutation) (int, ApprovalRecord, error) {
@@ -286,7 +295,7 @@ func (s *Store) Reject(ctx context.Context, mutation Mutation) (ApprovalRecord, 
 	}
 	s.state = candidate
 	delete(s.live, record.ID)
-	return record, nil
+	return cloneApprovalRecord(record), nil
 }
 
 func (s *Store) ConsumeOnce(ctx context.Context, input ConsumeInput) (ApprovalRecord, bool, error) {
@@ -355,7 +364,7 @@ func (s *Store) ConsumeOnce(ctx context.Context, input ConsumeInput) (ApprovalRe
 		for _, id := range drop {
 			delete(s.live, id)
 		}
-		return *record, true, nil
+		return cloneApprovalRecord(*record), true, nil
 	}
 
 	if changed {
@@ -434,7 +443,7 @@ func (s *Store) SettleDispatch(ctx context.Context, approvalID, outcome string) 
 		return ApprovalRecord{}, err
 	}
 	s.state = candidate
-	return record, nil
+	return cloneApprovalRecord(record), nil
 }
 
 func (s *Store) ApproveWorkspace(ctx context.Context, input WorkspaceGrantInput) (ApprovalRecord, Policy, error) {
@@ -462,14 +471,8 @@ func (s *Store) ApproveWorkspace(ctx context.Context, input WorkspaceGrantInput)
 	}
 	facts := live.facts
 	binding := live.prepared.Binding
-	if !facts.EffectsKnown || facts.OpaqueProviderExecution || !facts.WorkspaceRuleEligible {
-		return ApprovalRecord{}, Policy{}, fmt.Errorf("%w: opaque or unenforceable effects cannot receive a workspace grant", ErrNotEligible)
-	}
-	if !binding.TrustedWorkspace || strings.TrimSpace(binding.WorkspaceID) == "" {
-		return ApprovalRecord{}, Policy{}, fmt.Errorf("%w: trusted workspace binding is required", ErrNotEligible)
-	}
-	if !permissionBindingEqual(binding, facts.Binding) {
-		return ApprovalRecord{}, Policy{}, fmt.Errorf("%w: workspace grant binding mismatch", ErrNotEligible)
+	if reason := workspaceGrantUnavailable(candidate.Policy, facts, binding); reason != "" {
+		return ApprovalRecord{}, Policy{}, fmt.Errorf("%w: %s", ErrNotEligible, reason)
 	}
 
 	workspaceID := binding.WorkspaceID
@@ -520,7 +523,7 @@ func (s *Store) ApproveWorkspace(ctx context.Context, input WorkspaceGrantInput)
 	s.state = candidate
 	s.dropInvalidatedLiveLocked()
 	delete(s.live, record.ID)
-	return record, candidate.Policy, nil
+	return cloneApprovalRecord(record), cloneState(State{Policy: candidate.Policy}).Policy, nil
 }
 
 func policyHasScope(policy Policy, workspaceID string) bool {
@@ -556,3 +559,30 @@ func approvalErrorIs(err, target error) bool {
 // Ensure time import remains part of the approval API contract through the
 // ExpiresAt inputs even when callers use the default.
 var _ = time.Time{}
+
+// Workspace eligibility uses the same rule evaluation as the actual mutation.
+func workspaceGrantUnavailable(policy Policy, facts PermissionFacts, binding PermissionBinding) string {
+	if !facts.EffectsKnown || facts.OpaqueProviderExecution || !facts.WorkspaceRuleEligible {
+		return "Core cannot enforce a non-opaque workspace-confined rule for this operation"
+	}
+	if !binding.TrustedWorkspace || strings.TrimSpace(binding.WorkspaceID) == "" {
+		return "Trusted Core workspace binding is unavailable"
+	}
+	if !permissionBindingEqual(binding, facts.Binding) {
+		return "Workspace binding no longer matches"
+	}
+	candidate := cloneState(State{Policy: policy}).Policy
+	if !policyHasScope(candidate, binding.WorkspaceID) {
+		candidate.Scopes = append(candidate.Scopes, WorkspaceScope{ID: binding.WorkspaceID})
+	}
+	candidate.Rules = append(candidate.Rules, Rule{ID: "eligibility-check", Tool: facts.Tool, Action: facts.Action, WorkspaceID: binding.WorkspaceID, Effect: Allow, Reason: "workspace eligibility evaluation"})
+	decision, err := Evaluate(candidate, facts)
+	if err != nil || decision.Effect != Allow {
+		return "Workspace grant cannot override a stricter permission constraint"
+	}
+	return ""
+}
+
+func cloneApprovalRecord(record ApprovalRecord) ApprovalRecord {
+	return cloneState(State{History: []ApprovalRecord{record}}).History[0]
+}

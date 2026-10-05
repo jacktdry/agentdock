@@ -60,32 +60,3 @@ func (svc *Service) protectedWSLRelativeDescendants(root string) []string {
 	}
 	return result
 }
-
-func wslPathWithin(root, target string) bool {
-	root = pathpkg.Clean(root)
-	target = pathpkg.Clean(target)
-	if root == target {
-		return true
-	}
-	prefix := strings.TrimSuffix(root, "/") + "/"
-	if root == "/" {
-		prefix = "/"
-	}
-	return strings.HasPrefix(target, prefix)
-}
-
-func wslRelativePath(root, target string) string {
-	root = pathpkg.Clean(root)
-	target = pathpkg.Clean(target)
-	if root == target {
-		return ""
-	}
-	prefix := strings.TrimSuffix(root, "/") + "/"
-	if root == "/" {
-		prefix = "/"
-	}
-	if !strings.HasPrefix(target, prefix) {
-		return ""
-	}
-	return strings.TrimPrefix(target, prefix)
-}

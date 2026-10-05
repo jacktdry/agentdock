@@ -62,6 +62,7 @@ func resolveWSLFilePath(raw string) (string, error) {
 }
 
 func (svc *Service) callWSLFileHelper(ctx context.Context, selection fileRuntimeSelection, request map[string]any) (Result, error) {
+	request["protected_roots"] = svc.protectedWSLRoots()
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("encode WSL file helper request: %w", err)

@@ -16,6 +16,10 @@ export interface ApprovalPolicy {
 }
 
 export interface ApprovalRecord {
+    "decision"?: Decision | null;
+    "can_approve_once": boolean;
+    "can_approve_workspace": boolean;
+    "workspace_unavailable_reason"?: string;
     "schema_version": number;
     "version": number;
     "approval_id": string;
@@ -85,6 +89,29 @@ export interface ControlMutationRequest {
     "approval_version"?: number;
     "policy_revision": number;
     "policy"?: Policy | null;
+}
+
+export interface Decision {
+    "effect": string;
+    "rule_id": string;
+    "reason": string;
+    "policy_revision": number;
+    "binding": AuditSafeBinding;
+    "effective": Effective;
+    "sources": DecisionSource[] | null;
+}
+
+export interface DecisionSource {
+    "kind": string;
+    "id"?: string;
+    "effect": string;
+    "reason": string;
+}
+
+export interface Effective {
+    "mode": string;
+    "settings": Settings;
+    "workspace_id"?: string;
 }
 
 export interface Policy {

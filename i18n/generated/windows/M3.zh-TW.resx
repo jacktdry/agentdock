@@ -691,6 +691,123 @@
   <data name="overview.open_system" xml:space="preserve">
     <value>查看更新</value>
   </data>
+  <data name="permission.boundary" xml:space="preserve">
+    <value>AgentDock Core 管理應用程式權限。這不提供 macOS 或 Windows 作業系統安全沙箱。</value>
+  </data>
+  <data name="permission.commands" xml:space="preserve">
+    <value>命令</value>
+  </data>
+  <data name="permission.completed" xml:space="preserve">
+    <value>Core 已接受決定。此介面沒有執行原始操作。</value>
+  </data>
+  <data name="permission.confirm" xml:space="preserve">
+    <value>確認這項權限變更</value>
+  </data>
+  <data name="permission.confirm_scope" xml:space="preserve">
+    <value>請核對上述操作、批准 ID／版本及政策版本。工作區授權不能覆蓋 Profile 或安全限制。變更政策會使既有待批准與單次授權失效。</value>
+  </data>
+  <data name="permission.constraints" xml:space="preserve">
+    <value>僅顯示 Core 回報的限制。Provider 與 OS 權限獨立，執行時會再次檢查；未提供的限制不視為 AgentDock 權限。</value>
+  </data>
+  <data name="permission.created" xml:space="preserve">
+    <value>建立時間</value>
+  </data>
+  <data name="permission.empty" xml:space="preserve">
+    <value>目前 Core 快照沒有紀錄。</value>
+  </data>
+  <data name="permission.error" xml:space="preserve">
+    <value>要求未完成。請檢查重新讀取的 Core 狀態，再重新確認；不會自動重試操作。</value>
+  </data>
+  <data name="permission.execution" xml:space="preserve">
+    <value>執行結果</value>
+  </data>
+  <data name="permission.expires" xml:space="preserve">
+    <value>到期時間</value>
+  </data>
+  <data name="permission.file_writes" xml:space="preserve">
+    <value>檔案寫入</value>
+  </data>
+  <data name="permission.filesystem" xml:space="preserve">
+    <value>檔案系統</value>
+  </data>
+  <data name="permission.history" xml:space="preserve">
+    <value>批准歷史</value>
+  </data>
+  <data name="permission.history_bound" xml:space="preserve">
+    <value>Core 歷史最多保留 512 筆。批准狀態與執行結果是不同資訊。</value>
+  </data>
+  <data name="permission.management" xml:space="preserve">
+    <value>管理</value>
+  </data>
+  <data name="permission.mcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="permission.mode" xml:space="preserve">
+    <value>模式</value>
+  </data>
+  <data name="permission.network" xml:space="preserve">
+    <value>網路</value>
+  </data>
+  <data name="permission.never" xml:space="preserve">
+    <value>never 將 Ask 轉為 Deny，不會自動批准。Granular 類別決定哪些 Ask 可以建立待批准項目。</value>
+  </data>
+  <data name="permission.once" xml:space="preserve">
+    <value>批准一次</value>
+  </data>
+  <data name="permission.once_unavailable" xml:space="preserve">
+    <value>批准一次需要穩定且已驗證的身分。</value>
+  </data>
+  <data name="permission.other" xml:space="preserve">
+    <value>其他</value>
+  </data>
+  <data name="permission.pending" xml:space="preserve">
+    <value>待批准項目</value>
+  </data>
+  <data name="permission.pending_truth" xml:space="preserve">
+    <value>待批准表示等待決定，不表示操作正在執行。</value>
+  </data>
+  <data name="permission.policy" xml:space="preserve">
+    <value>批准政策</value>
+  </data>
+  <data name="permission.profile" xml:space="preserve">
+    <value>權限 Profile</value>
+  </data>
+  <data name="permission.reject" xml:space="preserve">
+    <value>拒絕</value>
+  </data>
+  <data name="permission.retry" xml:space="preserve">
+    <value>批准不代表原始操作已執行。原操作仍需由 caller retry。Approve Once 只批准一次精確重試；Approve Workspace 只適用於受信任工作區內指定工具與動作。</value>
+  </data>
+  <data name="permission.review_policy" xml:space="preserve">
+    <value>審閱政策變更</value>
+  </data>
+  <data name="permission.reviewer" xml:space="preserve">
+    <value>批准審查器</value>
+  </data>
+  <data name="permission.revision" xml:space="preserve">
+    <value>狀態／政策版本</value>
+  </data>
+  <data name="permission.scope" xml:space="preserve">
+    <value>工作區／工作階段範圍</value>
+  </data>
+  <data name="permission.stale" xml:space="preserve">
+    <value>Core 狀態無法取得或正在更新。讀取最新狀態前停用批准操作。</value>
+  </data>
+  <data name="permission.title" xml:space="preserve">
+    <value>權限與批准</value>
+  </data>
+  <data name="permission.trace" xml:space="preserve">
+    <value>有效權限／決策來源</value>
+  </data>
+  <data name="permission.workspace" xml:space="preserve">
+    <value>批准工作區</value>
+  </data>
+  <data name="permission.workspace_boundary" xml:space="preserve">
+    <value>應用程式工作區邊界</value>
+  </data>
+  <data name="permission.workspace_unavailable" xml:space="preserve">
+    <value>Core 尚未證明此操作可取得侷限於工作區的授權。</value>
+  </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action}完成。</value>
   </data>

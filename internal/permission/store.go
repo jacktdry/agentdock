@@ -234,6 +234,16 @@ func validateApprovalRecord(record ApprovalRecord) error {
 	default:
 		return fmt.Errorf("invalid dispatch outcome %q", record.DispatchOutcome)
 	}
+	if record.Decision != nil {
+		if len(record.Decision.Sources) > MaxSources {
+			return errors.New("approval trace exceeds bound")
+		}
+		for _, source := range record.Decision.Sources {
+			if len(source.Kind) > 128 || len(source.ID) > 256 || len(source.Effect) > 64 || len(source.Reason) > MaxReasonBytes {
+				return errors.New("approval trace field exceeds bound")
+			}
+		}
+	}
 	if len(record.Summary) > MaxSummaryBytes || len(record.Scope) > MaxScopeBytes || len(record.Reason) > MaxReasonBytes {
 		return errors.New("approval display field exceeds bound")
 	}
@@ -466,7 +476,7 @@ func (s *Store) History() ([]ApprovalRecord, error) {
 	if err := s.expireLocked(); err != nil {
 		return nil, err
 	}
-	result := append([]ApprovalRecord(nil), s.state.History...)
+	result := cloneState(s.state).History
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
 			return result[i].ID > result[j].ID
@@ -486,7 +496,7 @@ func (s *Store) Approval(id string) (ApprovalRecord, error) {
 	if !ok {
 		return ApprovalRecord{}, ErrNotFound
 	}
-	return record, nil
+	return cloneState(State{History: []ApprovalRecord{record}}).History[0], nil
 }
 
 func (s *Store) expireLocked() error {

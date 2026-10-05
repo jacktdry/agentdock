@@ -4,6 +4,7 @@ import (
 	"embed"
 	"flag"
 	"log"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 
@@ -22,7 +23,11 @@ func main() {
 	runtimeRootFlag := flag.String("runtime-root", "", "AgentDock runtime root override")
 	flag.Parse()
 
-	settings := NewSettingsService("")
+	settingsPath := ""
+	if *runtimeRootFlag != "" {
+		settingsPath = filepath.Join(*runtimeRootFlag, "shared-desktop-poc", "preferences.json")
+	}
+	settings := NewSettingsService(settingsPath)
 	prefs := settings.Get().Preferences
 	contractService := desktopapi.NewContractService()
 	runtimeService := desktopapi.NewRuntimeService(*runtimeRootFlag)

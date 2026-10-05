@@ -691,6 +691,123 @@
   <data name="overview.open_system" xml:space="preserve">
     <value>View updates</value>
   </data>
+  <data name="permission.boundary" xml:space="preserve">
+    <value>AgentDock Core application permission control. This does not provide a macOS or Windows OS security sandbox.</value>
+  </data>
+  <data name="permission.commands" xml:space="preserve">
+    <value>Commands</value>
+  </data>
+  <data name="permission.completed" xml:space="preserve">
+    <value>Core accepted the decision. The original operation was not executed by this UI.</value>
+  </data>
+  <data name="permission.confirm" xml:space="preserve">
+    <value>Confirm this exact permission change</value>
+  </data>
+  <data name="permission.confirm_scope" xml:space="preserve">
+    <value>Review the exact operation, approval ID/version and policy revision above. Workspace grants cannot override profile or hard safety constraints. Policy changes invalidate outstanding approvals.</value>
+  </data>
+  <data name="permission.constraints" xml:space="preserve">
+    <value>Only constraints reported by Core are shown. Provider and OS permissions remain independent and are checked again at dispatch; unknown constraints are not claimed as AgentDock authority.</value>
+  </data>
+  <data name="permission.created" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="permission.empty" xml:space="preserve">
+    <value>No records in the current Core snapshot.</value>
+  </data>
+  <data name="permission.error" xml:space="preserve">
+    <value>The request could not be completed. Review refreshed Core state and confirm again; no operation is retried automatically.</value>
+  </data>
+  <data name="permission.execution" xml:space="preserve">
+    <value>Execution outcome</value>
+  </data>
+  <data name="permission.expires" xml:space="preserve">
+    <value>Expires</value>
+  </data>
+  <data name="permission.file_writes" xml:space="preserve">
+    <value>File writes</value>
+  </data>
+  <data name="permission.filesystem" xml:space="preserve">
+    <value>Filesystem</value>
+  </data>
+  <data name="permission.history" xml:space="preserve">
+    <value>Approval History</value>
+  </data>
+  <data name="permission.history_bound" xml:space="preserve">
+    <value>Core history is bounded to 512 records. Status and execution outcome are separate.</value>
+  </data>
+  <data name="permission.management" xml:space="preserve">
+    <value>Management</value>
+  </data>
+  <data name="permission.mcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
+  <data name="permission.mode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="permission.network" xml:space="preserve">
+    <value>Network</value>
+  </data>
+  <data name="permission.never" xml:space="preserve">
+    <value>never turns Ask into Deny; it never auto-approves. Granular categories control which Ask requests can create approvals.</value>
+  </data>
+  <data name="permission.once" xml:space="preserve">
+    <value>Approve Once</value>
+  </data>
+  <data name="permission.once_unavailable" xml:space="preserve">
+    <value>Approve Once requires a stable authenticated principal.</value>
+  </data>
+  <data name="permission.other" xml:space="preserve">
+    <value>Other</value>
+  </data>
+  <data name="permission.pending" xml:space="preserve">
+    <value>Pending Approvals</value>
+  </data>
+  <data name="permission.pending_truth" xml:space="preserve">
+    <value>Pending means waiting for a decision; it does not mean the operation is running.</value>
+  </data>
+  <data name="permission.policy" xml:space="preserve">
+    <value>Approval Policy</value>
+  </data>
+  <data name="permission.profile" xml:space="preserve">
+    <value>Permission Profile</value>
+  </data>
+  <data name="permission.reject" xml:space="preserve">
+    <value>Reject</value>
+  </data>
+  <data name="permission.retry" xml:space="preserve">
+    <value>Approval does not execute the original operation. The caller must retry. Approve Once authorizes one exact retry; Approve Workspace applies only to the specific tool/action in the trusted workspace.</value>
+  </data>
+  <data name="permission.review_policy" xml:space="preserve">
+    <value>Review policy change</value>
+  </data>
+  <data name="permission.reviewer" xml:space="preserve">
+    <value>Approval Reviewer</value>
+  </data>
+  <data name="permission.revision" xml:space="preserve">
+    <value>State / policy revision</value>
+  </data>
+  <data name="permission.scope" xml:space="preserve">
+    <value>Workspace / session scope</value>
+  </data>
+  <data name="permission.stale" xml:space="preserve">
+    <value>Core state unavailable or refreshing. Decisions are disabled until fresh state is read.</value>
+  </data>
+  <data name="permission.title" xml:space="preserve">
+    <value>Permission / Approval</value>
+  </data>
+  <data name="permission.trace" xml:space="preserve">
+    <value>Effective permission / decision trace</value>
+  </data>
+  <data name="permission.workspace" xml:space="preserve">
+    <value>Approve Workspace</value>
+  </data>
+  <data name="permission.workspace_boundary" xml:space="preserve">
+    <value>Application workspace boundary</value>
+  </data>
+  <data name="permission.workspace_unavailable" xml:space="preserve">
+    <value>Core has not proven this operation can receive a workspace-confined grant.</value>
+  </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action} completed.</value>
   </data>

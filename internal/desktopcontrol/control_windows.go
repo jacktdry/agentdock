@@ -38,7 +38,7 @@ func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) 
 		pipe, err := windows.CreateNamedPipe(
 			name,
 			windows.PIPE_ACCESS_DUPLEX,
-			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
+			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT|windows.PIPE_REJECT_REMOTE_CLIENTS,
 			windows.PIPE_UNLIMITED_INSTANCES,
 			maxMessageBytes+4,
 			maxMessageBytes+4,

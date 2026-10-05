@@ -179,29 +179,33 @@ type PreparedRequest struct {
 	RuntimeEpoch   string
 }
 type ApprovalRecord struct {
-	SchemaVersion         int              `json:"schema_version"`
-	Version               uint64           `json:"version"`
-	ID                    string           `json:"approval_id"`
-	Audit                 AuditBinding     `json:"audit"`
-	Binding               AuditSafeBinding `json:"binding"`
-	Tool                  string           `json:"tool"`
-	Action                string           `json:"action,omitempty"`
-	Summary               string           `json:"summary"`
-	Scope                 string           `json:"scope"`
-	Reason                string           `json:"reason"`
-	RuleID                string           `json:"rule_id,omitempty"`
-	PolicyRevision        uint64           `json:"policy_revision"`
-	GrantedPolicyRevision uint64           `json:"granted_policy_revision,omitempty"`
-	RuntimeEpoch          string           `json:"runtime_epoch"`
-	Status                string           `json:"status"`
-	CreatedAt             time.Time        `json:"created_at"`
-	ExpiresAt             time.Time        `json:"expires_at"`
-	DecidedAt             *time.Time       `json:"decided_at,omitempty"`
-	DecidedBy             string           `json:"decided_by,omitempty"`
-	GrantKind             string           `json:"grant_kind"`
-	GrantedRuleID         string           `json:"granted_rule_id,omitempty"`
-	RetryCallID           string           `json:"retry_call_id,omitempty"`
-	DispatchOutcome       string           `json:"dispatch_outcome"`
+	Decision                   *Decision        `json:"decision,omitempty"`
+	CanApproveOnce             bool             `json:"can_approve_once"`
+	CanApproveWorkspace        bool             `json:"can_approve_workspace"`
+	WorkspaceUnavailableReason string           `json:"workspace_unavailable_reason,omitempty"`
+	SchemaVersion              int              `json:"schema_version"`
+	Version                    uint64           `json:"version"`
+	ID                         string           `json:"approval_id"`
+	Audit                      AuditBinding     `json:"audit"`
+	Binding                    AuditSafeBinding `json:"binding"`
+	Tool                       string           `json:"tool"`
+	Action                     string           `json:"action,omitempty"`
+	Summary                    string           `json:"summary"`
+	Scope                      string           `json:"scope"`
+	Reason                     string           `json:"reason"`
+	RuleID                     string           `json:"rule_id,omitempty"`
+	PolicyRevision             uint64           `json:"policy_revision"`
+	GrantedPolicyRevision      uint64           `json:"granted_policy_revision,omitempty"`
+	RuntimeEpoch               string           `json:"runtime_epoch"`
+	Status                     string           `json:"status"`
+	CreatedAt                  time.Time        `json:"created_at"`
+	ExpiresAt                  time.Time        `json:"expires_at"`
+	DecidedAt                  *time.Time       `json:"decided_at,omitempty"`
+	DecidedBy                  string           `json:"decided_by,omitempty"`
+	GrantKind                  string           `json:"grant_kind"`
+	GrantedRuleID              string           `json:"granted_rule_id,omitempty"`
+	RetryCallID                string           `json:"retry_call_id,omitempty"`
+	DispatchOutcome            string           `json:"dispatch_outcome"`
 }
 
 type CreateApprovalInput struct {

@@ -100,7 +100,7 @@ type treeEntry struct {
 	depth int
 }
 
-func walkTree(root string, includeHidden, includeIgnored bool, maxDepth int, skipped *[]string, visit func(treeEntry) bool) error {
+func walkTree(root string, includeHidden, includeIgnored bool, maxDepth int, protectedRoots []string, skipped *[]string, visit func(treeEntry) bool) error {
 	rules := []ignoreRule(nil)
 	if !includeIgnored {
 		rules = loadIgnoreRules(root)
@@ -119,6 +119,9 @@ func walkTree(root string, includeHidden, includeIgnored bool, maxDepth int, ski
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		for _, entry := range entries {
 			full := filepath.Join(directory, entry.Name())
+			if controlPathBlocked(protectedRoots, full, false) {
+				continue
+			}
 			rel, err := filepath.Rel(root, full)
 			if err != nil {
 				return false, err
@@ -197,7 +200,7 @@ func listDirectory(req *Request) (*Response, error) {
 	items := make([]DirEntry, 0)
 	skipped := make([]string, 0)
 	truncated := false
-	err = walkTree(root, req.IncludeHidden, req.IncludeIgnored, maxDepth, &skipped, func(item treeEntry) bool {
+	err = walkTree(root, req.IncludeHidden, req.IncludeIgnored, maxDepth, req.ProtectedRoots, &skipped, func(item treeEntry) bool {
 		kind := "file"
 		if item.info.IsDir() {
 			kind = "directory"
@@ -267,7 +270,7 @@ func searchText(req *Request) (*Response, error) {
 		candidates = append(candidates, candidate{full: root, rel: filepath.Base(root)})
 	} else if info.IsDir() {
 		skipped := []string{}
-		if err := walkTree(root, req.IncludeHidden, req.IncludeIgnored, 0, &skipped, func(item treeEntry) bool {
+		if err := walkTree(root, req.IncludeHidden, req.IncludeIgnored, 0, req.ProtectedRoots, &skipped, func(item treeEntry) bool {
 			if item.info.Mode().IsRegular() {
 				candidates = append(candidates, candidate{full: item.full, rel: item.rel})
 			}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/permission"
@@ -47,10 +48,17 @@ func (r *Runtime) RuntimeApprovals(approvalID, status string, limit int) (Result
 		}, nil
 	}
 
-	history, err := r.permissions.History()
+	state, err := r.permissions.Snapshot()
 	if err != nil {
 		return nil, toolErrorCause("PERMISSION_STATE_ERROR", "AgentDock permission history could not be read", "permission", nil, err)
 	}
+	history := state.History
+	sort.SliceStable(history, func(i, j int) bool {
+		if history[i].CreatedAt.Equal(history[j].CreatedAt) {
+			return history[i].ID > history[j].ID
+		}
+		return history[i].CreatedAt.After(history[j].CreatedAt)
+	})
 	filtered := make([]permission.ApprovalRecord, 0, len(history))
 	for _, record := range history {
 		if status != "" && record.Status != status {
@@ -66,6 +74,8 @@ func (r *Runtime) RuntimeApprovals(approvalID, status string, limit int) (Result
 		"source":         runtimeAPISource,
 		"schema_version": permission.SchemaVersion,
 		"approvals":      filtered,
+		"state_revision": state.Revision,
+		"runtime_epoch":  state.RuntimeEpoch,
 		"count":          len(filtered),
 	}, nil
 }

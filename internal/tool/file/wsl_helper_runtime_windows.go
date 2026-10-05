@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	wslHelperProtocolVersion = "1"
+	wslHelperProtocolVersion = "2"
 	wslHelperOverrideEnv     = "AGENTDOCK_WSL_HELPER_PATH"
 	wslHelperManifestName    = "manifest.json"
 	wslHelperDeployTimeout   = 30 * time.Second

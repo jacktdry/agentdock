@@ -14,6 +14,33 @@ import (
 	"time"
 )
 
+func TestApprovalMetadataIsBoundedDetachedAndWorkspaceEligibilityTruthful(t *testing.T) {
+	store := newPermissionStore(t, t.TempDir(), "metadata-epoch")
+	record, _ := mustCreateApproval(t, store, func(input *CreateApprovalInput) { input.Facts.WorkspaceRuleEligible = false })
+	if record.Decision == nil || len(record.Decision.Sources) == 0 || !record.CanApproveOnce || record.CanApproveWorkspace || record.WorkspaceUnavailableReason == "" {
+		t.Fatalf("unavailable must explain Core eligibility: %#v", record)
+	}
+	record.Decision.Sources[0].Reason = "caller mutation"
+	read, err := store.Approval(record.ID)
+	if err != nil || read.Decision.Sources[0].Reason == "caller mutation" {
+		t.Fatal("returned trace aliases durable state")
+	}
+	history, err := store.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	history[0].Decision.Sources[0].Reason = "history mutation"
+	read, _ = store.Approval(record.ID)
+	if read.Decision.Sources[0].Reason == "history mutation" {
+		t.Fatal("history aliases durable state")
+	}
+	read.Decision.Sources[0].Reason = "read mutation"
+	again, _ := store.Approval(record.ID)
+	if again.Decision.Sources[0].Reason == "read mutation" {
+		t.Fatal("approval read aliases durable state")
+	}
+}
+
 func newPermissionStore(t *testing.T, root, epoch string) *Store {
 	t.Helper()
 	store, err := NewStore(root, epoch)

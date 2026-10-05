@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PermissionPanel from './components/permission/PermissionPanel.vue'
 import ACPPanel from './components/acp/ACPPanel.vue'
 import ActivityStreamPanel from './components/activity/ActivityStreamPanel.vue'
 import ExecutionCenterPanel from './components/execution/ExecutionCenterPanel.vue'
@@ -55,6 +56,7 @@ function changeLocale(event: Event) {
         <ExecutionCenterPanel v-else-if="section === 'execution'" />
         <ConnectionPanel v-else-if="section === 'connection'" />
         <ACPPanel v-else-if="section === 'acp'" />
+        <PermissionPanel v-else-if="section === 'permission'" />
         <BasicSettingsPanel v-else-if="section === 'settings'" />
         <div v-else-if="section === 'system'" class="feature-stack">
           <UpdateCard />
