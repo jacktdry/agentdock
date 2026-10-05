@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: Core implementation in progress — versioned Runtime / Shared Desktop API complete; Permission UI pending
+> Status: M8 implementation and available-host validation complete; Windows native UAT is an external follow-up
 >
 > Date: 2026-10-05
 >
@@ -10,6 +10,76 @@
 >
 > Prerequisite repaired on this branch: M5 Activity Center / execution model integrated as `cbdabeef` from original `a505898a`
 
+
+## M8 closeout — 2026-10-05
+
+Implementation commit: `3df9a784`. Prior API / document checkpoints: `652331ed` / `f48f6374`. The closeout document commit is titled `docs(permission): record M8 closeout and validation`.
+
+Core contract, versioned Desktop-control API and Shared Permission UI are complete. Approval Reviewer remains `defer`. No automatic reviewer, original-operation dispatch, provider permission authority or OS sandbox claim is added.
+
+### Shared UI and Core truth
+
+- Permission navigation displays the Core profile, global mode and reviewer; Approval Policy supports on-request / never / granular editing while preserving scopes, rules and profile. Confirmation displays exact mutation, approval ID/version, policy revision, operation/scope/reason and challenge expiry. Native Go retains the credential; JS receives only safe challenge/state metadata.
+- Core approval records contain bounded creation-time decision/effective-permission traces and capability metadata. Returned nested data is detached from durable state. Existing records without a trace truthfully show unavailable. Approval and dispatch outcome are separate: pending, approved_once, consumed, approved_workspace, rejected, expired and invalidated remain Core-owned states.
+- History reads include an atomic snapshot revision/epoch. UI compares status/history revisions and epochs, disables mutation on incoherence/unavailability, and re-reads after every mutation result, including conflicts and transport uncertainty. It refreshes on mount/focus/online/visibility and every five seconds while visible; pending challenges are cancelled on reconnect and do not survive navigation. Cancel/unmount invalidates in-flight confirmation presentation. Event listeners and timer are removed on unmount.
+- Policy draft values survive refreshes at the same policy revision; a changed revision resets them to Core truth. Exact payloads are copied when confirmation starts. One confirmation can be submitted once. The UI never calls Runtime.Call or replays the original operation.
+
+### Workspace eligibility final decision
+
+All current built-in classifiers deliberately leave `WorkspaceRuleEligible=false`. File writes can escape a workspace depending on action/path and command, Browser/Computer, management and provider effects are not durable filesystem-confined rule classes. Merely targeting an in-workspace file is not proof that an exact tool/action durable allow rule is confined: that rule does not encode an enforceable path restriction. No built-in operation was invented or reclassified to enable this button.
+
+Core reports `can_approve_workspace=false` and a bounded unavailability reason. UI disables Approve Workspace. Store eligibility projection and actual mutation share the same checks: effects must be known/non-opaque, an enforceable rule class and trusted workspace binding are required, and the resulting rule cannot override a stricter evaluated constraint. Synthetic store tests exercise eligible classes only as contract coverage. Runtime in-workspace file-edit regression and native UAT prove the unavailable state is truthful. Approve Once still requires the stable authenticated principal and exact retry.
+
+### Final security review
+
+Independent read-only review inspected Core admission, Runtime mutation entrypoints, ACP continuation/option selection/missing-hook failure, distinct Desktop authority, strict JSON/fingerprints, one-shot/principal/revision/epoch behavior, protected paths and UI execution truthfulness. It found two Windows issues, both repaired and re-reviewed:
+
+1. Windows native bootstrap named pipe now uses `PIPE_REJECT_REMOTE_CLIENTS` in addition to its current-user DACL. A remote authenticated same-user pipe client must not retrieve the Desktop credential.
+2. Windows-backed WSL paths now use conservative case-folding for `/mnt/<drive>` only. Linux-native paths retain case sensitivity. Host injects protected roots; helper canonicalizes symlink ancestors, guards read/write/move/transaction paths, and skips protected scan descendants before inspecting them. Helper/manifest/installer require protocol v2, failing closed against older helpers that would ignore protected roots.
+
+The follow-up review found no concrete unresolved implementation blocker in those fixes. Portable regression and cross-compilation are evidence; actual Windows named-pipe/DrvFS behavior remains an external native-UAT check. This is an inspected review, not a claim of exhaustive proof against unrestricted same-account processes or OS sandboxing.
+
+### Validation actually executed
+
+| Layer | Evidence / result |
+| --- | --- |
+| Full root suite | `TMPDIR=/private/tmp go test ./... -count=1`, then final-tree `-json`: 2,302 test cases and 62 packages pass. Sole failure: unchanged `TestScriptGovernanceInventoryCoversTrackedScripts` for `packaging/macos/app-identity.sh` missing from inventory. This exact failure was reproduced at clean `f48f6374` before modifications. It is not fixed or reclassified as M8 failure. |
+| Root skip | Only `internal/acp.TestRealAdapterInitialize` was skipped without `AGENTDOCK_TEST_ACP_COMMAND`. It was then run explicitly against `/opt/homebrew/bin/codex-acp` using a Next-marked wrapper with isolated HOME/CODEX_HOME and workspace; pass in 0.85 seconds. This is real initialize evidence, not a full provider prompt/OS-permission UAT. |
+| Race | `TMPDIR=/private/tmp go test -race` with `-count=1`: permission, app, acp, runtimeapi, httpx, desktopapi, desktopcontrol, execution, nexusbridge, tool/browser/..., tool/computer/..., tool/file, tool/media, mcp/..., plugin/..., desktopruntime, tool/task and wslfilehelper all pass. This includes evaluator/policy/durable/expiry/restart/exact-principal/concurrent consume, handler-not-called, provider continuation and Broker hard-constraint regressions. |
+| Vet / formatting | `TMPDIR=/private/tmp go vet ./...`, `git diff --check` and `go run ./tools/i18n check`: pass. Wails beta.27 bindings regenerated. |
+| Shared Go | Nested `desktop/shared-poc`: `TMPDIR=/private/tmp go test ./... -count=1`: pass. |
+| Frontend | 60 tests in 10 files pass, `npm run typecheck` and `npm run build` pass. Includes Core revision/epoch coherence, reconnect restoration, unavailable workspace grants, explicit double confirmation, at-most-once submission, conflicts, challenge expiry and sanitized errors. |
+| macOS compile | Core and Shared Desktop production builds pass on arm64. Inherited deployment-target linker warnings remain; they did not prevent native launch. |
+| Windows compile | `GOOS=windows GOARCH=amd64 CGO_ENABLED=0` Core and Shared Desktop production builds pass. Windows file/control and Shared Desktop test executables cross-compile. This is not execution on Windows. |
+| WSL protection | Portable DrvFS casing/symlink/ancestor guard tests run on macOS and pass (also race). Linux-only helper test suite and helper binary cross-compile for linux/amd64. Linux dispatch/scan test binaries were not executed: this host has no running Docker daemon or Windows/WSL host. |
+
+An initial added test used a duplicate local variable and an initial race command named a nonexistent settings package. These were diagnosed and corrected; the final root/race runs above have no such failure. Settings regression is covered by the actual `desktopapi` / `desktopruntime` packages.
+
+### Next-only native/runtime UAT
+
+Isolated ad-hoc signed `AgentDock Next.app`, bundle ID `dev.dropabit.agentdock.next.m8-uat`, from this branch; roots under `/private/tmp/agentdock-m8-next-uat-m3z3gzlj/{runtime,state,workspace}`, direct loopback `127.0.0.1:18767`, explicit `AGENTDOCK_DESKTOP_VARIANT=next`. Native Shared Desktop always received `--runtime-root`; its preferences followed that fixture root. Installed stable/Next bundles and live launchd services were not test targets.
+
+Verified through the native Wails UI and Core/MCP/IPC fixtures:
+
+- Native profile/policy/reviewer `defer`, effective decision trace and workspace-disabled reason render truthfully.
+- Ordinary bearer mutation returns 401; normal read routes and health succeed. Trusted native IPC bootstrap → Desktop Go → exact challenge → Core mutation works.
+- Ask does not create the file; native Approve Once shows `approved_once / not_dispatched`; the file remains absent until the explicit caller retry. The exact same-principal retry creates it and history shows `consumed / succeeded`.
+- Native Reject leaves the operation unexecuted; native `never` policy editing/confirmation persists the Core change and the subsequent Ask-class request is Deny without handler execution.
+- Native app stop/relaunch against the same Core restores pending/history. A policy change while a confirmation dialog is open makes confirmation fail, re-fetches Core state and shows `invalidated / not_dispatched`; no operation is dispatched.
+- Stopping only the fixture Core makes UI show unavailable/stale with policy mutations disabled. Restarting that Core restores policy/history, invalidates the old-epoch pending request and leaves its target absent.
+- Fixture Core/App PIDs and descendants are gone; port 18767 is closed and `control.sock` is removed. No temporary runtime was left active. Ad-hoc UAT is not release signing or updater/service-registration validation.
+
+Final committed-tree native rebuild repeated the Ask → Approve Once → explicit retry flow successfully after the frontend lifecycle cleanup correction; all fixture resources were again cleaned up.
+
+Raw transient test logs remain in `/private/tmp/agentdock-m8-{root-acceptance.jsonl,race-final3.log,vet-final.log,desktop-final.log}`. Sanitized native UAT outcomes are in the fixture's `evidence.json`; credentials/payloads are not copied into repo docs or Memory.
+
+### Canonical tasks, handoff and external checks
+
+Per user reconciliation, repo `m8-permission-approval.md`, `roadmap.md`, `README.md` plus Next task store are the source of truth. New canonical Next task: `tsk_9b1ae7b19ea15a40`; full goal, 10 steps and acceptance conditions reconstruct M8 closeout. Existing `tsk_9c4e5c21c4c24c53` remains the linked API continuation/checkpoint. `tsk_b9e4bd0e985de598` is only a **legacy stable-store task reference**; it was never read, exported, modified or migrated.
+
+Engineering Memory contains an additive final implementation/validation note and Codex Memory has an additive update note. Codebase Memory project `Users-wei-sideProject-agentdock-m8-permission-approval` is refreshed (17,251 nodes / 80,539 edges) with a closeout ADR while preserving its earlier API ADR. No destructive store rebuild/cleanup is performed.
+
+External checks: native Windows named-pipe local/remote denial, true DrvFS alternate-case/symlink protection, Linux helper dispatch/scan and Windows UI/runtime UAT require the appropriate host. These are explicit platform-evidence follow-ups under the available-host acceptance scope, not claims of passing native UAT. Existing script-governance inventory debt is separate. No unresolved implementation security blocker remains from review. M8 local closeout does not authorize push, merge, release, stable activation or production deployment.
 
 ## Implementation checkpoint — 2026-10-05
 

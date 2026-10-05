@@ -399,33 +399,17 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 ## M8 — Permission / Approval
 
-狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、shared admission、ACP provider continuation gate、distinct Desktop control authority 與 control-plane path protection 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
+狀態：**M8 implementation / available-host validation complete**。Core contract、Desktop control API (`652331ed`)、Shared Permission UI 與 authority hardening (`3df9a784`) 已完成；Reviewer 維持 `defer`。完整 commit、security review、tests 與 Next 原生證據見 [M8 closeout](m8-permission-approval.md#m8-closeout--2026-10-05)。
 
-目前完成：
-- ✅ M5 execution identity prerequisite：`cbdabeef`
-- ✅ M8 authority / binding / retry contract：`0a6e93c8`
-- ✅ Permission Profile / Approval Policy / rules evaluator：`9ed469f1`
-- ✅ bounded durable approval/history store + one-shot consumption：`4abc9376`
-- ✅ `Runtime.Call` shared admission boundary：`9bc8065c`
-- ✅ stable opaque MCP authorization principals：`4c1c9274`
-- ✅ Nexus / ACP capability principal propagation：`c8c10053`
-- ✅ ACP Browser / Computer host-capability admission：`ef9c29ce`
-- ✅ Runtime insertion / task / MCP / evolution management admission + handler-before/after / M5 journal truthfulness：`832018c3`
-- ✅ ACP `session/request_permission` provider-continuation gate、fail-closed missing hook、cancel safe bypass、exact interaction/principal one-shot binding：`8e469fe0`
-- ✅ distinct per-Core-start Desktop control authority + exact one-time confirmation challenge：`dbf86e17`
-- ✅ permission/control-plane Host + WSL file/media path protection：`f2a6a70f`
+- Core trace / eligibility metadata、explicit one-time confirmation、bounded history、reconnect/conflict/retry truthfulness 已落地。批准不會執行原操作。
+- 內建 operation 的 durable workspace grant 維持 fail closed；UI disabled 並顯示 Core 原因，沒有為按鈕放寬 classifier。
+- full root suite 重跑：2,302 tests / 62 packages pass；唯一既有失敗仍是 app-identity script inventory。Real ACP initialize 的環境 skip 已用隔離 Codex adapter 補跑通過。M8 relevant race、root vet、Shared Go、60 frontend tests、typecheck/build、i18n/diff check 通過。
+- AgentDock Next fixture-only macOS 原生 UAT 通過政策編輯、Ask/批准/明確 retry、Reject、conflict、app reconnect、Core 中斷/restart；PIDs/port/socket 已清除。stable 完全未操作。
+- Windows Core / Shared Desktop / control/file test cross-build 與 portable WSL guard regression 通過。Windows/WSL native、Linux-only helper dispatch/scan execution 是明列外部驗證；cross-build 不等於 native UAT。
+- 獨立 security review 的 Windows remote named-pipe / DrvFS 大小寫問題已修正並複核；helper protocol v2 拒絕不支援 protected roots 的舊 payload。
+- Canonical Next Task `tsk_9b1ae7b19ea15a40` 關聯 API continuation `tsk_9c4e5c21c4c24c53`。舊 `tsk_b9e4bd0e985de598` 僅為 legacy stable-store reference；repo docs + Next task store 是 source of truth。
 
-2026-10-05 API checkpoint：`652331ed` 已完成 versioned Runtime / Shared Desktop `DomainPermission` v1 API，包含 distinct Desktop-control routes、64 KiB strict JSON、confirmation / policy / approval dispatch、revision/version conflict 與 sanitized error mapping。Native IPC bootstrap 讓 Go backend 持有 per-Core-start credential；前端只有 typed state/challenge metadata。交接的 3 個未提交檔案已納入此 checkpoint。Targeted Go tests、race、vet、Shared Desktop Go tests、48 frontend tests/typecheck/build、Windows Core cross-build、diff check 通過，未操作 stable runtime/state。
-
-目前內建 classifier 未標記 `WorkspaceRuleEligible`，`approveWorkspace` 對內建請求維持 fail closed；本 API checkpoint 不新增 grant eligibility，也不宣稱 Permission UI 或 live Next rollout 已完成。
-
-後續 gate：
-- ✅ versioned Runtime / Shared Desktop `DomainPermission` API：`652331ed`；
-- Shared Desktop Permission Profile / Approval Policy / effective permission / approval history UI；
-- Approval Reviewer 維持 `defer`，M8 不啟動自動 reviewer；
-- permission/race/vet、Browser/Computer hard-constraint、ACP/MCP/plugin/settings、Shared Desktop、i18n、macOS/Windows 與 AgentDock Next-only runtime smoke 全部通過後才 closeout。
-
-本 Milestone 的 runtime 驗證限 Next；stable AgentDock 不是開發或驗證 target。Shared UI parity 評估仍需在 M8 後段決定哪些舊 native business views 可以 deprecated。
+Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeout 不含 push、merge、release、production 部署或 stable migration。原生 Windows 外部證據與既有 governance debt 持續依 [M8 文件](m8-permission-approval.md) 追蹤。
 
 ## M9 — Release Migration
 
