@@ -26,6 +26,7 @@ type ConnectionDependencies struct {
 	PreflightPort     func(context.Context, desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error)
 	ReadBasic         func(context.Context, string) (desktopruntime.BasicSettings, error)
 	UpdateBasic       func(context.Context, string, desktopruntime.BasicSettings) error
+	CoreAction        func(context.Context, string, string) error
 }
 
 func defaultConnectionDependencies() ConnectionDependencies {
@@ -36,6 +37,7 @@ func defaultConnectionDependencies() ConnectionDependencies {
 		PreflightPort:     desktopruntime.PreflightPortMutation,
 		ReadBasic:         desktopruntime.ReadBasicSettings,
 		UpdateBasic:       desktopruntime.UpdateBasicSettings,
+		CoreAction:        desktopruntime.RunServiceActionLocked,
 		ReadPasswordState: desktopruntime.ReadOAuthPasswordState,
 		ReadPassword:      desktopruntime.ReadOAuthPassword,
 		// No environment proxy, cookie jar, auth middleware or client certificate.
@@ -68,6 +70,9 @@ func NewConnectionServiceWithDependencies(root string, deps ConnectionDependenci
 	}
 	if deps.UpdateBasic != nil {
 		s.foundation.UpdateBasic = deps.UpdateBasic
+	}
+	if deps.CoreAction != nil {
+		s.foundation.CoreAction = deps.CoreAction
 	}
 	if deps.Transport != nil {
 		s.foundation.Transport = deps.Transport

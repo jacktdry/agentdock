@@ -53,6 +53,7 @@ func integratedConnectionFixture(t *testing.T) (*ConnectionService, *desktoprunt
 			c.CoreEndpoint = fmt.Sprintf("http://127.0.0.1:%d", c.Port)
 			return nil
 		},
+		CoreAction: func(context.Context, string, string) error { return nil },
 	})
 	service.foundation.PreflightPort = func(ctx context.Context, request desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error) {
 		o := service.foundation.ObservePort(ctx, request)
@@ -433,73 +434,129 @@ func TestConnectionTunnelCurrentPortRejectsBeforeMutation(t *testing.T) {
 	}
 }
 
-func TestConnectionPortFinalListenerVerificationAndRollback(t *testing.T) {
-	for _, running := range []bool{false, true} {
-		for _, finalState := range []desktopruntime.PortState{desktopruntime.PortConflict, desktopruntime.PortUnknown, desktopruntime.PortAvailable, desktopruntime.PortOwnedByNext} {
-			for _, rollbackFails := range []bool{false, true} {
-				t.Run(fmt.Sprintf("running=%v/%s/rollbackFail=%v", running, finalState, rollbackFails), func(t *testing.T) {
-					service, c := integratedConnectionFixture(t)
-					oldPort := c.Port
-					selections := 0
-					service.foundation.SelectRuntime = func(context.Context, string) (desktopruntime.NextConnectionRuntime, error) {
-						selections++
-						return desktopruntime.NextConnectionRuntime{PortRuntime: desktopruntime.NextPortRuntime{Variant: "next", Root: service.runtimeRoot, Binary: "fixture", PID: selections, ProcessInstance: fmt.Sprint(selections)}, BindHost: "127.0.0.1", Running: &running}, nil
-					}
-					checks, writes := 0, 0
-					service.foundation.PreflightPort = func(ctx context.Context, r desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error) {
-						checks++
-						state := desktopruntime.PortAvailable
-						if checks == 2 {
-							state = finalState
-							if r.Runtime.PID < 3 {
-								t.Fatal("did not reselect after restart")
-							}
-						}
-						o := desktopruntime.PortObservation{State: state, ReasonCode: "fixture_final", ObservedPort: r.CandidatePort}
-						if state == desktopruntime.PortConflict || state == desktopruntime.PortUnknown {
-							return o, desktopruntime.ErrPortPreflight
-						}
-						return o, nil
-					}
-					service.foundation.UpdateBasic = func(ctx context.Context, _ string, settings desktopruntime.BasicSettings) error {
-						writes++
-						if writes == 2 {
-							if ctx.Err() != nil || settings.Port != oldPort {
-								t.Fatal("rollback did not restore old settings independently")
-							}
-							if rollbackFails {
-								return errors.New("ROLLBACK_SECRET")
-							}
-						}
-						c.Port = settings.Port
-						c.CoreEndpoint = fmt.Sprintf("http://127.0.0.1:%d", c.Port)
-						return nil
-					}
-					result := service.UpdatePort(context.Background(), ConnectionPortRequest{19000, ConnectionConfigRevision(*c)})
-					accepted := (running && finalState == desktopruntime.PortOwnedByNext) || (!running && finalState == desktopruntime.PortAvailable)
-					if accepted {
-						if !result.Completed || writes != 1 {
-							t.Fatal(result, writes)
-						}
-						return
-					}
-					if result.Completed || result.Error == nil || writes != 2 {
-						t.Fatal(result, writes)
-					}
-					phase := "rolled_back"
-					if rollbackFails {
-						phase = "recovery_required"
-					}
-					if result.Phase != phase {
-						t.Fatal(result)
-					}
-					data, _ := json.Marshal(result)
-					if strings.Contains(string(data), "ROLLBACK_SECRET") {
-						t.Fatal("secret leak")
-					}
-				})
-			}
+func TestConnectionPortRollbackRestoresLifecycleAndOwnership(t *testing.T) {
+	service, c := integratedConnectionFixture(t)
+	oldPort := c.Port
+	running := true
+	selections := 0
+	service.foundation.SelectRuntime = func(context.Context, string) (desktopruntime.NextConnectionRuntime, error) {
+		selections++
+		return desktopruntime.NextConnectionRuntime{
+			PortRuntime: desktopruntime.NextPortRuntime{Variant: "next", Root: service.runtimeRoot, Binary: "fixture", PID: selections, ProcessInstance: fmt.Sprint(selections)},
+			BindHost:    "127.0.0.1", Running: &running,
+		}, nil
+	}
+	checks, writes, coreActions := 0, 0, 0
+	service.foundation.PreflightPort = func(_ context.Context, r desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error) {
+		checks++
+		state := desktopruntime.PortAvailable
+		if checks == 2 {
+			state = desktopruntime.PortConflict
 		}
+		if checks == 3 {
+			if r.CandidatePort != oldPort || !running {
+				t.Fatal("rollback ownership checked before lifecycle restore")
+			}
+			state = desktopruntime.PortOwnedByNext
+		}
+		o := desktopruntime.PortObservation{State: state, ReasonCode: "fixture_final", ObservedPort: r.CandidatePort}
+		if state == desktopruntime.PortConflict || state == desktopruntime.PortUnknown {
+			return o, desktopruntime.ErrPortPreflight
+		}
+		return o, nil
+	}
+	service.foundation.UpdateBasic = func(ctx context.Context, _ string, settings desktopruntime.BasicSettings) error {
+		writes++
+		if ctx.Err() != nil {
+			t.Fatal("rollback used canceled context")
+		}
+		c.Port = settings.Port
+		c.CoreEndpoint = fmt.Sprintf("http://127.0.0.1:%d", c.Port)
+		if writes == 1 {
+			// Simulate a misleading generic health success while the selected Core
+			// actually failed to own the new listener.
+			running = false
+		} else if settings.Port != oldPort {
+			t.Fatal("rollback did not restore old port")
+		}
+		return nil
+	}
+	service.foundation.CoreAction = func(_ context.Context, root, action string) error {
+		coreActions++
+		if root != service.runtimeRoot || action != "restart" {
+			t.Fatal("unexpected recovery lifecycle action", root, action)
+		}
+		running = true
+		return nil
+	}
+	result := service.UpdatePort(context.Background(), ConnectionPortRequest{19000, ConnectionConfigRevision(*c)})
+	if result.Completed || result.Error == nil || result.Phase != "rolled_back" || c.Port != oldPort || writes != 2 || coreActions != 1 || checks != 3 {
+		t.Fatal(result, c.Port, writes, coreActions, checks)
+	}
+	if result.PortObservation == nil || result.PortObservation.State != desktopruntime.PortOwnedByNext {
+		t.Fatal("rollback ownership was not proven", result.PortObservation)
+	}
+}
+
+func TestConnectionPortRollbackFailureRequiresRecovery(t *testing.T) {
+	for _, failure := range []string{"restart", "ownership"} {
+		t.Run(failure, func(t *testing.T) {
+			service, c := integratedConnectionFixture(t)
+			oldPort := c.Port
+			running := true
+			service.foundation.SelectRuntime = func(context.Context, string) (desktopruntime.NextConnectionRuntime, error) {
+				return desktopruntime.NextConnectionRuntime{
+					PortRuntime: desktopruntime.NextPortRuntime{Variant: "next", Root: service.runtimeRoot, Binary: "fixture", PID: 42, ProcessInstance: "fixture"},
+					BindHost:    "127.0.0.1", Running: &running,
+				}, nil
+			}
+			checks, writes := 0, 0
+			service.foundation.PreflightPort = func(_ context.Context, r desktopruntime.PortObservationRequest) (desktopruntime.PortObservation, error) {
+				checks++
+				state := desktopruntime.PortAvailable
+				if checks == 2 {
+					state = desktopruntime.PortConflict
+				}
+				if checks == 3 {
+					state = desktopruntime.PortConflict
+				}
+				o := desktopruntime.PortObservation{State: state, ReasonCode: "fixture_failure", ObservedPort: r.CandidatePort}
+				if state == desktopruntime.PortConflict {
+					return o, desktopruntime.ErrPortPreflight
+				}
+				return o, nil
+			}
+			service.foundation.UpdateBasic = func(_ context.Context, _ string, settings desktopruntime.BasicSettings) error {
+				writes++
+				c.Port = settings.Port
+				c.CoreEndpoint = fmt.Sprintf("http://127.0.0.1:%d", c.Port)
+				if writes == 1 {
+					running = false
+				}
+				return nil
+			}
+			service.foundation.CoreAction = func(context.Context, string, string) error {
+				if failure == "restart" {
+					return errors.New("RECOVERY_SECRET")
+				}
+				running = true
+				return nil
+			}
+			result := service.UpdatePort(context.Background(), ConnectionPortRequest{19000, ConnectionConfigRevision(*c)})
+			if result.Completed || result.Error == nil || result.Phase != "recovery_required" || writes != 2 || c.Port != oldPort {
+				t.Fatal(result, writes, c.Port)
+			}
+			if failure == "restart" && checks != 2 {
+				t.Fatal("ownership check ran after failed restart", checks)
+			}
+			if failure == "ownership" && checks != 3 {
+				t.Fatal("rollback ownership not checked", checks)
+			}
+			data, _ := json.Marshal(result)
+			if strings.Contains(string(data), "RECOVERY_SECRET") {
+				t.Fatal("recovery error leaked")
+			}
+		})
 	}
 }
 

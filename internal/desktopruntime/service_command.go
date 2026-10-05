@@ -26,6 +26,18 @@ type serviceCommandResult struct {
 	Completed bool   `json:"completed"`
 }
 
+// RunServiceActionLocked performs a Core lifecycle action for a caller that
+// already owns the Desktop mutation lock and has already validated the selected
+// Next runtime identity. It must not acquire the lock again.
+func RunServiceActionLocked(ctx context.Context, runtimeRoot, action string) error {
+	switch action {
+	case "start", "restart":
+		return platformServiceAction(ctx, runtimeRoot, action)
+	default:
+		return errors.New("unsupported locked Core service action")
+	}
+}
+
 func RunServiceCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		return serviceCommandUsageError()

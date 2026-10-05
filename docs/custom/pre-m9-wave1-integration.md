@@ -17,7 +17,9 @@ remain [Next isolation](agentdock-next-isolation.md). Shared Vue UI is unchanged
   also validate revision before acquiring the lock and again while holding it.
 - Port changes reselect the restarted Core and require `owned_by_next`; stopped
   Core changes preserve stopped state and require the candidate to remain free.
-  Failed final verification rolls back or reports `recovery_required`.
+  Failed final verification restores the previous settings **and lifecycle**, then
+  proves the old port is again `owned_by_next` (or free for a previously stopped
+  Core). Any failed lifecycle restore / ownership proof reports `recovery_required`.
 - CLI owns the lock; Shared uses the explicit locked entry point. Basic Settings
   validates Next identity before service queries/effects and leaves Next port
   changes to Connection. Quick config-only saves while stopped return `applied`.
@@ -36,6 +38,17 @@ checks, so those suites require an approved unsandboxed run with the same masks.
 No live services, production listeners, connector/account setup, signed release
 installation, or UAT are validated. Windows and Linux Next service mutations
 remain unavailable without an authoritative supported identity adapter.
+
+Verification completed on repository fixtures:
+
+- focused Connection / port / Tunnel regression tests: pass;
+- `go test ./internal/desktopapi ./internal/desktopruntime`: pass;
+- `go test -race ./internal/desktopruntime`: pass;
+- focused `desktopapi -race`: bounded at 120 seconds and remained in compilation
+  with no tests started / no test failure; recorded as a verification limitation;
+- macOS `scripts/test/test-macos-app.sh --fixtures-only`: pass with launchctl masked;
+- Windows amd64 and Linux amd64 compile-only checks for both `desktopapi` and
+  `desktopruntime`: pass.
 
 ## Native installer concurrency debt
 

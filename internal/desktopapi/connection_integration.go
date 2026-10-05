@@ -295,6 +295,7 @@ func (s *ConnectionService) UpdatePort(ctx context.Context, request ConnectionPo
 		if selected.Running == nil {
 			return desktopruntime.ErrNextIdentityUnavailable
 		}
+		wasRunning := *selected.Running
 		old := settings
 		settings.Port = request.CandidatePort
 		// UpdateBasicSettings owns local target coherence, stopped-state preservation,
@@ -312,8 +313,8 @@ func (s *ConnectionService) UpdatePort(ctx context.Context, request ConnectionPo
 		} else {
 			final, err := s.foundation.PreflightPort(ctx, portRequest(afterConfig, afterRevision, settings.Port, fresh))
 			result.PortObservation = &final
-			if err != nil || (*selected.Running && (!*fresh.Running || final.State != desktopruntime.PortOwnedByNext)) ||
-				(!*selected.Running && (*fresh.Running || final.State != desktopruntime.PortAvailable)) {
+			if err != nil || (wasRunning && (!*fresh.Running || final.State != desktopruntime.PortOwnedByNext)) ||
+				(!wasRunning && (*fresh.Running || final.State != desktopruntime.PortAvailable)) {
 				verificationErr = desktopruntime.ErrPortPreflight
 			}
 		}
@@ -321,6 +322,33 @@ func (s *ConnectionService) UpdatePort(ctx context.Context, request ConnectionPo
 			recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
 			defer cancel()
 			if err := s.foundation.UpdateBasic(recovery, s.runtimeRoot, old); err != nil {
+				result.Phase = "recovery_required"
+				return desktopruntime.ErrTunnelRecoveryRequired
+			}
+			// UpdateBasic preserves the lifecycle it observes at rollback time. If
+			// the failed port transition already stopped a previously-running Core,
+			// restore that original lifecycle explicitly while the outer mutation
+			// lock is still held.
+			if wasRunning {
+				if err := s.foundation.CoreAction(recovery, s.runtimeRoot, "restart"); err != nil {
+					result.Phase = "recovery_required"
+					return desktopruntime.ErrTunnelRecoveryRequired
+				}
+			}
+			rollbackConfig, rollbackRevision, configErr := s.config(recovery)
+			rollbackRuntime, selectionErr := s.foundation.SelectRuntime(recovery, s.runtimeRoot)
+			if configErr != nil || selectionErr != nil || rollbackRuntime.Running == nil || rollbackConfig.Port != old.Port {
+				result.Phase = "recovery_required"
+				return desktopruntime.ErrTunnelRecoveryRequired
+			}
+			rollbackObservation, rollbackErr := s.foundation.PreflightPort(recovery, portRequest(rollbackConfig, rollbackRevision, old.Port, rollbackRuntime))
+			result.PortObservation = &rollbackObservation
+			if wasRunning {
+				if rollbackErr != nil || !*rollbackRuntime.Running || rollbackObservation.State != desktopruntime.PortOwnedByNext {
+					result.Phase = "recovery_required"
+					return desktopruntime.ErrTunnelRecoveryRequired
+				}
+			} else if rollbackErr != nil || *rollbackRuntime.Running || rollbackObservation.State != desktopruntime.PortAvailable {
 				result.Phase = "recovery_required"
 				return desktopruntime.ErrTunnelRecoveryRequired
 			}
