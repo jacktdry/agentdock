@@ -158,13 +158,14 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 
 1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
 2. 建立獨立 `mac-dev-next` ChatGPT connector，指向 Next Core :8767，確認與既有 `mac-dev` 同時可用。
-3. 在 Next plane 完成 M6 Browser ownership / M7 ACP lifecycle relevant regression，以及 Codex / Antigravity 各 20 prompt-driven ephemeral stress。
-4. 全部 gate 通過後完成 M7.5 closeout、整合回 `custom/main`；stable migration / retirement 仍另案規劃。
+3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
 
-### ACP stress / macOS Keychain note
+### ACP stress / macOS Keychain closeout
 
 - 2026-10-05 Next M6/M7 repository regression 已再次通過：`go test -race ./internal/tool/browser/... ./internal/tool/computer/... ./internal/app -run 'Browser|ACP|Memory|Ephemeral|Lifecycle'` 全綠；真實 `TestCodexACPUsesInjectedBrowserBrokerWithoutSpawningChromeDevtools` 也通過。
-- Antigravity stress 暫停，不是 lifecycle failure。官方 `agy 1.2.16` 會使用 Apple Keychain 保存/讀取 `Antigravity CLI` OAuth token；若 Keychain Access Control 未允許 `/Users/wei/.local/bin/agy`，每次短生命週期 AGY child 都可能再次觸發授權提示。現場曾一次出現約 23 個提示，因此不得在 ACL 修正前跑 20-prompt stress。
-- `agy` binary 已驗證為 Google LLC Developer ID Application（Team `EQHXZ8M8AV`）且 designated requirement valid。Keychain ACL 必須由使用者明確授權；AgentDock / 測試不得自動修改 login keychain、trust 或用 `security` 指令繞過。
-- Codex stress 尚未完成，但已確認失敗點不是 AgentDock lifecycle：`gpt-6.1-sol` / `gpt-6-sol` 皆出現「前數次成功、後續 backend 回 `model ... is not enabled in rustponsesapi`」的 entitlement/routing 不一致；每次失敗後 Next-owned descendants 仍收斂且 Memory child 維持 0。後續 stress 應把明確 model-entitlement failure 與 lifecycle failure 分開計算，不得把外部模型可用性誤判為 AgentDock leak。
+- 使用者曾觀察到 AGY ACP 約 23 次 macOS Keychain 授權視窗；Codex ACP 不會。確認 `Antigravity Safe Storage` ACL 已包含 Google-signed `/Users/wei/.local/bin/agy`（Team `EQHXZ8M8AV`）後仍可重現，故 ACL 不是根因。
+- 真正根因是 hardened `antigravity-acp` 對 AGY 使用 isolated `HOME`，導致 macOS Security.framework 在 sandbox HOME 下找不到既有 login Keychain 而走 `loginKC:queryCreate`。Fork commit `9f56b52` 保留 private `.gemini` / MCP / plugin sandbox，但在 macOS 將真實 `~/Library/Keychains` 以 symlink 掛入 isolated HOME；cleanup test 保證只移除 symlink，不碰真實 Keychains。
+- Next-only patched adapter 位於 `~/.agentdock-next/bin/antigravity-acp`，沒有覆蓋 stable `/Users/wei/.local/bin/antigravity-acp`。單次 `KEYCHAIN_FIX_OK` probe 後沒有任何 SecurityAgent / `loginKC:queryCreate` 事件。
+- Antigravity 使用 `gemini-3.8-flash + low` 完成 5 × 4 共 20 個 prompt-driven ephemeral session；20/20 成功、每批 descendants 回到單一 adapter baseline、Memory child=0、五批 SecurityAgent event=0、無 leftover stress driver。
+- Codex 使用 `gpt-5.6-luna + low` 的明確首批 4/4 prompt 成功；後續長命令遭工具層 internal failure/replay 而產生超額 session，因此不以 shell 次數作證據。改以 Next registry 取連續 20 個 managed ephemeral sessions 逐一 inspect，20/20 均為 `closed_reason=ephemeral_prompt_terminal`、無 auto-close error；最後 Next descendant 收斂為 adapter/app-server baseline，Memory child=0。先前 `gpt-6.1-sol` / `gpt-6-sol` 的間歇 `model ... is not enabled in rustponsesapi` 視為外部 entitlement/routing，不列為 lifecycle failure。
 - Codex isolated home 會刻意保留非 Browser/Computer MCP（例如 GitLab/GitHub/codebase-memory），只移除 `chrome-devtools`、`node_repl`、`computer-use`；這是既有 contract，並非 isolation regression。

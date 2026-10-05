@@ -1,10 +1,10 @@
 # ACP Session Lifecycle and Shared Memory
 
-> 狀態：M7 code + stress completed / M7.5 Phase 1 + Phase 2 repository isolation completed / Next-only package-live-Memory validation pending / stable cutover intentionally deferred
+> 狀態：M7 code + stress completed / M7.5 Phase 1 + Phase 2 repository isolation completed / Next-only package-live-Memory-M6/M7 ACP validation completed / connector + certificate-bound updater gates pending / stable cutover intentionally deferred
 >
 > 日期：2026-10-03
 >
-> 更新：2026-10-05 — M7 已於 d8acb9be 整合完成；M7.5 Phase 1 identity/runtime isolation 已於 b189ee5 完成，Phase 2 updater/arbiter repository isolation 已於 8f2aa6c1 完成。下一步先做獨立 review 與 Next-only signed package / launch-smoke，再做 Next-only Memory HTTP cutover；stable control plane 保持原樣
+> 更新：2026-10-05 — M7 已於 d8acb9be 整合完成；M7.5 Phase 1/2 isolation、獨立 review、Next-only package/SMAppService/Memory HTTP、M6/M7 regression 與 Codex/Antigravity stress 均已完成。剩餘外部 gate 為 `mac-dev-next` connector 與有效 Developer ID 後的 certificate-bound GUI updater transaction；stable control plane 保持原樣
 >
 > 目標 Milestone：M7 — ACP Manager
 
@@ -14,9 +14,9 @@
 
 目前連線中的 AgentDock 是 production control plane。先前 live activation 導致 ChatGPT Mac-Dev channel 斷線，故 Next 開發禁止檢查、修改、重啟、停止、替換 stable App/Core，或操作 `~/.agentdock`、stable stdio Memory registry 與 live launchd services。Stable 不是 development target；舊 stdio Memory children 不可為 Next 驗收而 drain / kill / cleanup。
 
-目前 M7.5 Phase 1 與 Phase 2 repository isolation 均已完成；Phase 2 獨立 review、Next-only launch/SMAppService smoke 與 Next Memory HTTP cutover 也已通過。Next registry 位於 `~/.agentdock-next`，Memory HTTP 以 `2025-11-25` pin 實際完成 tool search/inspect/health call；Codex / Antigravity 各一個 ephemeral prompt 均 auto-close 且沒有 Next-owned stdio Memory child。下一步是獨立 `mac-dev-next` connector 與完整 Next regression；certificate-bound updater transaction 等有效 Developer ID identity 可用後再驗證。這仍不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
+目前 M7.5 Phase 1 與 Phase 2 repository isolation 均已完成；Phase 2 獨立 review、Next-only launch/SMAppService smoke、Next Memory HTTP cutover，以及 Next M6/M7 lifecycle / Browser ownership regression 均已通過。Next registry 位於 `~/.agentdock-next`，Memory HTTP 以 `2025-11-25` pin 實際完成 tool search/inspect/health call；Codex / Antigravity 的 prompt-driven ephemeral stress 均已完成 lifecycle 驗證且沒有 Next-owned stdio Memory child。剩餘外部 gate 為獨立 `mac-dev-next` connector，以及有效 Developer ID identity 可用後的 certificate-bound updater transaction / GUI gate。這仍不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
 
-2026-10-05 補充：Next M6/M7 repository regression 與真實 Codex Browser Broker injection test 已再次通過。Antigravity 20-prompt stress 暫停於 macOS Keychain ACL prerequisite：官方 AGY 會從 `Antigravity CLI` Keychain item 讀 OAuth token；使用者觀察到只有啟動 AGY ACP 時才出現大量提示，Codex ACP 不會。ACL 未明確允許 `/Users/wei/.local/bin/agy` 前不得以壓測重複觸發提示，也不得由 AgentDock 自動修改 Keychain/trust。
+2026-10-05 補充：Next M6/M7 repository regression 與真實 Codex Browser Broker injection test 已再次通過。AGY 的 Keychain popup 根因已從「ACL prerequisite」更正為 macOS isolated HOME 的 login Keychain resolution：即使 `Antigravity Safe Storage` ACL 已正確允許 Google-signed `agy`，private HOME 仍會觸發 `loginKC:queryCreate`。Fork `9f56b52` 保留 private `.gemini` / MCP / plugin sandbox，並在 macOS 將真實 `~/Library/Keychains` symlink 到 sandbox HOME；278 個 fork tests + typecheck 全綠，Next-only live probe 與 20-prompt Antigravity stress 均 SecurityAgent=0。AgentDock 不會自動修改 login-keychain ACL / trust。Codex 的 `gpt-5.6-luna + low` 明確首批 4/4 成功，並另逐一驗證連續 20 個 managed ephemeral sessions 全部以 `ephemeral_prompt_terminal` 關閉、無 auto-close error、Memory child=0。
 
 ## 背景
 
