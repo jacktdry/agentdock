@@ -39,5 +39,5 @@
 
 8. 目前連線中的 AgentDock 是 production control plane；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable 當 development target。
 9. 客製版以 **AgentDock Next** side-by-side 開發，app identity、服務、port、runtime/state/log/work roots 與 connector 必須隔離；installer / self-update 必須 Next-target-aware 並 fail closed，禁止 fallback 到 `AgentDock.app`。
-10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 Phase 1 identity/runtime isolation 已於 `architecture/agentdock-next-isolation` 的 `b189ee5` 完成並通過 fixture/typecheck/Go 測試與第二模型 review。現在接續 Phase 2 self-update / updateplatform / arbiter target isolation；stable live cutover 仍刻意延後。只有 Next 完整開發、測試並可獨立連上 ChatGPT 後，才可另行規劃與授權舊 AgentDock migration / retirement。
+10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 Phase 1 identity/runtime isolation 已於 `b189ee5` 完成，Phase 2 updater/arbiter repository isolation 已於 `8f2aa6c1` 完成並通過 Go race/vet、Swift fixture/typecheck 與 updater/arbiter isolation tests。Next GUI updater gate 仍保留，下一步是獨立 review 與 Next-only signed package / codesign / launch-smoke，再進入 Memory HTTP cutover 與 `mac-dev-next`；stable live cutover 仍刻意延後。
 11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。
