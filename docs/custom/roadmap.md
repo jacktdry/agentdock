@@ -399,7 +399,7 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 ## M8 — Permission / Approval
 
-狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、shared admission、ACP provider continuation gate 與 distinct Desktop control authority 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
+狀態：**Core implementation in progress**。Contract 已解除 blocker；policy evaluator、approval/state store、shared admission、ACP provider continuation gate、distinct Desktop control authority 與 control-plane path protection 已形成獨立 checkpoint。完整契約與 commit 對照見 [m8-permission-approval.md](m8-permission-approval.md)。
 
 目前完成：
 - ✅ M5 execution identity prerequisite：`cbdabeef`
@@ -413,11 +413,11 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - ✅ Runtime insertion / task / MCP / evolution management admission + handler-before/after / M5 journal truthfulness：`832018c3`
 - ✅ ACP `session/request_permission` provider-continuation gate、fail-closed missing hook、cancel safe bypass、exact interaction/principal one-shot binding：`8e469fe0`
 - ✅ distinct per-Core-start Desktop control authority + exact one-time confirmation challenge：`dbf86e17`
+- ✅ permission/control-plane Host + WSL file/media path protection：`f2a6a70f`
 
-目前進行中：permission/control-plane file-path protection。
+目前進行中：versioned Runtime / Shared Desktop `DomainPermission` API。
 
 後續 gate：
-- permission/control-plane file-path protection；
 - versioned Runtime / Shared Desktop `DomainPermission` API；
 - Shared Desktop Permission Profile / Approval Policy / effective permission / approval history UI；
 - Approval Reviewer 維持 `defer`，M8 不啟動自動 reviewer；
