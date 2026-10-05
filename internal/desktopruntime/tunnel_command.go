@@ -13,11 +13,12 @@ import (
 
 // TunnelStatus 是桌面端和 CLI 共享的结构化 Tunnel 状态。
 type TunnelStatus struct {
-	Mode           string `json:"mode"`
-	Running        bool   `json:"running"`
-	Ready          bool   `json:"ready"`
-	StartupEnabled bool   `json:"startup_enabled"`
-	PublicURL      string `json:"public_url,omitempty"`
+	Mode           string             `json:"mode"`
+	Running        bool               `json:"running"`
+	Ready          bool               `json:"ready"`
+	StartupEnabled bool               `json:"startup_enabled"`
+	PublicURL      string             `json:"public_url,omitempty"`
+	Observation    *TunnelObservation `json:"observation,omitempty"`
 }
 
 type TunnelConfigureRequest struct {
@@ -27,6 +28,9 @@ type TunnelConfigureRequest struct {
 	TokenFile   string
 }
 
+// RunTunnelCommand mutation branches require the caller to serialize this runtime
+// with AcquireDesktopMutation. Shared callers already own that outer lock.
+// A successful legacy Completed result means local application, not public readiness.
 func RunTunnelCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		return tunnelCommandUsageError()

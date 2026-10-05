@@ -46,6 +46,7 @@ type tunnelFiles struct {
 
 type tunnelRuntime struct {
 	preserveStoppedCore bool
+	generation          string
 	manifest            Manifest
 	root                string
 	settings            controlPanelSettings
@@ -79,7 +80,11 @@ func loadTunnelRuntime(runtimeRoot string) (tunnelRuntime, error) {
 	if err != nil {
 		return tunnelRuntime{}, err
 	}
-	return tunnelRuntime{manifest: manifest, root: root, settings: settings, files: files, mode: mode}, nil
+	generation, err := TunnelGeneration(root)
+	if err != nil {
+		return tunnelRuntime{}, err
+	}
+	return tunnelRuntime{manifest: manifest, root: root, settings: settings, files: files, mode: mode, generation: generation}, nil
 }
 
 func readTunnelMode(path, fallback string) (string, error) {
