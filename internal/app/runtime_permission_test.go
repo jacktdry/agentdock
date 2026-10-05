@@ -10,6 +10,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/execution"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/permission"
 )
 
@@ -248,5 +249,80 @@ func TestNewRuntimeFailsClosedOnCorruptPermissionState(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "initialize permission store") {
 		t.Fatalf("NewRuntime error = %v", err)
+	}
+}
+
+func TestRuntimePermissionApproveOnceRequiresSameStablePrincipalAndExactRetry(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+		policy.GlobalMode = permission.Rules
+	})
+	principal := requestmeta.AuthPrincipal{Kind: "static_bearer", ID: "sha256:principal-a", Authenticated: true, Stable: true}
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), principal)
+	target := filepath.Join(rt.ws.Root(), "approved-once.txt")
+	args := map[string]any{"action": "add", "path": target, "content": "approved once\n"}
+
+	_, err := rt.Call(ctx, "file_edit", args)
+	first := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	approvalID, _ := first.Details["approval_id"].(string)
+	version, ok := first.Details["approval_version"].(uint64)
+	if !ok {
+		// ToolError details are in-process values today; keep a tolerant numeric fallback for future envelope changes.
+		if raw, numeric := first.Details["approval_version"].(float64); numeric {
+			version = uint64(raw)
+		} else {
+			t.Fatalf("approval version = %#v", first.Details["approval_version"])
+		}
+	}
+	policyRevision, ok := first.Details["policy_revision"].(uint64)
+	if !ok {
+		if raw, numeric := first.Details["policy_revision"].(float64); numeric {
+			policyRevision = uint64(raw)
+		} else {
+			t.Fatalf("policy revision = %#v", first.Details["policy_revision"])
+		}
+	}
+	if _, err := rt.permissions.ApproveOnce(context.Background(), permission.Mutation{
+		ApprovalID: approvalID, ApprovalVersion: version, PolicyRevision: policyRevision, Actor: "test-desktop-control",
+	}); err != nil {
+		t.Fatalf("ApproveOnce: %v", err)
+	}
+
+	otherCtx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.AuthPrincipal{
+		Kind: "static_bearer", ID: "sha256:principal-b", Authenticated: true, Stable: true,
+	})
+	_, err = rt.Call(otherCtx, "file_edit", args)
+	requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	if _, statErr := os.Stat(target); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("different principal consumed approval, stat=%v", statErr)
+	}
+
+	result, err := rt.Call(ctx, "file_edit", args)
+	if err != nil {
+		t.Fatalf("exact same-principal retry failed: %v", err)
+	}
+	if result["changed"] != true {
+		t.Fatalf("retry result = %#v", result)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil || string(data) != "approved once\n" {
+		t.Fatalf("approved file data=%q err=%v", data, err)
+	}
+
+	record, err := rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != permission.Consumed || record.DispatchOutcome != permission.Succeeded || record.RetryCallID == "" {
+		t.Fatalf("consumed record = %#v", record)
+	}
+
+	_, err = rt.Call(ctx, "file_edit", map[string]any{
+		"action": "replace", "path": target, "old": "approved once", "new": "second use",
+	})
+	requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	data, _ = os.ReadFile(target)
+	if string(data) != "approved once\n" {
+		t.Fatalf("one-shot grant was reusable: %q", data)
 	}
 }

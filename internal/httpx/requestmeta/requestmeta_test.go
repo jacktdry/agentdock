@@ -31,3 +31,18 @@ func TestWithBaseURLNearestValueWins(t *testing.T) {
 		t.Fatalf("BaseURL() = %q", got)
 	}
 }
+
+func TestAuthPrincipalRoundTripRequiresStableAuthenticatedIdentity(t *testing.T) {
+	ctx := context.Background()
+	principal := AuthPrincipal{Kind: "static_bearer", ID: "sha256:test", Authenticated: true, Stable: true}
+	ctx = WithAuthPrincipal(ctx, principal)
+	got, ok := AuthPrincipalFromContext(ctx)
+	if !ok || got != principal {
+		t.Fatalf("principal = %#v ok=%v", got, ok)
+	}
+
+	unchanged := WithAuthPrincipal(ctx, AuthPrincipal{Kind: "static_bearer", ID: "missing-flags"})
+	if unchanged != ctx {
+		t.Fatal("invalid principal unexpectedly wrapped context")
+	}
+}

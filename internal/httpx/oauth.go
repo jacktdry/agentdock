@@ -507,14 +507,8 @@ func parseOAuthTokenForm(r *http.Request) error {
 	return nil
 }
 func authorizedOAuth(r *http.Request, cfg config.Config, store *auth.OAuthStore) bool {
-	if !cfg.OAuthEnabled {
-		return false
-	}
-	issuer := issuerFor(cfg, r)
-	resource := issuer + "/mcp"
-	ctx := auth.WithOAuthRequest(r.Context(), issuer, resource, "")
-	_, err := newOAuthProtocolServer(cfg, store).ValidationBearerToken(r.WithContext(ctx))
-	return err == nil
+	_, ok := validatedOAuthTokenInfo(r, cfg, store)
+	return ok
 }
 func newOAuthProtocolServer(cfg config.Config, store *auth.OAuthStore) *oauthserver.Server {
 	accessTokenTTLSeconds := cfg.OAuthAccessTokenTTLSeconds

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/execution"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/observability"
 	"github.com/uvwt/agentdock/internal/permission"
 )
@@ -47,7 +48,7 @@ func (r *Runtime) admitRuntimeTool(
 	}
 
 	action := permissionAction(args)
-	facts := r.runtimePermissionFacts(name, action, args, source)
+	facts := r.runtimePermissionFacts(ctx, name, action, args, source)
 	fingerprint, err := runtimePermissionFingerprint(name, action, args)
 	if err != nil {
 		return permission.Admission{}, toolError("PERMISSION_STATE_ERROR", "AgentDock could not prepare permission admission", "permission")
@@ -135,17 +136,26 @@ func (r *Runtime) settleConsumedPermission(admission permission.Admission, resul
 	}
 }
 
-func (r *Runtime) runtimePermissionFacts(name, action string, args map[string]any, source observability.Source) permission.PermissionFacts {
+func (r *Runtime) runtimePermissionFacts(ctx context.Context, name, action string, args map[string]any, source observability.Source) permission.PermissionFacts {
+	binding := permission.PermissionBinding{
+		RuntimeEpoch: r.execution.Epoch(),
+		Source:       string(source),
+	}
+	if principal, ok := requestmeta.AuthPrincipalFromContext(ctx); ok {
+		binding.Principal = permission.AuthorizationPrincipal{
+			Kind:          principal.Kind,
+			ID:            principal.ID,
+			Authenticated: principal.Authenticated,
+			Stable:        principal.Stable,
+		}
+	}
 	facts := permission.PermissionFacts{
 		EffectsKnown: false,
 		Filesystem:   permission.FileNone,
 		Tool:         name,
 		Action:       action,
 		Reason:       "Core has no stronger effect classification for this operation",
-		Binding: permission.PermissionBinding{
-			RuntimeEpoch: r.execution.Epoch(),
-			Source:       string(source),
-		},
+		Binding:      binding,
 	}
 
 	if definition, ok := r.ToolDefinition(name); ok && definition.Annotations != nil {

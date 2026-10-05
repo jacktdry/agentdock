@@ -113,6 +113,17 @@ func TestOAuthDynamicRegistrationAuthorizationCodeAndRefreshFlow(t *testing.T) {
 		t.Fatalf("token payload = %#v", tokenPayload)
 	}
 	assertAuthorizedAccessToken(t, cfg, store, tokenPayload.AccessToken)
+	initialPrincipalRequest := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	initialPrincipalRequest.Header.Set("Authorization", "Bearer "+tokenPayload.AccessToken)
+	initialAuth := authenticateRequest(initialPrincipalRequest, cfg, store)
+	if !initialAuth.OK || initialAuth.Principal.Kind != "oauth_grant" ||
+		!initialAuth.Principal.Authenticated || !initialAuth.Principal.Stable || initialAuth.Principal.ID == "" {
+		t.Fatalf("initial OAuth principal = %#v", initialAuth)
+	}
+	if strings.Contains(initialAuth.Principal.ID, tokenPayload.AccessToken) ||
+		strings.Contains(initialAuth.Principal.ID, tokenPayload.RefreshToken) {
+		t.Fatal("OAuth principal leaked raw token material")
+	}
 	queryTokenRequest := httptest.NewRequest(http.MethodPost, "/mcp?access_token="+url.QueryEscape(tokenPayload.AccessToken), nil)
 	if authorizedOAuth(queryTokenRequest, cfg, store) {
 		t.Fatal("access token supplied through the query string was accepted")
@@ -157,6 +168,12 @@ func TestOAuthDynamicRegistrationAuthorizationCodeAndRefreshFlow(t *testing.T) {
 		t.Fatalf("refreshed token payload = %#v", refreshed)
 	}
 	assertAuthorizedAccessToken(t, cfg, store, refreshed.AccessToken)
+	refreshedPrincipalRequest := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	refreshedPrincipalRequest.Header.Set("Authorization", "Bearer "+refreshed.AccessToken)
+	refreshedAuth := authenticateRequest(refreshedPrincipalRequest, cfg, store)
+	if !refreshedAuth.OK || refreshedAuth.Principal != initialAuth.Principal {
+		t.Fatalf("OAuth principal changed across refresh: initial=%#v refreshed=%#v", initialAuth, refreshedAuth)
+	}
 	wrongResourceConfig := cfg
 	wrongResourceConfig.OAuthServerURL = "https://other-agentdock.example"
 	wrongResourceRequest := httptest.NewRequest(http.MethodPost, "/mcp", nil)
