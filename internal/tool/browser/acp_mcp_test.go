@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 func newTestACPBridge(t *testing.T) *ACPBridge {
@@ -274,5 +276,45 @@ func TestACPBrowserPrincipalBindsSessionProfileNotCapabilityToken(t *testing.T) 
 	otherOwner, _ := bridge.owner(otherToken)
 	if first.ID == acpBrowserAuthPrincipal(otherOwner).ID {
 		t.Fatal("different ACP sessions shared browser principal")
+	}
+}
+
+func TestACPBrowserAdmissionRunsBeforeBackendAndReleaseBypassesPolicy(t *testing.T) {
+	bridge := newTestACPBridge(t)
+	backend := &fakeLeaseBackend{}
+	bridge.managed.manager = NewManagedLeaseManager(backend)
+	token, err := bridge.RegisterSession("admission-browser", "codex", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocked := errors.New("permission blocked")
+	calls := 0
+	bridge.SetAdmissionHook(func(context.Context, permission.HostOperation) (permission.HostOperationFinish, error) {
+		calls++
+		return nil, blocked
+	})
+	if _, err := bridge.Acquire(context.Background(), token, "https://example.test"); !errors.Is(err, blocked) {
+		t.Fatalf("Acquire error=%v", err)
+	}
+	if backend.starts != 0 || calls != 1 {
+		t.Fatalf("backend starts=%d admission calls=%d", backend.starts, calls)
+	}
+
+	bridge.SetAdmissionHook(nil)
+	meta, err := bridge.Acquire(context.Background(), token, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeReleaseCalls := calls
+	bridge.SetAdmissionHook(func(context.Context, permission.HostOperation) (permission.HostOperationFinish, error) {
+		calls++
+		return nil, blocked
+	})
+	if _, err := bridge.Release(context.Background(), token, meta.BrowserLeaseID); err != nil {
+		t.Fatalf("Release was blocked by permission hook: %v", err)
+	}
+	if calls != beforeReleaseCalls {
+		t.Fatalf("release invoked admission hook: before=%d after=%d", beforeReleaseCalls, calls)
 	}
 }

@@ -6,21 +6,26 @@ import (
 	"errors"
 	"strings"
 	"sync"
+
+	"github.com/uvwt/agentdock/internal/browserpolicy"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 type acpOwner struct {
-	sessionID string
-	profileID string
-	token     string
-	scope     OwnerScope
+	sessionID     string
+	profileID     string
+	token         string
+	scope         OwnerScope
+	workspaceRoot string
 }
 
 type ACPBridge struct {
-	broker    *Broker
-	mu        sync.Mutex
-	byToken   map[string]*acpOwner
-	bySession map[string]*acpOwner
-	closed    bool
+	broker        *Broker
+	mu            sync.Mutex
+	byToken       map[string]*acpOwner
+	bySession     map[string]*acpOwner
+	admissionHook permission.HostAdmissionHook
+	closed        bool
 }
 
 func NewACPBridge(broker *Broker) (*ACPBridge, error) {
@@ -31,15 +36,31 @@ func NewACPBridge(broker *Broker) (*ACPBridge, error) {
 }
 
 func (b *ACPBridge) RegisterSession(sessionID, profileID string) (string, error) {
-	return b.RegisterSessionWithToken(sessionID, profileID, "")
+	return b.registerSession(sessionID, profileID, "", "")
 }
 func (b *ACPBridge) RegisterSessionWithToken(sessionID, profileID, token string) (string, error) {
+	return b.registerSession(sessionID, profileID, "", token)
+}
+func (b *ACPBridge) RegisterSessionWithTokenAndWorkspace(sessionID, profileID, cwd, token string) (string, error) {
+	return b.registerSession(sessionID, profileID, cwd, token)
+}
+
+func (b *ACPBridge) registerSession(sessionID, profileID, cwd, token string) (string, error) {
 	if b == nil {
 		return "", computerError(ErrProviderUnavailable, "ACP computer bridge unavailable", "acp", nil, nil)
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	profileID = strings.TrimSpace(profileID)
+	cwd = strings.TrimSpace(cwd)
 	token = strings.TrimSpace(token)
+	workspaceRoot := ""
+	if cwd != "" {
+		root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+		if err != nil {
+			return "", computerError(ErrInvalidArgument, "ACP computer workspace invalid", "acp", nil, err)
+		}
+		workspaceRoot = root
+	}
 	if sessionID == "" || profileID == "" {
 		return "", computerError(ErrInvalidArgument, "ACP computer owner identity required", "acp", nil, nil)
 	}
@@ -49,7 +70,7 @@ func (b *ACPBridge) RegisterSessionWithToken(sessionID, profileID, token string)
 		return "", computerError(ErrProviderUnavailable, "ACP computer bridge is closed", "acp", nil, nil)
 	}
 	if existing := b.bySession[sessionID]; existing != nil {
-		if existing.profileID != profileID || (token != "" && existing.token != token) {
+		if existing.profileID != profileID || existing.workspaceRoot != workspaceRoot || (token != "" && existing.token != token) {
 			return "", computerError(ErrOwnerMismatch, "ACP computer owner scope changed", "acp", &ErrorDetails{OwnerACPSessionID: sessionID}, nil)
 		}
 		return existing.token, nil
@@ -60,10 +81,39 @@ func (b *ACPBridge) RegisterSessionWithToken(sessionID, profileID, token string)
 	if existing := b.byToken[token]; existing != nil {
 		return "", computerError(ErrOwnerMismatch, "ACP computer capability token already belongs to another session", "acp", &ErrorDetails{OwnerACPSessionID: existing.sessionID}, nil)
 	}
-	owner := &acpOwner{sessionID: sessionID, profileID: profileID, token: token, scope: OwnerScope{Kind: OwnerACP, OwnerACPSessionID: sessionID, OwnerProfileID: profileID}}
+	owner := &acpOwner{sessionID: sessionID, profileID: profileID, token: token, workspaceRoot: workspaceRoot, scope: OwnerScope{Kind: OwnerACP, OwnerACPSessionID: sessionID, OwnerProfileID: profileID}}
 	b.bySession[sessionID] = owner
 	b.byToken[token] = owner
 	return token, nil
+}
+
+func (b *ACPBridge) SetAdmissionHook(hook permission.HostAdmissionHook) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.admissionHook = hook
+	b.mu.Unlock()
+}
+
+func (b *ACPBridge) admissionFor(ctx context.Context, owner *acpOwner, action string, payload any) (permission.HostOperationFinish, error) {
+	if b == nil || owner == nil {
+		return nil, nil
+	}
+	b.mu.Lock()
+	hook := b.admissionHook
+	b.mu.Unlock()
+	if hook == nil {
+		return nil, nil
+	}
+	return hook(ctx, permission.HostOperation{
+		Tool:          "acp_computer",
+		Action:        action,
+		SessionID:     owner.sessionID,
+		ProfileID:     owner.profileID,
+		WorkspaceRoot: owner.workspaceRoot,
+		Payload:       payload,
+	})
 }
 
 func (b *ACPBridge) owner(token string) (*acpOwner, error) {
@@ -80,23 +130,48 @@ func (b *ACPBridge) owner(token string) (*acpOwner, error) {
 }
 
 func (b *ACPBridge) Acquire(token string, capability Capability, foreground ForegroundPolicy) (SessionMetadata, error) {
+	return b.AcquireContext(context.Background(), token, capability, foreground)
+}
+
+func (b *ACPBridge) AcquireContext(ctx context.Context, token string, capability Capability, foreground ForegroundPolicy) (meta SessionMetadata, err error) {
 	owner, err := b.owner(token)
 	if err != nil {
 		return SessionMetadata{}, err
 	}
+	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"capability": capability, "foreground": foreground})
+	if err != nil {
+		return SessionMetadata{}, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
+	}
 	return b.broker.Acquire(AcquireRequest{Owner: owner.scope, Capability: capability, ForegroundPolicy: foreground})
 }
-func (b *ACPBridge) Observe(ctx context.Context, token, sessionID string, req ObservationRequest) (OperationResult, error) {
+func (b *ACPBridge) Observe(ctx context.Context, token, sessionID string, req ObservationRequest) (result OperationResult, err error) {
 	owner, err := b.owner(token)
 	if err != nil {
 		return OperationResult{}, err
 	}
+	finish, err := b.admissionFor(ctx, owner, "observe", map[string]any{"session_id": sessionID, "request": req})
+	if err != nil {
+		return OperationResult{}, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
+	}
 	return b.broker.ObserveOwned(ctx, sessionID, owner.scope, req)
 }
-func (b *ACPBridge) Act(ctx context.Context, token, sessionID string, req ActionRequest) (OperationResult, error) {
+func (b *ACPBridge) Act(ctx context.Context, token, sessionID string, req ActionRequest) (result OperationResult, err error) {
 	owner, err := b.owner(token)
 	if err != nil {
 		return OperationResult{}, err
+	}
+	finish, err := b.admissionFor(ctx, owner, "act", map[string]any{"session_id": sessionID, "request": req})
+	if err != nil {
+		return OperationResult{}, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
 	}
 	return b.broker.ActOwned(ctx, sessionID, owner.scope, req)
 }

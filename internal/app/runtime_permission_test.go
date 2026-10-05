@@ -326,3 +326,120 @@ func TestRuntimePermissionApproveOnceRequiresSameStablePrincipalAndExactRetry(t 
 		t.Fatalf("one-shot grant was reusable: %q", data)
 	}
 }
+
+func TestHostOperationRulesAskBeforeDispatchAndJournalPermissionFailure(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+		policy.GlobalMode = permission.Rules
+	})
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("acp_bridge", "session-a", "codex"))
+	op := permission.HostOperation{
+		Tool: "acp_browser", Action: "acquire",
+		SessionID: "session-a", ProfileID: "codex",
+		WorkspaceRoot: rt.ws.Root(),
+		Payload:       map[string]any{"url": "https://example.test"},
+	}
+
+	finish, err := rt.admitHostOperation(ctx, op)
+	if finish != nil {
+		t.Fatal("approval-required host operation returned a dispatch finisher")
+	}
+	toolErr := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	approvalID, _ := toolErr.Details["approval_id"].(string)
+	if approvalID == "" {
+		t.Fatalf("approval details=%#v", toolErr.Details)
+	}
+	record, err := rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != permission.Pending || record.Tool != "acp_browser" || record.Action != "acquire" {
+		t.Fatalf("approval record=%#v", record)
+	}
+	call := lastExecutionCall(t, rt)
+	if call.Tool != "acp_browser" || call.Source != "acp_bridge" ||
+		call.Status != execution.StatusFailed || call.ErrorCode != "APPROVAL_REQUIRED" || call.ErrorCategory != "permission" {
+		t.Fatalf("host execution call=%#v", call)
+	}
+}
+
+func TestHostOperationRulesAllowsCoreProvenReadOnlyAndJournalsCompletion(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+		policy.GlobalMode = permission.Rules
+	})
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("acp_bridge", "session-read", "codex"))
+	finish, err := rt.admitHostOperation(ctx, permission.HostOperation{
+		Tool: "acp_browser", Action: "take_snapshot",
+		SessionID: "session-read", ProfileID: "codex", WorkspaceRoot: rt.ws.Root(),
+		Payload: map[string]any{"lease_id": "lease-read"},
+	})
+	if err != nil || finish == nil {
+		t.Fatalf("read-only admission finish=%v err=%v", finish != nil, err)
+	}
+	finish(nil)
+	call := lastExecutionCall(t, rt)
+	if call.Tool != "acp_browser" || call.Status != execution.StatusCompleted || call.ErrorCode != "" {
+		t.Fatalf("read-only host execution call=%#v", call)
+	}
+}
+
+func TestHostOperationApproveOnceConsumesExactSamePrincipalRequest(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	replaceRuntimePermissionPolicy(t, rt, func(policy *permission.Policy) {
+		policy.GlobalMode = permission.Rules
+	})
+	principal := requestmeta.NewStableAuthPrincipal("acp_bridge", "session-once", "codex")
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), principal)
+	op := permission.HostOperation{
+		Tool: "acp_computer", Action: "act",
+		SessionID: "session-once", ProfileID: "codex", WorkspaceRoot: rt.ws.Root(),
+		Payload: map[string]any{"session_id": "computer-1", "request": map[string]any{"action": "click", "element_index": 1}},
+	}
+
+	_, err := rt.admitHostOperation(ctx, op)
+	first := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	approvalID, _ := first.Details["approval_id"].(string)
+	version := permissionDetailUint64(t, first.Details, "approval_version")
+	revision := permissionDetailUint64(t, first.Details, "policy_revision")
+	if _, err := rt.permissions.ApproveOnce(context.Background(), permission.Mutation{
+		ApprovalID: approvalID, ApprovalVersion: version, PolicyRevision: revision, Actor: "test-desktop-control",
+	}); err != nil {
+		t.Fatalf("ApproveOnce: %v", err)
+	}
+
+	otherCtx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("acp_bridge", "other-session", "codex"))
+	if finish, err := rt.admitHostOperation(otherCtx, op); finish != nil || err == nil {
+		t.Fatalf("different principal consumed host grant: finish=%v err=%v", finish != nil, err)
+	}
+
+	finish, err := rt.admitHostOperation(ctx, op)
+	if err != nil || finish == nil {
+		t.Fatalf("exact host retry finish=%v err=%v", finish != nil, err)
+	}
+	finish(nil)
+	record, err := rt.permissions.Approval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != permission.Consumed || record.DispatchOutcome != permission.Succeeded || record.RetryCallID == "" {
+		t.Fatalf("consumed host approval=%#v", record)
+	}
+
+	if finish, err := rt.admitHostOperation(ctx, op); finish != nil || err == nil {
+		t.Fatalf("one-shot host grant was reusable: finish=%v err=%v", finish != nil, err)
+	}
+}
+
+func permissionDetailUint64(t *testing.T, details map[string]any, key string) uint64 {
+	t.Helper()
+	switch value := details[key].(type) {
+	case uint64:
+		return value
+	case float64:
+		return uint64(value)
+	default:
+		t.Fatalf("%s=%#v", key, details[key])
+		return 0
+	}
+}

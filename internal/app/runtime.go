@@ -198,6 +198,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser bridge: %w", bridgeErr)
 		}
+		bridge.SetAdmissionHook(runtime.admitHostOperation)
 		runtime.acpBrowser = bridge
 	}
 	if cfg.ACPEnabled && !cfg.Stdio && runtime.computer != nil && runtime.computer.Broker() != nil {
@@ -206,6 +207,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP computer control bridge: %w", computerBridgeErr)
 		}
+		computerBridge.SetAdmissionHook(runtime.admitHostOperation)
 		runtime.acpComputer = computerBridge
 	}
 

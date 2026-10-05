@@ -10,6 +10,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
+	toolcore "github.com/uvwt/agentdock/internal/tool/core"
 )
 
 type acpComputerTokenContextKey struct{}
@@ -59,8 +60,15 @@ func computerMCPResult(value any, err error) (*mcpsdk.CallToolResult, error) {
 	}
 	if err != nil {
 		code := ErrProviderFailed
+		var toolErr *toolcore.ToolError
 		var typed *Error
-		if errors.As(err, &typed) {
+		if errors.As(err, &toolErr) {
+			code = toolErr.Code
+			payload["phase"] = toolErr.Category
+			if toolErr.Details != nil {
+				payload["details"] = toolErr.Details
+			}
+		} else if errors.As(err, &typed) {
 			code = typed.Code
 			payload["phase"] = typed.Phase
 			if typed.Details != nil {
@@ -104,7 +112,7 @@ func (b *ACPBridge) registerMCPTools(server *mcpsdk.Server) {
 		}
 		capability := Capability(optionalString(args, "capability", string(CapabilityObserve)))
 		foreground := ForegroundPolicy(optionalString(args, "foreground", string(ForegroundForbidden)))
-		return b.Acquire(token, capability, foreground)
+		return b.AcquireContext(ctx, token, capability, foreground)
 	})
 	observeSchema, _ := InputSchema(ToolObserve)
 	add("computer_observe", "Read capabilities, permissions, apps/windows, or accessibility state without silently escalating to foreground control.", observeSchema, func(ctx context.Context, args map[string]any) (any, error) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 type acpBrowserLease struct {
@@ -34,10 +35,11 @@ type ACPBridge struct {
 	external  *ExternalLeaseManager
 	lifecycle *browserLifecycleRunner
 
-	mu        sync.Mutex
-	byToken   map[string]*acpBrowserOwner
-	bySession map[string]*acpBrowserOwner
-	closed    bool
+	mu            sync.Mutex
+	byToken       map[string]*acpBrowserOwner
+	bySession     map[string]*acpBrowserOwner
+	admissionHook permission.HostAdmissionHook
+	closed        bool
 }
 
 func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, error) {
@@ -54,6 +56,35 @@ func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, 
 	}
 	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
 	return bridge, nil
+}
+
+func (b *ACPBridge) SetAdmissionHook(hook permission.HostAdmissionHook) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.admissionHook = hook
+	b.mu.Unlock()
+}
+
+func (b *ACPBridge) admissionFor(ctx context.Context, owner *acpBrowserOwner, action string, payload any) (permission.HostOperationFinish, error) {
+	if b == nil || owner == nil {
+		return nil, nil
+	}
+	b.mu.Lock()
+	hook := b.admissionHook
+	b.mu.Unlock()
+	if hook == nil {
+		return nil, nil
+	}
+	return hook(ctx, permission.HostOperation{
+		Tool:          "acp_browser",
+		Action:        action,
+		SessionID:     owner.sessionID,
+		ProfileID:     owner.profileID,
+		WorkspaceRoot: owner.scope.CanonicalWorkspaceRoot,
+		Payload:       payload,
+	})
 }
 
 func (b *ACPBridge) sweepLifecycle(now time.Time) error {
@@ -128,16 +159,22 @@ func (b *ACPBridge) owner(token string) (*acpBrowserOwner, error) {
 	return owner, nil
 }
 
-func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (LeaseMetadata, error) {
+func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseMetadata, err error) {
 	owner, err := b.owner(token)
 	if err != nil {
 		return LeaseMetadata{}, err
+	}
+	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"url": url})
+	if err != nil {
+		return LeaseMetadata{}, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
 	}
 	decision, err := b.planner.Resolve(ctx, owner.scope, nil)
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	var meta LeaseMetadata
 	switch decision.Route {
 	case browserpolicy.RouteManaged:
 		meta, _, err = b.managed.Acquire(ctx, decision.Scope, decision.Start, url)
@@ -178,10 +215,17 @@ func (b *ACPBridge) leaseOwner(token, leaseID string) (*acpBrowserOwner, acpBrow
 	return owner, entry, nil
 }
 
-func (b *ACPBridge) Call(ctx context.Context, token, leaseID, tool string, args map[string]any) (map[string]any, error) {
+func (b *ACPBridge) Call(ctx context.Context, token, leaseID, tool string, args map[string]any) (result map[string]any, err error) {
 	owner, entry, err := b.leaseOwner(token, leaseID)
 	if err != nil {
 		return nil, err
+	}
+	finish, err := b.admissionFor(ctx, owner, tool, map[string]any{"lease_id": leaseID, "arguments": args})
+	if err != nil {
+		return nil, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
 	}
 	switch entry.route {
 	case browserpolicy.RouteManaged:

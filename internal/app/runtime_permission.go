@@ -9,11 +9,13 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/uvwt/agentdock/internal/execution"
 	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/observability"
 	"github.com/uvwt/agentdock/internal/permission"
+	toolcomputer "github.com/uvwt/agentdock/internal/tool/computer"
 )
 
 func snapshotValidatedToolArguments(args map[string]any) (map[string]any, error) {
@@ -286,4 +288,228 @@ func runtimePermissionFingerprint(tool, action string, args map[string]any) (str
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write(canonical)
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOperation) (permission.HostOperationFinish, error) {
+	if r == nil || r.admission == nil || r.permissions == nil || r.execution == nil {
+		return nil, toolError("PERMISSION_STATE_ERROR", "AgentDock permission admission is unavailable", "permission")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tool := strings.TrimSpace(op.Tool)
+	action := strings.TrimSpace(op.Action)
+	if tool == "" || action == "" {
+		return nil, toolError("PERMISSION_STATE_ERROR", "host capability operation identity is incomplete", "permission")
+	}
+
+	parent := execution.ScopeFromContext(ctx).CallID
+	call := r.execution.BeginChild(parent, execution.BeginInput{
+		Tool: tool, Source: "acp_bridge", InsertionSupported: false,
+	})
+	finishFailed := func(callErr error) {
+		code, category := observableError(callErr)
+		r.execution.Finish(call.ID, execution.FinishInput{
+			Status: execution.StatusFailed, ErrorCode: code, ErrorCategory: category,
+		})
+	}
+
+	facts := r.hostOperationFacts(ctx, op)
+	fingerprint, err := hostOperationFingerprint(tool, action, op.Payload)
+	if err != nil {
+		callErr := toolError("PERMISSION_STATE_ERROR", "AgentDock could not prepare host capability admission", "permission")
+		finishFailed(callErr)
+		return nil, callErr
+	}
+	prepared := permission.PreparedRequest{
+		Fingerprint: fingerprint,
+		Binding:     facts.Binding,
+		Generations: map[string]string{
+			"acp_session": strings.TrimSpace(op.SessionID),
+			"acp_profile": strings.TrimSpace(op.ProfileID),
+		},
+		Tool: tool, Action: action, RuntimeEpoch: r.execution.Epoch(),
+	}
+	admission, err := r.admission.Admit(ctx, permission.AdmissionRequest{
+		Audit: permission.AuditBinding{CallID: call.ID, ParentCallID: call.ParentCallID},
+		Facts: facts, Prepared: prepared,
+		Summary: permissionDisplaySummary(tool, action),
+		Scope:   "AgentDock ACP host capability",
+	})
+	if err != nil {
+		callErr := err
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			slog.Warn("host capability permission admission failed", "tool", tool, "action", action, "error", err)
+			callErr = toolError("PERMISSION_STATE_ERROR", "AgentDock permission state could not be evaluated", "permission")
+		}
+		finishFailed(callErr)
+		return nil, callErr
+	}
+	if callErr := permissionAdmissionToolError(admission); callErr != nil {
+		finishFailed(callErr)
+		return nil, callErr
+	}
+
+	var once sync.Once
+	finish := func(dispatchErr error) {
+		once.Do(func() {
+			status := execution.StatusCompleted
+			code, category := "", ""
+			if dispatchErr != nil {
+				status = execution.StatusFailed
+				code, category = observableError(dispatchErr)
+			}
+			r.execution.Finish(call.ID, execution.FinishInput{
+				Status: status, ErrorCode: code, ErrorCategory: category,
+			})
+			if admission.ConsumedApprovalID != "" {
+				outcome := permission.Succeeded
+				if dispatchErr != nil {
+					outcome = permission.Failed
+				}
+				if _, settleErr := r.permissions.SettleDispatch(context.Background(), admission.ConsumedApprovalID, outcome); settleErr != nil {
+					slog.Error("settle host capability permission dispatch failed", "approval_id", admission.ConsumedApprovalID, "error", settleErr)
+				}
+			}
+		})
+	}
+	return finish, nil
+}
+
+func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOperation) permission.PermissionFacts {
+	binding := permission.PermissionBinding{
+		RuntimeEpoch: r.execution.Epoch(),
+		Source:       "acp_bridge",
+		ACPSessionID: strings.TrimSpace(op.SessionID),
+		Provider:     strings.TrimSpace(op.ProfileID),
+	}
+	if principal, ok := requestmeta.AuthPrincipalFromContext(ctx); ok {
+		binding.Principal = permission.AuthorizationPrincipal{
+			Kind: principal.Kind, ID: principal.ID,
+			Authenticated: principal.Authenticated, Stable: principal.Stable,
+		}
+	}
+	if root := strings.TrimSpace(op.WorkspaceRoot); root != "" {
+		binding.WorkspaceRoot = root
+		binding.WorkspaceID = trustedWorkspacePermissionID(root)
+		binding.TrustedWorkspace = binding.WorkspaceID != ""
+	}
+
+	facts := permission.PermissionFacts{
+		EffectsKnown: true,
+		Filesystem:   permission.FileNone,
+		Tool:         strings.TrimSpace(op.Tool),
+		Action:       strings.TrimSpace(op.Action),
+		Binding:      binding,
+		Reason:       "Core classified ACP host capability operation",
+	}
+	switch facts.Tool {
+	case "acp_browser":
+		switch facts.Action {
+		case "take_snapshot", "take_screenshot":
+			facts.ReadOnly = true
+			facts.Reason = "browser snapshot/screenshot observes the owned target"
+		case "acquire":
+			facts.Management = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Network = hostPayloadHasNonBlankString(op.Payload, "url")
+			facts.Reason = "browser acquire creates a lease and may start or attach browser resources"
+		case "navigate_page", "click", "fill", "press_key":
+			facts.Network = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "browser action can mutate page state or trigger network activity"
+		case "evaluate_script":
+			facts.EffectsKnown = false
+			facts.OpaqueProviderExecution = true
+			facts.Network = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "browser JavaScript effects cannot be proven before execution"
+		default:
+			facts.EffectsKnown = false
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "browser host operation is not classified"
+		}
+	case "acp_computer":
+		switch facts.Action {
+		case "acquire":
+			facts.Management = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "computer acquire creates a host control session"
+		case "observe":
+			if computerObservationIsCoreReadOnly(op.Payload) {
+				facts.ReadOnly = true
+				facts.Reason = "computer observation is Core-proven non-foreground inspection"
+			} else {
+				facts.Other = true
+				facts.OneShotEligible = true
+				facts.Reason = "computer observation may require foreground or permission interaction"
+			}
+		case "act":
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "computer action can mutate native GUI state"
+		default:
+			facts.EffectsKnown = false
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "computer host operation is not classified"
+		}
+	default:
+		facts.EffectsKnown = false
+		facts.Other = true
+		facts.OneShotEligible = true
+		facts.Reason = "host capability operation is not classified"
+	}
+	return facts
+}
+
+func hostOperationFingerprint(tool, action string, payload any) (string, error) {
+	snapshot, err := snapshotValidatedToolArguments(map[string]any{"payload": payload})
+	if err != nil {
+		return "", err
+	}
+	return runtimePermissionFingerprint(tool, action, snapshot)
+}
+
+func trustedWorkspacePermissionID(root string) string {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return ""
+	}
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("agentdock-permission-workspace-v1"))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(root))
+	return "workspace:sha256:" + hex.EncodeToString(hash.Sum(nil))
+}
+
+func hostPayloadHasNonBlankString(payload any, key string) bool {
+	container, ok := payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	value, _ := container[key].(string)
+	return strings.TrimSpace(value) != ""
+}
+
+func computerObservationIsCoreReadOnly(payload any) bool {
+	container, ok := payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	request, ok := container["request"].(toolcomputer.ObservationRequest)
+	if !ok || request.RestoreWindow || request.Action == "permissions" {
+		return false
+	}
+	switch request.Action {
+	case "capabilities", "list_apps", "list_windows", "get_app_state":
+		return true
+	default:
+		return false
+	}
 }

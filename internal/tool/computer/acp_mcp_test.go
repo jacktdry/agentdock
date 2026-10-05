@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/uvwt/agentdock/internal/permission"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -242,5 +243,61 @@ func TestACPComputerPrincipalBindsSessionProfileNotCapabilityToken(t *testing.T)
 	otherOwner, _ := bridge.owner(otherToken)
 	if first.ID == acpComputerAuthPrincipal(otherOwner).ID {
 		t.Fatal("different ACP sessions shared computer principal")
+	}
+}
+
+func TestACPComputerAdmissionRunsBeforeProviderAndReleaseBypassesPolicy(t *testing.T) {
+	bridge, provider := newTestComputerACPBridge(t)
+	token, err := bridge.RegisterSessionWithTokenAndWorkspace("admission-computer", "codex", t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := bridge.Acquire(token, CapabilityAct, ForegroundAllowed)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocked := errors.New("permission blocked")
+	calls := 0
+	bridge.SetAdmissionHook(func(context.Context, permission.HostOperation) (permission.HostOperationFinish, error) {
+		calls++
+		return nil, blocked
+	})
+	_, err = bridge.Act(context.Background(), token, meta.SessionID, ActionRequest{Action: "click", App: "Test", ElementIndex: intPtr(1)})
+	if !errors.Is(err, blocked) {
+		t.Fatalf("Act error=%v", err)
+	}
+	provider.mu.Lock()
+	actCalls := provider.actCall
+	provider.mu.Unlock()
+	if actCalls != 0 || calls != 1 {
+		t.Fatalf("provider act calls=%d admission calls=%d", actCalls, calls)
+	}
+
+	beforeReleaseCalls := calls
+	if _, err := bridge.Release(token, meta.SessionID); err != nil {
+		t.Fatalf("Release was blocked by permission hook: %v", err)
+	}
+	if calls != beforeReleaseCalls {
+		t.Fatalf("release invoked admission hook: before=%d after=%d", beforeReleaseCalls, calls)
+	}
+}
+
+func TestACPComputerTrustedWorkspaceRegistrationIsStableAndFailClosed(t *testing.T) {
+	bridge, _ := newTestComputerACPBridge(t)
+	root := t.TempDir()
+	token, err := bridge.RegisterSessionWithTokenAndWorkspace("workspace-owner", "codex", root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := bridge.owner(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.workspaceRoot == "" {
+		t.Fatal("trusted workspace root was not recorded")
+	}
+	if _, err := bridge.RegisterSessionWithTokenAndWorkspace("workspace-owner", "codex", t.TempDir(), token); err == nil {
+		t.Fatal("same ACP owner silently changed trusted workspace")
 	}
 }

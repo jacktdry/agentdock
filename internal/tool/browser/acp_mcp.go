@@ -10,6 +10,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
+	toolcore "github.com/uvwt/agentdock/internal/tool/core"
 )
 
 type acpBrowserTokenContextKey struct{}
@@ -72,8 +73,15 @@ func acpMCPResult(payload map[string]any, err error) (*mcpsdk.CallToolResult, er
 	}
 	if err != nil {
 		code := ErrActionFailed
+		var toolErr *toolcore.ToolError
 		var browserErr *Error
-		if errors.As(err, &browserErr) {
+		if errors.As(err, &toolErr) {
+			code = toolErr.Code
+			payload["phase"] = toolErr.Category
+			if toolErr.Details != nil {
+				payload["details"] = toolErr.Details
+			}
+		} else if errors.As(err, &browserErr) {
 			code = browserErr.Code
 			payload["phase"] = browserErr.Phase
 			if browserErr.Details != nil {

@@ -41,7 +41,7 @@ func (p acpHostCapabilityProvider) Servers(ctx context.Context, sessionID, cwd s
 		servers = append(servers, acpruntime.SessionMCPServer{Name: name, Type: "http", URL: p.bridge.MCPServerURL(p.port), Headers: []acpruntime.SessionMCPHeader{{Name: "Authorization", Value: "Bearer " + token}}})
 	}
 	if p.computer != nil {
-		computerToken, err := p.computer.RegisterSessionWithToken(sessionID, p.profileID, token)
+		computerToken, err := p.computer.RegisterSessionWithTokenAndWorkspace(sessionID, p.profileID, cwd, token)
 		if err != nil {
 			if p.bridge != nil {
 				_ = p.bridge.ReleaseSession(ctx, sessionID)
