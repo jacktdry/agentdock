@@ -54,6 +54,16 @@ func NewStore(eventCapacity, callCapacity int) *Store {
 	}
 }
 
+// Epoch returns the immutable identity of this execution-store lifetime.
+// Other Core subsystems use the same epoch to bind state that must not survive
+// a Core restart as if it were still live.
+func (s *Store) Epoch() string {
+	if s == nil {
+		return ""
+	}
+	return s.epoch
+}
+
 func (s *Store) Begin(ctx context.Context, input BeginInput) (context.Context, Call) {
 	if s == nil {
 		return ctx, Call{}

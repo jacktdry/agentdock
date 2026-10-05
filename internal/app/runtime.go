@@ -17,6 +17,7 @@ import (
 	"github.com/uvwt/agentdock/internal/execution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/observability"
+	"github.com/uvwt/agentdock/internal/permission"
 	pluginruntime "github.com/uvwt/agentdock/internal/plugin"
 	"github.com/uvwt/agentdock/internal/taskstate"
 	toolacp "github.com/uvwt/agentdock/internal/tool/acp"
@@ -58,6 +59,8 @@ type Runtime struct {
 	acp            *toolacp.Service
 	observer       *observability.Recorder
 	execution      *execution.Store
+	permissions    *permission.Store
+	admission      *permission.AdmissionGate
 	tracing        *observability.Tracing
 	lifecycleMu    sync.RWMutex
 	commandCtx     context.Context
@@ -75,6 +78,15 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	ws, err := workspace.New(cfg.AgentDockDefaultDir)
 	if err != nil {
 		return nil, err
+	}
+	executionStore := execution.NewStore(execution.DefaultEventCapacity, execution.DefaultCallCapacity)
+	permissionStore, err := permission.NewStore(cfg.AgentDockHome, executionStore.Epoch())
+	if err != nil {
+		return nil, fmt.Errorf("initialize permission store: %w", err)
+	}
+	admissionGate, err := permission.NewAdmissionGate(permissionStore)
+	if err != nil {
+		return nil, fmt.Errorf("initialize permission admission: %w", err)
 	}
 	envs, err := envstore.New(cfg.AgentDockHome)
 	if err != nil {
@@ -101,9 +113,11 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	runtime := &Runtime{
 		cfg: cfg, ws: ws, skills: skills,
 		toolNames: toolNames, toolValidators: toolValidators,
-		observer:   observability.NewRecorder(observability.DefaultRecentCapacity),
-		execution:  execution.NewStore(execution.DefaultEventCapacity, execution.DefaultCallCapacity),
-		commandCtx: commandCtx, commandCancel: commandCancel,
+		observer:    observability.NewRecorder(observability.DefaultRecentCapacity),
+		execution:   executionStore,
+		permissions: permissionStore,
+		admission:   admissionGate,
+		commandCtx:  commandCtx, commandCancel: commandCancel,
 	}
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, func(ctx context.Context, skillRef string) (toolcommand.SkillLease, error) {
 		resolved, release, err := skills.Acquire(ctx, skillRef)
@@ -363,12 +377,30 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 	if err = r.validateToolArguments(name, args); err != nil {
 		return nil, err
 	}
+	args, err = snapshotValidatedToolArguments(args)
+	if err != nil {
+		return nil, toolErrorDetails(
+			"INVALID_ARGUMENT",
+			"tool arguments cannot be normalized after validation",
+			"validation",
+			map[string]any{"tool": name},
+		)
+	}
 	spec, ok := toolSpecByName(name)
 	if !ok || spec.Handler == nil {
 		err = toolErrorDetails("UNKNOWN_TOOL", "tool has no handler", "validation", map[string]any{"tool": name})
 		return nil, err
 	}
+	admission, admissionErr := r.admitRuntimeTool(ctx, executionCall, name, args, source)
+	if admissionErr != nil {
+		err = admissionErr
+		return nil, err
+	}
+	if err = permissionAdmissionToolError(admission); err != nil {
+		return nil, err
+	}
 	result, err = spec.Handler(ctx, r, args)
+	r.settleConsumedPermission(admission, result, err)
 	if result != nil {
 		r.recordExecutionResultFacts(executionCall.ID, name, args, result)
 	}
