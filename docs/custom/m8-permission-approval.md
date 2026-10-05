@@ -1,6 +1,6 @@
 # M8 Permission / Approval
 
-> Status: Core implementation in progress — evaluator/state/Runtime/ACP host/Runtime-management admission checkpoints complete
+> Status: Core implementation in progress — evaluator/state/Runtime/ACP host/Runtime-management/provider-continuation admission checkpoints complete
 >
 > Date: 2026-10-05
 >
@@ -24,14 +24,15 @@ M8 is now past the contract-only stage. The current branch has the following rev
 - `c8c10053` — propagated Core-owned opaque principals through Nexus and the ACP Browser / Computer capability transports. Capability-token rotation does not become authorization identity.
 - `ef9c29ce` — gated ACP Browser / Computer host capabilities through the same Core admission boundary while preserving their independent ownership, foreground, routing and provider constraints.
 - `832018c3` — wired Runtime insertion/task/MCP/evolution mutations through the same `AdmissionGate`. Input validation/normalization happens before admission, Ask/Deny never reaches the underlying mutation handler, allow/error dispatch settles the M5 child call truthfully, and authenticated Runtime API callers now preserve the same stable opaque principal used by normal Core admission. Runtime MCP list/inspect remain explicit read-only exceptions.
+- `8e469fe0` — closed the ACP provider-continuation / permissive `session/request_permission` bypass. Any provider `option_id` selection now passes an injected Core continuation gate inside `acp.Manager` immediately before the response can resume the provider; a missing hook fails closed. Core cancellation bypasses the gate, while provider-supplied labels/kinds such as `reject_once` are not trusted as cancellation. One-shot matching is bound to principal + ACP session/profile + exact interaction ID + option/tool-call fingerprint, and the outer `acp_interaction respond` wrapper no longer consumes a separate approval before the nested continuation gate.
 
 Current targeted regression is green for `internal/permission`, `internal/execution`, `internal/app`, `internal/httpx/requestmeta`, `internal/httpx`, `internal/nexusbridge`, `internal/tool/browser`, and `internal/tool/computer`. `go test ... -count=1`, `go vet ...` and `git diff --check` pass for that set.
+ACP continuation-specific `-race` coverage also passes. Full `go test ./... -count=1` passes every package except the pre-existing script-governance inventory failure for `packaging/macos/app-identity.sh`, unchanged from the prior M8 baseline.
 
 The prior Runtime-management preparation in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go` is now part of committed checkpoint `832018c3`; there is no longer a classifier-only uncommitted slice. Handler-before/after tests prove the covered mutations are gated before dispatch and that success/failure/permission outcomes are reflected in the M5 execution journal.
 
 Still required before the Core step can be marked complete:
 
-- close remaining ACP provider-continuation / permissive `requestPermission` paths that can bypass normal `Runtime.Call`;
 - implement the distinct Desktop control authority and confirmation challenge for permission mutations;
 - protect permission/control credential paths from normal AgentDock file APIs;
 - expose versioned Runtime / Shared Desktop permission operations;
