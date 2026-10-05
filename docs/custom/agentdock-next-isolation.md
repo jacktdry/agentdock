@@ -18,6 +18,7 @@ Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service own
 
 - Next 開發不得檢查、修改、重啟、停止、替換或寫入 `/Applications/AgentDock.app`、目前 stable AgentDock Core、`~/.agentdock`、stable Memory registry 或 live launchd services；stable 不得作 development target。
 - Next 的 start / stop / restart、settings、diagnostics、tunnel、login item、ACP / Browser cleanup 及 installer / self-update 只可操作可證明為 Next-owned 的目標。禁止全域 kill、按 app basename 猜測 ownership、清除 stable children 或接管使用者 browser。
+- Core network namespace 不可混用：stable default `8765`、shared Memory `8766`、Next default `8767`。Next 不允許選用 stable/Memory reserved port；任何自訂 port 在 apply/start 前要做 ownership-aware occupancy preflight，無法證明為 Next-owned 的既有 listener 一律視為 conflict。
 - 不從 stable state 原地轉換、搬移或建立可寫 symlink；Next 不因缺少 state/config 而讀寫 stable fallback。明確 Next namespaces 未建立前，不啟動 runtime / service 實驗。
 - Bundle identifier、service label、paths、port、connector 必須一致驗證。缺失、衝突、identity 不符或 ownership 不明時 fail closed。
 - Installer / self-update 必須 **Next-target-aware**：以 Next identity 驗證來源、destination、runtime/service targets 與 update metadata；永不得 fallback 選擇 `AgentDock.app`。失敗 / rollback 只影響 Next。
@@ -161,6 +162,8 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
 
 `mac-dev-next` 不再等待所有 Shared UI parity 完成：Connection/Auth/Tunnel readiness 完成後就先建立 side-by-side connector，後續 ACP/MCP/Plugin/Browser/Nexus parity 可直接透過 Next control plane 驗證。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+
+正式 `mac-dev-next` public endpoint 採 **Next-owned Named Cloudflare Tunnel**：獨立 tunnel identity、hostname、token、service/state/log ownership，origin 指向 Next Core（預設 `127.0.0.1:8767`）。不得與 stable AgentDock 共用 tunnel token/hostname；Quick Tunnel 只作臨時 smoke。實際建立 Cloudflare Tunnel / DNS route 前由使用者確認 account/hostname。
 
 ### ACP stress / macOS Keychain closeout
 

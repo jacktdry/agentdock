@@ -417,9 +417,9 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 執行順序：
 
-1. Feature Parity Audit：stable native → Next backend → Shared UI，分類 Port / Redesign / Native-only / Deprecated / Not needed。
-2. **Next Connection/Auth Readiness**：Shared UI 顯示 Local MCP URL、完整 Public MCP URL（含 `/mcp`）、OAuth password 的 explicit Show/Copy、endpoint status/test；credentials 只讀 Next-owned state，不進 logs/Diagnostics/Activity/Memory。
-3. **Public Access / Tunnel UI**：Local / Quick / Named、Tunnel Token、endpoint、autostart；正式 `mac-dev-next` 優先使用固定 HTTPS endpoint，而不是 ephemeral Quick Tunnel。
+1. Feature Parity Audit + **AI UX/IA Design Workshop**：stable native → Next backend → Shared UI，分類 Port / Redesign / Native-only / Deprecated / Not needed；每個主要分類先由 Product / UX / Security / cross-platform / architecture 角色定義 page goal、content hierarchy、actions、help/warning、error/retry/accessibility，再進實作。
+2. **Next Connection/Auth Readiness**：Shared UI 顯示 Local MCP URL、完整 Public MCP URL（含 `/mcp`）、OAuth password 的 explicit Show/Copy、endpoint status/test；credentials 只讀 Next-owned state，不進 logs/Diagnostics/Activity/Memory。Next 預設 port `8767`，禁止與 stable `8765` 或 Memory `8766` 共用；自訂 port 必須做 ownership-aware occupancy preflight，foreign/unknown listener fail closed。
+3. **Public Access / Tunnel UI**：Local / Quick / Named、Tunnel Token、endpoint、autostart；正式 `mac-dev-next` 使用 **獨立 Named Cloudflare Tunnel + dedicated hostname/token**，不與 stable tunnel 共用。Quick Tunnel 只作 smoke。
 4. **使用者手動建立 `mac-dev-next` ChatGPT connector**：此步由使用者操作；建立前 AgentDock Next UI 必須已能提供 Public MCP URL 與 OAuth password。建立後驗證 stable `mac-dev` 與 `mac-dev-next` side-by-side，互不取得 lifecycle/state/credential authority。
 5. ACP Manager full parity：profile CRUD、enable/disable、default、detect/version/update、Codex/Antigravity presets、custom adapter。
 6. MCP Management Shared UI。
