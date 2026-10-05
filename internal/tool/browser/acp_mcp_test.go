@@ -242,3 +242,37 @@ func TestACPBrowserRegisterSessionWithTokenRequiresStableCapability(t *testing.T
 		assertBrowserCode(t, err, ErrLeaseOwnerMismatch)
 	}
 }
+
+func TestACPBrowserPrincipalBindsSessionProfileNotCapabilityToken(t *testing.T) {
+	bridge := newTestACPBridge(t)
+	root := t.TempDir()
+	firstToken, err := bridge.RegisterSessionWithToken("session-a", "codex", root, "token-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := bridge.owner(firstToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := acpBrowserAuthPrincipal(owner)
+	if err := bridge.ReleaseSession(context.Background(), "session-a"); err != nil {
+		t.Fatal(err)
+	}
+	secondToken, err := bridge.RegisterSessionWithToken("session-a", "codex", root, "token-two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner2, _ := bridge.owner(secondToken)
+	second := acpBrowserAuthPrincipal(owner2)
+	if first.ID == "" || first != second || first.Kind != "acp_bridge" {
+		t.Fatalf("principal changed with capability rotation: %#v %#v", first, second)
+	}
+	otherToken, err := bridge.RegisterSession("session-b", "codex", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOwner, _ := bridge.owner(otherToken)
+	if first.ID == acpBrowserAuthPrincipal(otherOwner).ID {
+		t.Fatal("different ACP sessions shared browser principal")
+	}
+}

@@ -211,3 +211,36 @@ func TestACPComputerHTTPForegroundDeniedReturnsStructuredError(t *testing.T) {
 func errorsAs(err error, target any) bool {
 	return errors.As(err, target)
 }
+
+func TestACPComputerPrincipalBindsSessionProfileNotCapabilityToken(t *testing.T) {
+	bridge, _ := newTestComputerACPBridge(t)
+	firstToken, err := bridge.RegisterSessionWithToken("session-a", "codex", "token-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := bridge.owner(firstToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := acpComputerAuthPrincipal(owner)
+	if err := bridge.ReleaseSession(context.Background(), "session-a"); err != nil {
+		t.Fatal(err)
+	}
+	secondToken, err := bridge.RegisterSessionWithToken("session-a", "codex", "token-two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner2, _ := bridge.owner(secondToken)
+	second := acpComputerAuthPrincipal(owner2)
+	if first.ID == "" || first != second || first.Kind != "acp_bridge" {
+		t.Fatalf("principal changed with capability rotation: %#v %#v", first, second)
+	}
+	otherToken, err := bridge.RegisterSession("session-b", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOwner, _ := bridge.owner(otherToken)
+	if first.ID == acpComputerAuthPrincipal(otherOwner).ID {
+		t.Fatal("different ACP sessions shared computer principal")
+	}
+}

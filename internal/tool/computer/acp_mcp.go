@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 )
 
 type acpComputerTokenContextKey struct{}
@@ -24,13 +25,22 @@ func (b *ACPBridge) MCPHTTPHandler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if _, err := b.owner(token); err != nil {
+		owner, err := b.owner(token)
+		if err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		ctx := context.WithValue(r.Context(), acpComputerTokenContextKey{}, token)
+		ctx = requestmeta.WithAuthPrincipal(ctx, acpComputerAuthPrincipal(owner))
 		transport.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func acpComputerAuthPrincipal(owner *acpOwner) requestmeta.AuthPrincipal {
+	if owner == nil {
+		return requestmeta.AuthPrincipal{}
+	}
+	return requestmeta.NewStableAuthPrincipal("acp_bridge", owner.sessionID, owner.profileID)
 }
 
 func acpComputerToken(ctx context.Context) (string, error) {

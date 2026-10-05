@@ -1,6 +1,11 @@
 package requestmeta
 
-import "context"
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
 
 type baseURLKey struct{}
 type authPrincipalKey struct{}
@@ -43,4 +48,28 @@ func AuthPrincipalFromContext(ctx context.Context) (AuthPrincipal, bool) {
 		return AuthPrincipal{}, false
 	}
 	return principal, true
+}
+
+func NewStableAuthPrincipal(kind string, identityParts ...string) AuthPrincipal {
+	kind = strings.TrimSpace(kind)
+	if kind == "" || len(identityParts) == 0 {
+		return AuthPrincipal{}
+	}
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("agentdock-auth-principal-v1\x00"))
+	_, _ = hash.Write([]byte(kind))
+	for _, part := range identityParts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return AuthPrincipal{}
+		}
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(part))
+	}
+	return AuthPrincipal{
+		Kind:          kind,
+		ID:            "sha256:" + hex.EncodeToString(hash.Sum(nil)),
+		Authenticated: true,
+		Stable:        true,
+	}
 }

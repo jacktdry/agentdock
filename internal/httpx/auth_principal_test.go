@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
+
 	"github.com/uvwt/agentdock/internal/config"
 )
 
@@ -35,7 +37,7 @@ func TestAuthenticateRequestStaticBearerProducesStableOpaquePrincipal(t *testing
 
 func TestPrincipalFingerprintIsDomainSeparated(t *testing.T) {
 	value := "same-value"
-	if principalFingerprint("static-bearer", value) == principalFingerprint("oauth-grant", value) {
+	if requestmeta.NewStableAuthPrincipal("static_bearer", value).ID == requestmeta.NewStableAuthPrincipal("oauth_grant", value).ID {
 		t.Fatal("principal fingerprint did not domain-separate auth kinds")
 	}
 }
