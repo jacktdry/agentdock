@@ -157,7 +157,7 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 目前剩餘 gate：
 
 1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
-2. 建立獨立 `mac-dev-next` ChatGPT connector，指向 Next Core :8767，確認與既有 `mac-dev` 同時可用。
+2. 建立獨立 `mac-dev-next` ChatGPT connector，指向 Next Core :8767，確認與既有 `mac-dev` 同時可用。目前 ChatGPT runtime 暴露的 Plugin/Connection 管理工具只有權限、依賴與卸載，沒有 install/connect/custom-MCP creation action；因此此步維持 client/UI 外部 gate，不得改寫既有 `mac-dev` 來繞過。
 3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
 
 ### ACP stress / macOS Keychain closeout
