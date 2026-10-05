@@ -157,8 +157,10 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 目前剩餘 gate：
 
 1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
-2. 建立獨立 `mac-dev-next` ChatGPT connector，指向 Next Core :8767，確認與既有 `mac-dev` 同時可用。目前 ChatGPT runtime 暴露的 Plugin/Connection 管理工具只有權限、依賴與卸載，沒有 install/connect/custom-MCP creation action；因此此步維持 client/UI 外部 gate，不得改寫既有 `mac-dev` 來繞過。
+2. 建立獨立 `mac-dev-next` ChatGPT connector，確認與既有 `mac-dev` 同時可用。**此步由使用者在 ChatGPT 手動建立**，Agent 不自動建立或替換 connector。建立前先完成 [Pre-M9 Connection/Auth Readiness](pre-m9-feature-parity.md)：AgentDock Next Shared UI 必須顯示完整 Public MCP URL（含 `/mcp`）及可 explicit Show/Copy 的 Next-owned OAuth password，並完成固定 public endpoint / Tunnel readiness。不得為取得 credential 或 endpoint fallback 到 stable state，也不得改寫既有 `mac-dev` 來繞過。
 3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
+
+`mac-dev-next` 不再等待所有 Shared UI parity 完成：Connection/Auth/Tunnel readiness 完成後就先建立 side-by-side connector，後續 ACP/MCP/Plugin/Browser/Nexus parity 可直接透過 Next control plane 驗證。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
 
 ### ACP stress / macOS Keychain closeout
 

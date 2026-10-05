@@ -393,7 +393,7 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - 通過隔離、Next lifecycle / update / rollback 與 M6/M7 regression；證據不得來自開發中操作 stable runtime。
 - Next 必須能以未來 `mac-dev-next` connector 獨立連上 ChatGPT，Next lifecycle 操作不能影響原 Mac-Dev control channel。
 
-2026-10-05 Next-only live checkpoint：Phase 2 獨立 review 無 blocker；arm64 ad-hoc App/ZIP/DMG、direct Core/GUI smoke、原生 Next-only SMAppService Core register/unregister、Next Memory HTTP registry/health、M6/M7 race regression、真實 Codex Browser Broker injection，以及 Codex/Antigravity prompt-driven ephemeral stress 均通過 lifecycle 驗收，且未產生 Next-owned stdio Memory child。Antigravity 的 macOS Keychain popup 已在 fork `9f56b52` 以「private AGY HOME + real `~/Library/Keychains` symlink」修正，Next 現已部署 `1.2.0-agentdock.6`（`5cb54d2`）；20-prompt stress 的五批 SecurityAgent event 均為 0。Stable `mac-dev` 全程可用。剩餘外部 gate 為 `mac-dev-next` ChatGPT connector，以及本機取得有效 Developer ID / certificate-bound signing identity 後的 GUI updater live transaction；不得以修改系統 trust 繞過。現行 ChatGPT Plugin/Connection 管理介面未暴露 install/connect/custom-MCP creation action，因此 `mac-dev-next` 暫時只能等待安全的 client/UI 註冊路徑，不能以改寫既有 `mac-dev` 取代。
+2026-10-05 Next-only live checkpoint：Phase 2 獨立 review 無 blocker；arm64 ad-hoc App/ZIP/DMG、direct Core/GUI smoke、原生 Next-only SMAppService Core register/unregister、Next Memory HTTP registry/health、M6/M7 race regression、真實 Codex Browser Broker injection，以及 Codex/Antigravity prompt-driven ephemeral stress 均通過 lifecycle 驗收，且未產生 Next-owned stdio Memory child。Antigravity 的 macOS Keychain popup 已在 fork `9f56b52` 以「private AGY HOME + real `~/Library/Keychains` symlink」修正，Next 現已部署 `1.2.0-agentdock.6`（`5cb54d2`）；20-prompt stress 的五批 SecurityAgent event 均為 0。Stable `mac-dev` 全程可用。剩餘外部 gate 為 `mac-dev-next` ChatGPT connector，以及本機取得有效 Developer ID / certificate-bound signing identity 後的 GUI updater live transaction；不得以修改系統 trust 繞過。2026-10-05 後續排序已調整：先完成 Shared Desktop Connection/Auth/Tunnel readiness，讓 Next UI 提供完整 Public MCP URL + OAuth password，再由使用者透過 ChatGPT UI 手動建立 `mac-dev-next`；不得改寫既有 `mac-dev` 取代此 gate。
 
 此 gate 是 M8/M9 live migration 的必要前置；後續 feature 開發仍限 Next。只有 Next 完整開發、測試及獨立連線後，才另行提出 migration / retirement 計畫，不把舊 AgentDock cutover 當目前下一步。
 
@@ -410,6 +410,28 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - Canonical Next Task `tsk_9b1ae7b19ea15a40` 關聯 API continuation `tsk_9c4e5c21c4c24c53`。舊 `tsk_b9e4bd0e985de598` 僅為 legacy stable-store reference；repo docs + Next task store 是 source of truth。
 
 Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeout 不含 push、merge、release、production 部署或 stable migration。原生 Windows 外部證據與既有 governance debt 持續依 [M8 文件](m8-permission-approval.md) 追蹤。
+
+## Pre-M9 — Feature Parity / Connection Readiness
+
+狀態：**Accepted execution order（2026-10-05）**。M8 後不直接進 M9；先補齊 Next 可獨立使用所需的 connection/auth surface 與必要 Shared Desktop parity。完整矩陣與 acceptance 見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+
+執行順序：
+
+1. Feature Parity Audit：stable native → Next backend → Shared UI，分類 Port / Redesign / Native-only / Deprecated / Not needed。
+2. **Next Connection/Auth Readiness**：Shared UI 顯示 Local MCP URL、完整 Public MCP URL（含 `/mcp`）、OAuth password 的 explicit Show/Copy、endpoint status/test；credentials 只讀 Next-owned state，不進 logs/Diagnostics/Activity/Memory。
+3. **Public Access / Tunnel UI**：Local / Quick / Named、Tunnel Token、endpoint、autostart；正式 `mac-dev-next` 優先使用固定 HTTPS endpoint，而不是 ephemeral Quick Tunnel。
+4. **使用者手動建立 `mac-dev-next` ChatGPT connector**：此步由使用者操作；建立前 AgentDock Next UI 必須已能提供 Public MCP URL 與 OAuth password。建立後驗證 stable `mac-dev` 與 `mac-dev-next` side-by-side，互不取得 lifecycle/state/credential authority。
+5. ACP Manager full parity：profile CRUD、enable/disable、default、detect/version/update、Codex/Antigravity presets、custom adapter。
+6. MCP Management Shared UI。
+7. Plugin Management Shared UI。
+8. Browser Broker Shared UI：依 M6 routing/ownership/lease 架構重新設計，不搬舊 CDP selector。
+9. Nexus / startup / logs/config / platform essentials；privileged operations 保持 native-backed。
+10. Pre-M9 hardening：清除 `app-identity.sh` governance debt；CBM lifecycle debt 先 triage，只有 release/update blocker 才在 M9 前修。
+11. 進入 M9 Release Migration。
+12. 用 release candidate artifacts 做 macOS signed updater、Windows/WSL native、Linux helper native validation。
+13. M9 closeout 後，Shared UI parity 穩定才逐步 deprecated 重複 AppKit/WPF business UI。
+
+重要：`mac-dev-next` **不等待全部 parity 完成**。Connection/Auth/Tunnel readiness 完成後就先建立 Next connector，讓後續 parity 開發可以直接透過獨立 Next control plane 驗證；stable 仍保留 production fallback，且不可作 Next development target。
 
 ## M9 — Release Migration
 
@@ -464,7 +486,13 @@ M7.5 (Next isolation / separate ChatGPT connection)
 ↓
 M8
 ↓
+Pre-M9 Feature Parity / Connection Readiness
+↓
 M9
+↓
+Release-native UAT
+↓
+Shared UI parity confirmed → duplicated native business UI deprecation
 ```
 
 ACP Manager、Browser Routing 與 Activity Center 都不應在 Desktop foundation 尚未確定前新增大量 AppKit / WPF UI，避免之後重做。
