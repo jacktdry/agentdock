@@ -385,6 +385,8 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - 通過隔離、Next lifecycle / update / rollback 與 M6/M7 regression；證據不得來自開發中操作 stable runtime。
 - Next 必須能以未來 `mac-dev-next` connector 獨立連上 ChatGPT，Next lifecycle 操作不能影響原 Mac-Dev control channel。
 
+2026-10-05 Next-only live checkpoint：Phase 2 獨立 review 無 blocker；arm64 ad-hoc App/ZIP/DMG、direct Core/GUI smoke、原生 Next-only SMAppService Core register/unregister、Next Memory HTTP registry/health，以及 Codex/Antigravity 各一個 ephemeral lifecycle prompt 均通過，且未產生 Next-owned stdio Memory child。Stable `mac-dev` 全程可用。正式 updater live transaction 目前只受本機缺少 Developer ID / certificate-bound signing identity 阻擋；不得以修改系統 trust 繞過。下一個可平行 gate 為 `mac-dev-next` connector 與 M6/M7 Next regression。
+
 此 gate 是 M8/M9 live migration 的必要前置；後續 feature 開發仍限 Next。只有 Next 完整開發、測試及獨立連線後，才另行提出 migration / retirement 計畫，不把舊 AgentDock cutover 當目前下一步。
 
 ## M8 — Permission / Approval

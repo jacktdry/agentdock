@@ -140,3 +140,23 @@ Go unit/race、vet、Swift fixtures、packaging identity fixtures、完整 Swift
 尚未驗證：certificate-signed release ZIP/DMG、native update/service registration、live rollback/recovery、GUI updater gate 開啟、Memory HTTP cutover、`mac-dev-next`、stable migration。沒有操作 stable App/Core/state/registry/live services。本次 review 是本 session diff review，未進行額外 cross-model review。
 
 下一接手點：獨立 review Phase 2，準備 Next-only signed package/launch-smoke 與 GUI gate 啟用驗證；需要另行授權的 live 工作仍須先證明 Next ownership。Memory/connector 與 stable retirement 次序不變。
+
+## M7.5 Next validation checkpoint — 2026-10-05
+
+Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER**；沒有 Critical / High / Medium finding。後續 Next-only 驗證均維持 stable production control plane 不可操作的邊界。
+
+- 從 `fc4ff98` source 產生 arm64 開發 artifact：`AgentDock Next.app`、ZIP、DMG。App / helper codesign、bundle metadata、三個 Next LaunchAgent plist、checksum 與 readonly DMG mount 均通過；artifact identity 為 `dev.dropabit.agentdock.next` / `AgentDockVariant=next`。
+- 本機沒有可用 Developer ID codesigning identity，因此目前 artifact 使用 ad-hoc signature。其 designated requirement 為 `cdhash`；Phase 2 的 Next updater signer-continuity contract 會拒絕這種來源，符合 fail-closed 設計。另以 `/private/tmp` isolated keychain 建立 self-signed code-signing certificate，未加入 user keychain search list、未修改 trust；macOS `codesign` 仍以 `errSecInternalComponent` 拒絕，故不以修改系統 trust 方式繞過此 gate。
+- Next app 僅安裝到 `~/Applications/AgentDock Next.app`。Direct Core smoke 綁定 `127.0.0.1:8767`，health 回報 `0.9.1`，只建立 `~/.agentdock-next`、`~/Library/Application Support/AgentDock Next`、`~/Library/Logs/AgentDock Next`、`~/AgentDock Next`。
+- 原生 `SMAppService` 以 temporary bundle-local harness 呼叫同一個 `ServiceController.start()` / `stop()` 完成真實 lifecycle 驗證：只註冊 `dev.dropabit.agentdock.next.core`，實際 PID executable mapping 為 Next bundle helper，8767 healthy；Tunnel / menu-login 未註冊。`stop()` 後 label、PID、port 均收斂。Harness 未進 Git，測後以乾淨 artifact 還原 App。
+- Next-only Memory registry 已建立於 `~/.agentdock-next/mcp/servers.json`，唯一 `memory` entry 使用 `streamable_http`、`http://127.0.0.1:8766/mcp`、`protocol_version=2025-11-25`。Next Core 自己的 MCP initialize 成功，`agentdock_context` 顯示 Next home/default dir，`mcp_tool_search → inspect → call memory_health` 成功；Memory `11.14.0` / `sqlite-vec` healthy，dynamic MCP 進入 `ready` 並列出 26 tools。
+- Next Core 在 Memory HTTP 使用期間沒有 spawn stdio Memory child。系統既存 stable stdio Memory process 不屬於 Next descendant，不作清理或驗收失敗條件。
+- Next fresh ACP config 使用本機 `codex-acp 2.1.1` 與 hardened `antigravity-acp 1.2.0-agentdock.5`。Codex ephemeral prompt 回 `NEXT_MEMORY_OK`，Antigravity ephemeral prompt 回 `NEXT_AGY_MEMORY_OK`；兩者均到 `end_turn` 並最終 `closed_reason=ephemeral_prompt_terminal`，Next descendant tree 的 Memory child count 均為 0。Codex 使用 `~/.agentdock-next/acp/codex/codex-home` sandbox；hardened Antigravity adapter 對 AGY child 使用 private HOME / browser-free sandbox。
+- 每次 smoke 後都重新驗證 stable `mac-dev` 可回應；沒有停止、重啟、替換或讀寫 stable AgentDock App/Core/state/registry/live service。
+
+目前剩餘 gate：
+
+1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
+2. 建立獨立 `mac-dev-next` ChatGPT connector，指向 Next Core :8767，確認與既有 `mac-dev` 同時可用。
+3. 在 Next plane 完成 M6 Browser ownership / M7 ACP lifecycle relevant regression，以及 Codex / Antigravity 各 20 prompt-driven ephemeral stress。
+4. 全部 gate 通過後完成 M7.5 closeout、整合回 `custom/main`；stable migration / retirement 仍另案規劃。

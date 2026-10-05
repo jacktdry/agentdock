@@ -14,7 +14,7 @@
 
 目前連線中的 AgentDock 是 production control plane。先前 live activation 導致 ChatGPT Mac-Dev channel 斷線，故 Next 開發禁止檢查、修改、重啟、停止、替換 stable App/Core，或操作 `~/.agentdock`、stable stdio Memory registry 與 live launchd services。Stable 不是 development target；舊 stdio Memory children 不可為 Next 驗收而 drain / kill / cleanup。
 
-目前 M7.5 Phase 1 與 Phase 2 repository isolation 均已完成；下一步是 [M7.5 AgentDock Next isolation](agentdock-next-isolation.md) 的獨立 Phase 2 review 與 Next-only signed package / launch-smoke，通過後才進入 Next Memory HTTP cutover。這仍不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
+目前 M7.5 Phase 1 與 Phase 2 repository isolation 均已完成；Phase 2 獨立 review、Next-only launch/SMAppService smoke 與 Next Memory HTTP cutover 也已通過。Next registry 位於 `~/.agentdock-next`，Memory HTTP 以 `2025-11-25` pin 實際完成 tool search/inspect/health call；Codex / Antigravity 各一個 ephemeral prompt 均 auto-close 且沒有 Next-owned stdio Memory child。下一步是獨立 `mac-dev-next` connector 與完整 Next regression；certificate-bound updater transaction 等有效 Developer ID identity 可用後再驗證。這仍不是 direct stable activation。以下 2026-10-03/04 daemon / adapter 資訊是既有驗證紀錄，不是本次重新檢查結果或操作 live service 的授權。
 
 ## 背景
 
