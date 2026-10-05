@@ -33,6 +33,14 @@ ACP continuation-specific `-race` coverage also passes. Full `go test ./... -cou
 
 The prior Runtime-management preparation in `internal/app/runtime_permission.go` and `internal/permission/host_operation.go` is now part of committed checkpoint `832018c3`; there is no longer a classifier-only uncommitted slice. Handler-before/after tests prove the covered mutations are gated before dispatch and that success/failure/permission outcomes are reflected in the M5 execution journal.
 
+Current uncommitted next slice is the **versioned Runtime / Shared Desktop permission API** and must be preserved:
+
+- `internal/app/runtime_permission_api.go`
+- `internal/runtimeapi/dispatch.go`
+- `internal/runtimeapi/runtime.go`
+
+This slice currently contains the read-side Core projection for `GET /internal/runtime/permissions` and `GET /internal/runtime/approvals`, approval status/limit validation, plus Runtime interface preparation for Desktop-control permission mutations. It is **not a completed checkpoint yet**: the distinct Desktop-control mutation route group, strict request decoding, confirmation/mutation dispatch, conflict/error mapping, handler tests and Shared Desktop contract wiring still need to be completed before commit/closeout. Do not reset or discard these three working-tree files.
+
 Still required before the Core step can be marked complete:
 
 - expose versioned Runtime / Shared Desktop permission operations;

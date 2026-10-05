@@ -415,7 +415,7 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 - ✅ distinct per-Core-start Desktop control authority + exact one-time confirmation challenge：`dbf86e17`
 - ✅ permission/control-plane Host + WSL file/media path protection：`f2a6a70f`
 
-目前進行中：versioned Runtime / Shared Desktop `DomainPermission` API。
+目前進行中：versioned Runtime / Shared Desktop `DomainPermission` API。工作樹刻意保留 `internal/app/runtime_permission_api.go`、`internal/runtimeapi/dispatch.go`、`internal/runtimeapi/runtime.go` 三個未提交檔案；目前只有 permission/approval read API 與 Desktop-control mutation interface preparation，尚未完成 mutation routes、strict decode、confirmation dispatch、conflict/error mapping 與完整 handler tests，**不可 reset，也不可視為完成 checkpoint**。
 
 後續 gate：
 - versioned Runtime / Shared Desktop `DomainPermission` API；
