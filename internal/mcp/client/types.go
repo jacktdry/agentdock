@@ -20,6 +20,8 @@ var (
 )
 
 type ServerConfig struct {
+	// Generation is registry-owned metadata, never supplied by a caller.
+	Generation        string            `json:"-"`
 	Name              string            `json:"name"`
 	Description       string            `json:"description"`
 	Transport         string            `json:"transport"`
@@ -43,6 +45,23 @@ type ServerConfig struct {
 	PluginDataDir     string            `json:"-"`
 	Enabled           bool              `json:"enabled"`
 	TimeoutMS         int               `json:"timeout_ms,omitempty"`
+}
+
+// RegistrySnapshot is an authoritative Core read, not a renderer-safe DTO.
+// Configs may contain protected args/URLs; adapters must project safe fields.
+type RegistrySnapshot struct {
+	Revision string
+	Servers  map[string]ServerConfig
+}
+
+// MutationResult retains durable post-state even if runtime cleanup fails.
+// A non-nil error with Persisted=true must not be blindly retried.
+type MutationResult struct {
+	Registry       RegistrySnapshot
+	Persisted      bool
+	RuntimeApplied bool
+	Server         ServerConfig
+	Summary        ServerSummary
 }
 
 type Tool struct {

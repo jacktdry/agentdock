@@ -119,11 +119,34 @@ func (m *Manager) SetOwnedServers(configs []ServerConfig) error {
 		return err
 	}
 
+	m.mu.RLock()
+	previousOwned := make(map[string]ServerConfig, len(m.owned))
+	for name, cfg := range m.owned {
+		previousOwned[name] = cfg
+	}
+	m.mu.RUnlock()
+	for name, cfg := range owned {
+		previous, exists := previousOwned[name]
+		cfg.Generation = previous.Generation
+		if !exists || !reflect.DeepEqual(previous, cfg) {
+			cfg.Generation, err = newRegistryToken()
+			if err != nil {
+				return err
+			}
+		}
+		owned[name] = cfg
+		merged[name] = cfg
+	}
+	states, staleStates := m.planRegistryReplacement(merged)
+	if err := closeServerStates(staleStates); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	m.owned = owned
-	staleStates := m.replaceRegistryLocked(merged)
+	m.servers = merged
+	m.states = states
 	m.mu.Unlock()
-	return closeServerStates(staleStates)
+	return nil
 }
 
 func buildOwnedRegistry(standalone map[string]ServerConfig, configs []ServerConfig) (map[string]ServerConfig, map[string]ServerConfig, error) {
@@ -170,154 +193,193 @@ func (m *Manager) mergeOwned(standalone map[string]ServerConfig) (map[string]Ser
 		if _, exists := merged[name]; exists {
 			return nil, newError("MCP_SERVER_COLLISION", "Plugin MCP runtime name conflicts with a standalone MCP server", false, map[string]any{"server": name, "plugin_name": cfg.PluginName}, nil)
 		}
-		merged[name] = cfg
+		merged[name] = normalizeServerConfig(cfg)
 	}
 	return merged, nil
 }
 
-func (m *Manager) Add(cfg ServerConfig) (ServerSummary, error) {
-	cfg = normalizeServerConfig(cfg)
-	cfg.SourceType = "standalone"
-	cfg.DisplayName = cfg.Name
-	cfg.StorageKey = cfg.Name
-	if err := validateServerConfig(cfg); err != nil {
-		return ServerSummary{}, newError("MCP_CONFIG_INVALID", err.Error(), false, map[string]any{"server": cfg.Name}, err)
-	}
+// Registry reads persisted state under the store lock and includes the current
+// ownership overlay. It never falls back to cache or connects/closes clients.
+func (m *Manager) Registry() (RegistrySnapshot, error) {
 	m.registryMu.Lock()
 	defer m.registryMu.Unlock()
 	if err := m.ensureOpenLocked(); err != nil {
-		return ServerSummary{}, err
+		return RegistrySnapshot{}, err
 	}
-	m.mu.RLock()
-	_, ownedCollision := m.owned[cfg.Name]
-	m.mu.RUnlock()
-	if ownedCollision {
-		return ServerSummary{}, newError("MCP_SERVER_COLLISION", "standalone MCP name conflicts with a Plugin-owned MCP server", false, map[string]any{"server": cfg.Name}, nil)
-	}
-	servers, err := m.store.update(func(servers map[string]ServerConfig) error {
-		if _, exists := servers[cfg.Name]; exists {
-			return newError("MCP_SERVER_EXISTS", "dynamic MCP server already exists", false, map[string]any{"server": cfg.Name}, nil)
-		}
-		servers[cfg.Name] = cfg
-		return nil
-	})
+	snapshot, err := m.store.snapshot()
 	if err != nil {
-		var mcpErr *Error
-		if errors.As(err, &mcpErr) {
-			return ServerSummary{}, err
-		}
-		return ServerSummary{}, newError("MCP_REGISTRY_WRITE_FAILED", "persist dynamic MCP server", false, map[string]any{"server": cfg.Name}, err)
+		return RegistrySnapshot{}, newError("MCP_REGISTRY_READ_FAILED", "read dynamic MCP registry", true, nil, err)
 	}
-	servers, err = m.mergeOwned(servers)
-	if err != nil {
-		return ServerSummary{}, err
-	}
+	return m.registryWithOwned(snapshot)
+}
 
-	m.mu.Lock()
-	staleStates := m.replaceRegistryLocked(servers)
-	state := m.states[cfg.Name]
-	m.mu.Unlock()
-	closeServerStates(staleStates)
-	return summaryFor(cfg, state), nil
+func (m *Manager) registryWithOwned(snapshot RegistrySnapshot) (RegistrySnapshot, error) {
+	servers, err := m.mergeOwned(snapshot.Servers)
+	if err != nil {
+		return RegistrySnapshot{}, err
+	}
+	names := make([]string, 0)
+	for name, cfg := range servers {
+		if cfg.SourceType == "plugin" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	parts := []string{snapshot.Revision}
+	for _, name := range names {
+		parts = append(parts, name, servers[name].PluginName, servers[name].Generation)
+	}
+	return RegistrySnapshot{Revision: opaqueMetadata(parts...), Servers: servers}, nil
+}
+
+func (m *Manager) Add(cfg ServerConfig) (ServerSummary, error) {
+	result, err := m.mutateRegistry("create", cfg.Name, cfg, false, nil)
+	return result.Summary, err
+}
+
+// AddChecked requires the authoritative registry revision, including ownership.
+func (m *Manager) AddChecked(cfg ServerConfig, expectedRevision string) (MutationResult, error) {
+	return m.mutateRegistry("create", cfg.Name, cfg, false, &registryExpectation{revision: expectedRevision})
+}
+
+// Update atomically replaces an existing standalone config. Name is immutable.
+// Both tokens are mandatory; there is no remove/add intermediate state.
+func (m *Manager) Update(name string, cfg ServerConfig, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	return m.mutateRegistry("update", name, cfg, false, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
 func (m *Manager) Remove(name string) error {
-	name = strings.TrimSpace(name)
-	m.registryMu.Lock()
-	defer m.registryMu.Unlock()
-	if err := m.ensureOpenLocked(); err != nil {
-		return err
-	}
-	m.mu.RLock()
-	ownedCfg, owned := m.owned[name]
-	m.mu.RUnlock()
-	if owned {
-		return newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, map[string]any{"server": name, "plugin_name": ownedCfg.PluginName}, nil)
-	}
-	servers, err := m.store.update(func(servers map[string]ServerConfig) error {
-		if _, exists := servers[name]; !exists {
-			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
-		}
-		delete(servers, name)
-		return nil
-	})
-	if err != nil {
-		var mcpErr *Error
-		if errors.As(err, &mcpErr) {
-			return err
-		}
-		return newError("MCP_REGISTRY_WRITE_FAILED", "remove dynamic MCP server", false, map[string]any{"server": name}, err)
-	}
-	servers, err = m.mergeOwned(servers)
-	if err != nil {
-		return err
-	}
+	_, err := m.mutateRegistry("remove", name, ServerConfig{}, false, nil)
+	return err
+}
 
-	m.mu.Lock()
-	staleStates := m.replaceRegistryLocked(servers)
-	m.mu.Unlock()
-	// Registry 删除成功后再清理 OAuth grant，避免持久化注册失败时留下“服务器还在、
-	// 授权却先丢了”的不可逆半状态。DCR client 是跨 MCP 共享状态，不在这里删除。
-	return errors.Join(closeServerStates(staleStates), m.oauth.RemoveGrant(name))
+func (m *Manager) RemoveChecked(name, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	return m.mutateRegistry("remove", name, ServerConfig{}, false, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
 func (m *Manager) SetEnabled(name string, enabled bool) (ServerSummary, error) {
+	result, err := m.mutateRegistry("enabled", name, ServerConfig{}, enabled, nil)
+	return result.Summary, err
+}
+
+func (m *Manager) SetEnabledChecked(name string, enabled bool, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	return m.mutateRegistry("enabled", name, ServerConfig{}, enabled, &registryExpectation{expectedRevision, expectedGeneration})
+}
+
+type registryExpectation struct{ revision, generation string }
+
+func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabled bool, expected *registryExpectation) (MutationResult, error) {
 	name = strings.TrimSpace(name)
+	if operation == "create" || operation == "update" {
+		cfg = standaloneServerConfigs(map[string]ServerConfig{name: cfg})[name]
+		cfg.Generation = ""
+		if operation == "update" && cfg.Name != name {
+			return MutationResult{}, newError("MCP_NAME_IMMUTABLE", "MCP server name cannot change", false, nil, nil)
+		}
+		if err := validateServerConfig(cfg); err != nil {
+			return MutationResult{}, newError("MCP_CONFIG_INVALID", err.Error(), false, map[string]any{"server": cfg.Name}, err)
+		}
+	}
 	m.registryMu.Lock()
 	defer m.registryMu.Unlock()
 	if err := m.ensureOpenLocked(); err != nil {
-		return ServerSummary{}, err
+		return MutationResult{}, err
 	}
-	m.mu.RLock()
-	ownedCfg, owned := m.owned[name]
-	m.mu.RUnlock()
-	if owned {
-		return ServerSummary{}, newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, map[string]any{"server": name, "plugin_name": ownedCfg.PluginName}, nil)
-	}
-	var selected ServerConfig
-	servers, err := m.store.update(func(servers map[string]ServerConfig) error {
-		cfg, exists := servers[name]
-		if !exists {
-			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
+	snapshot, err := m.store.update(func(snapshot RegistrySnapshot) error {
+		// Validate the entire overlay before writing, including collisions unrelated
+		// to the target. Ownership cannot change while registryMu is held.
+		authoritative, err := m.registryWithOwned(snapshot)
+		if err != nil {
+			return err
 		}
-		cfg.Enabled = enabled
-		servers[name] = cfg
-		selected = cfg
+		if owned, exists := authoritative.Servers[name]; exists && owned.SourceType == "plugin" {
+			code := "MCP_OWNED_BY_PLUGIN"
+			if operation == "create" {
+				code = "MCP_SERVER_COLLISION"
+			}
+			return newError(code, "Plugin-owned MCP lifecycle is managed by plugin_manage", false, map[string]any{"server": name, "plugin_name": owned.PluginName}, nil)
+		}
+		if expected != nil && (expected.revision == "" || expected.revision != authoritative.Revision) {
+			return newError("MCP_REGISTRY_CONFLICT", "MCP registry revision changed", false, nil, nil)
+		}
+		previous, exists := snapshot.Servers[name]
+		if operation == "create" {
+			if exists {
+				return newError("MCP_SERVER_EXISTS", "dynamic MCP server already exists", false, map[string]any{"server": name}, nil)
+			}
+		} else {
+			if !exists {
+				return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
+			}
+			if expected != nil && (expected.generation == "" || expected.generation != previous.Generation) {
+				return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation changed", false, nil, nil)
+			}
+		}
+		switch operation {
+		case "create", "update":
+			snapshot.Servers[name] = cfg
+		case "remove":
+			delete(snapshot.Servers, name)
+		case "enabled":
+			previous.Enabled = enabled
+			snapshot.Servers[name] = previous
+		}
 		return nil
 	})
 	if err != nil {
 		var mcpErr *Error
 		if errors.As(err, &mcpErr) {
-			return ServerSummary{}, err
+			return MutationResult{}, err
 		}
-		return ServerSummary{}, newError("MCP_REGISTRY_WRITE_FAILED", "persist dynamic MCP server state", false, map[string]any{"server": name}, err)
+		return MutationResult{}, newError("MCP_REGISTRY_WRITE_FAILED", "persist dynamic MCP registry", false, map[string]any{"server": name}, err)
 	}
-	servers, err = m.mergeOwned(servers)
+	authoritative, err := m.registryWithOwned(snapshot)
 	if err != nil {
-		return ServerSummary{}, err
+		return MutationResult{Persisted: true}, err
 	}
-
-	m.mu.Lock()
-	staleStates := m.replaceRegistryLocked(servers)
-	state := m.states[name]
-	m.mu.Unlock()
-	if err := closeServerStates(staleStates); err != nil {
-		return ServerSummary{}, err
+	// Return independent config copies so callers cannot mutate Manager state.
+	result := MutationResult{Registry: authoritative, Persisted: true}
+	merged, err := m.mergeOwned(snapshot.Servers)
+	if err != nil {
+		return result, err
 	}
-	if !enabled {
-		if err := closeState(state); err != nil {
-			return ServerSummary{}, err
+	states, staleStates := m.planRegistryReplacement(merged)
+	cleanupErr := closeServerStates(staleStates)
+	runtimeApplied := cleanupErr == nil
+	if runtimeApplied {
+		m.mu.Lock()
+		m.servers = merged
+		m.states = states
+		m.mu.Unlock()
+	}
+	result.RuntimeApplied = runtimeApplied
+	if operation == "remove" {
+		// Preserve scoped environment values; OAuth grant removal follows persistence.
+		cleanupErr = errors.Join(cleanupErr, m.oauth.RemoveGrant(name))
+	} else {
+		result.Server = authoritative.Servers[name]
+		if runtimeApplied {
+			m.mu.RLock()
+			state := m.states[name]
+			m.mu.RUnlock()
+			result.Summary = summaryFor(result.Server, state)
 		}
 	}
-	return summaryFor(selected, state), nil
+	return result, cleanupErr
 }
 
-func (m *Manager) replaceRegistryLocked(servers map[string]ServerConfig) []*serverState {
+func (m *Manager) planRegistryReplacement(servers map[string]ServerConfig) (map[string]*serverState, []*serverState) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	states := make(map[string]*serverState, len(servers))
 	stale := make([]*serverState, 0)
 	for name, cfg := range servers {
 		if previous, exists := m.servers[name]; exists && reflect.DeepEqual(previous, cfg) {
-			states[name] = m.states[name]
+			state := m.states[name]
+			if state == nil {
+				state = &serverState{}
+			}
+			states[name] = state
 			continue
 		}
 		if previousState := m.states[name]; previousState != nil {
@@ -330,9 +392,7 @@ func (m *Manager) replaceRegistryLocked(servers map[string]ServerConfig) []*serv
 			stale = append(stale, state)
 		}
 	}
-	m.servers = servers
-	m.states = states
-	return stale
+	return states, stale
 }
 
 func closeServerStates(states []*serverState) error {
@@ -357,10 +417,15 @@ func (m *Manager) syncRegistry() error {
 	if err != nil {
 		return err
 	}
+	states, staleStates := m.planRegistryReplacement(servers)
+	if err := closeServerStates(staleStates); err != nil {
+		return err
+	}
 	m.mu.Lock()
-	staleStates := m.replaceRegistryLocked(servers)
+	m.servers = servers
+	m.states = states
 	m.mu.Unlock()
-	return closeServerStates(staleStates)
+	return nil
 }
 
 func (m *Manager) List() []ServerSummary {
@@ -722,11 +787,13 @@ func (m *Manager) CallObserved(ctx context.Context, qualifiedName string, argume
 }
 
 func (m *Manager) Close() error {
-	m.registryMu.Lock()
-	defer m.registryMu.Unlock()
+	// Publish shutdown before waiting for an in-flight registry transition. A
+	// lockServer already waiting on state must observe closed once it acquires it.
 	if m.closed.Swap(true) {
 		return nil
 	}
+	m.registryMu.Lock()
+	defer m.registryMu.Unlock()
 	m.mu.RLock()
 	states := make([]*serverState, 0, len(m.states))
 	for _, state := range m.states {
@@ -744,15 +811,20 @@ func (m *Manager) lockServer(name string) (ServerConfig, *serverState, func(), e
 	if m.closed.Load() {
 		return ServerConfig{}, nil, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
 	}
+	// Serialize state acquisition with registry transitions. The registry mutex is
+	// released after the state lock is pinned, so network/tool calls do not hold it.
+	m.registryMu.Lock()
 	m.mu.RLock()
 	cfg, exists := m.servers[name]
 	state := m.states[name]
-	if !exists {
+	if !exists || state == nil {
 		m.mu.RUnlock()
+		m.registryMu.Unlock()
 		return ServerConfig{}, nil, nil, newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, map[string]any{"server": name}, nil)
 	}
 	state.mu.Lock()
 	m.mu.RUnlock()
+	m.registryMu.Unlock()
 	if m.closed.Load() {
 		state.mu.Unlock()
 		return ServerConfig{}, nil, nil, newError("MCP_MANAGER_CLOSED", "dynamic MCP manager is closed", false, nil, nil)
@@ -897,11 +969,9 @@ func (m *Manager) ensureTools(ctx context.Context, name string) (map[string]Tool
 }
 
 func (m *Manager) refreshStateLocked(ctx context.Context, cfg ServerConfig, state *serverState) (map[string]Tool, error) {
-	if state.client != nil {
-		_ = state.client.close()
+	if err := closeStateLocked(state); err != nil {
+		return nil, err
 	}
-	state.client = nil
-	state.tools = nil
 	client, err := m.newProtocolClient(cfg)
 	if err != nil {
 		recordStateError(state, err)
@@ -954,17 +1024,25 @@ func closeState(state *serverState) error {
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	var err error
-	if state.client != nil {
-		err = state.client.close()
-	}
-	state.client = nil
+	return closeStateLocked(state)
+}
+
+func closeStateLocked(state *serverState) error {
 	state.tools = nil
-	state.lastError = ""
-	state.lastErrorCode = ""
 	state.oauthStatus = ""
 	state.refreshedAt = time.Time{}
-	return err
+	if state.client != nil {
+		if err := state.client.close(); err != nil {
+			failure := newError("MCP_CLIENT_CLOSE_FAILED", "MCP client cleanup failed", false, nil, err)
+			recordStateError(state, failure)
+			// Keep the old client handle: repeated refresh must still drain it first.
+			return failure
+		}
+	}
+	state.client = nil
+	state.lastError = ""
+	state.lastErrorCode = ""
+	return nil
 }
 
 func summaryFor(cfg ServerConfig, state *serverState) ServerSummary {

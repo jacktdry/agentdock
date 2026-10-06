@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -771,5 +772,385 @@ func TestManagerStreamableHTTPProtocolPinSkipsDiscover(t *testing.T) {
 	}
 	if cfg.ProtocolVersion != pinned {
 		t.Fatalf("persisted protocol_version=%q", cfg.ProtocolVersion)
+	}
+}
+
+type failingCloseProtocolClient struct {
+	closeCalls atomic.Int32
+}
+
+func (c *failingCloseProtocolClient) initialize(context.Context) error { return nil }
+func (c *failingCloseProtocolClient) listTools(context.Context) ([]Tool, error) {
+	return nil, nil
+}
+func (c *failingCloseProtocolClient) callTool(context.Context, string, map[string]any) (map[string]any, error) {
+	return nil, nil
+}
+func (c *failingCloseProtocolClient) close() error {
+	c.closeCalls.Add(1)
+	return errors.New("close-canary")
+}
+
+func requireMCPClientErrorCode(t *testing.T, err error, code string) *Error {
+	t.Helper()
+	var mcpErr *Error
+	if !errors.As(err, &mcpErr) || mcpErr.Code != code {
+		t.Fatalf("error = %#v, want %s", err, code)
+	}
+	return mcpErr
+}
+
+func TestManagerRevisionedStandaloneMutations(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	initial, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !validToken(initial.Revision) {
+		t.Fatalf("initial revision = %q", initial.Revision)
+	}
+
+	cfg := ServerConfig{
+		Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/mcp", Enabled: true,
+	}
+	created, err := manager.AddChecked(cfg, initial.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.Persisted || !created.RuntimeApplied {
+		t.Fatalf("create result = %#v", created)
+	}
+	createdCfg := created.Registry.Servers["demo"]
+	if !validToken(createdCfg.Generation) || created.Registry.Revision == initial.Revision {
+		t.Fatalf("create metadata = revision %q generation %q", created.Registry.Revision, createdCfg.Generation)
+	}
+
+	updatedCfg := cfg
+	updatedCfg.Description = "Updated"
+	updated, err := manager.Update("demo", updatedCfg, created.Registry.Revision, createdCfg.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedEntry := updated.Registry.Servers["demo"]
+	if updatedEntry.Description != "Updated" || updatedEntry.Generation == createdCfg.Generation ||
+		updated.Registry.Revision == created.Registry.Revision {
+		t.Fatalf("update result = %#v", updated)
+	}
+
+	_, err = manager.SetEnabledChecked("demo", false, created.Registry.Revision, createdCfg.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+
+	_, err = manager.SetEnabledChecked("demo", false, updated.Registry.Revision, createdCfg.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+
+	renamed := updatedCfg
+	renamed.Name = "renamed"
+	_, err = manager.Update("demo", renamed, updated.Registry.Revision, updatedEntry.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_NAME_IMMUTABLE")
+	afterRejectedRename, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRejectedRename.Revision != updated.Registry.Revision {
+		t.Fatal("rejected rename changed registry revision")
+	}
+
+	removed, err := manager.RemoveChecked("demo", updated.Registry.Revision, updatedEntry.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := removed.Registry.Servers["demo"]; exists {
+		t.Fatal("removed server remained in authoritative registry")
+	}
+	recreated, err := manager.AddChecked(cfg, removed.Registry.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recreatedEntry := recreated.Registry.Servers["demo"]
+	if recreatedEntry.Generation == updatedEntry.Generation {
+		t.Fatal("delete/recreate reused server generation")
+	}
+	_, err = manager.SetEnabledChecked("demo", false, recreated.Registry.Revision, updatedEntry.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+}
+
+func TestManagerCheckedMutationRejectsCrossManagerStaleRevision(t *testing.T) {
+	home := t.TempDir()
+	first, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	firstSnapshot, err := first.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSnapshot, err := second.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstSnapshot.Revision != secondSnapshot.Revision {
+		t.Fatalf("initial revisions differ: first=%q second=%q", firstSnapshot.Revision, secondSnapshot.Revision)
+	}
+
+	if _, err := first.AddChecked(ServerConfig{
+		Name: "first", Description: "First", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/first", Enabled: true,
+	}, firstSnapshot.Revision); err != nil {
+		t.Fatal(err)
+	}
+	_, err = second.AddChecked(ServerConfig{
+		Name: "second", Description: "Second", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/second", Enabled: true,
+	}, secondSnapshot.Revision)
+	requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+
+	authoritative, err := second.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := authoritative.Servers["second"]; exists {
+		t.Fatal("stale checked mutation persisted second server")
+	}
+	if _, exists := authoritative.Servers["first"]; !exists {
+		t.Fatal("authoritative registry lost first manager update")
+	}
+}
+
+func TestManagerRevisionedUpdateRejectsPluginOwnedServer(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	name := "plugin.demo.remote"
+	if err := manager.SetOwnedServers([]ServerConfig{{
+		Name: name, DisplayName: "Demo Plugin", Description: "Plugin-owned",
+		Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp",
+		StorageKey: name, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(), Enabled: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := snapshot.Servers[name]
+	if owned.SourceType != "plugin" || !validToken(owned.Generation) {
+		t.Fatalf("owned snapshot = %#v", owned)
+	}
+	_, err = manager.Update(name, ServerConfig{
+		Name: name, Description: "Attempted standalone edit", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/other", Enabled: true,
+	}, snapshot.Revision, owned.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_OWNED_BY_PLUGIN")
+}
+
+func TestManagerCleanupFailureKeepsOldRuntimeStateAndBlocksReplacement(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := ServerConfig{
+		Name: "demo", Description: "Old runtime config", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/mcp", Enabled: true,
+	}
+	if _, err := manager.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldGeneration := snapshot.Servers["demo"].Generation
+	failing := &failingCloseProtocolClient{}
+	manager.mu.Lock()
+	oldState := manager.states["demo"]
+	oldState.client = failing
+	manager.mu.Unlock()
+
+	updatedCfg := cfg
+	updatedCfg.Description = "Persisted new config"
+	result, err := manager.Update("demo", updatedCfg, snapshot.Revision, oldGeneration)
+	requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+	if !result.Persisted || result.RuntimeApplied {
+		t.Fatalf("partial update result = %#v", result)
+	}
+
+	persisted, readErr := manager.Registry()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if persisted.Servers["demo"].Description != "Persisted new config" ||
+		persisted.Revision != result.Registry.Revision {
+		t.Fatalf("persisted registry = %#v result=%#v", persisted, result)
+	}
+
+	manager.mu.RLock()
+	runtimeCfg := manager.servers["demo"]
+	runtimeState := manager.states["demo"]
+	manager.mu.RUnlock()
+	if runtimeCfg.Description != "Old runtime config" || runtimeState != oldState || runtimeState.client != failing {
+		t.Fatalf("runtime state switched after cleanup failure: cfg=%#v state=%p old=%p", runtimeCfg, runtimeState, oldState)
+	}
+
+	_, _, err = manager.Refresh(context.Background(), "demo")
+	requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+	if failing.closeCalls.Load() < 2 {
+		t.Fatalf("close attempts = %d, want retry before replacement", failing.closeCalls.Load())
+	}
+	manager.mu.RLock()
+	if manager.states["demo"] != oldState || manager.states["demo"].client != failing {
+		manager.mu.RUnlock()
+		t.Fatal("failed cleanup was bypassed by replacement runtime state")
+	}
+	manager.mu.RUnlock()
+}
+
+func TestManagerPassiveRegistryAndLegacyMutations(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	failing := &failingCloseProtocolClient{}
+	m.states["demo"].client = failing
+	first, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision != second.Revision || first.Servers["demo"].Generation != second.Servers["demo"].Generation || failing.closeCalls.Load() != 0 {
+		t.Fatal("passive read changed metadata or closed client")
+	}
+	// Snapshot maps must not alias the running manager's configs.
+	first.Servers["demo"] = ServerConfig{}
+	m.states["demo"].client = nil
+	disabled, err := m.SetEnabledChecked("demo", false, second.Revision, second.Servers["demo"].Generation)
+	if err != nil || !disabled.Persisted || !disabled.RuntimeApplied || disabled.Summary.Enabled {
+		t.Fatalf("checked disable: %#v %v", disabled, err)
+	}
+	if _, err := m.SetEnabled("demo", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove("demo"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.List()) != 0 {
+		t.Fatal("legacy remove left server registered")
+	}
+}
+
+func TestManagerRegistryReadFailureNeverAuthorizesCachedMutation(t *testing.T) {
+	m, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp"}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := []byte(`{"version":2,"servers":`)
+	if err := os.WriteFile(m.store.path, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	operations := []func() error{
+		func() error { _, err := m.Registry(); return err },
+		func() error {
+			other := cfg
+			other.Name = "other"
+			_, err := m.AddChecked(other, snapshot.Revision)
+			return err
+		},
+		func() error {
+			_, err := m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error {
+			_, err := m.SetEnabledChecked("demo", true, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error {
+			_, err := m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error { return m.Remove("demo") },
+	}
+	for _, operation := range operations {
+		requireMCPClientErrorCode(t, operation(), "MCP_REGISTRY_READ_FAILED")
+	}
+	after, err := os.ReadFile(m.store.path)
+	if err != nil || string(after) != string(corrupt) {
+		t.Fatalf("failed read overwrote registry: %q %v", after, err)
+	}
+}
+
+func TestManagerRefreshCloseFailureDoesNotStartReplacement(t *testing.T) {
+	m, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "replacement-started")
+	t.Setenv("P5_REPLACEMENT_MARKER", marker)
+	cfg := ServerConfig{Name: "local", Description: "Local", Transport: TransportStdio, Command: os.Args[0], Args: []string{"-test.run=TestP5ReplacementHelperProcess"}, EnvFromEnv: map[string]string{"P5_REPLACEMENT_MARKER": "P5_REPLACEMENT_MARKER"}, Enabled: true}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	failing := &failingCloseProtocolClient{}
+	state := m.states["local"]
+	state.client = failing
+	for i := 0; i < 2; i++ {
+		_, _, err := m.Refresh(context.Background(), "local")
+		requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+		if state.client != failing || state.lastErrorCode != "MCP_CLIENT_CLOSE_FAILED" {
+			t.Fatal("close failure lost old client or error state")
+		}
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("replacement process started: %v", err)
+	}
+	if failing.closeCalls.Load() != 2 {
+		t.Fatal("refresh bypassed close retry")
+	}
+	state.client = nil
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestP5ReplacementHelperProcess(t *testing.T) {
+	if marker := os.Getenv("P5_REPLACEMENT_MARKER"); marker != "" {
+		if err := os.WriteFile(marker, []byte("started"), 0600); err != nil {
+			os.Exit(2)
+		}
+		os.Exit(0)
 	}
 }
