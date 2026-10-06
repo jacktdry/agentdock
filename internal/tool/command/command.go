@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/commandpath"
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/observability"
@@ -527,7 +528,7 @@ func (svc *Service) baseCommandEnv() (map[string]string, error) {
 	}
 	// macOS 的 launchd 默认只提供系统 PATH。命令工具需要补齐常见用户级可执行目录，
 	// 否则 Homebrew、~/.local/bin 中已安装的 CLI 在桌面服务里会表现为“未安装”。
-	if commandPath := platformCommandPath(env["PATH"], hostHome); commandPath != "" {
+	if commandPath := commandpath.Path(env["PATH"], hostHome); commandPath != "" {
 		env["PATH"] = commandPath
 	}
 	commandTempDir := filepath.Join(svc.config().AgentDockHome, "tmp")

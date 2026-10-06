@@ -1,18 +1,23 @@
 //go:build darwin
 
-package command
+package commandpath
 
 import (
 	"path/filepath"
 	"strings"
 )
 
-func platformCommandPath(currentPath, home string) string {
+// Path supplements launchd's PATH with common macOS CLI locations.
+func Path(currentPath, home string) string {
+	return searchPath(currentPath, home, []string{"/opt/homebrew/bin", "/usr/local/bin"})
+}
+
+func searchPath(currentPath, home string, common []string) string {
 	entries := make([]string, 0, 8)
 	if home != "" {
 		entries = append(entries, filepath.Join(home, ".local", "bin"))
 	}
-	entries = append(entries, "/opt/homebrew/bin", "/usr/local/bin")
+	entries = append(entries, common...)
 	entries = append(entries, filepath.SplitList(currentPath)...)
 
 	seen := make(map[string]struct{}, len(entries))

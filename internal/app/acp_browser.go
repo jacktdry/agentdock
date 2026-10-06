@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
+	"github.com/uvwt/agentdock/internal/commandpath"
 	"github.com/uvwt/agentdock/internal/config"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
 	toolcomputer "github.com/uvwt/agentdock/internal/tool/computer"
@@ -143,6 +144,10 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 var codexACPBlockedMCPServers = []string{"chrome-devtools", "node_repl", "computer-use"}
 
 func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env map[string]string) (map[string]string, error) {
+	codexPath, err := resolveCodexCLI(env)
+	if err != nil {
+		return nil, err
+	}
 	sourceHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if sourceHome == "" {
 		home, err := os.UserHomeDir()
@@ -185,14 +190,6 @@ func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env ma
 			return nil, fmt.Errorf("stat Codex %s: %w", name, err)
 		}
 	}
-	codexPath := strings.TrimSpace(env["CODEX_PATH"])
-	if codexPath == "" {
-		resolved, err := exec.LookPath("codex")
-		if err != nil {
-			return nil, fmt.Errorf("resolve codex CLI for ACP browser isolation: %w", err)
-		}
-		codexPath = resolved
-	}
 	for _, server := range codexACPBlockedMCPServers {
 		if err := runCodexMCPRemove(codexPath, sandbox, server); err != nil {
 			return nil, err
@@ -202,11 +199,22 @@ func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env ma
 	return env, nil
 }
 
+func resolveCodexCLI(env map[string]string) (string, error) {
+	if explicit, ok := env["CODEX_PATH"]; ok {
+		return commandpath.ValidateExecutable(explicit)
+	}
+	resolved, err := commandpath.LookPath("codex")
+	if err != nil {
+		return "", fmt.Errorf("resolve codex CLI for ACP browser isolation: %w", err)
+	}
+	return resolved, nil
+}
+
 var runCodexMCPRemove = func(codexPath, home, server string) error {
 	cmd := exec.Command(codexPath, "mcp", "remove", server) //nolint:gosec // executable comes from configured Codex path/PATH.
 	cmd.Env = codexIsolationCommandEnv(home)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("remove %s from Codex ACP MCP config: %w: %s", server, err, strings.TrimSpace(string(output)))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("remove %s from Codex ACP MCP config: %w", server, err)
 	}
 	return nil
 }
