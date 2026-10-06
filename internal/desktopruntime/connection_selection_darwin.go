@@ -56,6 +56,11 @@ func platformSelectNextConnectionRuntime(ctx context.Context, root string) (Next
 	binary, instance, err := platformPortProcess(pid)
 	if err == nil && portBinaryMatches(binary, selection.Binary) && instance != "" {
 		result.PortRuntime.PID, result.PortRuntime.ProcessInstance = pid, instance
+		if healthy(ctx, values) {
+			result.Health = "healthy"
+		} else {
+			result.Health = "unhealthy"
+		}
 	}
 	return result, nil
 }
