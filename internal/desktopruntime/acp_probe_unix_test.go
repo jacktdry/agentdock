@@ -41,7 +41,18 @@ func TestProbeACPProfileReportsConfiguredAntigravityVersion(t *testing.T) {
 func TestProbeACPProfileDiscoversCodexFromPATH(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
-	command := writeACPProbeExecutable(t, filepath.Join(bin, "codex-acp"), "@agentclientprotocol/codex-acp 2.1.1")
+	packageRoot := filepath.Join(root, "lib", "node_modules", "@agentclientprotocol", "codex-acp")
+	entry := writeACPProbeExecutable(t, filepath.Join(packageRoot, "dist", "index.js"), "should-not-run")
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.json"), []byte(`{"name":"@agentclientprotocol/codex-acp","version":"2.1.1","bin":{"codex-acp":"dist/index.js"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := filepath.Join(bin, "codex-acp")
+	if err := os.Symlink(entry, command); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("PATH", bin)
 	probe, err := ProbeACPProfile(context.Background(), root, "codex", ACPProfileSettings{ID: "codex", Kind: "codex"})
 	if err != nil {

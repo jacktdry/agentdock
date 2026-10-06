@@ -3,6 +3,7 @@ package desktopruntime
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -40,14 +41,31 @@ func ProbeACPProfile(ctx context.Context, runtimeRoot, preset string, profile AC
 		VersionState:  "unsupported",
 		BlockedReason: "update_not_available",
 	}
-	if !trustedACPVersionProbe(runtimeRoot, preset, command, args) {
+
+	switch preset {
+	case "codex":
+		if version, ok := codexACPInstalledVersion(command, args); ok {
+			probe.InstalledVersion = version
+			probe.VersionState = "not_checked"
+		} else {
+			probe.VersionState = "unavailable"
+			probe.BlockedReason = "version_unavailable"
+		}
+		return probe, nil
+	case "antigravity":
+		// Antigravity is the only adapter whose version probe executes a binary.
+		// It must be the exact Next-owned target, and configured runtime arguments
+		// are never forwarded to the read-only --version probe.
+		if !trustedAntigravityTarget(runtimeRoot, command) {
+			return probe, nil
+		}
+	default:
 		return probe, nil
 	}
 
 	versionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	versionArgs := append(append([]string(nil), args...), "--version")
-	cmd := exec.CommandContext(versionCtx, command, versionArgs...)
+	cmd := exec.CommandContext(versionCtx, command, "--version")
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -69,47 +87,75 @@ func ProbeACPProfile(ctx context.Context, runtimeRoot, preset string, profile AC
 	return probe, nil
 }
 
-func trustedACPVersionProbe(runtimeRoot, preset, command string, args []string) bool {
-	base := strings.ToLower(filepath.Base(command))
-	switch preset {
-	case "codex":
-		if base == "codex-acp" || base == "codex-acp.exe" || base == "codex-acp.com" {
-			return true
+func codexACPInstalledVersion(command string, args []string) (string, bool) {
+	entry := strings.TrimSpace(command)
+	base := strings.ToLower(filepath.Base(entry))
+	if base == "node" || base == "node.exe" || base == "node.com" {
+		if len(args) == 0 {
+			return "", false
 		}
-		if (base == "node" || base == "node.exe" || base == "node.com") && len(args) > 0 {
-			entry := strings.ToLower(filepath.ToSlash(args[0]))
-			return strings.Contains(entry, "/@agentclientprotocol/codex-acp/") || strings.Contains(entry, "/codex-acp/")
-		}
-		return false
-	case "legacy":
-		return strings.Contains(base, "claude-agent-acp") || base == "grok" || base == "grok.exe" || base == "grok.com"
-	case "antigravity":
-		if !NextManagedRoot(runtimeRoot) || (base != "antigravity-acp" && base != "antigravity-acp.exe" && base != "antigravity-acp.com") {
-			return false
-		}
-		resolved := command
-		if canonical, err := filepath.EvalSymlinks(command); err == nil {
-			resolved = canonical
-		}
-		resolved = filepath.Clean(resolved)
-		home, _ := os.UserHomeDir()
-		for _, root := range []string{
-			filepath.Join(home, ".agentdock-next", "bin"),
-			filepath.Join(runtimeRoot, "bin"),
-		} {
-			root = filepath.Clean(root)
-			relative, err := filepath.Rel(root, resolved)
-			if err == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
-				return true
+		entry = strings.TrimSpace(args[0])
+	}
+	if entry == "" || !filepath.IsAbs(entry) {
+		return "", false
+	}
+	if canonical, err := filepath.EvalSymlinks(entry); err == nil {
+		entry = canonical
+	}
+	entry = filepath.Clean(entry)
+	info, err := os.Stat(entry)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+
+	dir := filepath.Dir(entry)
+	for depth := 0; depth < 8; depth++ {
+		packagePath := filepath.Join(dir, "package.json")
+		if data, err := os.ReadFile(packagePath); err == nil && len(data) <= 1<<20 {
+			var pkg struct {
+				Name    string          `json:"name"`
+				Version string          `json:"version"`
+				Bin     json.RawMessage `json:"bin"`
 			}
-			if err == nil && relative == "." {
-				return true
+			if json.Unmarshal(data, &pkg) == nil && pkg.Name == "@agentclientprotocol/codex-acp" && strings.TrimSpace(pkg.Version) != "" {
+				if codexPackageBinMatches(dir, pkg.Bin, entry) {
+					return strings.TrimSpace(pkg.Version), true
+				}
 			}
 		}
-		return false
-	default:
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
+}
+
+func codexPackageBinMatches(packageRoot string, raw json.RawMessage, entry string) bool {
+	var binPath string
+	if len(raw) == 0 {
 		return false
 	}
+	if raw[0] == '"' {
+		if json.Unmarshal(raw, &binPath) != nil {
+			return false
+		}
+	} else {
+		var bins map[string]string
+		if json.Unmarshal(raw, &bins) != nil {
+			return false
+		}
+		binPath = bins["codex-acp"]
+	}
+	if strings.TrimSpace(binPath) == "" {
+		return false
+	}
+	candidate := filepath.Clean(filepath.Join(packageRoot, filepath.FromSlash(binPath)))
+	if canonical, err := filepath.EvalSymlinks(candidate); err == nil {
+		candidate = canonical
+	}
+	return filepath.Clean(candidate) == filepath.Clean(entry)
 }
 
 func normalizeACPVersion(raw string) string {

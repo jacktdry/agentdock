@@ -3,6 +3,11 @@ import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import type { ACPManagedProfile } from '../../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type { ACPProfileSettings } from '../../../bindings/github.com/uvwt/agentdock/internal/desktopruntime/models'
 import { useI18n } from '../../i18n'
+import {
+  moveACPArgument,
+  profileRuntimeKind,
+  type ACPProfileEditorPreset,
+} from '../../features/acpProfileEditorLogic'
 
 const props = defineProps<{
   profile?: ACPManagedProfile | null
@@ -14,24 +19,25 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-type Preset = 'codex' | 'antigravity' | 'custom'
 const { t } = useI18n()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
-const preset = ref<Preset>('codex')
+const preset = ref<ACPProfileEditorPreset>('codex')
 const id = ref('')
 const displayName = ref('')
 const command = ref('')
-const argsText = ref('')
+const args = ref<string[]>([])
 const enabled = ref(false)
 const validation = ref('')
 
 const editing = computed(() => !!props.profile)
 const originalId = computed(() => props.profile?.id)
 const customIdVisible = computed(() => preset.value === 'custom')
+const argsProtected = computed(() => props.profile?.protectedArgs === true)
 
-function inferPreset(profile: ACPManagedProfile): Preset {
+function inferPreset(profile: ACPManagedProfile): ACPProfileEditorPreset {
   if (profile.preset === 'codex') return 'codex'
   if (profile.preset === 'antigravity') return 'antigravity'
+  if (profile.preset === 'legacy') return 'legacy'
   return 'custom'
 }
 
@@ -42,14 +48,14 @@ function resetDraft() {
     id.value = profile.id
     displayName.value = profile.displayName ?? ''
     command.value = profile.configuredCommand ?? ''
-    argsText.value = (profile.configuredArgs ?? []).join('\n')
+    args.value = [...(profile.configuredArgs ?? [])]
     enabled.value = profile.enabled
   } else {
     preset.value = 'codex'
     id.value = 'codex'
     displayName.value = t('acp.preset_codex')
     command.value = ''
-    argsText.value = ''
+    args.value = []
     enabled.value = false
   }
   validation.value = ''
@@ -72,6 +78,18 @@ watch(preset, value => {
   }
 })
 
+function addArgument() {
+  args.value = [...args.value, '']
+}
+
+function removeArgument(index: number) {
+  args.value = args.value.filter((_, current) => current !== index)
+}
+
+function moveArgument(index: number, direction: -1 | 1) {
+  args.value = moveACPArgument(args.value, index, direction)
+}
+
 function submit() {
   validation.value = ''
   const trimmedId = id.value.trim()
@@ -88,13 +106,15 @@ function submit() {
     validation.value = t('acp.validation_command')
     return
   }
-  const kind = preset.value === 'codex' ? 'codex' : 'custom'
+
+  const kind = profileRuntimeKind(props.profile?.runtimeKind, preset.value)
   const profile: ACPProfileSettings = {
     id: trimmedId,
     displayName: displayName.value.trim(),
     kind,
     command: trimmedCommand,
-    args: argsText.value.split('\n').map(value => value.trim()).filter(Boolean),
+    args: argsProtected.value ? [] : [...args.value],
+    preserveArgs: argsProtected.value,
     enabled: enabled.value,
   }
   emit('save', profile, originalId.value)
@@ -112,9 +132,10 @@ function submit() {
             <option value="codex">{{ t('acp.preset_codex') }}</option>
             <option value="antigravity">{{ t('acp.preset_antigravity') }}</option>
             <option value="custom">{{ t('acp.preset_custom') }}</option>
+            <option v-if="editing && preset === 'legacy'" value="legacy">{{ t('acp.preset_legacy') }}</option>
           </select>
         </label>
-        <p class="field-hint">{{ t(('acp.preset_help_' + preset) as any) }}</p>
+        <p class="field-hint">{{ preset === 'legacy' ? t('acp.preset_help_legacy') : t(('acp.preset_help_' + preset) as any) }}</p>
 
         <label v-if="customIdVisible">
           {{ t('acp.profile_id') }}
@@ -140,10 +161,32 @@ function submit() {
               <input v-model="command" type="text" spellcheck="false" autocomplete="off" class="path-input">
             </label>
             <p class="field-hint">{{ t('acp.command_hint') }}</p>
-            <label>
-              {{ t('acp.arguments') }}
-              <textarea v-model="argsText" rows="5" spellcheck="false" :placeholder="t('acp.arguments_hint')" />
-            </label>
+
+            <div class="argument-editor">
+              <div class="argument-editor-heading">
+                <span>{{ t('acp.arguments') }}</span>
+                <button v-if="!argsProtected" type="button" :disabled="busy" @click="addArgument">{{ t('acp.add_argument') }}</button>
+              </div>
+
+              <p v-if="argsProtected" class="field-hint">{{ t('acp.protected_arguments_hint') }}</p>
+              <p v-else-if="args.length === 0" class="field-hint">{{ t('acp.arguments_empty') }}</p>
+
+              <div v-for="(_, index) in args" :key="index" class="argument-row">
+                <textarea v-model="args[index]" rows="2" spellcheck="false"
+                  :aria-label="t('acp.argument_named', { index: index + 1 })" />
+                <div class="argument-actions">
+                  <button type="button" :disabled="busy || index === 0"
+                    :aria-label="t('acp.move_argument_up', { index: index + 1 })"
+                    @click="moveArgument(index, -1)">↑</button>
+                  <button type="button" :disabled="busy || index === args.length - 1"
+                    :aria-label="t('acp.move_argument_down', { index: index + 1 })"
+                    @click="moveArgument(index, 1)">↓</button>
+                  <button type="button" class="danger-button" :disabled="busy"
+                    :aria-label="t('acp.remove_argument', { index: index + 1 })"
+                    @click="removeArgument(index)">×</button>
+                </div>
+              </div>
+            </div>
           </div>
         </details>
       </fieldset>

@@ -19,6 +19,9 @@
   <data name="acp.adapter_type" xml:space="preserve">
     <value>Adapter</value>
   </data>
+  <data name="acp.add_argument" xml:space="preserve">
+    <value>Add argument</value>
+  </data>
   <data name="acp.add_profile" xml:space="preserve">
     <value>Add profile</value>
   </data>
@@ -31,11 +34,17 @@
   <data name="acp.apply_policy" xml:space="preserve">
     <value>Apply policy</value>
   </data>
+  <data name="acp.argument_named" xml:space="preserve">
+    <value>Argument {index}</value>
+  </data>
   <data name="acp.arguments" xml:space="preserve">
     <value>Arguments</value>
   </data>
+  <data name="acp.arguments_empty" xml:space="preserve">
+    <value>No arguments configured.</value>
+  </data>
   <data name="acp.arguments_hint" xml:space="preserve">
-    <value>One argument per line</value>
+    <value>Each argument is a separate item and is preserved exactly.</value>
   </data>
   <data name="acp.attention_required" xml:space="preserve">
     <value>Needs attention</value>
@@ -78,6 +87,9 @@
   </data>
   <data name="acp.blocked_update_not_available" xml:space="preserve">
     <value>Safe update is not available for this adapter yet.</value>
+  </data>
+  <data name="acp.blocked_update_outcome_unknown" xml:space="preserve">
+    <value>The adapter may have been replaced, but durability could not be confirmed. Check the adapter state before retrying.</value>
   </data>
   <data name="acp.blocked_version_unavailable" xml:space="preserve">
     <value>The adapter is available, but its installed version could not be read.</value>
@@ -232,6 +244,12 @@
   <data name="acp.minutes" xml:space="preserve">
     <value>{count, number} minutes</value>
   </data>
+  <data name="acp.move_argument_down" xml:space="preserve">
+    <value>Move argument {index} down</value>
+  </data>
+  <data name="acp.move_argument_up" xml:space="preserve">
+    <value>Move argument {index} up</value>
+  </data>
   <data name="acp.no_profiles" xml:space="preserve">
     <value>No ACP profiles are configured yet.</value>
   </data>
@@ -274,6 +292,9 @@
   <data name="acp.preset_help_custom" xml:space="preserve">
     <value>Use a custom ACP executable. AgentDock will preserve the ordered arguments exactly.</value>
   </data>
+  <data name="acp.preset_help_legacy" xml:space="preserve">
+    <value>This legacy profile keeps its existing runtime kind. You can edit its name, command, state, and safe arguments without converting it.</value>
+  </data>
   <data name="acp.preset_legacy" xml:space="preserve">
     <value>Legacy profile</value>
   </data>
@@ -289,6 +310,9 @@
   <data name="acp.profiles_intro" xml:space="preserve">
     <value>Manage the adapters AgentDock can use for new coding-agent sessions.</value>
   </data>
+  <data name="acp.protected_arguments_hint" xml:space="preserve">
+    <value>This profile contains protected arguments. They stay in local persistence and are not shown here; saving preserves them unchanged.</value>
+  </data>
   <data name="acp.protocol" xml:space="preserve">
     <value>Protocol version</value>
   </data>
@@ -300,6 +324,9 @@
   </data>
   <data name="acp.recheck" xml:space="preserve">
     <value>Re-check</value>
+  </data>
+  <data name="acp.remove_argument" xml:space="preserve">
+    <value>Remove argument {index}</value>
   </data>
   <data name="acp.restart_required" xml:space="preserve">
     <value>Settings saved. Restart AgentDock Next Core before new sessions use these changes.</value>

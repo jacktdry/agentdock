@@ -48,6 +48,6 @@ export function UpdateLifecycle(update: $models.ACPLifecycleUpdate): $Cancellabl
     return $Call.ByID(107031406, update);
 }
 
-export function UpdateProfileAdapter(profileID: string, expectedVersion: string): $CancellablePromise<$models.ACPProfileUpdateMutationResult> {
-    return $Call.ByID(3803654350, profileID, expectedVersion);
+export function UpdateProfileAdapter(profileID: string, expectedPlan: string): $CancellablePromise<$models.ACPProfileUpdateMutationResult> {
+    return $Call.ByID(3803654350, profileID, expectedPlan);
 }

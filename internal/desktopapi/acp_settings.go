@@ -2,6 +2,9 @@ package desktopapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -20,11 +23,13 @@ type ACPManagedProfile struct {
 	Enabled           bool     `json:"enabled"`
 	ConfiguredCommand string   `json:"configuredCommand,omitempty"`
 	ConfiguredArgs    []string `json:"configuredArgs"`
+	ProtectedArgs     bool     `json:"protectedArgs,omitempty"`
 	DetectedCommand   string   `json:"detectedCommand,omitempty"`
 	DetectedArgs      []string `json:"detectedArgs,omitempty"`
 	Availability      string   `json:"availability"`
 	InstalledVersion  string   `json:"installedVersion,omitempty"`
 	LatestVersion     string   `json:"latestVersion,omitempty"`
+	UpdatePlan        string   `json:"updatePlan,omitempty"`
 	VersionState      string   `json:"versionState"`
 	CanDetect         bool     `json:"canDetect"`
 	CanUpdate         bool     `json:"canUpdate"`
@@ -101,7 +106,7 @@ func (s *ACPService) ProbeProfile(ctx context.Context, profileID string) ACPProf
 }
 
 func (s *ACPService) CheckProfileUpdate(ctx context.Context, profileID string) ACPProfileProbeResult {
-	_, profile, failure := s.readACPManagedProfile(ctx, profileID)
+	config, profile, failure := s.readACPManagedProfile(ctx, profileID)
 	if failure != nil {
 		return ACPProfileProbeResult{Error: failure}
 	}
@@ -116,11 +121,23 @@ func (s *ACPService) CheckProfileUpdate(ctx context.Context, profileID string) A
 		return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_update_check_failed", err)}
 	}
 	applyACPUpdate(&managed, update)
+	if update.Supported && update.Available {
+		managed.UpdatePlan = acpUpdatePlanToken(config.Revision, profile, update)
+	}
 	return ACPProfileProbeResult{Profile: &managed}
 }
 
-func (s *ACPService) UpdateProfileAdapter(ctx context.Context, profileID, expectedVersion string) ACPProfileUpdateMutationResult {
-	_, profile, failure := s.readACPManagedProfile(ctx, profileID)
+func (s *ACPService) UpdateProfileAdapter(ctx context.Context, profileID, expectedPlan string) ACPProfileUpdateMutationResult {
+	if s.rootError != nil {
+		return ACPProfileUpdateMutationResult{Error: safeServiceError("acp_root_unavailable", s.rootError)}
+	}
+	release, err := desktopruntime.AcquireDesktopMutation(ctx, s.runtimeRoot)
+	if err != nil {
+		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_update_lock_failed", err)}
+	}
+	defer release()
+
+	config, profile, failure := s.readACPManagedProfile(ctx, profileID)
 	if failure != nil {
 		return ACPProfileUpdateMutationResult{Error: failure}
 	}
@@ -136,18 +153,39 @@ func (s *ACPService) UpdateProfileAdapter(ctx context.Context, profileID, expect
 	if !update.Supported || !update.Available {
 		return ACPProfileUpdateMutationResult{Error: NewError("acp_profile_update_unavailable", "No trusted ACP adapter update is available", ErrorCategoryUnavailable, true, nil)}
 	}
-	if strings.TrimSpace(expectedVersion) == "" || strings.TrimSpace(expectedVersion) != update.LatestVersion {
+	plan := acpUpdatePlanToken(config.Revision, profile, update)
+	if strings.TrimSpace(expectedPlan) == "" || strings.TrimSpace(expectedPlan) != plan {
 		return ACPProfileUpdateMutationResult{Error: NewError("acp_profile_update_conflict", "ACP adapter update changed; check again before applying", ErrorCategoryConflict, false, nil)}
 	}
-	if err := desktopruntime.ApplyACPProfileUpdate(ctx, s.updateClient, s.updateSource, s.runtimeRoot, update); err != nil {
+	applyUpdate := s.applyUpdate
+	if applyUpdate == nil {
+		applyUpdate = desktopruntime.ApplyACPProfileUpdate
+	}
+	if err := applyUpdate(ctx, s.updateClient, s.updateSource, s.runtimeRoot, update); err != nil {
+		if errors.Is(err, desktopruntime.ErrACPUpdateOutcomeUnknown) {
+			reconciled := managed
+			if observed, probeErr := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile); probeErr == nil {
+				applyACPProbe(&reconciled, observed)
+			} else {
+				reconciled.Availability = "unknown"
+				reconciled.InstalledVersion = ""
+			}
+			reconciled.LatestVersion = update.LatestVersion
+			reconciled.UpdatePlan = ""
+			reconciled.VersionState = "unavailable"
+			reconciled.CanUpdate = false
+			reconciled.BlockedReason = "update_outcome_unknown"
+			return ACPProfileUpdateMutationResult{
+				Completed: false, RestartRequired: false, RuntimeImpact: "adapter_update_outcome_unknown", Profile: &reconciled,
+				Error: NewError("acp_profile_update_outcome_unknown", "ACP adapter promotion could not be durably confirmed; check the adapter state before retrying", ErrorCategoryConflict, false, nil),
+			}
+		}
 		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_update_failed", err)}
 	}
-	probe, err = desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
-	if err != nil {
-		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
-	}
 	applyACPProbe(&managed, probe)
+	managed.InstalledVersion = update.LatestVersion
 	managed.LatestVersion = update.LatestVersion
+	managed.UpdatePlan = ""
 	managed.VersionState = "current"
 	managed.CanUpdate = false
 	managed.BlockedReason = ""
@@ -175,7 +213,12 @@ func (s *ACPService) readACPManagedProfile(ctx context.Context, profileID string
 
 func applyACPProbe(managed *ACPManagedProfile, probe desktopruntime.ACPAdapterProbe) {
 	managed.DetectedCommand = probe.Command
-	managed.DetectedArgs = append([]string(nil), probe.Args...)
+	if managed.ProtectedArgs || containsSensitiveACPArguments(probe.Args) {
+		managed.ProtectedArgs = true
+		managed.DetectedArgs = nil
+	} else {
+		managed.DetectedArgs = append([]string(nil), probe.Args...)
+	}
 	managed.Availability = probe.Availability
 	managed.InstalledVersion = probe.InstalledVersion
 	managed.VersionState = probe.VersionState
@@ -224,12 +267,53 @@ func acpManagedProfile(p desktopruntime.ACPProfileSettings) ACPManagedProfile {
 		}
 	}
 	args := append([]string{}, p.Args...)
+	protectedArgs := containsSensitiveACPArguments(args)
+	if protectedArgs {
+		args = []string{}
+	}
 	return ACPManagedProfile{
 		ID: p.ID, DisplayName: p.DisplayName, RuntimeKind: p.Kind, Preset: preset, Source: source,
-		Enabled: p.Enabled, ConfiguredCommand: p.Command, ConfiguredArgs: args,
+		Enabled: p.Enabled, ConfiguredCommand: p.Command, ConfiguredArgs: args, ProtectedArgs: protectedArgs,
 		Availability: "unknown", VersionState: "not_checked", CanDetect: true, CanUpdate: false,
 		BlockedReason: "update_not_available",
 	}
+}
+
+func acpUpdatePlanToken(revision string, profile desktopruntime.ACPProfileSettings, update desktopruntime.ACPAdapterUpdate) string {
+	payload, _ := json.Marshal(struct {
+		Revision  string                          `json:"revision"`
+		ProfileID string                          `json:"profileId"`
+		Command   string                          `json:"command"`
+		Update    desktopruntime.ACPAdapterUpdate `json:"update"`
+	}{
+		Revision:  revision,
+		ProfileID: profile.ID,
+		Command:   profile.Command,
+		Update:    update,
+	})
+	sum := sha256.Sum256(append([]byte("acp-update-plan-v1\x00"), payload...))
+	return hex.EncodeToString(sum[:])
+}
+
+func containsSensitiveACPArguments(args []string) bool {
+	sensitive := []string{"api-key", "apikey", "access-token", "auth-token", "bearer", "credential", "password", "passwd", "secret", "token"}
+	for index, arg := range args {
+		value := strings.ToLower(strings.TrimSpace(arg))
+		for _, marker := range sensitive {
+			if strings.Contains(value, marker) {
+				return true
+			}
+		}
+		if index > 0 {
+			previous := strings.ToLower(strings.TrimSpace(args[index-1]))
+			for _, marker := range sensitive {
+				if strings.Contains(previous, marker) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func acpSettingsError(ctx context.Context, code string, err error) *APIError {

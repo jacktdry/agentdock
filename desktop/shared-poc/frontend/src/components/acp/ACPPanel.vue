@@ -58,7 +58,7 @@ async function confirmDelete() {
 async function confirmAdapterUpdate() {
   const target = adapterUpdateTarget.value
   adapterUpdateTarget.value = null
-  if (target?.latestVersion) await store.updateProfileAdapter(target.id, target.latestVersion)
+  if (target?.updatePlan) await store.updateProfileAdapter(target.id, target.updatePlan)
 }
 
 async function setGlobalEnabled(event: Event) {

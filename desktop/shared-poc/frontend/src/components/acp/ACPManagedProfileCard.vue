@@ -47,6 +47,7 @@ const blockedKey = () => {
   case 'trusted_release_invalid': return 'acp.blocked_trusted_release'
   case 'trusted_release_incomplete': return 'acp.blocked_trusted_release'
   case 'platform_unsupported': return 'acp.blocked_platform'
+  case 'update_outcome_unknown': return 'acp.blocked_update_outcome_unknown'
   default: return ''
   }
 }
@@ -101,7 +102,7 @@ const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
       <button type="button" :disabled="busy || !canCheckUpdate || profile.availability !== 'available'" @click="emit('checkUpdate')">
         {{ t('acp.check_update') }}
       </button>
-      <button v-if="profile.canUpdate && profile.latestVersion" type="button" :disabled="busy || !canUpdateAdapter" @click="emit('updateAdapter')">
+      <button v-if="profile.canUpdate && profile.latestVersion && profile.updatePlan" type="button" :disabled="busy || !canUpdateAdapter" @click="emit('updateAdapter')">
         {{ t('acp.update_to', { version: profile.latestVersion }) }}
       </button>
       <button type="button" :disabled="busy || !canManageSettings || (profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">

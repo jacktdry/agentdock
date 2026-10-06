@@ -59,6 +59,9 @@ func platformLoadACPConfiguration(_ context.Context, runtimeRoot string) (acpCon
 		fields["acp_enabled"], _ = json.Marshal(settings.Enabled)
 		fields["acp_default_profile"], _ = json.Marshal(settings.DefaultProfile)
 		fields["acp_profiles"], _ = json.Marshal(profiles)
+		delete(fields, "acp_agent")
+		delete(fields, "acp_command")
+		delete(fields, "acp_args")
 		data, err := json.MarshalIndent(fields, "", "  ")
 		if err != nil {
 			return "", err

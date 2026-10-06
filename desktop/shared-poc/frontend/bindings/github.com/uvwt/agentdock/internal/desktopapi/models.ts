@@ -57,11 +57,13 @@ export interface ACPManagedProfile {
     "enabled": boolean;
     "configuredCommand"?: string;
     "configuredArgs": string[] | null;
+    "protectedArgs"?: boolean;
     "detectedCommand"?: string;
     "detectedArgs"?: string[] | null;
     "availability": string;
     "installedVersion"?: string;
     "latestVersion"?: string;
+    "updatePlan"?: string;
     "versionState": string;
     "canDetect": boolean;
     "canUpdate": boolean;

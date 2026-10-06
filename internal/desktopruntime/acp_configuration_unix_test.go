@@ -107,6 +107,49 @@ func TestACPConfigurationReadsProfilesWhileDisabledAndPreservesHiddenFields(t *t
 	}
 }
 
+func TestACPConfigurationPreserveArgsKeepsProtectedValuesAndHiddenFields(t *testing.T) {
+	root, path := writeACPConfigurationFixture(t)
+	ctx := context.Background()
+
+	before, err := ReadACPConfiguration(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requested := before.ACPSettings
+	requested.Profiles[0].DisplayName = "Safe rename"
+	requested.Profiles[0].Args = []string{}
+	requested.Profiles[0].PreserveArgs = true
+
+	after, err := SaveACPSettings(ctx, root, before.Revision, requested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Profiles) != 1 || len(after.Profiles[0].Args) != 1 || after.Profiles[0].Args[0] != "--existing" {
+		t.Fatalf("candidate args were not preserved: %#v", after.Profiles)
+	}
+	values, err := envstore.ParseFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted []map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(values["AGENTDOCK_ACP_PROFILES_JSON"]), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	var args []string
+	if err := json.Unmarshal(persisted[0]["args"], &args); err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 1 || args[0] != "--existing" {
+		t.Fatalf("persisted args = %#v", args)
+	}
+	if _, ok := persisted[0]["env_from_env"]; !ok {
+		t.Fatal("hidden env_from_env field was lost")
+	}
+	if _, ok := persisted[0]["future_field"]; !ok {
+		t.Fatal("future hidden field was lost")
+	}
+}
+
 func TestACPConfigurationRejectsStaleRevisionWithoutWriting(t *testing.T) {
 	root, path := writeACPConfigurationFixture(t)
 	ctx := context.Background()

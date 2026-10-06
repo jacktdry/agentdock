@@ -14,6 +14,18 @@ import (
 	"testing"
 )
 
+func prepareTrustedAntigravityTarget(t *testing.T, home string) string {
+	t.Helper()
+	target := filepath.Join(home, ".agentdock-next", "bin", "antigravity-acp")
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("#!/bin/sh\necho 1.2.0-agentdock.6\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return target
+}
+
 func testACPUpdateSource(t *testing.T, handler http.Handler) (*httptest.Server, ACPUpdateSource) {
 	t.Helper()
 	server := httptest.NewTLSServer(handler)
@@ -31,7 +43,7 @@ func TestCheckACPProfileUpdateFailClosesWhenTrustedReleaseMissing(t *testing.T) 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
-	target := filepath.Join(home, ".agentdock-next", "bin", "antigravity-acp")
+	target := prepareTrustedAntigravityTarget(t, home)
 
 	server, source := testACPUpdateSource(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -53,7 +65,7 @@ func TestCheckACPProfileUpdateReturnsNewerVerifiedForkRelease(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
-	target := filepath.Join(home, ".agentdock-next", "bin", "antigravity-acp")
+	target := prepareTrustedAntigravityTarget(t, home)
 	assetName, ok := antigravityAssetName(runtime.GOOS, runtime.GOARCH)
 	if !ok {
 		t.Skip("unsupported test platform")

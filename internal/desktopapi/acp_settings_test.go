@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/desktopruntime"
@@ -51,6 +53,77 @@ func TestACPSettingsSnapshotIncludesDisabledProfilesAndPresetMetadata(t *testing
 		got.Capabilities[2].Name != "checkProfileUpdate" || got.Capabilities[3].Name != "saveSettings" ||
 		got.Capabilities[4].Name != "updateProfileAdapter" || !got.Capabilities[4].RequiresConfirmation {
 		t.Fatalf("capabilities = %#v", got.Capabilities)
+	}
+}
+
+func TestACPSettingsSnapshotHidesSensitiveArguments(t *testing.T) {
+	service := &ACPService{
+		runtimeRoot: "/runtime",
+		readConfiguration: func(context.Context, string) (desktopruntime.ACPConfiguration, error) {
+			return desktopruntime.ACPConfiguration{
+				Revision: "rev-sensitive",
+				ACPSettings: desktopruntime.ACPSettings{
+					Profiles: []desktopruntime.ACPProfileSettings{{
+						ID: "custom-one", Kind: "custom", Command: "/opt/custom-acp",
+						Args: []string{"--api-key=PRIVATE_VALUE", "--mode", "safe"}, Enabled: false,
+					}},
+				},
+			}, nil
+		},
+	}
+	got := service.Settings(context.Background())
+	if got.Error != nil || len(got.Profiles) != 1 {
+		t.Fatalf("settings = %#v", got)
+	}
+	profile := got.Profiles[0]
+	if !profile.ProtectedArgs || len(profile.ConfiguredArgs) != 0 {
+		t.Fatalf("protected args were exposed: %#v", profile)
+	}
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "PRIVATE_VALUE") {
+		t.Fatalf("serialized profile leaked protected argument: %s", raw)
+	}
+}
+
+func TestACPProbeProfileDoesNotExposeProtectedDetectedArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("custom executable fixture is Unix-only")
+	}
+	root := t.TempDir()
+	command := filepath.Join(root, "custom-acp")
+	if err := os.WriteFile(command, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	service := &ACPService{
+		runtimeRoot: root,
+		readConfiguration: func(context.Context, string) (desktopruntime.ACPConfiguration, error) {
+			return desktopruntime.ACPConfiguration{
+				Revision: "rev-sensitive-probe",
+				ACPSettings: desktopruntime.ACPSettings{
+					Profiles: []desktopruntime.ACPProfileSettings{{
+						ID: "custom-one", Kind: "custom", Command: command,
+						Args: []string{"--api-key=PRIVATE_VALUE", "--mode", "safe"}, Enabled: false,
+					}},
+				},
+			}, nil
+		},
+	}
+	got := service.ProbeProfile(context.Background(), "custom-one")
+	if got.Error != nil || got.Profile == nil {
+		t.Fatalf("probe = %#v", got)
+	}
+	if !got.Profile.ProtectedArgs || len(got.Profile.ConfiguredArgs) != 0 || len(got.Profile.DetectedArgs) != 0 {
+		t.Fatalf("protected probe args were exposed: %#v", got.Profile)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "PRIVATE_VALUE") {
+		t.Fatalf("probe response leaked protected argument: %s", raw)
 	}
 }
 
@@ -185,15 +258,43 @@ func TestACPCheckProfileUpdateRequiresTrustedForkRelease(t *testing.T) {
 	if got.Error != nil || got.Profile == nil {
 		t.Fatalf("check = %#v", got)
 	}
-	if !got.Profile.CanUpdate || got.Profile.LatestVersion != "1.2.0-agentdock.7" || got.Profile.VersionState != "update_available" {
+	if !got.Profile.CanUpdate || got.Profile.LatestVersion != "1.2.0-agentdock.7" || got.Profile.VersionState != "update_available" || got.Profile.UpdatePlan == "" {
 		t.Fatalf("profile = %#v", got.Profile)
 	}
 }
 
-func TestACPUpdateProfileAdapterRejectsStaleExpectedVersion(t *testing.T) {
+func TestACPCheckProfileUpdateDoesNotExposeProtectedArguments(t *testing.T) {
+	service, _, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
+	defer cleanup()
+	baseRead := service.readConfiguration
+	service.readConfiguration = func(ctx context.Context, root string) (desktopruntime.ACPConfiguration, error) {
+		config, err := baseRead(ctx, root)
+		if err != nil {
+			return config, err
+		}
+		config.Profiles[0].Args = []string{"--api-key=PRIVATE_VALUE", "--mode", "safe"}
+		return config, nil
+	}
+	got := service.CheckProfileUpdate(context.Background(), "antigravity")
+	if got.Error != nil || got.Profile == nil {
+		t.Fatalf("check = %#v", got)
+	}
+	if !got.Profile.ProtectedArgs || len(got.Profile.ConfiguredArgs) != 0 || len(got.Profile.DetectedArgs) != 0 || got.Profile.UpdatePlan == "" {
+		t.Fatalf("protected update metadata exposed: %#v", got.Profile)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "PRIVATE_VALUE") {
+		t.Fatalf("update check leaked protected argument: %s", raw)
+	}
+}
+
+func TestACPUpdateProfileAdapterRejectsStalePlan(t *testing.T) {
 	service, command, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
-	got := service.UpdateProfileAdapter(context.Background(), "antigravity", "1.2.0-agentdock.8")
+	got := service.UpdateProfileAdapter(context.Background(), "antigravity", "stale-plan")
 	if got.Error == nil || got.Error.Code != "acp_profile_update_conflict" || got.Completed {
 		t.Fatalf("update = %#v", got)
 	}
@@ -206,10 +307,34 @@ func TestACPUpdateProfileAdapterRejectsStaleExpectedVersion(t *testing.T) {
 	}
 }
 
+func TestACPUpdateProfileAdapterReconcilesOutcomeUnknown(t *testing.T) {
+	service, _, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
+	defer cleanup()
+	service.applyUpdate = func(context.Context, *http.Client, desktopruntime.ACPUpdateSource, string, desktopruntime.ACPAdapterUpdate) error {
+		return desktopruntime.ErrACPUpdateOutcomeUnknown
+	}
+	checked := service.CheckProfileUpdate(context.Background(), "antigravity")
+	if checked.Error != nil || checked.Profile == nil || checked.Profile.UpdatePlan == "" {
+		t.Fatalf("check = %#v", checked)
+	}
+	got := service.UpdateProfileAdapter(context.Background(), "antigravity", checked.Profile.UpdatePlan)
+	if got.Error == nil || got.Error.Code != "acp_profile_update_outcome_unknown" || got.Completed || got.Profile == nil {
+		t.Fatalf("update = %#v", got)
+	}
+	if got.RuntimeImpact != "adapter_update_outcome_unknown" || got.Profile.UpdatePlan != "" || got.Profile.CanUpdate ||
+		got.Profile.BlockedReason != "update_outcome_unknown" || got.Profile.VersionState != "unavailable" {
+		t.Fatalf("reconciled profile = %#v", got.Profile)
+	}
+}
+
 func TestACPUpdateProfileAdapterPromotesVerifiedNextOwnedBinary(t *testing.T) {
 	service, command, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
-	got := service.UpdateProfileAdapter(context.Background(), "antigravity", "1.2.0-agentdock.7")
+	checked := service.CheckProfileUpdate(context.Background(), "antigravity")
+	if checked.Error != nil || checked.Profile == nil || checked.Profile.UpdatePlan == "" {
+		t.Fatalf("check = %#v", checked)
+	}
+	got := service.UpdateProfileAdapter(context.Background(), "antigravity", checked.Profile.UpdatePlan)
 	if got.Error != nil || !got.Completed || got.RestartRequired || got.RuntimeImpact != "existing_sessions_unchanged" || got.Profile == nil {
 		t.Fatalf("update = %#v", got)
 	}

@@ -7,6 +7,7 @@ export interface ACPProfileSettings {
     "kind": string;
     "command"?: string;
     "args"?: string[] | null;
+    "preserveArgs"?: boolean;
     "enabled": boolean;
 }
 

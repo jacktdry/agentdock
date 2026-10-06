@@ -140,6 +140,7 @@ type ACPService struct {
 	call              func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
 	updateClient      *http.Client
 	updateSource      desktopruntime.ACPUpdateSource
+	applyUpdate       func(context.Context, *http.Client, desktopruntime.ACPUpdateSource, string, desktopruntime.ACPAdapterUpdate) error
 	memoryURL         string
 }
 
@@ -150,7 +151,8 @@ func NewACPService(root string) *ACPService {
 		readSettings: desktopruntime.ReadACPSettings, readConfiguration: desktopruntime.ReadACPConfiguration, saveConfiguration: desktopruntime.SaveACPSettings,
 		readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool,
 		updateClient: &http.Client{Timeout: 2 * time.Minute}, updateSource: desktopruntime.DefaultACPUpdateSource(),
-		memoryURL: defaultSharedMemoryMCPURL,
+		applyUpdate: desktopruntime.ApplyACPProfileUpdate,
+		memoryURL:   defaultSharedMemoryMCPURL,
 	}
 }
 

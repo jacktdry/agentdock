@@ -180,6 +180,11 @@ func loadControlPanelSettings(runtimeRoot string, fallbackPort int) (controlPane
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return controlPanelSettings{}, fmt.Errorf("解析控制面板设置失败: %w", err)
 	}
+	rawFields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &rawFields); err != nil {
+		return controlPanelSettings{}, fmt.Errorf("解析控制面板字段失败: %w", err)
+	}
+	_, hasACPProfilesField := rawFields["acp_profiles"]
 	// 旧 bool 只在读取边界迁移一次；新版 settings 只保存 mcp_apps_mode。
 	var legacyMCPApps struct {
 		Mode    string `json:"mcp_apps_mode"`
@@ -212,8 +217,8 @@ func loadControlPanelSettings(runtimeRoot string, fallbackPort int) (controlPane
 			return controlPanelSettings{}, fmt.Errorf("OAuth Access Token 有效期无效: %w", err)
 		}
 	}
-	if len(settings.ACPProfiles) == 0 {
-		// 旧 control-panel-settings.json 只在读取边界迁移一次；新文件只保存 Profiles。
+	if len(settings.ACPProfiles) == 0 && !hasACPProfilesField {
+		// 只有缺少 acp_profiles 字段时才迁移旧单 Profile；显式 [] 是权威空 inventory。
 		var legacy struct {
 			Agent   string   `json:"acp_agent"`
 			Command string   `json:"acp_command"`

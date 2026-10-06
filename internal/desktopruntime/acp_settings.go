@@ -11,12 +11,13 @@ import (
 )
 
 type ACPProfileSettings struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName,omitempty"`
-	Kind        string   `json:"kind"`
-	Command     string   `json:"command,omitempty"`
-	Args        []string `json:"args,omitempty"`
-	Enabled     bool     `json:"enabled"`
+	ID           string   `json:"id"`
+	DisplayName  string   `json:"displayName,omitempty"`
+	Kind         string   `json:"kind"`
+	Command      string   `json:"command,omitempty"`
+	Args         []string `json:"args,omitempty"`
+	PreserveArgs bool     `json:"preserveArgs,omitempty"`
+	Enabled      bool     `json:"enabled"`
 }
 
 type ACPSettings struct {

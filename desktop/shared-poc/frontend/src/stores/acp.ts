@@ -21,6 +21,7 @@ function editableProfile(profile: ACPManagedProfile): ACPProfileSettings {
     kind: profile.runtimeKind,
     command: profile.configuredCommand,
     args: [...(profile.configuredArgs ?? [])],
+    preserveArgs: profile.protectedArgs,
     enabled: profile.enabled,
   }
 }
@@ -198,22 +199,22 @@ export const useACPStore = defineStore('acp', () => {
     }
   }
 
-  async function updateProfileAdapter(profileId: string, expectedVersion: string) {
-    if (pending.value || !settings.value || !canUpdateProfileAdapter.value || !expectedVersion) return false
+  async function updateProfileAdapter(profileId: string, expectedPlan: string) {
+    if (pending.value || !settings.value || !canUpdateProfileAdapter.value || !expectedPlan) return false
     pending.value = true
     mutationError.value = null
     completed.value = false
     try {
       let result
       try {
-        result = await ACPService.UpdateProfileAdapter(profileId, expectedVersion)
+        result = await ACPService.UpdateProfileAdapter(profileId, expectedPlan)
       } catch {
         mutationError.value = clientError('acp_profile_update_failed', '')
         return false
       }
+      if (result.profile) overlayManagedProfile(profileId, result.profile)
       mutationError.value = result.error ?? (result.completed ? null : clientError('acp_profile_update_incomplete', ''))
       if (mutationError.value || !result.profile) return false
-      overlayManagedProfile(profileId, result.profile)
       restartRequired.value = result.restartRequired
       completed.value = true
       return true

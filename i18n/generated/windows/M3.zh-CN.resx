@@ -19,6 +19,9 @@
   <data name="acp.adapter_type" xml:space="preserve">
     <value>适配器</value>
   </data>
+  <data name="acp.add_argument" xml:space="preserve">
+    <value>新增参数</value>
+  </data>
   <data name="acp.add_profile" xml:space="preserve">
     <value>新增配置文件</value>
   </data>
@@ -31,11 +34,17 @@
   <data name="acp.apply_policy" xml:space="preserve">
     <value>应用策略</value>
   </data>
+  <data name="acp.argument_named" xml:space="preserve">
+    <value>参数 {index}</value>
+  </data>
   <data name="acp.arguments" xml:space="preserve">
     <value>参数</value>
   </data>
+  <data name="acp.arguments_empty" xml:space="preserve">
+    <value>当前没有配置参数。</value>
+  </data>
   <data name="acp.arguments_hint" xml:space="preserve">
-    <value>每行一个参数</value>
+    <value>每个参数都是独立项目，内容会原样保留。</value>
   </data>
   <data name="acp.attention_required" xml:space="preserve">
     <value>需要处理</value>
@@ -78,6 +87,9 @@
   </data>
   <data name="acp.blocked_update_not_available" xml:space="preserve">
     <value>目前尚未提供此适配器的安全更新。</value>
+  </data>
+  <data name="acp.blocked_update_outcome_unknown" xml:space="preserve">
+    <value>适配器可能已被替换，但无法确认写入是否已持久保存。重新尝试前请先检查适配器状态。</value>
   </data>
   <data name="acp.blocked_version_unavailable" xml:space="preserve">
     <value>适配器可用，但无法读取已安装版本。</value>
@@ -232,6 +244,12 @@
   <data name="acp.minutes" xml:space="preserve">
     <value>{count, number} 分钟</value>
   </data>
+  <data name="acp.move_argument_down" xml:space="preserve">
+    <value>将参数 {index} 下移</value>
+  </data>
+  <data name="acp.move_argument_up" xml:space="preserve">
+    <value>将参数 {index} 上移</value>
+  </data>
   <data name="acp.no_profiles" xml:space="preserve">
     <value>目前还没有 ACP 配置文件。</value>
   </data>
@@ -274,6 +292,9 @@
   <data name="acp.preset_help_custom" xml:space="preserve">
     <value>指定自定义 ACP 可执行文件；AgentDock 会按原顺序保留每个参数。</value>
   </data>
+  <data name="acp.preset_help_legacy" xml:space="preserve">
+    <value>此旧版配置文件会保留现有 runtime kind；可编辑名称、命令、启用状态与安全参数，不会转换成其他类型。</value>
+  </data>
   <data name="acp.preset_legacy" xml:space="preserve">
     <value>旧版配置文件</value>
   </data>
@@ -289,6 +310,9 @@
   <data name="acp.profiles_intro" xml:space="preserve">
     <value>管理 AgentDock 创建新 Coding Agent 会话时可以使用的适配器。</value>
   </data>
+  <data name="acp.protected_arguments_hint" xml:space="preserve">
+    <value>此配置文件包含受保护参数。它们只保留在本地持久化数据中，不会显示在这里；保存时会原样保留。</value>
+  </data>
   <data name="acp.protocol" xml:space="preserve">
     <value>协议版本</value>
   </data>
@@ -300,6 +324,9 @@
   </data>
   <data name="acp.recheck" xml:space="preserve">
     <value>重新检查</value>
+  </data>
+  <data name="acp.remove_argument" xml:space="preserve">
+    <value>移除参数 {index}</value>
   </data>
   <data name="acp.restart_required" xml:space="preserve">
     <value>设置已保存。重新启动 AgentDock Next Core 后，新会话才会使用这些变更。</value>

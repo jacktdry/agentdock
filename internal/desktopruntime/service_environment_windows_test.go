@@ -110,6 +110,29 @@ func TestLoadControlPanelSettingsMigratesLegacyACPToProfile(t *testing.T) {
 	}
 }
 
+func TestLoadControlPanelSettingsTreatsExplicitEmptyProfilesAsAuthoritative(t *testing.T) {
+	root := t.TempDir()
+	settingsPath := filepath.Join(root, "control-panel-settings.json")
+	content, err := json.Marshal(map[string]any{
+		"port": 8765, "log_level": "info", "acp_enabled": false,
+		"acp_profiles": []map[string]any{}, "acp_default_profile": "",
+		"acp_agent": "custom", "acp_command": `C:\legacy.exe`, "acp_args": []string{"--legacy"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := loadControlPanelSettings(root, 8765)
+	if err != nil {
+		t.Fatalf("loadControlPanelSettings() error = %v", err)
+	}
+	if len(settings.ACPProfiles) != 0 || settings.ACPDefaultProfile != "" {
+		t.Fatalf("explicit empty profile inventory revived legacy ACP: %#v", settings)
+	}
+}
+
 func TestLoadControlPanelSettingsPrefersProfilesOverLegacyACPFields(t *testing.T) {
 	root := t.TempDir()
 	settingsPath := filepath.Join(root, "control-panel-settings.json")

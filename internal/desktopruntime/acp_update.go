@@ -17,12 +17,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/uvwt/agentdock/internal/fs/atomicfile"
 )
 
 const defaultAntigravityReleaseAPI = "https://api.github.com/repos/jacktdry/antigravity-acp/releases/latest"
 const maxACPAdapterAssetBytes int64 = 128 << 20
+
+var ErrACPUpdateOutcomeUnknown = errors.New("ACP adapter update outcome unknown")
 
 type ACPUpdateSource struct {
 	ReleaseAPI        string
@@ -155,30 +155,26 @@ func ApplyACPProfileUpdate(ctx context.Context, client *http.Client, source ACPU
 	if !matchesSHA256(data, update.Digest) {
 		return errors.New("ACP adapter update digest mismatch")
 	}
-	dir := filepath.Dir(update.TargetPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create ACP adapter directory: %w", err)
-	}
-	staged, err := os.CreateTemp(dir, ".agentdock-acp-update-*")
+	staged, err := os.CreateTemp("", ".agentdock-acp-verify-*")
 	if err != nil {
-		return fmt.Errorf("create ACP adapter staging file: %w", err)
+		return fmt.Errorf("create ACP adapter verification file: %w", err)
 	}
 	stagedPath := staged.Name()
 	defer os.Remove(stagedPath)
 	if err := staged.Chmod(0o700); err != nil {
 		staged.Close()
-		return fmt.Errorf("secure ACP adapter staging file: %w", err)
+		return fmt.Errorf("secure ACP adapter verification file: %w", err)
 	}
 	if _, err := staged.Write(data); err != nil {
 		staged.Close()
-		return fmt.Errorf("write ACP adapter staging file: %w", err)
+		return fmt.Errorf("write ACP adapter verification file: %w", err)
 	}
 	if err := staged.Sync(); err != nil {
 		staged.Close()
-		return fmt.Errorf("sync ACP adapter staging file: %w", err)
+		return fmt.Errorf("sync ACP adapter verification file: %w", err)
 	}
 	if err := staged.Close(); err != nil {
-		return fmt.Errorf("close ACP adapter staging file: %w", err)
+		return fmt.Errorf("close ACP adapter verification file: %w", err)
 	}
 	verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -189,8 +185,8 @@ func ApplyACPProfileUpdate(ctx context.Context, client *http.Client, source ACPU
 	if normalizeACPVersion(string(output)) != update.LatestVersion {
 		return errors.New("ACP adapter staging version mismatch")
 	}
-	if err := atomicfile.Write(update.TargetPath, data, 0o700); err != nil {
-		return fmt.Errorf("promote ACP adapter update: %w", err)
+	if err := platformPromoteACPUpdate(runtimeRoot, update.TargetPath, data); err != nil {
+		return err
 	}
 	return nil
 }
@@ -200,21 +196,7 @@ func trustedAntigravityTarget(runtimeRoot, command string) bool {
 	if command == "" || !filepath.IsAbs(command) || !NextManagedRoot(runtimeRoot) {
 		return false
 	}
-	if info, err := os.Lstat(command); err == nil && !info.Mode().IsRegular() {
-		return false
-	}
-	home, _ := os.UserHomeDir()
-	roots := []string{filepath.Join(home, ".agentdock-next", "bin"), filepath.Join(runtimeRoot, "bin")}
-	for _, root := range roots {
-		root = filepath.Clean(root)
-		relative, err := filepath.Rel(root, command)
-		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
-			continue
-		}
-		base := strings.ToLower(filepath.Base(command))
-		return base == "antigravity-acp" || base == "antigravity-acp.exe" || base == "antigravity-acp.com"
-	}
-	return false
+	return platformTrustedAntigravityTarget(runtimeRoot, command)
 }
 
 func fetchACPRelease(ctx context.Context, client *http.Client, endpoint string) (acpRelease, int, error) {

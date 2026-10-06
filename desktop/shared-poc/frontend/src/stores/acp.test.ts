@@ -345,6 +345,7 @@ describe('ACP adapter updates', () => {
       profile: {
         ...configured.profiles![0],
         latestVersion: '1.2.0-agentdock.7',
+        updatePlan: 'plan-7',
         versionState: 'update_available',
         canUpdate: true,
         blockedReason: '',
@@ -355,6 +356,7 @@ describe('ACP adapter updates', () => {
     expect(await store.checkProfileUpdate('antigravity')).toBe(true)
     expect(mocks.checkUpdate).toHaveBeenCalledWith('antigravity')
     expect(store.configuredProfiles[0].latestVersion).toBe('1.2.0-agentdock.7')
+    expect(store.configuredProfiles[0].updatePlan).toBe('plan-7')
     expect(store.configuredProfiles[0].canUpdate).toBe(true)
     expect(mocks.updateAdapter).not.toHaveBeenCalled()
     expect(mocks.saveSettings).not.toHaveBeenCalled()
@@ -377,11 +379,42 @@ describe('ACP adapter updates', () => {
     })
     const store = useACPStore()
     await store.refresh()
-    expect(await store.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(true)
-    expect(mocks.updateAdapter).toHaveBeenCalledWith('antigravity', '1.2.0-agentdock.7')
+    expect(await store.updateProfileAdapter('antigravity', 'plan-7')).toBe(true)
+    expect(mocks.updateAdapter).toHaveBeenCalledWith('antigravity', 'plan-7')
     expect(store.configuredProfiles[0].installedVersion).toBe('1.2.0-agentdock.7')
     expect(store.restartRequired).toBe(false)
     expect(store.completed).toBe(true)
+  })
+
+  it('reconciles an outcome-unknown profile even when the mutation returns an error', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.updateAdapter.mockResolvedValue({
+      completed: false,
+      restartRequired: false,
+      runtimeImpact: 'adapter_update_outcome_unknown',
+      profile: {
+        ...configured.profiles![0],
+        installedVersion: '1.2.0-agentdock.7',
+        latestVersion: '1.2.0-agentdock.7',
+        updatePlan: '',
+        versionState: 'unavailable',
+        canUpdate: false,
+        blockedReason: 'update_outcome_unknown',
+      },
+      error: {
+        code: 'acp_profile_update_outcome_unknown',
+        message: 'check adapter state before retrying',
+        category: ErrorCategory.ErrorCategoryConflict,
+        retryable: false,
+      },
+    })
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.updateProfileAdapter('antigravity', 'plan-7')).toBe(false)
+    expect(store.error?.code).toBe('acp_profile_update_outcome_unknown')
+    expect(store.configuredProfiles[0].installedVersion).toBe('1.2.0-agentdock.7')
+    expect(store.configuredProfiles[0].blockedReason).toBe('update_outcome_unknown')
+    expect(store.configuredProfiles[0].canUpdate).toBe(false)
   })
 
   it('preserves backend conflict and blocks calls without update capability', async () => {
@@ -394,7 +427,7 @@ describe('ACP adapter updates', () => {
     } })
     const store = useACPStore()
     await store.refresh()
-    expect(await store.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(false)
+    expect(await store.updateProfileAdapter('antigravity', 'plan-7')).toBe(false)
     expect(store.error?.code).toBe('acp_profile_update_conflict')
 
     mocks.allowed.delete('updateProfileAdapter')

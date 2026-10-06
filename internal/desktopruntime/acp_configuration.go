@@ -136,8 +136,15 @@ func mergeACPConfiguration(doc acpConfigurationDocument, requested ACPSettings) 
 				return ACPSettings{}, nil, ErrACPSettingsInvalid
 			}
 		}
-		for key, value := range map[string]any{"id": input.ID, "display_name": input.DisplayName, "kind": input.Kind, "command": input.Command, "args": input.Args, "enabled": input.Enabled} {
+		for key, value := range map[string]any{"id": input.ID, "display_name": input.DisplayName, "kind": input.Kind, "command": input.Command, "enabled": input.Enabled} {
 			fields[key], _ = json.Marshal(value)
+		}
+		if input.PreserveArgs {
+			if existing[input.ID] == nil {
+				return ACPSettings{}, nil, ErrACPSettingsInvalid
+			}
+		} else {
+			fields["args"], _ = json.Marshal(input.Args)
 		}
 		raw, err := json.Marshal(fields)
 		if err != nil {
