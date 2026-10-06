@@ -6,6 +6,30 @@
 review_threshold_lines: 300
 
 scripts:
+  - path: packaging/macos/build-next-shared.sh
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: packaging/macos/next_shared_bundle.py
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: packaging/macos/install-next-shared.py
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: scripts/test/test-next-shared-package.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+
   - path: scripts/install/install.sh
     class: bootstrap
     owner: installer

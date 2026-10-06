@@ -11,6 +11,14 @@ OFFLINE_PAYLOAD_DIR="${AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR:-}"
 MIN_VERSION="${AGENTDOCK_MACOS_MIN_VERSION:-13.0}"
 # Fixed flavor contract; shared with the metadata-only fixture path.
 source "$ROOT_DIR/packaging/macos/app-identity.sh"
+# Only the Next product packager may supply a Shared Desktop entrypoint.
+SHARED_EXECUTABLE="${AGENTDOCK_MACOS_SHARED_EXECUTABLE:-}"
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  [[ "$APP_VARIANT" == next && "$ARCH_LIST" == arm64 && -f "$SHARED_EXECUTABLE" && ! -L "$SHARED_EXECUTABLE" ]] || {
+    print -u2 -- "Shared executable requires Next arm64 and a regular file"; exit 1
+  }
+  [[ "$(file "$SHARED_EXECUTABLE")" == *"Mach-O 64-bit executable arm64"* ]] || exit 1
+fi
 if [[ "${1:-}" == "--metadata-only" ]]; then
   [[ $# == 2 ]] || { print -u2 -- "Usage: build-app.sh --metadata-only OUTPUT"; exit 1; }
   VERSION="0.0.0"
@@ -114,7 +122,10 @@ for architecture in "${architectures[@]}"; do
   release_architectures+=("$release_architecture")
   binary="$TMP_DIR/AgentDock-$architecture"
   print -- "==> 编译 AgentDock.app：$architecture"
-  xcrun swiftc \
+  if [[ -n "$SHARED_EXECUTABLE" ]]; then
+    cp "$SHARED_EXECUTABLE" "$binary"
+  else
+    xcrun swiftc \
     -swift-version 5 \
     -O \
     -whole-module-optimization \
@@ -122,6 +133,7 @@ for architecture in "${architectures[@]}"; do
     -sdk "$SDK_PATH" \
     "$SOURCE_DIR"/*.swift \
     -o "$binary"
+  fi
   compiled_binaries+=("$binary")
 
   login_helper="$TMP_DIR/AgentDockLoginHelper-$architecture"

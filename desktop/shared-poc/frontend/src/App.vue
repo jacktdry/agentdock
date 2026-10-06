@@ -16,6 +16,8 @@ const section = shallowRef<Section>('overview')
 import { type LocalePreference, useI18n } from './i18n'
 
 const { currentPreference, localeOptions, setLocale, t } = useI18n()
+const productName = import.meta.env.VITE_AGENTDOCK_PRODUCT_NAME
+if (productName) document.title = productName
 
 function changeLocale(event: Event) {
   setLocale((event.target as HTMLSelectElement).value as LocalePreference)
@@ -27,7 +29,7 @@ function changeLocale(event: Event) {
     <header class="hero">
       <div>
         <p class="eyebrow">{{ t('app.eyebrow') }}</p>
-        <h1>{{ t('app.title') }}</h1>
+        <h1>{{ productName || t('app.title') }}</h1>
         <p class="lede">{{ t('app.lede') }}</p>
       </div>
       <div class="hero-actions">

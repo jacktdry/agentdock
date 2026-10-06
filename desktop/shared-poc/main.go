@@ -20,7 +20,11 @@ var assets embed.FS
 const activityStreamName = "desktop:activity"
 
 func main() {
+	if err := configureProduct(); err != nil {
+		log.Fatal(err)
+	}
 	runtimeRootFlag := flag.String("runtime-root", "", "AgentDock runtime root override")
+	background := flag.Bool("background", false, "Start with the window hidden")
 	flag.Parse()
 
 	settingsPath := ""
@@ -35,7 +39,7 @@ func main() {
 	coreActivityService := NewCoreActivityService(*runtimeRootFlag)
 
 	app := application.New(application.Options{
-		Name:        "AgentDock Desktop",
+		Name:        productName,
 		Description: "Cross-platform AgentDock desktop",
 		Services: []application.Service{
 			application.NewService(contractService),
@@ -65,7 +69,8 @@ func main() {
 	width, height := normaliseWindowSize(prefs.WindowWidth, prefs.WindowHeight)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:               "agentdock-shared-poc",
-		Title:              "AgentDock Desktop",
+		Title:              productName,
+		Hidden:             *background,
 		Width:              width,
 		Height:             height,
 		MinWidth:           760,
@@ -107,7 +112,7 @@ func main() {
 	if runtime.GOOS == "darwin" {
 		menu.AddRole(application.AppMenu)
 	}
-	desktopMenu := menu.AddSubmenu("AgentDock")
+	desktopMenu := menu.AddSubmenu(productName)
 	desktopMenu.Add("Show Window").SetAccelerator("CmdOrCtrl+Shift+A").OnClick(func(*application.Context) {
 		showWindow()
 	})
@@ -125,9 +130,9 @@ func main() {
 	} else {
 		tray.SetIcon(icons.DefaultWindowsIcon)
 	}
-	tray.SetTooltip("AgentDock Desktop")
+	tray.SetTooltip(productName)
 	trayMenu := app.NewMenu()
-	trayMenu.Add("Show AgentDock").OnClick(func(*application.Context) {
+	trayMenu.Add("Show " + productName).OnClick(func(*application.Context) {
 		showWindow()
 	})
 	trayMenu.AddSeparator()
