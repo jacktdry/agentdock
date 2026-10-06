@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Clipboard } from '@wailsio/runtime'
 import {
   computed,
   onBeforeUnmount,
@@ -245,7 +246,7 @@ async function showPassword() {
 async function copyText(value: string, kind: 'local' | 'public' | 'password') {
   clearCopyNotice()
   try {
-    await navigator.clipboard.writeText(value)
+    await Clipboard.SetText(value)
     copyNotice.value = kind
     copyTimer = window.setTimeout(clearCopyNotice, 2_500)
   } catch {
