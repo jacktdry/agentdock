@@ -3,6 +3,7 @@
 "acp.active_sessions" = "活动会话";
 "acp.adapter" = "适配器进程健康状态";
 "acp.adapter_actions_pending" = "适配器检测、版本检查与安全更新会在下一个 ACP Manager slice 补上。";
+"acp.adapter_paths" = "适配器路径";
 "acp.adapter_type" = "适配器";
 "acp.add_profile" = "新增配置文件";
 "acp.advanced" = "高级适配器设置";
@@ -17,6 +18,9 @@
 "acp.availability_unavailable" = "不可用";
 "acp.availability_unknown" = "尚未检查";
 "acp.backend" = "后端";
+"acp.blocked_adapter_not_found" = "找不到可供此配置文件使用的适配器。";
+"acp.blocked_update_not_available" = "目前尚未提供此适配器的安全更新。";
+"acp.blocked_version_unavailable" = "适配器可用，但无法读取已安装版本。";
 "acp.browser_leases" = "浏览器租约";
 "acp.bytes" = "{count, number} 字节";
 "acp.cleanup_issues" = "浏览器清理问题";
@@ -24,6 +28,7 @@
 "acp.closed" = "已关闭";
 "acp.command" = "适配器命令";
 "acp.command_hint" = "请使用准确的可执行文件路径；启用配置文件前会由 AgentDock 验证。";
+"acp.configured_command" = "当前配置命令";
 "acp.configured_profiles" = "配置文件数量";
 "acp.confirm_close" = "关闭此 ACP 会话并释放其资源？";
 "acp.confirm_delete" = "删除此 ACP 配置文件？";
@@ -35,6 +40,8 @@
 "acp.delete_active_hint" = "删除前请先关闭此配置文件的活动会话。";
 "acp.delete_explainer" = "这只会移除配置文件设置，不会删除远端会话记录。";
 "acp.descendants" = "子孙进程数";
+"acp.detect" = "检测";
+"acp.detected_command" = "检测到的命令";
 "acp.diagnostics" = "诊断";
 "acp.disable" = "禁用";
 "acp.display_name" = "显示名称";
@@ -51,6 +58,7 @@
 "acp.global_enabled" = "允许新的会话使用 ACP";
 "acp.idle" = "空闲";
 "acp.installed" = "已安装";
+"acp.installed_version" = "已安装版本";
 "acp.invalid_policy" = "请选择支持的策略和范围内的超时值。";
 "acp.kind" = "类型";
 "acp.last_active" = "最后活动时间";
@@ -82,6 +90,7 @@
 "acp.protocol" = "协议版本";
 "acp.provider" = "提供商";
 "acp.ready" = "就绪";
+"acp.recheck" = "重新检查";
 "acp.restart_required" = "设置已保存。重新启动 AgentDock Next Core 后，新会话才会使用这些变更。";
 "acp.rss" = "RSS";
 "acp.running" = "运行中";
@@ -110,6 +119,7 @@
 "acp.ttl" = "空闲超时（分钟）";
 "acp.ttl_hint" = "支持范围：1 分钟至 7 天。默认为 30 分钟。";
 "acp.unhealthy" = "不健康";
+"acp.use_detected" = "使用检测结果";
 "acp.validation_command" = "启用的配置文件需要适配器命令。";
 "acp.validation_duplicate" = "已有相同 ID 的配置文件。";
 "acp.validation_id" = "请输入配置文件 ID。";

@@ -57,7 +57,11 @@ export interface ACPManagedProfile {
     "enabled": boolean;
     "configuredCommand"?: string;
     "configuredArgs": string[] | null;
+    "detectedCommand"?: string;
+    "detectedArgs"?: string[] | null;
     "availability": string;
+    "installedVersion"?: string;
+    "latestVersion"?: string;
     "versionState": string;
     "canDetect": boolean;
     "canUpdate": boolean;
@@ -112,6 +116,11 @@ export interface ACPProfileInfo {
     "packageName"?: string;
     "latestVersion"?: string;
     "versionState": string;
+}
+
+export interface ACPProfileProbeResult {
+    "profile"?: ACPManagedProfile | null;
+    "error"?: APIError | null;
 }
 
 export interface ACPProfileStatus {

@@ -3,6 +3,7 @@
 "acp.active_sessions" = "活動工作階段";
 "acp.adapter" = "配接器程序健康狀態";
 "acp.adapter_actions_pending" = "配接器偵測、版本檢查與安全更新會在下一個 ACP Manager slice 補上。";
+"acp.adapter_paths" = "配接器路徑";
 "acp.adapter_type" = "配接器";
 "acp.add_profile" = "新增設定檔";
 "acp.advanced" = "進階配接器設定";
@@ -17,6 +18,9 @@
 "acp.availability_unavailable" = "不可用";
 "acp.availability_unknown" = "尚未檢查";
 "acp.backend" = "後端";
+"acp.blocked_adapter_not_found" = "找不到可供此設定檔使用的配接器。";
+"acp.blocked_update_not_available" = "目前尚未提供此配接器的安全更新。";
+"acp.blocked_version_unavailable" = "配接器可用，但無法讀取已安裝版本。";
 "acp.browser_leases" = "瀏覽器租約";
 "acp.bytes" = "{count, number} 位元組";
 "acp.cleanup_issues" = "瀏覽器清理問題";
@@ -24,6 +28,7 @@
 "acp.closed" = "已關閉";
 "acp.command" = "配接器命令";
 "acp.command_hint" = "請使用確切的執行檔路徑；啟用設定檔前會由 AgentDock 驗證。";
+"acp.configured_command" = "目前設定命令";
 "acp.configured_profiles" = "設定檔數量";
 "acp.confirm_close" = "關閉此 ACP 工作階段並釋放其資源？";
 "acp.confirm_delete" = "刪除此 ACP 設定檔？";
@@ -35,6 +40,8 @@
 "acp.delete_active_hint" = "刪除前請先關閉此設定檔的活動工作階段。";
 "acp.delete_explainer" = "這只會移除設定檔設定，不會刪除遠端對話紀錄。";
 "acp.descendants" = "子孫程序數";
+"acp.detect" = "偵測";
+"acp.detected_command" = "偵測到的命令";
 "acp.diagnostics" = "診斷";
 "acp.disable" = "停用";
 "acp.display_name" = "顯示名稱";
@@ -51,6 +58,7 @@
 "acp.global_enabled" = "允許新的工作階段使用 ACP";
 "acp.idle" = "閒置";
 "acp.installed" = "已安裝";
+"acp.installed_version" = "已安裝版本";
 "acp.invalid_policy" = "請選擇支援的原則與範圍內的逾時值。";
 "acp.kind" = "類型";
 "acp.last_active" = "最後活動時間";
@@ -82,6 +90,7 @@
 "acp.protocol" = "通訊協定版本";
 "acp.provider" = "提供者";
 "acp.ready" = "就緒";
+"acp.recheck" = "重新檢查";
 "acp.restart_required" = "設定已儲存。重新啟動 AgentDock Next Core 後，新工作階段才會套用這些變更。";
 "acp.rss" = "RSS";
 "acp.running" = "執行中";
@@ -110,6 +119,7 @@
 "acp.ttl" = "閒置逾時（分鐘）";
 "acp.ttl_hint" = "支援範圍：1 分鐘至 7 天。預設為 30 分鐘。";
 "acp.unhealthy" = "不健康";
+"acp.use_detected" = "使用偵測結果";
 "acp.validation_command" = "啟用的設定檔需要配接器命令。";
 "acp.validation_duplicate" = "已有相同 ID 的設定檔。";
 "acp.validation_id" = "請輸入設定檔 ID。";

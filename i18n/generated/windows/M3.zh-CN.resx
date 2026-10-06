@@ -13,6 +13,9 @@
   <data name="acp.adapter_actions_pending" xml:space="preserve">
     <value>适配器检测、版本检查与安全更新会在下一个 ACP Manager slice 补上。</value>
   </data>
+  <data name="acp.adapter_paths" xml:space="preserve">
+    <value>适配器路径</value>
+  </data>
   <data name="acp.adapter_type" xml:space="preserve">
     <value>适配器</value>
   </data>
@@ -55,6 +58,15 @@
   <data name="acp.backend" xml:space="preserve">
     <value>后端</value>
   </data>
+  <data name="acp.blocked_adapter_not_found" xml:space="preserve">
+    <value>找不到可供此配置文件使用的适配器。</value>
+  </data>
+  <data name="acp.blocked_update_not_available" xml:space="preserve">
+    <value>目前尚未提供此适配器的安全更新。</value>
+  </data>
+  <data name="acp.blocked_version_unavailable" xml:space="preserve">
+    <value>适配器可用，但无法读取已安装版本。</value>
+  </data>
   <data name="acp.browser_leases" xml:space="preserve">
     <value>浏览器租约</value>
   </data>
@@ -75,6 +87,9 @@
   </data>
   <data name="acp.command_hint" xml:space="preserve">
     <value>请使用准确的可执行文件路径；启用配置文件前会由 AgentDock 验证。</value>
+  </data>
+  <data name="acp.configured_command" xml:space="preserve">
+    <value>当前配置命令</value>
   </data>
   <data name="acp.configured_profiles" xml:space="preserve">
     <value>配置文件数量</value>
@@ -108,6 +123,12 @@
   </data>
   <data name="acp.descendants" xml:space="preserve">
     <value>子孙进程数</value>
+  </data>
+  <data name="acp.detect" xml:space="preserve">
+    <value>检测</value>
+  </data>
+  <data name="acp.detected_command" xml:space="preserve">
+    <value>检测到的命令</value>
   </data>
   <data name="acp.diagnostics" xml:space="preserve">
     <value>诊断</value>
@@ -156,6 +177,9 @@
   </data>
   <data name="acp.installed" xml:space="preserve">
     <value>已安装</value>
+  </data>
+  <data name="acp.installed_version" xml:space="preserve">
+    <value>已安装版本</value>
   </data>
   <data name="acp.invalid_policy" xml:space="preserve">
     <value>请选择支持的策略和范围内的超时值。</value>
@@ -250,6 +274,9 @@
   <data name="acp.ready" xml:space="preserve">
     <value>就绪</value>
   </data>
+  <data name="acp.recheck" xml:space="preserve">
+    <value>重新检查</value>
+  </data>
   <data name="acp.restart_required" xml:space="preserve">
     <value>设置已保存。重新启动 AgentDock Next Core 后，新会话才会使用这些变更。</value>
   </data>
@@ -333,6 +360,9 @@
   </data>
   <data name="acp.unhealthy" xml:space="preserve">
     <value>不健康</value>
+  </data>
+  <data name="acp.use_detected" xml:space="preserve">
+    <value>使用检测结果</value>
   </data>
   <data name="acp.validation_command" xml:space="preserve">
     <value>启用的配置文件需要适配器命令。</value>

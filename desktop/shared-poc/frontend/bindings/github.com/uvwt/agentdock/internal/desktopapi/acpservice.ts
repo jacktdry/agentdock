@@ -17,6 +17,10 @@ export function Close(profileID: string, sessionID: string): $CancellablePromise
     return $Call.ByID(2847673345, profileID, sessionID);
 }
 
+export function ProbeProfile(profileID: string): $CancellablePromise<$models.ACPProfileProbeResult> {
+    return $Call.ByID(1534005872, profileID);
+}
+
 /**
  * Profiles use the existing simplified configuration DTO (id, displayName,
  * kind, command, args, enabled). An empty new ID is assigned by the backend.

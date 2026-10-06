@@ -3,6 +3,7 @@
 "acp.active_sessions" = "Active sessions";
 "acp.adapter" = "Adapter process health";
 "acp.adapter_actions_pending" = "Detection, version checks, and safe updates are provided by the next ACP Manager slice.";
+"acp.adapter_paths" = "Adapter paths";
 "acp.adapter_type" = "Adapter";
 "acp.add_profile" = "Add profile";
 "acp.advanced" = "Advanced adapter settings";
@@ -17,6 +18,9 @@
 "acp.availability_unavailable" = "Unavailable";
 "acp.availability_unknown" = "Not checked";
 "acp.backend" = "Backend";
+"acp.blocked_adapter_not_found" = "No usable adapter was found for this profile.";
+"acp.blocked_update_not_available" = "Safe update is not available for this adapter yet.";
+"acp.blocked_version_unavailable" = "The adapter is available, but its installed version could not be read.";
 "acp.browser_leases" = "Browser leases";
 "acp.bytes" = "{count, number} bytes";
 "acp.cleanup_issues" = "Browser cleanup issues";
@@ -24,6 +28,7 @@
 "acp.closed" = "Closed";
 "acp.command" = "Adapter command";
 "acp.command_hint" = "Use the exact executable path. AgentDock validates it before an enabled profile can be used.";
+"acp.configured_command" = "Configured command";
 "acp.configured_profiles" = "Configured profiles";
 "acp.confirm_close" = "Close this ACP session and release its resources?";
 "acp.confirm_delete" = "Delete this ACP profile?";
@@ -35,6 +40,8 @@
 "acp.delete_active_hint" = "Close this profile's active sessions before deleting it.";
 "acp.delete_explainer" = "This removes the profile configuration. It does not delete remote transcripts.";
 "acp.descendants" = "Descendant processes";
+"acp.detect" = "Detect";
+"acp.detected_command" = "Detected command";
 "acp.diagnostics" = "Diagnostics";
 "acp.disable" = "Disable";
 "acp.display_name" = "Display name";
@@ -51,6 +58,7 @@
 "acp.global_enabled" = "Enable ACP for new sessions";
 "acp.idle" = "Idle";
 "acp.installed" = "Installed";
+"acp.installed_version" = "Installed version";
 "acp.invalid_policy" = "Choose a supported policy and timeout within the supported range.";
 "acp.kind" = "Kind";
 "acp.last_active" = "Last active";
@@ -82,6 +90,7 @@
 "acp.protocol" = "Protocol version";
 "acp.provider" = "Provider";
 "acp.ready" = "Ready";
+"acp.recheck" = "Re-check";
 "acp.restart_required" = "Settings saved. Restart AgentDock Next Core before new sessions use these changes.";
 "acp.rss" = "RSS";
 "acp.running" = "Running";
@@ -110,6 +119,7 @@
 "acp.ttl" = "Idle timeout (minutes)";
 "acp.ttl_hint" = "Supported range: 1 minute to 7 days. Default: 30 minutes.";
 "acp.unhealthy" = "Unhealthy";
+"acp.use_detected" = "Use detected";
 "acp.validation_command" = "Enabled profiles require an adapter command.";
 "acp.validation_duplicate" = "A profile with this ID already exists.";
 "acp.validation_id" = "Enter a profile ID.";

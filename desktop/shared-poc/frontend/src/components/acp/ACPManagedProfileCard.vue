@@ -8,12 +8,15 @@ const props = defineProps<{
   isDefault: boolean
   busy: boolean
   activeSessions: number
+  canDetect: boolean
 }>()
 const emit = defineEmits<{
   edit: []
   toggle: [enabled: boolean]
   makeDefault: []
   delete: []
+  probe: []
+  useDetected: []
 }>()
 const { t } = useI18n()
 
@@ -26,6 +29,18 @@ const presetKey = () => {
   default: return 'acp.preset_custom'
   }
 }
+const blockedKey = () => {
+  switch (props.profile.blockedReason) {
+  case 'adapter_not_found': return 'acp.blocked_adapter_not_found'
+  case 'version_unavailable': return 'acp.blocked_version_unavailable'
+  case 'update_not_available': return 'acp.blocked_update_not_available'
+  default: return ''
+  }
+}
+const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
+  props.profile.detectedCommand !== props.profile.configuredCommand ||
+  JSON.stringify(props.profile.detectedArgs ?? []) !== JSON.stringify(props.profile.configuredArgs ?? [])
+)
 </script>
 
 <template>
@@ -47,14 +62,28 @@ const presetKey = () => {
 
     <dl class="status-grid managed-profile-status">
       <div><dt>{{ t('acp.availability') }}</dt><dd>{{ t(('acp.availability_' + profile.availability) as any) }}</dd></div>
+      <div><dt>{{ t('acp.installed_version') }}</dt><dd>{{ text(profile.installedVersion) }}</dd></div>
       <div><dt>{{ t('acp.version_state') }}</dt><dd>{{ t(('acp.version_' + profile.versionState) as any) }}</dd></div>
       <div><dt>{{ t('acp.active_sessions') }}</dt><dd>{{ activeSessions }}</dd></div>
-      <div><dt>{{ t('acp.source') }}</dt><dd>{{ text(profile.source) }}</dd></div>
     </dl>
 
-    <p v-if="profile.blockedReason" class="execution-meta">{{ t('acp.adapter_actions_pending') }}</p>
+    <details v-if="profile.configuredCommand || profile.detectedCommand" class="adapter-paths">
+      <summary>{{ t('acp.adapter_paths') }}</summary>
+      <dl class="status-grid">
+        <div v-if="profile.configuredCommand"><dt>{{ t('acp.configured_command') }}</dt><dd class="path">{{ text(profile.configuredCommand) }}</dd></div>
+        <div v-if="profile.detectedCommand"><dt>{{ t('acp.detected_command') }}</dt><dd class="path">{{ text(profile.detectedCommand) }}</dd></div>
+      </dl>
+    </details>
+
+    <p v-if="blockedKey()" class="field-hint">{{ t(blockedKey() as any) }}</p>
 
     <div class="actions">
+      <button type="button" :disabled="busy || !canDetect || !profile.canDetect" @click="emit('probe')">
+        {{ profile.availability === 'unknown' ? t('acp.detect') : t('acp.recheck') }}
+      </button>
+      <button v-if="hasDifferentDetectedAdapter()" type="button" :disabled="busy" @click="emit('useDetected')">
+        {{ t('acp.use_detected') }}
+      </button>
       <button type="button" :disabled="busy || (profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">
         {{ profile.enabled ? t('acp.disable') : t('acp.enable') }}
       </button>

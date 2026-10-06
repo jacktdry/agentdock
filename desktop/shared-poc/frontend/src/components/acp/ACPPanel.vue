@@ -112,7 +112,9 @@ onMounted(async () => {
         <ACPManagedProfileCard v-for="profile in store.configuredProfiles" :key="profile.id"
           :profile="profile" :is-default="store.settings?.defaultProfile === profile.id"
           :busy="store.busy || !store.canSaveSettings" :active-sessions="store.activeSessionsFor(profile.id)"
-          @edit="openEdit(profile)" @toggle="store.setProfileEnabled(profile.id, $event)"
+          :can-detect="store.canProbeProfile"
+          @edit="openEdit(profile)" @probe="store.probeProfile(profile.id)" @use-detected="store.useDetectedAdapter(profile.id)"
+          @toggle="store.setProfileEnabled(profile.id, $event)"
           @make-default="store.makeDefault(profile.id)" @delete="deleteTarget = profile" />
       </div>
       <div v-else class="empty-state">

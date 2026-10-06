@@ -6,6 +6,7 @@ import { ErrorCategory } from '../../bindings/github.com/uvwt/agentdock/internal
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   settings: vi.fn(),
+  probe: vi.fn(),
   saveSettings: vi.fn(),
   close: vi.fn(),
   update: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../bindings/github.com/uvwt/agentdock/internal/desktopapi/acpservice', () => ({
   Status: mocks.status,
   Settings: mocks.settings,
+  ProbeProfile: mocks.probe,
   SaveSettings: mocks.saveSettings,
   Close: mocks.close,
   UpdateLifecycle: mocks.update,
@@ -50,7 +52,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   setActivePinia(createPinia())
   mocks.allowed.clear()
-  for (const op of ['status', 'settings', 'saveSettings', 'close', 'updateLifecycle']) mocks.allowed.add(op)
+  for (const op of ['status', 'settings', 'probeProfile', 'saveSettings', 'close', 'updateLifecycle']) mocks.allowed.add(op)
   mocks.status.mockResolvedValue(status)
   mocks.settings.mockResolvedValue(manager)
 })
@@ -217,6 +219,96 @@ describe('ACP settings mutations', () => {
     expect(store.canEnableACP).toBe(false)
     expect(await store.setGlobalEnabled(true)).toBe(false)
     expect(mocks.saveSettings).not.toHaveBeenCalled()
+  })
+})
+
+describe('ACP adapter probe', () => {
+  const configured: ACPManagerSnapshot = {
+    revision: 'rev-1',
+    enabled: false,
+    defaultProfile: '',
+    capabilities: [],
+    profiles: [{
+      id: 'codex',
+      displayName: 'Codex',
+      runtimeKind: 'codex',
+      preset: 'codex',
+      source: 'builtin',
+      enabled: false,
+      configuredCommand: '',
+      configuredArgs: [],
+      availability: 'unknown',
+      versionState: 'not_checked',
+      canDetect: true,
+      canUpdate: false,
+    }],
+  }
+
+  it('overlays detected metadata without persisting it automatically', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.probe.mockResolvedValue({
+      profile: {
+        ...configured.profiles![0],
+        detectedCommand: '/opt/homebrew/bin/codex-acp',
+        detectedArgs: [],
+        availability: 'available',
+        installedVersion: '2.1.1',
+        versionState: 'not_checked',
+        blockedReason: 'update_not_available',
+      },
+    })
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.probeProfile('codex')).toBe(true)
+    expect(mocks.probe).toHaveBeenCalledWith('codex')
+    expect(store.configuredProfiles[0].detectedCommand).toBe('/opt/homebrew/bin/codex-acp')
+    expect(store.configuredProfiles[0].installedVersion).toBe('2.1.1')
+    expect(mocks.saveSettings).not.toHaveBeenCalled()
+  })
+
+  it('persists a detected adapter only after explicit useDetectedAdapter', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    const detected = {
+      ...configured.profiles![0],
+      detectedCommand: '/opt/homebrew/bin/codex-acp',
+      detectedArgs: ['--stdio'],
+      availability: 'available',
+      installedVersion: '2.1.1',
+      versionState: 'not_checked',
+      blockedReason: 'update_not_available',
+    }
+    mocks.probe.mockResolvedValue({ profile: detected })
+    mocks.saveSettings.mockResolvedValue({
+      completed: true,
+      persisted: true,
+      applied: false,
+      restartRequired: true,
+      runtimeImpact: 'existing_runtime_unchanged',
+      snapshot: { ...configured, revision: 'rev-2', profiles: [{ ...detected, configuredCommand: detected.detectedCommand, configuredArgs: detected.detectedArgs }] },
+    })
+
+    const store = useACPStore()
+    await store.refresh()
+    await store.probeProfile('codex')
+    expect(await store.useDetectedAdapter('codex')).toBe(true)
+    expect(mocks.saveSettings).toHaveBeenCalledWith('rev-1', false, '', [{
+      id: 'codex',
+      displayName: 'Codex',
+      kind: 'codex',
+      command: '/opt/homebrew/bin/codex-acp',
+      args: ['--stdio'],
+      enabled: false,
+    }])
+  })
+
+  it('maps rejected probe calls to a safe client error', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.probe.mockRejectedValue(new Error('Bearer private'))
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.probeProfile('codex')).toBe(false)
+    expect(store.error?.code).toBe('acp_profile_probe_failed')
+    expect(JSON.stringify(store.error)).not.toContain('private')
   })
 })
 

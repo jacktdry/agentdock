@@ -2,6 +2,8 @@ package desktopapi
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/desktopruntime"
@@ -38,7 +40,7 @@ func TestACPSettingsSnapshotIncludesDisabledProfilesAndPresetMetadata(t *testing
 	if got.Profiles[2].Preset != "legacy" || got.Profiles[2].Source != "builtin" {
 		t.Fatalf("legacy = %#v", got.Profiles[2])
 	}
-	if len(got.Capabilities) != 2 || got.Capabilities[0].Name != "settings" || got.Capabilities[1].Name != "saveSettings" {
+	if len(got.Capabilities) != 3 || got.Capabilities[0].Name != "settings" || got.Capabilities[1].Name != "probeProfile" || got.Capabilities[2].Name != "saveSettings" {
 		t.Fatalf("capabilities = %#v", got.Capabilities)
 	}
 }
@@ -64,5 +66,42 @@ func TestACPSaveSettingsMapsConflictAndReportsPersistenceOnly(t *testing.T) {
 	}
 	if saved.RuntimeImpact != "existing_runtime_unchanged" || saved.Snapshot == nil || saved.Snapshot.Revision != "rev-2" {
 		t.Fatalf("saved details = %#v", saved)
+	}
+}
+
+func TestACPProbeProfileReturnsSafeDetectedMetadata(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	command := filepath.Join(home, ".agentdock-next", "bin", "antigravity-acp")
+	if err := os.MkdirAll(filepath.Dir(command), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(command, []byte("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 1.2.0-agentdock.6; fi\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	service := &ACPService{
+		runtimeRoot: root,
+		readConfiguration: func(context.Context, string) (desktopruntime.ACPConfiguration, error) {
+			return desktopruntime.ACPConfiguration{
+				Revision: "rev-1",
+				ACPSettings: desktopruntime.ACPSettings{
+					Profiles: []desktopruntime.ACPProfileSettings{{
+						ID: "antigravity", DisplayName: "Antigravity", Kind: "custom", Command: command, Enabled: true,
+					}},
+				},
+			}, nil
+		},
+	}
+	got := service.ProbeProfile(context.Background(), "antigravity")
+	if got.Error != nil || got.Profile == nil {
+		t.Fatalf("probe = %#v", got)
+	}
+	if got.Profile.Preset != "antigravity" || got.Profile.Availability != "available" || got.Profile.DetectedCommand != command || got.Profile.InstalledVersion != "1.2.0-agentdock.6" {
+		t.Fatalf("profile = %#v", got.Profile)
+	}
+	if got.Profile.CanUpdate {
+		t.Fatal("probe must not imply update authority")
 	}
 }

@@ -13,6 +13,9 @@
   <data name="acp.adapter_actions_pending" xml:space="preserve">
     <value>Detection, version checks, and safe updates are provided by the next ACP Manager slice.</value>
   </data>
+  <data name="acp.adapter_paths" xml:space="preserve">
+    <value>Adapter paths</value>
+  </data>
   <data name="acp.adapter_type" xml:space="preserve">
     <value>Adapter</value>
   </data>
@@ -55,6 +58,15 @@
   <data name="acp.backend" xml:space="preserve">
     <value>Backend</value>
   </data>
+  <data name="acp.blocked_adapter_not_found" xml:space="preserve">
+    <value>No usable adapter was found for this profile.</value>
+  </data>
+  <data name="acp.blocked_update_not_available" xml:space="preserve">
+    <value>Safe update is not available for this adapter yet.</value>
+  </data>
+  <data name="acp.blocked_version_unavailable" xml:space="preserve">
+    <value>The adapter is available, but its installed version could not be read.</value>
+  </data>
   <data name="acp.browser_leases" xml:space="preserve">
     <value>Browser leases</value>
   </data>
@@ -75,6 +87,9 @@
   </data>
   <data name="acp.command_hint" xml:space="preserve">
     <value>Use the exact executable path. AgentDock validates it before an enabled profile can be used.</value>
+  </data>
+  <data name="acp.configured_command" xml:space="preserve">
+    <value>Configured command</value>
   </data>
   <data name="acp.configured_profiles" xml:space="preserve">
     <value>Configured profiles</value>
@@ -108,6 +123,12 @@
   </data>
   <data name="acp.descendants" xml:space="preserve">
     <value>Descendant processes</value>
+  </data>
+  <data name="acp.detect" xml:space="preserve">
+    <value>Detect</value>
+  </data>
+  <data name="acp.detected_command" xml:space="preserve">
+    <value>Detected command</value>
   </data>
   <data name="acp.diagnostics" xml:space="preserve">
     <value>Diagnostics</value>
@@ -156,6 +177,9 @@
   </data>
   <data name="acp.installed" xml:space="preserve">
     <value>Installed</value>
+  </data>
+  <data name="acp.installed_version" xml:space="preserve">
+    <value>Installed version</value>
   </data>
   <data name="acp.invalid_policy" xml:space="preserve">
     <value>Choose a supported policy and timeout within the supported range.</value>
@@ -250,6 +274,9 @@
   <data name="acp.ready" xml:space="preserve">
     <value>Ready</value>
   </data>
+  <data name="acp.recheck" xml:space="preserve">
+    <value>Re-check</value>
+  </data>
   <data name="acp.restart_required" xml:space="preserve">
     <value>Settings saved. Restart AgentDock Next Core before new sessions use these changes.</value>
   </data>
@@ -333,6 +360,9 @@
   </data>
   <data name="acp.unhealthy" xml:space="preserve">
     <value>Unhealthy</value>
+  </data>
+  <data name="acp.use_detected" xml:space="preserve">
+    <value>Use detected</value>
   </data>
   <data name="acp.validation_command" xml:space="preserve">
     <value>Enabled profiles require an adapter command.</value>

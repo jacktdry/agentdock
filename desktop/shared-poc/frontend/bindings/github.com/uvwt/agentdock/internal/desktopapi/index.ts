@@ -40,6 +40,7 @@ export type {
     ACPMutationResult,
     ACPProcessStatus,
     ACPProfileInfo,
+    ACPProfileProbeResult,
     ACPProfileStatus,
     ACPSessionLifecycle,
     ACPSettingsMutationResult,

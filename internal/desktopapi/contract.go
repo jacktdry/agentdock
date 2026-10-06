@@ -190,6 +190,7 @@ func DefaultManifest() Manifest {
 				Operations: []OperationCapability{
 					{Name: "status", Access: AccessRead},
 					{Name: "settings", Access: AccessRead},
+					{Name: "probeProfile", Access: AccessRead},
 					{Name: "saveSettings", Access: AccessMutating},
 					{Name: "updateLifecycle", Access: AccessMutating, RequiresConfirmation: true},
 					{Name: "close", Access: AccessMutating, RequiresConfirmation: true},

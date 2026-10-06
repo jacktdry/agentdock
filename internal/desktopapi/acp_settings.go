@@ -20,7 +20,11 @@ type ACPManagedProfile struct {
 	Enabled           bool     `json:"enabled"`
 	ConfiguredCommand string   `json:"configuredCommand,omitempty"`
 	ConfiguredArgs    []string `json:"configuredArgs"`
+	DetectedCommand   string   `json:"detectedCommand,omitempty"`
+	DetectedArgs      []string `json:"detectedArgs,omitempty"`
 	Availability      string   `json:"availability"`
+	InstalledVersion  string   `json:"installedVersion,omitempty"`
+	LatestVersion     string   `json:"latestVersion,omitempty"`
 	VersionState      string   `json:"versionState"`
 	CanDetect         bool     `json:"canDetect"`
 	CanUpdate         bool     `json:"canUpdate"`
@@ -46,8 +50,17 @@ type ACPSettingsMutationResult struct {
 	Error           *APIError           `json:"error,omitempty"`
 }
 
+type ACPProfileProbeResult struct {
+	Profile *ACPManagedProfile `json:"profile,omitempty"`
+	Error   *APIError          `json:"error,omitempty"`
+}
+
 func acpSettingsOperations() []OperationCapability {
-	return []OperationCapability{{Name: "settings", Access: AccessRead}, {Name: "saveSettings", Access: AccessMutating}}
+	return []OperationCapability{
+		{Name: "settings", Access: AccessRead},
+		{Name: "probeProfile", Access: AccessRead},
+		{Name: "saveSettings", Access: AccessMutating},
+	}
 }
 
 // Settings reads configuration only; it never probes Core, Memory or adapters.
@@ -60,6 +73,34 @@ func (s *ACPService) Settings(ctx context.Context) ACPManagerSnapshot {
 		return ACPManagerSnapshot{Profiles: []ACPManagedProfile{}, Error: acpSettingsError(ctx, "acp_settings_read_failed", err)}
 	}
 	return acpManagerSnapshot(config)
+}
+
+func (s *ACPService) ProbeProfile(ctx context.Context, profileID string) ACPProfileProbeResult {
+	if s.rootError != nil {
+		return ACPProfileProbeResult{Error: safeServiceError("acp_root_unavailable", s.rootError)}
+	}
+	config, err := s.readConfiguration(ctx, s.runtimeRoot)
+	if err != nil {
+		return ACPProfileProbeResult{Error: acpSettingsError(ctx, "acp_settings_read_failed", err)}
+	}
+	for _, profile := range config.Profiles {
+		if profile.ID != strings.TrimSpace(profileID) {
+			continue
+		}
+		managed := acpManagedProfile(profile)
+		probe, err := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
+		if err != nil {
+			return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
+		}
+		managed.DetectedCommand = probe.Command
+		managed.DetectedArgs = append([]string(nil), probe.Args...)
+		managed.Availability = probe.Availability
+		managed.InstalledVersion = probe.InstalledVersion
+		managed.VersionState = probe.VersionState
+		managed.BlockedReason = probe.BlockedReason
+		return ACPProfileProbeResult{Profile: &managed}
+	}
+	return ACPProfileProbeResult{Error: NewError("acp_profile_not_found", "ACP profile was not found", ErrorCategoryValidation, false, nil)}
 }
 
 // Profiles use the existing simplified configuration DTO (id, displayName,
@@ -79,21 +120,30 @@ func (s *ACPService) SaveSettings(ctx context.Context, expectedRevision string, 
 func acpManagerSnapshot(config desktopruntime.ACPConfiguration) ACPManagerSnapshot {
 	result := ACPManagerSnapshot{Revision: config.Revision, Enabled: config.Enabled, DefaultProfile: config.DefaultProfile, Profiles: []ACPManagedProfile{}, Capabilities: acpSettingsOperations()}
 	for _, p := range config.Profiles {
-		preset, source := "custom", "custom"
-		switch p.Kind {
-		case "codex":
-			preset, source = "codex", "builtin"
-		case "claude", "grok":
-			preset, source = "legacy", "builtin"
-		case "custom":
-			if strings.Contains(strings.ToLower(filepath.Base(p.Command)), "antigravity-acp") {
-				preset, source = "antigravity", "custom-fork"
-			}
-		}
-		args := append([]string{}, p.Args...)
-		result.Profiles = append(result.Profiles, ACPManagedProfile{ID: p.ID, DisplayName: p.DisplayName, RuntimeKind: p.Kind, Preset: preset, Source: source, Enabled: p.Enabled, ConfiguredCommand: p.Command, ConfiguredArgs: args, Availability: "unknown", VersionState: "not_checked", BlockedReason: "adapter_operations_not_available"})
+		result.Profiles = append(result.Profiles, acpManagedProfile(p))
 	}
 	return result
+}
+
+func acpManagedProfile(p desktopruntime.ACPProfileSettings) ACPManagedProfile {
+	preset, source := "custom", "custom"
+	switch p.Kind {
+	case "codex":
+		preset, source = "codex", "builtin"
+	case "claude", "grok":
+		preset, source = "legacy", "builtin"
+	case "custom":
+		if p.ID == "antigravity" || strings.Contains(strings.ToLower(filepath.Base(p.Command)), "antigravity-acp") {
+			preset, source = "antigravity", "custom-fork"
+		}
+	}
+	args := append([]string{}, p.Args...)
+	return ACPManagedProfile{
+		ID: p.ID, DisplayName: p.DisplayName, RuntimeKind: p.Kind, Preset: preset, Source: source,
+		Enabled: p.Enabled, ConfiguredCommand: p.Command, ConfiguredArgs: args,
+		Availability: "unknown", VersionState: "not_checked", CanDetect: true, CanUpdate: false,
+		BlockedReason: "update_not_available",
+	}
 }
 
 func acpSettingsError(ctx context.Context, code string, err error) *APIError {

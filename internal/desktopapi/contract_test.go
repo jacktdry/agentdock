@@ -46,12 +46,12 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 	}
 
 	acpCapability := seen[DomainACP]
-	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 5 {
+	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 6 {
 		t.Fatalf("ACP capability = %#v", acpCapability)
 	}
 	for _, operation := range acpCapability.Operations {
 		switch operation.Name {
-		case "status", "settings":
+		case "status", "settings", "probeProfile":
 			if operation.Access != AccessRead || operation.RequiresConfirmation {
 				t.Fatal("ACP status must be read-only")
 			}

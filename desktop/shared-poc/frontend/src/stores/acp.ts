@@ -41,6 +41,7 @@ export const useACPStore = defineStore('acp', () => {
   const error = computed(() => mutationError.value ?? settingsError.value ?? statusError.value)
   const canRead = computed(() => contract.canInvoke(Domain.DomainACP, 'status'))
   const canReadSettings = computed(() => contract.canInvoke(Domain.DomainACP, 'settings'))
+  const canProbeProfile = computed(() => contract.canInvoke(Domain.DomainACP, 'probeProfile'))
   const canSaveSettings = computed(() => contract.canInvoke(Domain.DomainACP, 'saveSettings'))
   const state = computed(() => {
     if (loading.value && !settings.value) return 'loading'
@@ -130,6 +131,41 @@ export const useACPStore = defineStore('acp', () => {
     }
   }
 
+  async function probeProfile(profileId: string) {
+    if (pending.value || !settings.value || !canProbeProfile.value) return false
+    pending.value = true
+    mutationError.value = null
+    completed.value = false
+    try {
+      let result
+      try {
+        result = await ACPService.ProbeProfile(profileId)
+      } catch {
+        mutationError.value = clientError('acp_profile_probe_failed', '')
+        return false
+      }
+      mutationError.value = result.error ?? null
+      if (mutationError.value || !result.profile) return false
+      settings.value = {
+        ...settings.value,
+        profiles: (settings.value.profiles ?? []).map(profile => profile.id === profileId ? result.profile! : profile),
+      }
+      return true
+    } finally {
+      pending.value = false
+    }
+  }
+
+  async function useDetectedAdapter(profileId: string) {
+    const profile = settings.value?.profiles?.find(item => item.id === profileId)
+    if (!profile?.detectedCommand) return false
+    return upsertProfile({
+      ...editableProfile(profile),
+      command: profile.detectedCommand,
+      args: [...(profile.detectedArgs ?? [])],
+    }, profileId)
+  }
+
   async function saveConfiguration(enabled: boolean, defaultProfile: string, profiles: ACPProfileSettings[]) {
     if (pending.value || !settings.value || !canSaveSettings.value) return false
     pending.value = true
@@ -213,6 +249,7 @@ export const useACPStore = defineStore('acp', () => {
     busy,
     canRead,
     canReadSettings,
+    canProbeProfile,
     canSaveSettings,
     canEnableACP,
     state,
@@ -222,6 +259,8 @@ export const useACPStore = defineStore('acp', () => {
     canInvoke,
     activeSessionsFor,
     refresh,
+    probeProfile,
+    useDetectedAdapter,
     upsertProfile,
     setProfileEnabled,
     makeDefault,
