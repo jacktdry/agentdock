@@ -79,6 +79,23 @@ class NextPackageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_bundle(self.app, signatures=False)
 
+    @unittest.skipUnless(sys.platform == "darwin", "renameatx_np is macOS-only")
+    def test_contents_swap_preserves_app_root(self):
+        left_app = self.home / "left.app"
+        right_app = self.home / "right.app"
+        (left_app / "Contents").mkdir(parents=True)
+        (right_app / "Contents").mkdir(parents=True)
+        (left_app / "Contents/marker").write_text("old")
+        (right_app / "Contents/marker").write_text("new")
+        original = left_app.stat()
+
+        installer.rename_swap(left_app / "Contents", right_app / "Contents")
+
+        current = left_app.stat()
+        self.assertEqual((current.st_dev, current.st_ino), (original.st_dev, original.st_ino))
+        self.assertEqual((left_app / "Contents/marker").read_text(), "new")
+        self.assertEqual((right_app / "Contents/marker").read_text(), "old")
+
     def test_writable_destination_refused(self):
         self.app.parent.chmod(0o777)
         with self.assertRaises(ValueError):

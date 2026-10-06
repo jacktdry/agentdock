@@ -66,6 +66,8 @@ def validate_bundle(path, *, shared=False, signatures=True):
         "Helpers/agentdock-arbiter": BUNDLE_ID + ".arbiter",
         "Helpers/AgentDockLoginHelper": BUNDLE_ID + ".login-helper",
     }
+    if shared:
+        targets["MacOS/AgentDockServiceRegistrar"] = BUNDLE_ID + ".service-registrar"
     for relative, identifier in targets.items():
         target = contents / relative
         require(target.is_file() and os.access(target, os.X_OK), f"Missing executable: {relative}")

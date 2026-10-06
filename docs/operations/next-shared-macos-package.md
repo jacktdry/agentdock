@@ -60,25 +60,43 @@ The destination is fixed from the current account's home directory to
 Next bundle is required. Stable/system destinations, symlinks, hardlinked bundle
 files, wrong metadata/helper/signing identities and writable-by-others
 destination directories are refused. The source must also prove it is the Next
-Wails production build. A validated private sibling copy is atomically exchanged
-with the existing bundle using macOS `RENAME_SWAP`. The previous Next bundle is
-retained at the printed backup path. Failure before the exchange leaves the
-installed app intact. Coordinate writers externally; the helper is not a service
+Wails production build. To preserve the existing SMAppService parent-bundle
+binding, the installer keeps the top-level `AgentDock Next.app` directory (and
+its inode) in place and atomically exchanges only its signed `Contents`
+directory with a validated private sibling copy using macOS `RENAME_SWAP`.
+The previous Next `Contents` directory is retained at the printed backup path.
+Post-swap signature/product validation failure automatically swaps the old
+contents back. Coordinate writers externally; the helper is not a service
 manager or a defense against a malicious process running as the same user.
 
 This command does not launch, stop, restart, register, or unregister anything.
 It does not modify runtime configuration, credentials, or service state. Its
 installation entrypoint is not executed by the fixture suite.
 
+A Shared package also contains the narrowly scoped native
+`Contents/MacOS/AgentDockServiceRegistrar`. It is Next-only: the helper refuses
+any bundle whose identifier / variant is not `dev.dropabit.agentdock.next` /
+`next`. After replacing `Contents`, an already registered Core may still be
+bound to the previous helper code requirement. The authorized live migration
+step is therefore:
+
+```sh
+"$HOME/Applications/AgentDock Next.app/Contents/MacOS/AgentDockServiceRegistrar" reregister core
+```
+
+A successful call prints `enabled`; exit status 3 means macOS requires the user
+to approve the background item. Do not run this against stable AgentDock. Tunnel
+re-registration is separate and should only be used when the Next-owned Tunnel
+was already intended to be enabled.
+
 ## Native and live gates
 
-Shared Desktop still cannot register SMAppService or install/apply updates.
-Existing capability/unavailable responses remain authoritative. The native
-AppKit fallback remains in the repository; use separately authorized native
-workflows for registration. An already registered Next service can be evaluated
-only in later main-session live validation. Successful build/signature checks
-do not establish service registration continuity, GUI usability, or connector
-readiness.
+Shared Desktop still does not expose SMAppService registration or install/apply
+updates through its normal Vue UI. Existing capability/unavailable responses
+remain authoritative. The native AppKit fallback remains in the repository,
+and the packaged registrar exists only as a bounded native migration adapter.
+Successful build/signature checks do not by themselves establish service
+registration continuity, GUI usability, or connector readiness.
 
 Cloudflare provisioning is excluded. The later gate requires a dedicated Next
 Named Tunnel, hostname, token and route to port 8767. Follow

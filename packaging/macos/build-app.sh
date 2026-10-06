@@ -5,6 +5,7 @@ ROOT_DIR="${0:A:h:h:h}"
 SOURCE_DIR="$ROOT_DIR/desktop/macos/AgentDockApp/Sources"
 LOCALIZATION_DIR="$ROOT_DIR/desktop/macos/AgentDockApp/Resources"
 LOGIN_HELPER_SOURCE="$ROOT_DIR/desktop/macos/AgentDockLoginHelper/main.swift"
+SERVICE_REGISTRAR_SOURCE="$ROOT_DIR/desktop/macos/AgentDockServiceRegistrar/main.swift"
 OUTPUT_DIR="${AGENTDOCK_MACOS_APP_OUTPUT_DIR:-$ROOT_DIR/dist/macos-app}"
 ARCH_LIST="${AGENTDOCK_MACOS_ARCHES:-$(uname -m)}"
 OFFLINE_PAYLOAD_DIR="${AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR:-}"
@@ -18,6 +19,9 @@ if [[ -n "$SHARED_EXECUTABLE" ]]; then
     print -u2 -- "Shared executable requires Next arm64 and a regular file"; exit 1
   }
   [[ "$(file "$SHARED_EXECUTABLE")" == *"Mach-O 64-bit executable arm64"* ]] || exit 1
+  [[ -f "$SERVICE_REGISTRAR_SOURCE" && ! -L "$SERVICE_REGISTRAR_SOURCE" ]] || {
+    print -u2 -- "Shared executable requires the native service registrar source"; exit 1
+  }
 fi
 if [[ "${1:-}" == "--metadata-only" ]]; then
   [[ $# == 2 ]] || { print -u2 -- "Usage: build-app.sh --metadata-only OUTPUT"; exit 1; }
@@ -111,6 +115,7 @@ IFS=',' read -rA architectures <<< "$ARCH_LIST"
 (( ${#architectures[@]} > 0 )) || die "没有可构建的架构"
 compiled_binaries=()
 login_helper_binaries=()
+service_registrar_binaries=()
 release_architectures=()
 for architecture in "${architectures[@]}"; do
   architecture="${architecture//[[:space:]]/}"
@@ -147,6 +152,12 @@ for architecture in "${architectures[@]}"; do
     "$LOGIN_HELPER_SOURCE" \
     -o "$login_helper"
   login_helper_binaries+=("$login_helper")
+
+  if [[ -n "$SHARED_EXECUTABLE" ]]; then
+    service_registrar="$TMP_DIR/AgentDockServiceRegistrar-$architecture"
+    xcrun swiftc       -swift-version 5       -O       -whole-module-optimization       -target "$architecture-apple-macosx$MIN_VERSION"       -sdk "$SDK_PATH"       "$SERVICE_REGISTRAR_SOURCE"       -o "$service_registrar"
+    service_registrar_binaries+=("$service_registrar")
+  fi
 done
 
 APP_DIR="$OUTPUT_DIR/$APP_BUNDLE_NAME"
@@ -156,6 +167,7 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 HELPERS_DIR="$CONTENTS_DIR/Helpers"
 LAUNCH_AGENTS_DIR="$CONTENTS_DIR/Library/LaunchAgents"
 MENU_LOGIN_HELPER="$HELPERS_DIR/AgentDockLoginHelper"
+SERVICE_REGISTRAR="$MACOS_DIR/AgentDockServiceRegistrar"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$HELPERS_DIR" "$LAUNCH_AGENTS_DIR"
 localization_count=0
 while IFS= read -r -d '' source_lproj; do
@@ -179,6 +191,15 @@ else
   lipo -create "${login_helper_binaries[@]}" -output "$MENU_LOGIN_HELPER"
 fi
 chmod 0755 "$MENU_LOGIN_HELPER"
+
+if (( ${#service_registrar_binaries[@]} == 1 )); then
+  cp -p "$service_registrar_binaries[1]" "$SERVICE_REGISTRAR"
+elif (( ${#service_registrar_binaries[@]} > 1 )); then
+  lipo -create "${service_registrar_binaries[@]}" -output "$SERVICE_REGISTRAR"
+fi
+if (( ${#service_registrar_binaries[@]} > 0 )); then
+  chmod 0755 "$SERVICE_REGISTRAR"
+fi
 
 ICONSET_DIR="$TMP_DIR/AgentDock.iconset"
 mkdir -p "$ICONSET_DIR"
@@ -315,6 +336,9 @@ sign_macos_code "$LOGIN_SIGN_ID" "$MENU_LOGIN_HELPER"
 sign_macos_code "$CORE_LABEL" "$HELPERS_DIR/agentdock"
 sign_macos_code "$CLOUDFLARED_SIGN_ID" "$HELPERS_DIR/cloudflared"
 sign_macos_code "$ARBITER_SIGN_ID" "$HELPERS_DIR/agentdock-arbiter"
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  sign_macos_code "$REGISTRAR_SIGN_ID" "$SERVICE_REGISTRAR"
+fi
 # 嵌套代码先分别签名，再签外层 App。不要用 --deep 做签名操作，否则会重新签
 # Core/cloudflared 并破坏它们的稳定代码身份；--deep 只用于最终递归验证。
 sign_macos_code "$BUNDLE_ID" "$APP_DIR"

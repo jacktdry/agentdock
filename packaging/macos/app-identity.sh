@@ -28,6 +28,7 @@ MENU_LABEL="$BUNDLE_ID.menu-login"
 LOGIN_SIGN_ID="$BUNDLE_ID.login-helper"
 CLOUDFLARED_SIGN_ID="$BUNDLE_ID.cloudflared"
 ARBITER_SIGN_ID="$BUNDLE_ID.arbiter"
+REGISTRAR_SIGN_ID="$BUNDLE_ID.service-registrar"
 ZIP_NAME="$ARTIFACT_PREFIX-macos-universal.zip"
 DMG_NAME="$ARTIFACT_PREFIX-macos-universal.dmg"
 
