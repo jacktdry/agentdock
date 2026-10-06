@@ -203,12 +203,12 @@ func TestDispatchMCPManagePreservesOnlyProvidedFields(t *testing.T) {
 	_, err := Dispatch(context.Background(), runtime, Request{
 		Method: "POST",
 		Path:   "/internal/runtime/mcp",
-		Body:   []byte(`{"action":"add","name":"demo","transport":"stdio","args":[]}`),
+		Body:   []byte(`{"action":"add","name":"demo","transport":"stdio","protocol_version":"2025-11-25","args":[]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{"action": "add", "name": "demo", "transport": "stdio", "args": []string{}}
+	want := map[string]any{"action": "add", "name": "demo", "transport": "stdio", "protocol_version": "2025-11-25", "args": []string{}}
 	if !reflect.DeepEqual(runtime.mcpArgs, want) {
 		t.Fatalf("MCP args = %#v, want %#v", runtime.mcpArgs, want)
 	}

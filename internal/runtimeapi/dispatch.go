@@ -219,21 +219,22 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 }
 
 type runtimeMCPRequest struct {
-	Action      string            `json:"action"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Transport   string            `json:"transport"`
-	URL         string            `json:"url"`
-	Command     string            `json:"command"`
-	Args        []string          `json:"args"`
-	Cwd         string            `json:"cwd"`
-	HeaderEnv   map[string]string `json:"header_env"`
-	EnvFromEnv  map[string]string `json:"env_from_env"`
-	Enabled     *bool             `json:"enabled"`
-	TimeoutMS   int               `json:"timeout_ms"`
-	Key         string            `json:"key"`
-	Value       *string           `json:"value"`
-	CallbackID  string            `json:"callback_id"`
+	Action          string            `json:"action"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Transport       string            `json:"transport"`
+	ProtocolVersion string            `json:"protocol_version"`
+	URL             string            `json:"url"`
+	Command         string            `json:"command"`
+	Args            []string          `json:"args"`
+	Cwd             string            `json:"cwd"`
+	HeaderEnv       map[string]string `json:"header_env"`
+	EnvFromEnv      map[string]string `json:"env_from_env"`
+	Enabled         *bool             `json:"enabled"`
+	TimeoutMS       int               `json:"timeout_ms"`
+	Key             string            `json:"key"`
+	Value           *string           `json:"value"`
+	CallbackID      string            `json:"callback_id"`
 }
 
 var runtimeMCPManageActions = map[string]bool{
@@ -274,6 +275,9 @@ func decodeRuntimeMCPRequest(body []byte) (map[string]any, error) {
 	}
 	if request.Transport != "" {
 		args["transport"] = request.Transport
+	}
+	if request.ProtocolVersion != "" {
+		args["protocol_version"] = request.ProtocolVersion
 	}
 	if request.URL != "" {
 		args["url"] = request.URL
