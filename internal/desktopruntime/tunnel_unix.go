@@ -5,6 +5,8 @@ package desktopruntime
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -170,6 +172,26 @@ func platformTunnelAction(ctx context.Context, runtimeRoot, action string) error
 	})
 }
 
+func ensureOAuthCredentialsUnix(core map[string]string) error {
+	for _, credential := range []struct {
+		name  string
+		bytes int
+	}{
+		{name: "AGENTDOCK_OAUTH_PASSWORD", bytes: 12},
+		{name: "AGENTDOCK_OAUTH_TOKEN_SECRET", bytes: 32},
+	} {
+		if strings.TrimSpace(core[credential.name]) != "" {
+			continue
+		}
+		raw := make([]byte, credential.bytes)
+		if _, err := rand.Read(raw); err != nil {
+			return fmt.Errorf("generate %s: %w", credential.name, err)
+		}
+		core[credential.name] = hex.EncodeToString(raw)
+	}
+	return nil
+}
+
 func validateNamedPortUnix(core map[string]string) error {
 	port, err := strconv.Atoi(core["AGENTDOCK_PORT"])
 	if core["AGENTDOCK_PORT"] == "" {
@@ -235,6 +257,11 @@ func platformConfigureTunnel(ctx context.Context, request TunnelConfigureRequest
 		}
 		values := map[string]string{"AGENTDOCK_TUNNEL_MODE": request.Mode}
 		delete(core, "AGENTDOCK_SERVER_URL")
+		if request.Mode == "quick" || request.Mode == "named" {
+			if err := ensureOAuthCredentialsUnix(core); err != nil {
+				return err
+			}
+		}
 		core["AGENTDOCK_OAUTH_ENABLED"] = tunnelBool(request.Mode == "named")
 		if request.Mode == "quick" {
 			values["AGENTDOCK_TUNNEL_TARGET"] = strings.TrimSuffix(healthURL(core), "/healthz")

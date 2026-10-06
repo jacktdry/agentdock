@@ -94,11 +94,39 @@ func TestTunnelConfigurePreservesStoppedServicesAndInvalidatesQuickURL(t *testin
 			if core["AGENTDOCK_OAUTH_ENABLED"] != tunnelBool(mode == "named") {
 				t.Fatal("invalid intermediate OAuth state")
 			}
+			if mode == "quick" || mode == "named" {
+				if len(core["AGENTDOCK_OAUTH_PASSWORD"]) != 24 || len(core["AGENTDOCK_OAUTH_TOKEN_SECRET"]) != 64 {
+					t.Fatal("public tunnel configuration did not provision OAuth credentials")
+				}
+			}
 			gen, err := TunnelGeneration(root)
 			if err != nil || gen == "" {
 				t.Fatal("configuration generation absent")
 			}
 		})
+	}
+}
+
+func TestTunnelConfigurePreservesExistingOAuthCredentials(t *testing.T) {
+	root, manifest, _ := tunnelStoppedFixture(t)
+	core, err := envstore.ParseFile(manifest.EnvironmentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	core["AGENTDOCK_OAUTH_PASSWORD"] = "existing-password"
+	core["AGENTDOCK_OAUTH_TOKEN_SECRET"] = "existing-signing-secret"
+	if err := writeEnvironment(manifest.EnvironmentFile, core); err != nil {
+		t.Fatal(err)
+	}
+	if err := platformConfigureTunnel(context.Background(), TunnelConfigureRequest{RuntimeRoot: root, Mode: "quick"}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := envstore.ParseFile(manifest.EnvironmentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after["AGENTDOCK_OAUTH_PASSWORD"] != "existing-password" || after["AGENTDOCK_OAUTH_TOKEN_SECRET"] != "existing-signing-secret" {
+		t.Fatal("existing OAuth credentials were rotated")
 	}
 }
 
