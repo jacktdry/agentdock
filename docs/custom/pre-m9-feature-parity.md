@@ -1,10 +1,12 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 repository implementation + verification complete；STOP at P3 user connector gate（2026-10-06）**
+> 狀態：**P1/P2 deployed + live readiness validated；dedicated Next Named Tunnel ready；STOP at P3 user connector gate（2026-10-06）**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
-> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。P1/P2 現在依 contract 停在 **P3：由使用者手動建立 `mac-dev-next`**；不得自動進 Wave 3 或 M9。
+> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。2026-10-06 又完成實際 Next deployment/readiness hardening：Codex launchd resolution `6a3dac19`、Shared macOS package `2dc80377`、SMAppService update/constraint handling `63730804` / `821d7e64` / `884f158d`、macOS port ownership cgo gate `6fac35b2`、public-access OAuth provisioning `82251a3a`、live Core health reporting `36683aec`。P1/P2 現在依 contract 停在 **P3：由使用者手動建立 `mac-dev-next`**；不得自動進 Wave 3 或 M9。
+>
+> Live readiness（2026-10-06）：`AgentDock Next.app` 使用 Shared Desktop，Next Core 維持 `127.0.0.1:8767`；獨立 Cloudflare Named Tunnel `mac-dev-next` 與 `mac-dev-next.dropabit.dev` 已建立並健康連線，remote ingress 明確指向 `http://localhost:8767`，Public MCP URL 為 `https://mac-dev-next.dropabit.dev/mcp`。OAuth discovery metadata 與 unauthenticated MCP challenge 已由 public HTTPS 實測通過；Next OAuth / Tunnel credentials 僅存於 Next-owned private state，文件不記錄 secret。stable `mac-dev.dropabit.dev`、stable tunnel、stable Core `8765` 未變更。
 
 ## 為什麼需要這一層
 

@@ -4,7 +4,7 @@ Backend integration originated on `feature/pre-m9-wave1-integration` and is now
 integrated into `feature/m8-permission-approval`. The frozen contract remains
 [Wave 0](pre-m9-wave0-contract.md); runtime boundaries remain
 [Next isolation](agentdock-next-isolation.md). Shared Connection UI is now implemented
-under the same contract. **P1/P2 repository verification is complete; execution stops
+under the same contract. **P1/P2 repository verification plus Next-only live deployment/readiness are complete; execution stops
 at the user-owned `mac-dev-next` connector gate.**
 
 - Quick invalidation disables OAuth until the current generation publishes its
@@ -38,9 +38,11 @@ fixtures can replace it with their own temporary fake. Go cache is temporary.
 The sandbox denies temporary listener binding and some Swift executable fixture
 checks, so those suites require an approved unsandboxed run with the same masks.
 
-No live services, production listeners, connector/account setup, signed release
-installation, or UAT are validated. Windows and Linux Next service mutations
-remain unavailable without an authoritative supported identity adapter.
+The original Wave 1 fixture run did not validate live services, connector/account
+setup, or release-native UAT. A bounded **Next-only live readiness** pass was then
+performed on 2026-10-06 after packaging deployment; it does not convert the local
+ad-hoc artifact into release-native signed UAT. Windows and Linux Next service
+mutations remain unavailable without an authoritative supported identity adapter.
 
 Verification completed on repository fixtures:
 
@@ -54,6 +56,17 @@ Verification completed on repository fixtures:
   `desktopruntime`: pass;
 - Shared Desktop frontend: `pnpm test` **70/70 pass**;
 - Shared Desktop frontend: `pnpm build:dev` passes Vue typecheck and Vite development build.
+
+## Next-only live readiness — 2026-10-06
+
+- Shared Desktop was packaged and installed as `~/Applications/AgentDock Next.app` with bundle id `dev.dropabit.agentdock.next`; stable `/Applications/AgentDock.app` was not replaced or restarted.
+- Next Core runs under `dev.dropabit.agentdock.next.core` on `127.0.0.1:8767`. The macOS package now builds Core with cgo because the Darwin ownership probe requires `libproc`; a non-cgo Core fails closed instead of authorizing a mutation.
+- Public access now provisions missing Next OAuth password/signing credentials transactionally before enabling OAuth; existing credentials are preserved.
+- In-place SMAppService updates verify actual launchd running state and perform one bounded retry if macOS still enforces the previous helper launch constraint.
+- Dedicated Cloudflare Named Tunnel `mac-dev-next` uses `mac-dev-next.dropabit.dev` and remote ingress `http://localhost:8767`. The tunnel is healthy with active connections; its token is stored only in the Next-owned private runtime state.
+- Public HTTPS checks pass for `/healthz`, protected-resource metadata, authorization-server metadata, and the expected unauthenticated `/mcp` 401 challenge. Public MCP URL is `https://mac-dev-next.dropabit.dev/mcp`.
+- Stable `mac-dev.dropabit.dev`, its Cloudflare tunnel/DNS, stable Core `8765`, App binaries, and live service remained unchanged throughout this pass.
+- `mac-dev-next` is still **not** created automatically. The next step remains the user-owned ChatGPT connector action, followed by side-by-side validation.
 
 ## Native installer concurrency debt
 
