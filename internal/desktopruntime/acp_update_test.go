@@ -5,14 +5,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+type acpRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn acpRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
 
 func prepareTrustedAntigravityTarget(t *testing.T, home string) string {
 	t.Helper()
@@ -118,6 +126,28 @@ func TestCheckACPProfileUpdateRejectsSharedOrUnmanagedTargets(t *testing.T) {
 	}
 	if external.BlockedReason != "update_target_not_next_owned" || external.Supported {
 		t.Fatalf("external update = %#v", external)
+	}
+}
+
+func TestDownloadACPAssetRejectsFinalRedirectHost(t *testing.T) {
+	client := &http.Client{Transport: acpRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		finalRequest := request.Clone(request.Context())
+		finalURL, err := url.Parse("https://evil.example/asset")
+		if err != nil {
+			return nil, err
+		}
+		finalRequest.URL = finalURL
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(strings.NewReader("payload")),
+			Request:    finalRequest,
+			Header:     make(http.Header),
+		}, nil
+	})}
+	_, err := downloadACPAsset(context.Background(), client, "https://github.com/asset", []string{"github.com"}, 1024)
+	if err == nil || !strings.Contains(err.Error(), "untrusted host") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

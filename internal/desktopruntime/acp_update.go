@@ -62,6 +62,7 @@ func DefaultACPUpdateSource() ACPUpdateSource {
 			"github.com",
 			"objects.githubusercontent.com",
 			"github-releases.githubusercontent.com",
+			"release-assets.githubusercontent.com",
 		},
 	}
 }
@@ -148,7 +149,7 @@ func ApplyACPProfileUpdate(ctx context.Context, client *http.Client, source ACPU
 	if client == nil {
 		client = &http.Client{Timeout: 2 * time.Minute}
 	}
-	data, err := downloadACPAsset(ctx, client, update.AssetURL, maxACPAdapterAssetBytes)
+	data, err := downloadACPAsset(ctx, client, update.AssetURL, source.AllowedAssetHosts, maxACPAdapterAssetBytes)
 	if err != nil {
 		return err
 	}
@@ -223,7 +224,7 @@ func fetchACPRelease(ctx context.Context, client *http.Client, endpoint string) 
 	return release, response.StatusCode, nil
 }
 
-func downloadACPAsset(ctx context.Context, client *http.Client, rawURL string, limit int64) ([]byte, error) {
+func downloadACPAsset(ctx context.Context, client *http.Client, rawURL string, allowedHosts []string, limit int64) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -234,6 +235,9 @@ func downloadACPAsset(ctx context.Context, client *http.Client, rawURL string, l
 		return nil, err
 	}
 	defer response.Body.Close()
+	if response.Request == nil || response.Request.URL == nil || !allowedACPAssetURL(response.Request.URL.String(), allowedHosts) {
+		return nil, errors.New("ACP adapter asset redirected to an untrusted host")
+	}
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ACP adapter asset returned %s", response.Status)
 	}

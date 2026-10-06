@@ -161,7 +161,7 @@ export const useACPStore = defineStore('acp', () => {
 
   async function useDetectedAdapter(profileId: string) {
     const profile = settings.value?.profiles?.find(item => item.id === profileId)
-    if (!profile?.detectedCommand) return false
+    if (!profile?.detectedCommand || profile.protectedArgs) return false
     return upsertProfile({
       ...editableProfile(profile),
       command: profile.detectedCommand,

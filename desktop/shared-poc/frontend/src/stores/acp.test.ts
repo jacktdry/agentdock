@@ -305,6 +305,23 @@ describe('ACP adapter probe', () => {
     }])
   })
 
+  it('refuses useDetectedAdapter when arguments are protected', async () => {
+    const protectedConfigured: ACPManagerSnapshot = {
+      ...configured,
+      profiles: [{
+        ...configured.profiles![0],
+        protectedArgs: true,
+        detectedCommand: '/opt/homebrew/bin/codex-acp',
+        detectedArgs: [],
+      }],
+    }
+    mocks.settings.mockResolvedValue(protectedConfigured)
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.useDetectedAdapter('codex')).toBe(false)
+    expect(mocks.saveSettings).not.toHaveBeenCalled()
+  })
+
   it('maps rejected probe calls to a safe client error', async () => {
     mocks.settings.mockResolvedValue(configured)
     mocks.probe.mockRejectedValue(new Error('Bearer private'))

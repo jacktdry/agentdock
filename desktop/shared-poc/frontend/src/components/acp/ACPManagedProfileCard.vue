@@ -51,7 +51,7 @@ const blockedKey = () => {
   default: return ''
   }
 }
-const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
+const hasDifferentDetectedAdapter = () => !props.profile.protectedArgs && !!props.profile.detectedCommand && (
   props.profile.detectedCommand !== props.profile.configuredCommand ||
   JSON.stringify(props.profile.detectedArgs ?? []) !== JSON.stringify(props.profile.configuredArgs ?? [])
 )
