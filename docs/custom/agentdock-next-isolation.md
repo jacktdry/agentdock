@@ -17,6 +17,7 @@ Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service own
 ## 不可破壞的 invariants
 
 - Next 開發不得檢查、修改、重啟、停止、替換或寫入 `/Applications/AgentDock.app`、目前 stable AgentDock Core、`~/.agentdock`、stable Memory registry 或 live launchd services；stable 不得作 development target。
+- **Stable `mac-dev` 是 Next 開發與維護的唯一 mutation control plane**：凡是修改 Next repository、build/package、安裝或替換 `AgentDock Next.app`、註冊／重啟 Next services、Tunnel／runtime mutation 與修復操作，一律由仍可用的 stable `mac-dev` 執行。`mac-dev-next`（目前 ChatGPT 顯示為 `macbook-air-m3`）只作 Next connector / runtime / side-by-side 驗證目標，不得用來修改、重編譯、重裝或修復自己；若 stable control plane 不可用則停止 live mutation，而不是改由 Next 自我維護。
 - Next 的 start / stop / restart、settings、diagnostics、tunnel、login item、ACP / Browser cleanup 及 installer / self-update 只可操作可證明為 Next-owned 的目標。禁止全域 kill、按 app basename 猜測 ownership、清除 stable children 或接管使用者 browser。
 - Core network namespace 不可混用：stable default `8765`、shared Memory `8766`、Next default `8767`。Next 不允許選用 stable/Memory reserved port；任何自訂 port 在 apply/start 前要做 ownership-aware occupancy preflight，無法證明為 Next-owned 的既有 listener 一律視為 conflict。
 - 不從 stable state 原地轉換、搬移或建立可寫 symlink；Next 不因缺少 state/config 而讀寫 stable fallback。明確 Next namespaces 未建立前，不啟動 runtime / service 實驗。
