@@ -1,4 +1,5 @@
 """Read-only validation shared by the Next package check and explicit installer."""
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -77,8 +78,17 @@ def validate_bundle(path, *, shared=False, signatures=True):
     if signatures:
         subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(path)], check=True)
     if shared:
-        # Inspect build metadata without launching any bundled executable.
+        marker_path = contents / "Resources/desktop-product.json"
+        require(marker_path.is_file(), "Missing Shared Desktop product marker")
+        marker = json.loads(marker_path.read_text())
+        require(marker == {
+            "schema_version": 1,
+            "product_name": NAME,
+            "desktop_variant": "next",
+            "ui": "shared-wails",
+        }, "Invalid Shared Desktop product marker")
+        # Inspect Go module/build metadata without launching the bundled executable.
         metadata = subprocess.check_output(["go", "version", "-m", str(contents / "MacOS/AgentDock")], text=True)
-        for marker in ("github.com/wailsapp/wails/v3", "main.desktopVariant=next", "main.productName=AgentDock Next", "production"):
-            require(marker in metadata, f"Missing Shared Desktop build marker: {marker}")
+        require("github.com/wailsapp/wails/v3" in metadata, "Missing Wails Shared Desktop dependency")
+        require("	build	-tags=production" in metadata, "Shared Desktop executable is not a production build")
     return path

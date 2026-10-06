@@ -281,6 +281,13 @@ find "$CORE_SKILL_BUNDLE" -type f -exec chmod 0644 {} +
 
 write_app_metadata "$CONTENTS_DIR"
 
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  cat > "$RESOURCES_DIR/desktop-product.json" <<JSON
+{"schema_version":1,"product_name":"$APP_NAME","desktop_variant":"$APP_VARIANT","ui":"shared-wails"}
+JSON
+  chmod 0644 "$RESOURCES_DIR/desktop-product.json"
+fi
+
 sign_macos_code() {
   local identifier="$1"
   local target="$2"

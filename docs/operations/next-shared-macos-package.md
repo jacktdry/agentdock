@@ -33,8 +33,7 @@ Next, forces `AGENTDOCK_DESKTOP_VARIANT=next` before desktop services are create
 and isolates shell preferences under the Next runtime root. It accepts the
 existing login helper's `--background` argument. The metadata and signing
 identifiers come from `app-identity.sh`; helper paths and service labels match
-the native Next package. The script verifies signatures and inspects Go build
-metadata without launching the app or any bundled helper.
+the native Next package. The script writes a signed `Resources/desktop-product.json` marker for the Shared/Next identity, verifies signatures, and inspects Go build metadata without launching the app or any bundled helper.
 
 ```sh
 python3 scripts/test/test-next-shared-package.py
