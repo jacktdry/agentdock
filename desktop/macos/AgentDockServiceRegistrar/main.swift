@@ -67,6 +67,12 @@ do {
         guard waitUntilUnregistered(service) else {
             fail("Background service did not converge to the unregistered state.", code: EX_TEMPFAIL)
         }
+        // SMAppService can report .notRegistered before backgroundtaskmanagementd
+        // finishes invalidating the previous launch constraint. Registering again
+        // too early may leave launchd with the old helper CDHash and produce an
+        // OS_REASON_CODESIGNING launch-constraint failure. Give that asynchronous
+        // invalidation one bounded settle window before registering the new helper.
+        Thread.sleep(forTimeInterval: 6.0)
     case .notRegistered, .notFound:
         break
     @unknown default:
