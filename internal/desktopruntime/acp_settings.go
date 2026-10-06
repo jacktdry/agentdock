@@ -62,7 +62,7 @@ func acpSettingsFromEnvironment(values map[string]string) (ACPSettings, error) {
 		}
 		return acpSettingsFromProfiles(enabled, profiles, values["AGENTDOCK_ACP_DEFAULT_PROFILE"]), nil
 	}
-	if !enabled {
+	if !enabled && strings.TrimSpace(values["AGENTDOCK_ACP_AGENT"]) == "" && strings.TrimSpace(values["AGENTDOCK_ACP_COMMAND"]) == "" {
 		return ACPSettings{Enabled: false, Profiles: []ACPProfileSettings{}}, nil
 	}
 	agent := strings.TrimSpace(values["AGENTDOCK_ACP_AGENT"])
@@ -82,5 +82,5 @@ func acpSettingsFromEnvironment(values map[string]string) (ACPSettings, error) {
 		}
 	}
 	profiles := []agentconfig.ACPProfile{{ID: agent, Kind: kind, Command: strings.TrimSpace(values["AGENTDOCK_ACP_COMMAND"]), Args: args, Enabled: true}}
-	return acpSettingsFromProfiles(true, profiles, agent), nil
+	return acpSettingsFromProfiles(enabled, profiles, agent), nil
 }

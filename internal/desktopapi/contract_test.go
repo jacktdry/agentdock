@@ -46,18 +46,22 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 	}
 
 	acpCapability := seen[DomainACP]
-	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 3 {
+	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 5 {
 		t.Fatalf("ACP capability = %#v", acpCapability)
 	}
 	for _, operation := range acpCapability.Operations {
 		switch operation.Name {
-		case "status":
+		case "status", "settings":
 			if operation.Access != AccessRead || operation.RequiresConfirmation {
 				t.Fatal("ACP status must be read-only")
 			}
 		case "close", "updateLifecycle":
 			if operation.Access != AccessMutating || !operation.RequiresConfirmation {
 				t.Fatal("ACP mutation requires confirmation")
+			}
+		case "saveSettings":
+			if operation.Access != AccessMutating || operation.RequiresConfirmation {
+				t.Fatal("ACP settings save must preserve sessions without a restart confirmation")
 			}
 		default:
 			t.Fatalf("unexpected ACP operation: %q", operation.Name)

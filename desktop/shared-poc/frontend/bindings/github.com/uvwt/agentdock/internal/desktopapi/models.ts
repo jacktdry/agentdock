@@ -44,6 +44,35 @@ export interface ACPLifecycleUpdate {
     "idleCloseAfterMs"?: number;
 }
 
+/**
+ * Command/args are explicit local Desktop configuration fields. Environment
+ * mappings and raw persistence documents never cross this API boundary.
+ */
+export interface ACPManagedProfile {
+    "id": string;
+    "displayName"?: string;
+    "runtimeKind": string;
+    "preset": string;
+    "source": string;
+    "enabled": boolean;
+    "configuredCommand"?: string;
+    "configuredArgs": string[] | null;
+    "availability": string;
+    "versionState": string;
+    "canDetect": boolean;
+    "canUpdate": boolean;
+    "blockedReason"?: string;
+}
+
+export interface ACPManagerSnapshot {
+    "revision": string;
+    "enabled": boolean;
+    "defaultProfile": string;
+    "profiles": ACPManagedProfile[] | null;
+    "capabilities": OperationCapability[] | null;
+    "error"?: APIError | null;
+}
+
 export interface ACPMemoryStatus {
     "endpoint": string;
     "healthy": boolean;
@@ -111,6 +140,16 @@ export interface ACPSessionLifecycle {
     "closedReason"?: string;
     "autoCloseAttemptedAt"?: string | null;
     "autoCloseError"?: string;
+}
+
+export interface ACPSettingsMutationResult {
+    "completed": boolean;
+    "persisted": boolean;
+    "applied": boolean;
+    "restartRequired": boolean;
+    "runtimeImpact": string;
+    "snapshot"?: ACPManagerSnapshot | null;
+    "error"?: APIError | null;
 }
 
 export interface ACPStatusResult {

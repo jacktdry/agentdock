@@ -465,6 +465,17 @@ func (c *Config) normalizeACP() error {
 }
 
 func (c *Config) normalizeACPProfiles() error {
+	return c.normalizeACPProfileConfiguration(true, true)
+}
+
+// ValidateACPSettings validates the complete persisted inventory, including
+// disabled profiles, without the runtime's implicit default selection.
+func ValidateACPSettings(enabled bool, defaultProfile string, profiles []ACPProfile) error {
+	c := Config{ACPEnabled: enabled, ACPDefaultProfile: defaultProfile, ACPProfiles: append([]ACPProfile(nil), profiles...)}
+	return c.normalizeACPProfileConfiguration(enabled, false)
+}
+
+func (c *Config) normalizeACPProfileConfiguration(requireEnabled, selectDefault bool) error {
 	seen := make(map[string]struct{}, len(c.ACPProfiles))
 	enabled := make(map[string]struct{}, len(c.ACPProfiles))
 	firstEnabled := ""
@@ -511,6 +522,13 @@ func (c *Config) normalizeACPProfiles() error {
 		if !profile.Enabled {
 			continue
 		}
+		enabled[profile.ID] = struct{}{}
+		if firstEnabled == "" {
+			firstEnabled = profile.ID
+		}
+		if !requireEnabled {
+			continue
+		}
 		if profile.Command == "" {
 			return fmt.Errorf("enabled ACP profile %q requires a command", profile.ID)
 		}
@@ -524,18 +542,17 @@ func (c *Config) normalizeACPProfiles() error {
 		if err := validateACPCommandPlatform(profile.Command, info); err != nil {
 			return fmt.Errorf("ACP profile %q: %w", profile.ID, err)
 		}
-		enabled[profile.ID] = struct{}{}
-		if firstEnabled == "" {
-			firstEnabled = profile.ID
-		}
 	}
 
-	if len(enabled) == 0 {
+	if requireEnabled && len(enabled) == 0 {
 		return errors.New("AGENTDOCK_ACP_PROFILES_JSON must contain at least one enabled ACP profile")
 	}
 	c.ACPDefaultProfile = strings.TrimSpace(c.ACPDefaultProfile)
-	if c.ACPDefaultProfile == "" {
+	if c.ACPDefaultProfile == "" && selectDefault {
 		c.ACPDefaultProfile = firstEnabled
+	}
+	if c.ACPDefaultProfile == "" && !requireEnabled {
+		return nil
 	}
 	if _, exists := enabled[c.ACPDefaultProfile]; !exists {
 		return fmt.Errorf("AGENTDOCK_ACP_DEFAULT_PROFILE must reference an enabled ACP profile: %q", c.ACPDefaultProfile)

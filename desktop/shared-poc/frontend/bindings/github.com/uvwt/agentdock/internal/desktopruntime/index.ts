@@ -7,6 +7,7 @@ export {
 } from "./models.js";
 
 export type {
+    ACPProfileSettings,
     PortObservation,
     TunnelObservation
 } from "./models.js";

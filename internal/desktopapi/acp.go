@@ -130,17 +130,19 @@ type ACPMutationResult struct {
 }
 
 type ACPService struct {
-	runtimeRoot  string
-	rootError    error
-	readSettings func(context.Context, string) (desktopruntime.ACPSettings, error)
-	readAccess   func(context.Context, string) (desktopruntime.LocalCoreAccess, error)
-	call         func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
-	memoryURL    string
+	runtimeRoot       string
+	rootError         error
+	readSettings      func(context.Context, string) (desktopruntime.ACPSettings, error)
+	readConfiguration func(context.Context, string) (desktopruntime.ACPConfiguration, error)
+	saveConfiguration func(context.Context, string, string, desktopruntime.ACPSettings) (desktopruntime.ACPConfiguration, error)
+	readAccess        func(context.Context, string) (desktopruntime.LocalCoreAccess, error)
+	call              func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
+	memoryURL         string
 }
 
 func NewACPService(root string) *ACPService {
 	root, err := resolveRuntimeRoot(root)
-	return &ACPService{runtimeRoot: root, rootError: err, readSettings: desktopruntime.ReadACPSettings, readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool, memoryURL: defaultSharedMemoryMCPURL}
+	return &ACPService{runtimeRoot: root, rootError: err, readSettings: desktopruntime.ReadACPSettings, readConfiguration: desktopruntime.ReadACPConfiguration, saveConfiguration: desktopruntime.SaveACPSettings, readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool, memoryURL: defaultSharedMemoryMCPURL}
 }
 
 func (s *ACPService) Status(ctx context.Context) ACPStatusResult {

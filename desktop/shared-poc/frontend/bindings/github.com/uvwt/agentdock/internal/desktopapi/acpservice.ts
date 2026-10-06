@@ -7,10 +7,29 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as desktopruntime$0 from "../desktopruntime/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 export function Close(profileID: string, sessionID: string): $CancellablePromise<$models.ACPMutationResult> {
     return $Call.ByID(2847673345, profileID, sessionID);
+}
+
+/**
+ * Profiles use the existing simplified configuration DTO (id, displayName,
+ * kind, command, args, enabled). An empty new ID is assigned by the backend.
+ */
+export function SaveSettings(expectedRevision: string, enabled: boolean, defaultProfile: string, profiles: desktopruntime$0.ACPProfileSettings[] | null): $CancellablePromise<$models.ACPSettingsMutationResult> {
+    return $Call.ByID(949748259, expectedRevision, enabled, defaultProfile, profiles);
+}
+
+/**
+ * Settings reads configuration only; it never probes Core, Memory or adapters.
+ */
+export function Settings(): $CancellablePromise<$models.ACPManagerSnapshot> {
+    return $Call.ByID(2707635558);
 }
 
 export function Status(): $CancellablePromise<$models.ACPStatusResult> {
