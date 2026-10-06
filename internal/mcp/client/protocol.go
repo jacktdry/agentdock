@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -117,11 +118,29 @@ func (c *sdkProtocolClient) transport() (mcpsdk.Transport, error) {
 			// access token，也会在真正发请求前被静态 Header 覆盖。
 			oauth = nil
 		}
-		httpClient := c.httpClient
-		if httpClient == nil {
-			httpClient = &http.Client{}
+		endpoint, err := url.Parse(c.cfg.URL)
+		if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+			return nil, errors.New("invalid MCP HTTP endpoint")
 		}
-		httpClient.Transport = headerRoundTripper{headers: headers}
+		// Copy the client so repeated setup cannot stack wrappers or mutate callers.
+		httpClient := &http.Client{}
+		if c.httpClient != nil {
+			*httpClient = *c.httpClient
+		}
+		previousRedirect := httpClient.CheckRedirect
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if !sameHTTPOrigin(endpoint, req.URL) {
+				return errMCPOriginRejected
+			}
+			if previousRedirect != nil {
+				return previousRedirect(req, via)
+			}
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		}
+		httpClient.Transport = headerRoundTripper{headers: headers, endpoint: endpoint, base: httpClient.Transport}
 		return &mcpsdk.StreamableClientTransport{
 			Endpoint:             c.cfg.URL,
 			HTTPClient:           httpClient,
@@ -289,6 +308,10 @@ func (c *sdkProtocolClient) wrapSDKError(operation string, err error) error {
 		return nil
 	}
 	details := map[string]any{"server": c.cfg.Name}
+	if errors.Is(err, errMCPOriginRejected) {
+		// net/http wraps redirect errors with the untrusted Location URL.
+		return newError("MCP_CONNECTION_FAILED", errMCPOriginRejected.Error(), false, details, errMCPOriginRejected)
+	}
 	var authRequired *oauthclient.AuthRequiredError
 	if errors.As(err, &authRequired) {
 		return newError("MCP_AUTH_REQUIRED", authRequired.Error(), false, details, err)
@@ -425,11 +448,35 @@ func resolveHTTPHeaders(cfg ServerConfig) (http.Header, error) {
 	return headers, nil
 }
 
+var errMCPOriginRejected = errors.New("MCP HTTP request to another origin rejected")
+
+func sameHTTPOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || a.Hostname() == "" || b.Hostname() == "" {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if p := u.Port(); p != "" {
+			return p
+		}
+		if strings.EqualFold(u.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
+}
+
 type headerRoundTripper struct {
-	headers http.Header
+	headers  http.Header
+	endpoint *url.URL
+	base     http.RoundTripper
 }
 
 func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	// Guard every dispatch, including SDK-originated requests, before adding secrets.
+	if !sameHTTPOrigin(t.endpoint, request.URL) {
+		return nil, errMCPOriginRejected
+	}
 	clone := request.Clone(request.Context())
 	clone.Header = request.Header.Clone()
 	for name, values := range t.headers {
@@ -438,7 +485,11 @@ func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 			clone.Header.Add(name, value)
 		}
 	}
-	return http.DefaultTransport.RoundTrip(clone)
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(clone)
 }
 
 type tailBuffer struct {
