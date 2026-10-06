@@ -5,7 +5,7 @@ integrated into `feature/m8-permission-approval`. The frozen contract remains
 [Wave 0](pre-m9-wave0-contract.md); runtime boundaries remain
 [Next isolation](agentdock-next-isolation.md). Shared Connection UI is now implemented
 under the same contract. **P1/P2 repository verification plus Next-only live deployment/readiness are complete; the user-owned
-Next connector has been created in ChatGPT as `macbook-air-m3`. Execution stops at the remaining stable/Next side-by-side validation gate.**
+Next connector has been created in ChatGPT as `macbook-air-m3`, and P3 stable/Next side-by-side validation completed on 2026-10-06. Wave 3 is now unblocked; M9 remains blocked on required parity plus hardening integration review.**
 
 - Quick invalidation disables OAuth until the current generation publishes its
   origin and enables OAuth in the same environment write. Real auth validation
@@ -69,7 +69,16 @@ Verification completed on repository fixtures:
 - The user manually created the Next ChatGPT connector; its current ChatGPT display name is `macbook-air-m3` while its logical role remains `mac-dev-next`.
 - Connector copy actions were corrected in `a7e92f2c` to use Wails native `Clipboard.SetText` instead of browser `navigator.clipboard`; Local MCP URL, Public MCP URL, and OAuth password copy now work in the desktop WebView.
 - Stable `mac-dev` is the only mutation control plane for Next repository changes, build/package, App replacement, service/tunnel mutation, and repair. `macbook-air-m3` is a validation target only and must not self-modify or self-reinstall.
-- The next step is stable `mac-dev` + Next `macbook-air-m3` side-by-side validation; Wave 3 stays blocked until it passes.
+- P3 side-by-side validation is complete. The next implementation stage is Wave 3 domain parity; all Next mutations still route through stable `mac-dev`, and M9 remains blocked until required parity plus hardening integration review completes.
+
+## P3 side-by-side closeout — 2026-10-06
+
+- Both ChatGPT connectors were callable in the same session. Stable reported `AGENTDOCK_HOME=/Users/wei/.agentdock` and default dir `/Users/wei/AgentDock`; Next reported `/Users/wei/.agentdock-next` and `/Users/wei/AgentDock Next`.
+- Task state is split between `~/.agentdock/tasks` and `~/.agentdock-next/tasks`. Stable MCP registry listed five stdio servers; Next listed only its `streamable_http` Memory entry.
+- Stable listened on `127.0.0.1:8765` from `/Applications/AgentDock.app/Contents/Helpers/agentdock`; Next listened on `127.0.0.1:8767` from `~/Applications/AgentDock Next.app/Contents/Helpers/agentdock`. Next Core/tunnel labels are `dev.dropabit.agentdock.next.core` / `dev.dropabit.agentdock.next.tunnel`; stable uses its existing `com.uvwt.agentdock.*` services.
+- Public protected-resource metadata self-identifies separate resources and authorization servers for `mac-dev.dropabit.dev/mcp` and `mac-dev-next.dropabit.dev/mcp`. The `macbook-air-m3` connector resolves to the Next runtime identity, providing no stable endpoint/state fallback evidence.
+- From stable `mac-dev`, a bounded `launchctl kickstart -k` was applied only to `dev.dropabit.agentdock.next.core`. Next Core restarted and returned healthy; stable Core retained the same PID and stayed healthy. Both connectors remained callable afterward.
+- No stable App/Core/state/registry/service mutation was performed. This closes P3 only; it is not release-native updater/UAT evidence.
 
 ## Native installer concurrency debt
 

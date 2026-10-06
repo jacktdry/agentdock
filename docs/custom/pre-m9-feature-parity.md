@@ -1,12 +1,14 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；dedicated Next Named Tunnel ready；P3 connector 已建立，STOP at side-by-side validation gate（2026-10-06）**
+> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；Wave 3 已解除阻塞，M9 仍須等待必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
-> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。2026-10-06 又完成實際 Next deployment/readiness hardening：Codex launchd resolution `6a3dac19`、Shared macOS package `2dc80377`、SMAppService update/constraint handling `63730804` / `821d7e64` / `884f158d`、macOS port ownership cgo gate `6fac35b2`、public-access OAuth provisioning `82251a3a`、live Core health reporting `36683aec`、native Wails clipboard copy `a7e92f2c`。使用者已在 ChatGPT 建立 Next connector；ChatGPT 顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`。現在 P3 只剩 stable/Next side-by-side validation；驗證完成前不得進 Wave 3 或 M9。
+> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。2026-10-06 又完成實際 Next deployment/readiness hardening：Codex launchd resolution `6a3dac19`、Shared macOS package `2dc80377`、SMAppService update/constraint handling `63730804` / `821d7e64` / `884f158d`、macOS port ownership cgo gate `6fac35b2`、public-access OAuth provisioning `82251a3a`、live Core health reporting `36683aec`、native Wails clipboard copy `a7e92f2c`。使用者已在 ChatGPT 建立 Next connector；ChatGPT 顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`。2026-10-06 已完成 P3 stable/Next side-by-side validation：Wave 3 可以開始，但不得直接進 M9；M9 仍需等必要 parity 與 hardening integration review。
 >
 > Live readiness（2026-10-06）：`AgentDock Next.app` 使用 Shared Desktop，Next Core 維持 `127.0.0.1:8767`；獨立 Cloudflare Named Tunnel `mac-dev-next` 與 `mac-dev-next.dropabit.dev` 已建立並健康連線，remote ingress 明確指向 `http://localhost:8767`，Public MCP URL 為 `https://mac-dev-next.dropabit.dev/mcp`。OAuth discovery metadata 與 unauthenticated MCP challenge 已由 public HTTPS 實測通過；Next OAuth / Tunnel credentials 僅存於 Next-owned private state，文件不記錄 secret。stable `mac-dev.dropabit.dev`、stable tunnel、stable Core `8765` 未變更。
+>
+> P3 side-by-side closeout（2026-10-06）：stable `mac-dev` 與 Next `macbook-air-m3` 可同時呼叫；兩者分別回報 `~/.agentdock` / `~/AgentDock` 與 `~/.agentdock-next` / `~/AgentDock Next`。stable listener 為 `127.0.0.1:8765` 且 executable 位於 `/Applications/AgentDock.app/Contents/Helpers/agentdock`；Next listener 為 `127.0.0.1:8767` 且 executable 位於 `~/Applications/AgentDock Next.app/Contents/Helpers/agentdock`。Task store 分別為 `~/.agentdock/tasks` 與 `~/.agentdock-next/tasks`，MCP registry 內容與 transport 亦不同。Public protected-resource metadata 分別宣告 `mac-dev.dropabit.dev/mcp` 與 `mac-dev-next.dropabit.dev/mcp`。最後由 stable `mac-dev` 僅重啟 `dev.dropabit.agentdock.next.core`：Next PID 改變並恢復健康，stable Core PID 保持不變，兩個 connector 在重啟後仍可呼叫。
 
 ## 為什麼需要這一層
 
@@ -150,15 +152,15 @@ P1/P2 完成後，AgentDock Next UI 應已提供建立 ChatGPT 個人 MCP 所需
 - Public MCP URL；
 - OAuth password。
 
-目前剩餘工作是由開發 session 驗證：
+P3 驗證已完成，closeout evidence：
 
-- stable `mac-dev` 與 Next connector `macbook-air-m3` 同時可用；
-- Next lifecycle 不影響 stable；
-- stable lifecycle 不是 Next 的 ownership authority；
-- Next connector 使用 Next credential / endpoint；
-- Next task/state/registry 不與 stable 混用。
+- stable `mac-dev` 與 Next connector `macbook-air-m3` 已確認可同時呼叫；
+- stable / Next runtime home、default dir、task store、MCP registry 皆為不同 namespace；
+- stable Core 維持 `8765`，Next Core 維持 `8767`，listener executable 分別來自 stable App 與 `AgentDock Next.app`；
+- public protected-resource metadata 分別綁定 `mac-dev.dropabit.dev/mcp` 與 `mac-dev-next.dropabit.dev/mcp`，而 Next connector 實際回報 Next runtime identity，沒有 stable endpoint/state fallback 證據；
+- 由 stable `mac-dev` 執行一次 Next-only Core restart 後，Next 恢復健康、stable Core PID 不變，兩個 connector 均持續可用。
 
-此 gate 完成後可進 P4+。**後續 Next repo 修改、build/package、App reinstall、service/tunnel mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 僅用來驗證 Next connector/runtime 行為。**
+P3 已 closeout，可進 P4+ / Wave 3。**後續 Next repo 修改、build/package、App reinstall、service/tunnel mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 僅用來驗證 Next connector/runtime 行為。M9 仍須等待必要 parity + hardening integration review。**
 
 ### P4 — ACP Manager Full Parity
 
@@ -199,7 +201,19 @@ Secrets 不在一般 list/status 中明文呈現。
 - configuration；
 - disconnect / uninstall。
 
-### P7 — Browser Broker Shared UI
+### P7 — Nexus / Startup / Platform Essentials
+
+補齊日常 parity：
+
+- Nexus endpoint / pairing / device status；
+- startup / autostart；
+- Open Logs / Open Config；
+- tray/menu status；
+- platform permission / elevation entry points。
+
+真正 privileged/platform mutation 保持 native adapter，不把 privilege logic 搬進 Vue。
+
+### P8 — Browser Broker Shared UI
 
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
@@ -214,18 +228,6 @@ Secrets 不在一般 list/status 中明文呈現。
 - worker/process ownership；
 - queue/concurrency；
 - cleanup / recovery status。
-
-### P8 — Nexus / Startup / Platform Essentials
-
-補齊日常 parity：
-
-- Nexus endpoint / pairing / device status；
-- startup / autostart；
-- Open Logs / Open Config；
-- tray/menu status；
-- platform permission / elevation entry points。
-
-真正 privileged/platform mutation 保持 native adapter，不把 privilege logic 搬進 Vue。
 
 ### P9 — Pre-M9 Hardening
 
@@ -273,12 +275,12 @@ Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external
 | ACP profile/package CRUD | 有 | 有/部分 | 未完整 | P4 Port |
 | MCP management | Core/native | 有 | unavailable | P5 Port |
 | Plugin management | Core/native | 有 | unavailable | P6 Port |
-| Browser config | 舊 CDP 模式 | Browser Broker | 未提供管理頁 | P7 Redesign |
-| Nexus | 有 | 有 | 未提供 | P8 Port |
-| Startup / autostart | 有 | 有 | 部分 | P8 Native-backed Port |
+| Nexus | 有 | 有 | 未提供 | P7 Port |
+| Browser config | 舊 CDP 模式 | Browser Broker | 未提供管理頁 | P8 Redesign |
+| Startup / autostart | 有 | 有 | 部分 | P7 Native-backed Port |
 | Update check | 有 | 有 | 有 | Complete |
 | Update apply/recovery | 有 | 有 | native-only | M9 / native-backed |
-| Logs / config shortcuts | 有 | 有 | 未提供 | P8 Port |
+| Logs / config shortcuts | 有 | 有 | 未提供 | P7 Port |
 | OS permissions / elevation | 有 | platform-specific | 未完整 | Native-only backend |
 
 Audit 過程若發現其他 stable-only 功能，必須先加入矩陣並分類，不可因 Shared UI 沒有入口就默認「不需要」。
@@ -304,9 +306,9 @@ P5 MCP Management
   ↓
 P6 Plugin Management
   ↓
-P7 Browser Broker UI
+P7 Nexus / startup / platform essentials
   ↓
-P8 Nexus / startup / platform essentials
+P8 Browser Broker UI
   ↓
 P9 Pre-M9 hardening
   ↓
@@ -367,19 +369,19 @@ P1/P2 完成並驗證後停止：
 1. AgentDock Next UI 顯示完整 Public MCP URL + OAuth password；
 2. Next Named Tunnel / port readiness 完成；
 3. **由使用者手動建立 Next ChatGPT connector**：已完成，ChatGPT 顯示名稱為 `macbook-air-m3`；
-4. **目前 gate：驗證 stable `mac-dev` + `macbook-air-m3` side-by-side。**
+4. **stable `mac-dev` + `macbook-air-m3` side-by-side validation：已於 2026-10-06 完成。**
 
-這個 gate 不可由 worker 自動跨越。
+Connector 建立仍屬 user-owned gate；本次 side-by-side closeout 由主 orchestrator 驗證，沒有交給 worker 自動跨越。
 
 ### Wave 3 — Domain parity（高度可平行）
 
-side-by-side validation 通過後，可用獨立 worktree / branch 平行推進：
+P3 side-by-side validation 已通過；現在可用獨立 worktree / branch 推進，預定順序為：
 
 - ACP Manager；
 - MCP Management；
 - Plugin Management；
-- Browser Broker UI；
-- Nexus / Platform Essentials。
+- Nexus / Platform Essentials；
+- Browser Broker UI。
 
 每個 domain 原則上自行完成：
 
@@ -426,7 +428,7 @@ release candidate artifact 凍結後可平行：
 1. **AI UX/IA roundtable → UI implementation**
    先收斂 page / interaction contract，才開始各 domain UI。
 2. **P1/P2 → USER creates Next connector → side-by-side validation**
-   connector 已由使用者建立為 `macbook-air-m3`；side-by-side 驗證未通過前不可假裝 gate 已完成。
+   connector 已由使用者建立為 `macbook-air-m3`，side-by-side validation 已於 2026-10-06 通過；此 gate 已完成，但不得因此跳過後續 parity / hardening gate。
 3. **Required parity + hardening → M9 → release candidate → native UAT**
    cross-build / source-tree smoke 不能當作 release-native acceptance。
 
@@ -451,10 +453,10 @@ Worker 成功不等於 Pre-M9 step 完成。
 
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
-3. **從 Wave 0 / P0 開始**，先做完整 parity inventory 與 AI UX/IA Design Workshop；
-4. 圓桌收斂後才建立 Wave 1 implementation tasks；
-5. P1/P2 與 connector 建立已完成；先執行 stable `mac-dev` + `macbook-air-m3` side-by-side validation；
-6. connector 驗證完成後才進 Wave 3 大量平行 parity implementation；任何 Next mutation 仍由 stable `mac-dev` 執行。
+3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
+4. **從 Wave 3 開始**，依 ACP Manager → MCP Management → Plugin Management → Nexus / Platform Essentials → Browser Broker UI 推進；
+5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
+6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
 除非 repo 文件已被後續 commit 明確 supersede，這個順序是 Pre-M9 的 source of truth。
 

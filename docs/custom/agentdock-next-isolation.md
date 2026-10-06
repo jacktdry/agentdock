@@ -1,6 +1,6 @@
 # AgentDock Next Isolation
 
-> 狀態：Accepted durable decision / Phase 1 and Phase 2 completed / Shared Next deployed / ChatGPT Next connector created / side-by-side validation pending
+> 狀態：Accepted durable decision / Phase 1 and Phase 2 completed / Shared Next deployed / ChatGPT Next connector created / P3 side-by-side validation complete
 >
 > 日期：2026-10-05
 >
@@ -156,13 +156,13 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 - Next fresh ACP config 使用本機 `codex-acp 2.1.1` 與 hardened `antigravity-acp 1.2.0-agentdock.6`（Keychain compatibility fix `9f56b52`，version bump `5cb54d2`）。Codex ephemeral prompt 回 `NEXT_MEMORY_OK`，Antigravity ephemeral prompt 回 `NEXT_AGY_MEMORY_OK`；兩者均到 `end_turn` 並最終 `closed_reason=ephemeral_prompt_terminal`，Next descendant tree 的 Memory child count 均為 0。Codex 使用 `~/.agentdock-next/acp/codex/codex-home` sandbox；hardened Antigravity adapter 對 AGY child 使用 private HOME / browser-free sandbox。
 - 每次 smoke 後都重新驗證 stable `mac-dev` 可回應；沒有停止、重啟、替換或讀寫 stable AgentDock App/Core/state/registry/live service。
 
-目前剩餘 gate：
+P3 side-by-side gate 已完成；其餘 release-native / migration gate：
 
 1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
-2. 獨立 Next ChatGPT connector 已由使用者手動建立，ChatGPT 顯示名稱為 `macbook-air-m3`（邏輯角色 `mac-dev-next`）。目前剩餘 gate 是確認它與既有 stable `mac-dev` 同時可用，且 lifecycle/state/credential authority 不交叉。不得為取得 credential 或 endpoint fallback 到 stable state，也不得改寫既有 `mac-dev` 來繞過。
+2. ✅ 獨立 Next ChatGPT connector 已由使用者手動建立，ChatGPT 顯示名稱為 `macbook-air-m3`（邏輯角色 `mac-dev-next`）。2026-10-06 side-by-side 驗證確認 stable/Next connector 可同時呼叫，runtime/task/registry/service namespace 分離；public protected-resource metadata 分別綁定 stable / Next hostname，Next connector 實際回報 `~/.agentdock-next` identity。由 stable `mac-dev` 僅重啟 Next Core 後，Next 恢復健康、stable Core PID 未變，兩個 connector 仍可呼叫。控制平面規則維持不變：不得由 `macbook-air-m3` 自我修改或自我修復。
 3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
 
-Next connector 不再等待所有 Shared UI parity 完成，目前已建立。後續 ACP/MCP/Plugin/Browser/Nexus parity 可透過 `macbook-air-m3` 驗證 Next connector/runtime 行為；但 repo/build/package/install/service/tunnel mutation 一律仍由 stable `mac-dev` 執行。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+Next connector 不再等待所有 Shared UI parity 完成，目前已建立。後續 ACP/MCP/Plugin/Nexus/Browser parity 可透過 `macbook-air-m3` 驗證 Next connector/runtime 行為；但 repo/build/package/install/service/tunnel mutation 一律仍由 stable `mac-dev` 執行。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
 
 正式 `mac-dev-next` public endpoint 採 **Next-owned Named Cloudflare Tunnel**：獨立 tunnel identity、hostname、token、service/state/log ownership，origin 指向 Next Core（預設 `127.0.0.1:8767`）。不得與 stable AgentDock 共用 tunnel token/hostname；Quick Tunnel 只作臨時 smoke。實際建立 Cloudflare Tunnel / DNS route 前由使用者確認 account/hostname。
 
