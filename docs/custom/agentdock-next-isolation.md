@@ -1,6 +1,6 @@
 # AgentDock Next Isolation
 
-> 狀態：Accepted durable decision / Phase 1 and Phase 2 repository implementation completed / GUI updater gate retained / live validation pending
+> 狀態：Accepted durable decision / Phase 1 and Phase 2 completed / Shared Next deployed / ChatGPT Next connector created / side-by-side validation pending
 >
 > 日期：2026-10-05
 >
@@ -10,7 +10,7 @@
 
 先前對已安裝 pre-M7 AgentDock 的 live activation 嘗試造成 ChatGPT Mac-Dev control channel 斷線。目前連線中的 **AgentDock 是 production control plane**，必須保持可用；客製版以 **AgentDock Next** 作獨立 development plane 並行開發。這取代先前 M7 direct stable activation / Memory registry cutover gate，不推翻 M7 feature code / stress 的完成狀態。
 
-Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service ownership、runtime/state、tunnel / connector 與 update target 均獨立。ChatGPT 現有 Mac-Dev 仍連 stable；未來 `mac-dev-next` 單獨連 Next Core，不重指向原 connector。
+Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service ownership、runtime/state、tunnel / connector 與 update target 均獨立。ChatGPT 現有 stable `mac-dev` 仍連 stable Core；Next connector 已建立並連向 Next Core，ChatGPT 目前顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`，不重指向原 connector。
 
 唯一規劃中的 shared service 是 Memory HTTP `http://127.0.0.1:8766/mcp`。Next registry/config 固定使用 `protocol_version=2025-11-25`，保存在 Next state；共用 endpoint / DB 不等於共用 AgentDock registry、runtime state 或 daemon lifecycle authority。
 
@@ -28,11 +28,11 @@ Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service own
 
 ## Namespace matrix（proposed defaults）
 
-以下 defaults 已作為 Phase 1 repository identity/runtime contract 落地；updater/arbiter target isolation 已由 Phase 2 實作；實際安裝與 live runtime 仍待後續驗證，因此不代表目前已安裝或正在運行。Stable identity 只記錄已知邊界，不以本文件要求現場探查。
+以下 defaults 已作為 repository identity/runtime contract 落地；updater/arbiter target isolation 已由 Phase 2 實作。2026-10-06 的 live readiness 已驗證 `~/Applications/AgentDock Next.app`、Next Core `8767`、Next Named Tunnel 與 ChatGPT Next connector；release-native signed updater / rollback UAT 仍是後續 gate。Stable identity 只記錄已知邊界，不以本文件要求額外探查或 mutation。
 
 | 項目 | Stable production plane | AgentDock Next development plane |
 | --- | --- | --- |
-| App | `/Applications/AgentDock.app`，禁止操作 | `AgentDock Next.app`；installer destination `/Applications/AgentDock Next.app` |
+| App | `/Applications/AgentDock.app`，禁止操作 | live development install：`~/Applications/AgentDock Next.app`；release updater contract 亦允許受驗證的 system Applications target |
 | Bundle identifier | 保留既有，不探查 / 更改 | `dev.dropabit.agentdock.next` |
 | Core LaunchAgent | 保留既有 live service | `dev.dropabit.agentdock.next.core` |
 | Tunnel LaunchAgent | 保留既有 live service | `dev.dropabit.agentdock.next.tunnel` |
@@ -42,7 +42,7 @@ Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service own
 | State / `AGENTDOCK_HOME` | `~/.agentdock`，禁止操作 | `~/.agentdock-next` |
 | Default work directory | 保留既有，不共用 | `~/AgentDock Next` |
 | Core port | `8765`，保持原樣 | `8767`；衝突時 fail closed，不回退 `8765` |
-| ChatGPT connector | 原 Mac-Dev control channel | 未來獨立 `mac-dev-next` |
+| ChatGPT connector | stable `mac-dev` control channel | Next connector：ChatGPT 顯示 `macbook-air-m3`（邏輯角色 `mac-dev-next`） |
 | Memory registry/config | 原 stdio registry，禁止操作 | Next state 內獨立 registry → HTTP `http://127.0.0.1:8766/mcp`，pin `2025-11-25` |
 | Installer / self-update | 禁止作開發 target | 僅 Next identity / paths / services；fail closed，無 stable fallback |
 
@@ -159,10 +159,10 @@ Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER
 目前剩餘 gate：
 
 1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
-2. 建立獨立 `mac-dev-next` ChatGPT connector，確認與既有 `mac-dev` 同時可用。**此步由使用者在 ChatGPT 手動建立**，Agent 不自動建立或替換 connector。建立前先完成 [Pre-M9 Connection/Auth Readiness](pre-m9-feature-parity.md)：AgentDock Next Shared UI 必須顯示完整 Public MCP URL（含 `/mcp`）及可 explicit Show/Copy 的 Next-owned OAuth password，並完成固定 public endpoint / Tunnel readiness。不得為取得 credential 或 endpoint fallback 到 stable state，也不得改寫既有 `mac-dev` 來繞過。
+2. 獨立 Next ChatGPT connector 已由使用者手動建立，ChatGPT 顯示名稱為 `macbook-air-m3`（邏輯角色 `mac-dev-next`）。目前剩餘 gate 是確認它與既有 stable `mac-dev` 同時可用，且 lifecycle/state/credential authority 不交叉。不得為取得 credential 或 endpoint fallback 到 stable state，也不得改寫既有 `mac-dev` 來繞過。
 3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
 
-`mac-dev-next` 不再等待所有 Shared UI parity 完成：Connection/Auth/Tunnel readiness 完成後就先建立 side-by-side connector，後續 ACP/MCP/Plugin/Browser/Nexus parity 可直接透過 Next control plane 驗證。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+Next connector 不再等待所有 Shared UI parity 完成，目前已建立。後續 ACP/MCP/Plugin/Browser/Nexus parity 可透過 `macbook-air-m3` 驗證 Next connector/runtime 行為；但 repo/build/package/install/service/tunnel mutation 一律仍由 stable `mac-dev` 執行。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
 
 正式 `mac-dev-next` public endpoint 採 **Next-owned Named Cloudflare Tunnel**：獨立 tunnel identity、hostname、token、service/state/log ownership，origin 指向 Next Core（預設 `127.0.0.1:8767`）。不得與 stable AgentDock 共用 tunnel token/hostname；Quick Tunnel 只作臨時 smoke。實際建立 Cloudflare Tunnel / DNS route 前由使用者確認 account/hostname。
 

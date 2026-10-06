@@ -23,7 +23,7 @@
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
 - [m8-permission-approval.md](m8-permission-approval.md)：M8 Core-owned Permission / Approval authority、binding、retry、history 與 implementation checkpoint。
-- [pre-m9-feature-parity.md](pre-m9-feature-parity.md)：M8 closeout 後的 feature parity audit、Next Connection/Auth/Tunnel readiness、`mac-dev-next` 手動建立 gate 與 M9 前工作順序。
+- [pre-m9-feature-parity.md](pre-m9-feature-parity.md)：M8 closeout 後的 feature parity audit、Next Connection/Auth/Tunnel readiness、已建立的 Next connector（ChatGPT 顯示 `macbook-air-m3`）side-by-side gate 與 M9 前工作順序。
 - [pre-m9-wave0-contract.md](pre-m9-wave0-contract.md)：Wave 0 roundtable 收斂後凍結的 P1/P2 UX、secret、port ownership、Tunnel state/mutation 與 Wave 1 backend integration contract。
 - [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 - [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)：Browser / CDP process ownership、stale cleanup、Edge connector 去重與 ACP browser child lifecycle。
@@ -40,7 +40,7 @@
 6. 新 Desktop 業務功能原則上只實作一次，不再長期維護 AppKit 與 WPF 兩套平行 UI。
 7. 使用者可見字串不得散落硬寫在 Swift、C#、Vue 或驗證腳本中。
 
-8. 目前連線中的 AgentDock 是 production control plane；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable 當 development target。
+8. stable `mac-dev` 是 production control plane，也是 **Next 開發與維護唯一允許執行 mutation 的 control plane**；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable runtime 當 development target。Next connector（ChatGPT 顯示 `macbook-air-m3`）只作 Next connector/runtime/side-by-side 驗證，不得修改、編譯、重裝或修復自己。
 9. 客製版以 **AgentDock Next** side-by-side 開發，app identity、服務、port、runtime/state/log/work roots 與 connector 必須隔離；installer / self-update 必須 Next-target-aware 並 fail closed，禁止 fallback 到 `AgentDock.app`。
-10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 AgentDock Next isolation 的 repository/runtime validation 與 handoff 已完成，stable live cutover 仍刻意延後。M8 implementation / available-host validation 已完成：API `652331ed`、Shared Permission UI / authority hardening `3df9a784`；完整證據見 [M8 closeout](m8-permission-approval.md#m8-closeout--2026-10-05)。下一執行層不是直接進 M9，而是 [Pre-M9 Feature Parity / Connection Readiness](pre-m9-feature-parity.md)：先做 feature audit + AI UX/IA 圓桌，定義各分類的內容層級、操作、說明/警告與 accessibility；優先讓 Shared UI 顯示完整 Public MCP URL + OAuth password、做 Next port ownership/conflict validation，並建立 Next 專用 Named Cloudflare Tunnel contract。之後由使用者手動在 ChatGPT 建立 `mac-dev-next`，驗證 stable + Next side-by-side，再補 ACP/MCP/Plugin/Browser/Nexus 等必要 parity。Developer ID signed updater、Windows/WSL/Linux helper native evidence則作為 M9/release-native gate。不得為任何 gate 操作 stable AgentDock。
+10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 AgentDock Next isolation 的 repository/runtime validation 與 handoff 已完成，stable live cutover 仍刻意延後。M8 implementation / available-host validation 已完成：API `652331ed`、Shared Permission UI / authority hardening `3df9a784`；完整證據見 [M8 closeout](m8-permission-approval.md#m8-closeout--2026-10-05)。Pre-M9 P1/P2 live readiness 已完成：Shared UI、Next Core `8767`、獨立 Named Tunnel `mac-dev-next.dropabit.dev`、OAuth/public MCP discovery 皆已部署；connector copy 已以 `a7e92f2c` 改用 Wails native clipboard。使用者已建立 Next ChatGPT connector，顯示名稱為 `macbook-air-m3`。目前下一 gate 是 stable `mac-dev` + `macbook-air-m3` side-by-side validation；通過後再補 ACP/MCP/Plugin/Browser/Nexus 等必要 parity。Developer ID signed updater、Windows/WSL/Linux helper native evidence作為 M9/release-native gate。
 11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。

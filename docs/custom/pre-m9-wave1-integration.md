@@ -4,8 +4,8 @@ Backend integration originated on `feature/pre-m9-wave1-integration` and is now
 integrated into `feature/m8-permission-approval`. The frozen contract remains
 [Wave 0](pre-m9-wave0-contract.md); runtime boundaries remain
 [Next isolation](agentdock-next-isolation.md). Shared Connection UI is now implemented
-under the same contract. **P1/P2 repository verification plus Next-only live deployment/readiness are complete; execution stops
-at the user-owned `mac-dev-next` connector gate.**
+under the same contract. **P1/P2 repository verification plus Next-only live deployment/readiness are complete; the user-owned
+Next connector has been created in ChatGPT as `macbook-air-m3`. Execution stops at the remaining stable/Next side-by-side validation gate.**
 
 - Quick invalidation disables OAuth until the current generation publishes its
   origin and enables OAuth in the same environment write. Real auth validation
@@ -66,7 +66,10 @@ Verification completed on repository fixtures:
 - Dedicated Cloudflare Named Tunnel `mac-dev-next` uses `mac-dev-next.dropabit.dev` and remote ingress `http://localhost:8767`. The tunnel is healthy with active connections; its token is stored only in the Next-owned private runtime state.
 - Public HTTPS checks pass for `/healthz`, protected-resource metadata, authorization-server metadata, and the expected unauthenticated `/mcp` 401 challenge. Public MCP URL is `https://mac-dev-next.dropabit.dev/mcp`.
 - Stable `mac-dev.dropabit.dev`, its Cloudflare tunnel/DNS, stable Core `8765`, App binaries, and live service remained unchanged throughout this pass.
-- `mac-dev-next` is still **not** created automatically. The next step remains the user-owned ChatGPT connector action, followed by side-by-side validation.
+- The user manually created the Next ChatGPT connector; its current ChatGPT display name is `macbook-air-m3` while its logical role remains `mac-dev-next`.
+- Connector copy actions were corrected in `a7e92f2c` to use Wails native `Clipboard.SetText` instead of browser `navigator.clipboard`; Local MCP URL, Public MCP URL, and OAuth password copy now work in the desktop WebView.
+- Stable `mac-dev` is the only mutation control plane for Next repository changes, build/package, App replacement, service/tunnel mutation, and repair. `macbook-air-m3` is a validation target only and must not self-modify or self-reinstall.
+- The next step is stable `mac-dev` + Next `macbook-air-m3` side-by-side validation; Wave 3 stays blocked until it passes.
 
 ## Native installer concurrency debt
 

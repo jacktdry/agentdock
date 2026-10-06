@@ -1,10 +1,10 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；dedicated Next Named Tunnel ready；STOP at P3 user connector gate（2026-10-06）**
+> 狀態：**P1/P2 deployed + live readiness validated；dedicated Next Named Tunnel ready；P3 connector 已建立，STOP at side-by-side validation gate（2026-10-06）**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
-> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。2026-10-06 又完成實際 Next deployment/readiness hardening：Codex launchd resolution `6a3dac19`、Shared macOS package `2dc80377`、SMAppService update/constraint handling `63730804` / `821d7e64` / `884f158d`、macOS port ownership cgo gate `6fac35b2`、public-access OAuth provisioning `82251a3a`、live Core health reporting `36683aec`。P1/P2 現在依 contract 停在 **P3：由使用者手動建立 `mac-dev-next`**；不得自動進 Wave 3 或 M9。
+> Wave 0 的實際 parity 修正、Connection IA、secret classification、port ownership、Tunnel state / mutation semantics 與 Wave 1 worker boundaries 已凍結於 [Pre-M9 Wave 0 Contract](pre-m9-wave0-contract.md)。Wave 1 backend integration 已落在 `94367b74`，Shared Connection UI 已落在 `80eeed53`，final port rollback lifecycle hardening 已落在 `b7e440cc`。2026-10-06 又完成實際 Next deployment/readiness hardening：Codex launchd resolution `6a3dac19`、Shared macOS package `2dc80377`、SMAppService update/constraint handling `63730804` / `821d7e64` / `884f158d`、macOS port ownership cgo gate `6fac35b2`、public-access OAuth provisioning `82251a3a`、live Core health reporting `36683aec`、native Wails clipboard copy `a7e92f2c`。使用者已在 ChatGPT 建立 Next connector；ChatGPT 顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`。現在 P3 只剩 stable/Next side-by-side validation；驗證完成前不得進 Wave 3 或 M9。
 >
 > Live readiness（2026-10-06）：`AgentDock Next.app` 使用 Shared Desktop，Next Core 維持 `127.0.0.1:8767`；獨立 Cloudflare Named Tunnel `mac-dev-next` 與 `mac-dev-next.dropabit.dev` 已建立並健康連線，remote ingress 明確指向 `http://localhost:8767`，Public MCP URL 為 `https://mac-dev-next.dropabit.dev/mcp`。OAuth discovery metadata 與 unauthenticated MCP challenge 已由 public HTTPS 實測通過；Next OAuth / Tunnel credentials 僅存於 Next-owned private state，文件不記錄 secret。stable `mac-dev.dropabit.dev`、stable tunnel、stable Core `8765` 未變更。
 
@@ -12,7 +12,7 @@
 
 目前 AgentDock Next / Shared Desktop 已完成 shared architecture、Activity / Execution、ACP lifecycle、Permission / Approval 等核心 vertical slices，但尚未達到舊 native AgentDock 的完整日常功能 parity。
 
-因此 M9 前先完成一次 bounded parity audit，並優先補齊「讓 AgentDock Next 可以獨立被 ChatGPT 使用」所需的 connection/auth surface。不要等所有 Shared UI parity 完成才建立 `mac-dev-next`；一旦 Next connection prerequisites 完成，就先建立 side-by-side connector，後續功能開發即可直接以 Next 作為獨立 control plane。
+因此 M9 前先完成一次 bounded parity audit，並優先補齊「讓 AgentDock Next 可以獨立被 ChatGPT 使用」所需的 connection/auth surface。Next connector 已先建立，不等待所有 Shared UI parity；但 **stable `mac-dev` 仍是 Next repo/build/install/service/tunnel mutation 的唯一 control plane**。Next connector（ChatGPT 顯示為 `macbook-air-m3`）只作 Next runtime / connector / side-by-side 驗證目標，不做自我修改或自我重裝。
 
 ## 不可破壞的邊界
 
@@ -141,24 +141,24 @@ Next tunnel 必須使用 Next-owned service/config/state，例如 `dev.dropabit.
 
 實際 Cloudflare Tunnel / DNS 建立屬於部署動作；在執行前先由使用者確認 hostname / account target。若目前只做本機 UI/contract，可先完成 API、validation 與 fixture，不碰既有 stable Cloudflare Tunnel。
 
-### P3 — 使用者建立 `mac-dev-next` ChatGPT Connector
+### P3 — Next ChatGPT Connector + side-by-side validation
 
-**這一步由使用者手動操作，不由 Agent 自動建立。**
+**Connector 建立動作由使用者手動完成；目前已完成。ChatGPT 顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`。**
 
 P1/P2 完成後，AgentDock Next UI 應已提供建立 ChatGPT 個人 MCP 所需的：
 
 - Public MCP URL；
 - OAuth password。
 
-使用者在 ChatGPT 建立獨立 `mac-dev-next` 後，再由開發 session 驗證：
+目前剩餘工作是由開發 session 驗證：
 
-- `mac-dev` 與 `mac-dev-next` 同時可用；
+- stable `mac-dev` 與 Next connector `macbook-air-m3` 同時可用；
 - Next lifecycle 不影響 stable；
 - stable lifecycle 不是 Next 的 ownership authority；
 - Next connector 使用 Next credential / endpoint；
 - Next task/state/registry 不與 stable 混用。
 
-此 gate 完成後，後續 P4+ 開發優先使用 Next control plane；stable 保留安全 fallback。
+此 gate 完成後可進 P4+。**後續 Next repo 修改、build/package、App reinstall、service/tunnel mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 僅用來驗證 Next connector/runtime 行為。**
 
 ### P4 — ACP Manager Full Parity
 
@@ -294,7 +294,7 @@ P1 Next Connection/Auth Readiness
   ↓
 P2 Public Access / Tunnel UI
   ↓
-P3 USER: create mac-dev-next in ChatGPT
+P3 USER: connector created as macbook-air-m3
   ↓
 verify stable + Next side-by-side
   ↓
@@ -366,14 +366,14 @@ P1/P2 完成並驗證後停止：
 
 1. AgentDock Next UI 顯示完整 Public MCP URL + OAuth password；
 2. Next Named Tunnel / port readiness 完成；
-3. **由使用者手動建立 `mac-dev-next` ChatGPT connector**；
-4. 驗證 stable `mac-dev` + `mac-dev-next` side-by-side。
+3. **由使用者手動建立 Next ChatGPT connector**：已完成，ChatGPT 顯示名稱為 `macbook-air-m3`；
+4. **目前 gate：驗證 stable `mac-dev` + `macbook-air-m3` side-by-side。**
 
 這個 gate 不可由 worker 自動跨越。
 
 ### Wave 3 — Domain parity（高度可平行）
 
-`mac-dev-next` 建立後，可用獨立 worktree / branch 平行推進：
+side-by-side validation 通過後，可用獨立 worktree / branch 平行推進：
 
 - ACP Manager；
 - MCP Management；
@@ -425,8 +425,8 @@ release candidate artifact 凍結後可平行：
 
 1. **AI UX/IA roundtable → UI implementation**
    先收斂 page / interaction contract，才開始各 domain UI。
-2. **P1/P2 → USER creates `mac-dev-next` → Next-native validation**
-   connector 由使用者建立；未建立前不可假裝 gate 已完成。
+2. **P1/P2 → USER creates Next connector → side-by-side validation**
+   connector 已由使用者建立為 `macbook-air-m3`；side-by-side 驗證未通過前不可假裝 gate 已完成。
 3. **Required parity + hardening → M9 → release candidate → native UAT**
    cross-build / source-tree smoke 不能當作 release-native acceptance。
 
@@ -453,8 +453,8 @@ Worker 成功不等於 Pre-M9 step 完成。
 2. 確認 branch / clean worktree / latest docs commit；
 3. **從 Wave 0 / P0 開始**，先做完整 parity inventory 與 AI UX/IA Design Workshop；
 4. 圓桌收斂後才建立 Wave 1 implementation tasks；
-5. P1/P2 完成時停下交給使用者建立 `mac-dev-next`；
-6. connector 驗證完成後才進 Wave 3 大量平行 parity implementation。
+5. P1/P2 與 connector 建立已完成；先執行 stable `mac-dev` + `macbook-air-m3` side-by-side validation；
+6. connector 驗證完成後才進 Wave 3 大量平行 parity implementation；任何 Next mutation 仍由 stable `mac-dev` 執行。
 
 除非 repo 文件已被後續 commit 明確 supersede，這個順序是 Pre-M9 的 source of truth。
 
