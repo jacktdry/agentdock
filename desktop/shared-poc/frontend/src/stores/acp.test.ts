@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { ACPManagerSnapshot, ACPStatusResult, APIError } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import { ErrorCategory } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
+import type { ACPProfileSettings } from '../../bindings/github.com/uvwt/agentdock/internal/desktopruntime/models'
 
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -175,9 +176,10 @@ describe('ACP settings mutations', () => {
     expect(store.completed).toBe(true)
   })
 
-  it('reloads the latest revision after a stale save while preserving the conflict for retry', async () => {
+  it('keeps an editor draft pinned to its base revision after a conflict reload', async () => {
     const latest = { ...configured, revision: 'rev-2' }
-    mocks.settings.mockResolvedValueOnce(configured).mockResolvedValueOnce(latest)
+    mocks.settings.mockResolvedValue(latest)
+    mocks.settings.mockResolvedValueOnce(configured)
     const store = useACPStore()
     await store.refresh()
     const conflict: APIError = {
@@ -194,11 +196,21 @@ describe('ACP settings mutations', () => {
       runtimeImpact: '',
       error: conflict,
     })
+    const draft: ACPProfileSettings = {
+      id: 'codex',
+      displayName: 'Local draft',
+      kind: 'codex',
+      command: '/opt/local-codex-acp',
+      args: [],
+      enabled: false,
+    }
 
-    expect(await store.setGlobalEnabled(false)).toBe(false)
+    expect(await store.upsertProfile(draft, 'codex', 'rev-1')).toBe(false)
     expect(store.error).toEqual(conflict)
     expect(store.settings).toEqual(latest)
-    expect(mocks.settings).toHaveBeenCalledTimes(2)
+    expect(await store.upsertProfile(draft, 'codex', 'rev-1')).toBe(false)
+    expect(mocks.saveSettings.mock.calls.map(call => call[0])).toEqual(['rev-1', 'rev-1'])
+    expect(store.settings).toEqual(latest)
     expect(store.restartRequired).toBe(false)
   })
 

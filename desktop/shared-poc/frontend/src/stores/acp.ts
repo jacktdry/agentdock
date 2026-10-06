@@ -226,7 +226,7 @@ export const useACPStore = defineStore('acp', () => {
     }
   }
 
-  async function saveConfiguration(enabled: boolean, defaultProfile: string, profiles: ACPProfileSettings[]) {
+  async function saveConfiguration(enabled: boolean, defaultProfile: string, profiles: ACPProfileSettings[], expectedRevision?: string) {
     if (pending.value || !settings.value || !canSaveSettings.value) return false
     pending.value = true
     mutationError.value = null
@@ -234,7 +234,7 @@ export const useACPStore = defineStore('acp', () => {
     try {
       let result: ACPSettingsMutationResult
       try {
-        result = await ACPService.SaveSettings(settings.value.revision, enabled, defaultProfile, profiles)
+        result = await ACPService.SaveSettings(expectedRevision ?? settings.value.revision, enabled, defaultProfile, profiles)
       } catch {
         mutationError.value = clientError('acp_settings_save_failed', '')
         return false
@@ -258,7 +258,7 @@ export const useACPStore = defineStore('acp', () => {
     return configuredProfiles.value.map(editableProfile)
   }
 
-  async function upsertProfile(profile: ACPProfileSettings, originalId?: string) {
+  async function upsertProfile(profile: ACPProfileSettings, originalId?: string, expectedRevision?: string) {
     const profiles = editableProfiles()
     if (originalId) {
       const index = profiles.findIndex(item => item.id === originalId)
@@ -267,7 +267,7 @@ export const useACPStore = defineStore('acp', () => {
     } else {
       profiles.push(profile)
     }
-    return saveConfiguration(settings.value?.enabled ?? false, settings.value?.defaultProfile ?? '', profiles)
+    return saveConfiguration(settings.value?.enabled ?? false, settings.value?.defaultProfile ?? '', profiles, expectedRevision)
   }
 
   async function setProfileEnabled(profileId: string, enabled: boolean) {

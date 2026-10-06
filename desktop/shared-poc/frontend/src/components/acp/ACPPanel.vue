@@ -26,6 +26,7 @@ const deleteTarget = shallowRef<ACPManagedProfile | null>(null)
 const adapterUpdateTarget = shallowRef<ACPManagedProfile | null>(null)
 const editorOpen = ref(false)
 const editorProfile = shallowRef<ACPManagedProfile | null>(null)
+const editorRevision = ref('')
 
 async function confirmRuntime() {
   const action = runtimeConfirmation.value
@@ -37,16 +38,18 @@ async function confirmRuntime() {
 
 function openAdd() {
   editorProfile.value = null
+  editorRevision.value = store.settings?.revision ?? ''
   editorOpen.value = true
 }
 
 function openEdit(profile: ACPManagedProfile) {
   editorProfile.value = profile
+  editorRevision.value = store.settings?.revision ?? ''
   editorOpen.value = true
 }
 
 async function saveProfile(profile: ACPProfileSettings, originalId?: string) {
-  if (await store.upsertProfile(profile, originalId)) editorOpen.value = false
+  if (await store.upsertProfile(profile, originalId, editorRevision.value)) editorOpen.value = false
 }
 
 async function confirmDelete() {

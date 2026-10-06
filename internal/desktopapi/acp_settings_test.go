@@ -94,6 +94,8 @@ func TestSensitiveACPArgumentVariantsAreProtected(t *testing.T) {
 		{"--apiKey=PRIVATE"},
 		{"API_KEY=PRIVATE"},
 		{"--github-token", "PRIVATE"},
+		{"--openai-api-key=PRIVATE"},
+		{`{"access_token":"PRIVATE"}`},
 		{"Authorization: Basic PRIVATE"},
 		{"--header", "Authorization: Bearer PRIVATE"},
 		{"--client_secret=PRIVATE"},

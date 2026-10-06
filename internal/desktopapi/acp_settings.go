@@ -302,9 +302,7 @@ func containsSensitiveACPArguments(args []string) bool {
 			continue
 		}
 		lower := strings.ToLower(value)
-		if strings.HasPrefix(lower, "bearer ") ||
-			strings.Contains(lower, "authorization:") ||
-			strings.Contains(lower, "proxy-authorization:") {
+		if sensitiveACPArgumentText(lower) {
 			return true
 		}
 
@@ -320,8 +318,37 @@ func containsSensitiveACPArguments(args []string) bool {
 			"refreshtoken", "idtoken", "privatekey", "secretkey", "signingkey", "accesskey":
 			return true
 		}
-		if strings.HasSuffix(normalized, "token") && normalized != "token" {
+		if strings.HasSuffix(normalized, "token") {
 			return true
+		}
+	}
+	return false
+}
+
+func sensitiveACPArgumentText(value string) bool {
+	if strings.HasPrefix(value, "bearer ") ||
+		strings.Contains(value, "authorization:") ||
+		strings.Contains(value, "proxy-authorization:") {
+		return true
+	}
+	words := strings.FieldsFunc(value, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	})
+	for index, word := range words {
+		switch word {
+		case "authorization", "credential", "credentials", "password", "passwd", "secret", "bearer":
+			return true
+		case "token":
+			if index == 0 || words[index-1] != "max" {
+				return true
+			}
+		case "key":
+			if index > 0 {
+				switch words[index-1] {
+				case "api", "private", "secret", "signing", "access":
+					return true
+				}
+			}
 		}
 	}
 	return false
