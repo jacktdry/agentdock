@@ -4,8 +4,23 @@
   <data name="acp.act" xml:space="preserve">
     <value>Computer act sessions</value>
   </data>
+  <data name="acp.active_sessions" xml:space="preserve">
+    <value>Active sessions</value>
+  </data>
   <data name="acp.adapter" xml:space="preserve">
     <value>Adapter process health</value>
+  </data>
+  <data name="acp.adapter_actions_pending" xml:space="preserve">
+    <value>Detection, version checks, and safe updates are provided by the next ACP Manager slice.</value>
+  </data>
+  <data name="acp.adapter_type" xml:space="preserve">
+    <value>Adapter</value>
+  </data>
+  <data name="acp.add_profile" xml:space="preserve">
+    <value>Add profile</value>
+  </data>
+  <data name="acp.advanced" xml:space="preserve">
+    <value>Advanced adapter settings</value>
   </data>
   <data name="acp.alive" xml:space="preserve">
     <value>Alive</value>
@@ -13,8 +28,29 @@
   <data name="acp.apply_policy" xml:space="preserve">
     <value>Apply policy</value>
   </data>
+  <data name="acp.arguments" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="acp.arguments_hint" xml:space="preserve">
+    <value>One argument per line</value>
+  </data>
+  <data name="acp.attention_required" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
   <data name="acp.auto_close_failed" xml:space="preserve">
     <value>Auto-close failed. Refresh or try manual close.</value>
+  </data>
+  <data name="acp.availability" xml:space="preserve">
+    <value>Availability</value>
+  </data>
+  <data name="acp.availability_available" xml:space="preserve">
+    <value>Available</value>
+  </data>
+  <data name="acp.availability_unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="acp.availability_unknown" xml:space="preserve">
+    <value>Not checked</value>
   </data>
   <data name="acp.backend" xml:space="preserve">
     <value>Backend</value>
@@ -34,17 +70,62 @@
   <data name="acp.closed" xml:space="preserve">
     <value>Closed</value>
   </data>
+  <data name="acp.command" xml:space="preserve">
+    <value>Adapter command</value>
+  </data>
+  <data name="acp.command_hint" xml:space="preserve">
+    <value>Use the exact executable path. AgentDock validates it before an enabled profile can be used.</value>
+  </data>
+  <data name="acp.configured_profiles" xml:space="preserve">
+    <value>Configured profiles</value>
+  </data>
   <data name="acp.confirm_close" xml:space="preserve">
     <value>Close this ACP session and release its resources?</value>
+  </data>
+  <data name="acp.confirm_delete" xml:space="preserve">
+    <value>Delete this ACP profile?</value>
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>Apply this lifecycle policy to the ACP session?</value>
   </data>
+  <data name="acp.default_badge" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="acp.default_disable_hint" xml:space="preserve">
+    <value>Choose another default before disabling or deleting this profile.</value>
+  </data>
   <data name="acp.default_profile" xml:space="preserve">
     <value>Default profile</value>
   </data>
+  <data name="acp.delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="acp.delete_active_hint" xml:space="preserve">
+    <value>Close this profile&#39;s active sessions before deleting it.</value>
+  </data>
+  <data name="acp.delete_explainer" xml:space="preserve">
+    <value>This removes the profile configuration. It does not delete remote transcripts.</value>
+  </data>
   <data name="acp.descendants" xml:space="preserve">
     <value>Descendant processes</value>
+  </data>
+  <data name="acp.diagnostics" xml:space="preserve">
+    <value>Diagnostics</value>
+  </data>
+  <data name="acp.disable" xml:space="preserve">
+    <value>Disable</value>
+  </data>
+  <data name="acp.display_name" xml:space="preserve">
+    <value>Display name</value>
+  </data>
+  <data name="acp.edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="acp.edit_named" xml:space="preserve">
+    <value>Edit {name}</value>
+  </data>
+  <data name="acp.edit_profile" xml:space="preserve">
+    <value>Edit profile</value>
   </data>
   <data name="acp.eligible" xml:space="preserve">
     <value>Idle close eligible</value>
@@ -52,11 +133,23 @@
   <data name="acp.empty_sessions" xml:space="preserve">
     <value>No managed sessions.</value>
   </data>
+  <data name="acp.enable" xml:space="preserve">
+    <value>Enable</value>
+  </data>
+  <data name="acp.enable_requirements" xml:space="preserve">
+    <value>Enable at least one profile with a configured command and make it the default first.</value>
+  </data>
+  <data name="acp.enabled_command_hint" xml:space="preserve">
+    <value>Enabled profiles need a valid adapter command. New profiles can be saved disabled and completed later.</value>
+  </data>
   <data name="acp.endpoint" xml:space="preserve">
     <value>Endpoint</value>
   </data>
   <data name="acp.failures" xml:space="preserve">
     <value>Auto-close failures</value>
+  </data>
+  <data name="acp.global_enabled" xml:space="preserve">
+    <value>Enable ACP for new sessions</value>
   </data>
   <data name="acp.idle" xml:space="preserve">
     <value>Idle</value>
@@ -76,14 +169,23 @@
   <data name="acp.loaded" xml:space="preserve">
     <value>Loaded</value>
   </data>
+  <data name="acp.make_default" xml:space="preserve">
+    <value>Make default</value>
+  </data>
   <data name="acp.managed" xml:space="preserve">
     <value>Managed</value>
+  </data>
+  <data name="acp.manager_intro" xml:space="preserve">
+    <value>Configure coding-agent profiles, then inspect runtime sessions and diagnostics.</value>
   </data>
   <data name="acp.memory" xml:space="preserve">
     <value>Shared Memory</value>
   </data>
   <data name="acp.minutes" xml:space="preserve">
     <value>{count, number} minutes</value>
+  </data>
+  <data name="acp.no_profiles" xml:space="preserve">
+    <value>No ACP profiles are configured yet.</value>
   </data>
   <data name="acp.observe" xml:space="preserve">
     <value>Computer observe sessions</value>
@@ -106,8 +208,38 @@
   <data name="acp.policy_persistent" xml:space="preserve">
     <value>Persistent</value>
   </data>
+  <data name="acp.preset_antigravity" xml:space="preserve">
+    <value>Antigravity</value>
+  </data>
+  <data name="acp.preset_codex" xml:space="preserve">
+    <value>Codex</value>
+  </data>
+  <data name="acp.preset_custom" xml:space="preserve">
+    <value>Custom adapter</value>
+  </data>
+  <data name="acp.preset_help_antigravity" xml:space="preserve">
+    <value>Antigravity uses AgentDock&#39;s hardened Antigravity ACP path while keeping the existing custom runtime kind.</value>
+  </data>
+  <data name="acp.preset_help_codex" xml:space="preserve">
+    <value>Codex uses the supported Codex ACP adapter. Detection and version management are handled by AgentDock.</value>
+  </data>
+  <data name="acp.preset_help_custom" xml:space="preserve">
+    <value>Use a custom ACP executable. AgentDock will preserve the ordered arguments exactly.</value>
+  </data>
+  <data name="acp.preset_legacy" xml:space="preserve">
+    <value>Legacy profile</value>
+  </data>
   <data name="acp.process_error" xml:space="preserve">
     <value>Process health observation failed.</value>
+  </data>
+  <data name="acp.profile_id" xml:space="preserve">
+    <value>Profile ID</value>
+  </data>
+  <data name="acp.profiles" xml:space="preserve">
+    <value>Profiles</value>
+  </data>
+  <data name="acp.profiles_intro" xml:space="preserve">
+    <value>Manage the adapters AgentDock can use for new coding-agent sessions.</value>
   </data>
   <data name="acp.protocol" xml:space="preserve">
     <value>Protocol version</value>
@@ -118,11 +250,23 @@
   <data name="acp.ready" xml:space="preserve">
     <value>Ready</value>
   </data>
+  <data name="acp.restart_required" xml:space="preserve">
+    <value>Settings saved. Restart AgentDock Next Core before new sessions use these changes.</value>
+  </data>
   <data name="acp.rss" xml:space="preserve">
     <value>RSS</value>
   </data>
   <data name="acp.running" xml:space="preserve">
     <value>Running</value>
+  </data>
+  <data name="acp.runtime" xml:space="preserve">
+    <value>Runtime</value>
+  </data>
+  <data name="acp.runtime_empty" xml:space="preserve">
+    <value>No active ACP runtime profiles are currently reported.</value>
+  </data>
+  <data name="acp.runtime_intro" xml:space="preserve">
+    <value>Existing managed sessions keep their current runtime until you close or restart them.</value>
   </data>
   <data name="acp.session" xml:space="preserve">
     <value>Session</value>
@@ -190,11 +334,41 @@
   <data name="acp.unhealthy" xml:space="preserve">
     <value>Unhealthy</value>
   </data>
+  <data name="acp.validation_command" xml:space="preserve">
+    <value>Enabled profiles require an adapter command.</value>
+  </data>
+  <data name="acp.validation_duplicate" xml:space="preserve">
+    <value>A profile with this ID already exists.</value>
+  </data>
+  <data name="acp.validation_id" xml:space="preserve">
+    <value>Enter a profile ID.</value>
+  </data>
   <data name="acp.version" xml:space="preserve">
     <value>Version</value>
   </data>
+  <data name="acp.version_checking" xml:space="preserve">
+    <value>Checking</value>
+  </data>
+  <data name="acp.version_current" xml:space="preserve">
+    <value>Current</value>
+  </data>
+  <data name="acp.version_not_checked" xml:space="preserve">
+    <value>Not checked</value>
+  </data>
   <data name="acp.version_state" xml:space="preserve">
     <value>Version state</value>
+  </data>
+  <data name="acp.version_unavailable" xml:space="preserve">
+    <value>Latest version unavailable</value>
+  </data>
+  <data name="acp.version_unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="acp.version_unsupported" xml:space="preserve">
+    <value>Update unsupported</value>
+  </data>
+  <data name="acp.version_update_available" xml:space="preserve">
+    <value>Update available</value>
   </data>
   <data name="activity.clear_log" xml:space="preserve">
     <value>Clear log</value>

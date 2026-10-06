@@ -389,10 +389,39 @@ dialog::backdrop { background: rgb(0 0 0 / 65%); }
   .desktop-layout { grid-template-columns: 1fr; }
   .primary-nav { position: static; flex-direction: row; flex-wrap: wrap; }
   .primary-nav .developer-entry { margin-top: 0; }
+  .managed-profile-heading { flex-direction: column; }
 }
-@media (max-width: 560px) { .overview-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .overview-grid { grid-template-columns: 1fr; }
+  .profile-editor { width: calc(100% - 1rem); max-width: none; padding: 1rem; }
+  .managed-profile .actions { align-items: stretch; }
+  .managed-profile .actions button { flex: 1 1 100%; }
+}
 
 .acp-card dd, .acp-card h3 { overflow-wrap: anywhere; }
+.managed-profile-list { display: grid; gap: 0.8rem; margin-top: 1rem; }
+.managed-profile { border: 1px solid #303641; border-radius: 0.75rem; background: #15181e; padding: 0.85rem; }
+.managed-profile-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.managed-profile-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.managed-profile-title h4 { margin: 0; overflow-wrap: anywhere; }
+.managed-profile-status { margin: 0.8rem 0; }
+.field-hint { margin: 0.35rem 0 0; color: #aeb5c0; font-size: 0.8rem; overflow-wrap: anywhere; }
+.restart-notice { border: 1px solid #806833; border-radius: 0.65rem; background: #211d16; padding: 0.7rem; color: #ffd28b; }
+.empty-state { margin-top: 1rem; border: 1px dashed #505866; border-radius: 0.7rem; padding: 1rem; }
+.danger-button { border-color: #755054; color: #ffacb5; }
+.profile-editor { width: min(38rem, calc(100% - 2rem)); }
+.profile-editor .settings-form { margin-top: 0; }
+.profile-editor .settings-form fieldset > label:not(.checkbox-label),
+.profile-editor-advanced label { display: grid; gap: 0.4rem; }
+.profile-editor input[type="text"],
+.profile-editor textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; background: #181b21; border: 1px solid #596171; border-radius: 0.55rem; padding: 0.6rem; }
+.profile-editor input[type="text"]:focus-visible,
+.profile-editor textarea:focus-visible { outline: 3px solid #8fb3ff; outline-offset: 2px; }
+.profile-editor textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.profile-editor details { border-top: 1px solid #303641; padding-top: 0.75rem; }
+.profile-editor summary { cursor: pointer; font-weight: 650; }
+.profile-editor-advanced { display: grid; gap: 0.65rem; margin-top: 0.75rem; }
+.path-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; }
 .acp-sessions { list-style: none; padding: 0; display: grid; gap: 1rem; }
 .acp-session { border-top: 1px solid #303641; padding-top: 0.5rem; }
 .acp-session .actions label { display: grid; gap: 0.4rem; max-width: 100%; }

@@ -4,8 +4,23 @@
   <data name="acp.act" xml:space="preserve">
     <value>電腦操作工作階段</value>
   </data>
+  <data name="acp.active_sessions" xml:space="preserve">
+    <value>活動工作階段</value>
+  </data>
   <data name="acp.adapter" xml:space="preserve">
     <value>配接器程序健康狀態</value>
+  </data>
+  <data name="acp.adapter_actions_pending" xml:space="preserve">
+    <value>配接器偵測、版本檢查與安全更新會在下一個 ACP Manager slice 補上。</value>
+  </data>
+  <data name="acp.adapter_type" xml:space="preserve">
+    <value>配接器</value>
+  </data>
+  <data name="acp.add_profile" xml:space="preserve">
+    <value>新增設定檔</value>
+  </data>
+  <data name="acp.advanced" xml:space="preserve">
+    <value>進階配接器設定</value>
   </data>
   <data name="acp.alive" xml:space="preserve">
     <value>存活</value>
@@ -13,8 +28,29 @@
   <data name="acp.apply_policy" xml:space="preserve">
     <value>套用原則</value>
   </data>
+  <data name="acp.arguments" xml:space="preserve">
+    <value>參數</value>
+  </data>
+  <data name="acp.arguments_hint" xml:space="preserve">
+    <value>每行一個參數</value>
+  </data>
+  <data name="acp.attention_required" xml:space="preserve">
+    <value>需要處理</value>
+  </data>
   <data name="acp.auto_close_failed" xml:space="preserve">
     <value>自動關閉失敗。請重新整理或嘗試手動關閉。</value>
+  </data>
+  <data name="acp.availability" xml:space="preserve">
+    <value>可用狀態</value>
+  </data>
+  <data name="acp.availability_available" xml:space="preserve">
+    <value>可用</value>
+  </data>
+  <data name="acp.availability_unavailable" xml:space="preserve">
+    <value>不可用</value>
+  </data>
+  <data name="acp.availability_unknown" xml:space="preserve">
+    <value>尚未檢查</value>
   </data>
   <data name="acp.backend" xml:space="preserve">
     <value>後端</value>
@@ -34,17 +70,62 @@
   <data name="acp.closed" xml:space="preserve">
     <value>已關閉</value>
   </data>
+  <data name="acp.command" xml:space="preserve">
+    <value>配接器命令</value>
+  </data>
+  <data name="acp.command_hint" xml:space="preserve">
+    <value>請使用確切的執行檔路徑；啟用設定檔前會由 AgentDock 驗證。</value>
+  </data>
+  <data name="acp.configured_profiles" xml:space="preserve">
+    <value>設定檔數量</value>
+  </data>
   <data name="acp.confirm_close" xml:space="preserve">
     <value>關閉此 ACP 工作階段並釋放其資源？</value>
+  </data>
+  <data name="acp.confirm_delete" xml:space="preserve">
+    <value>刪除此 ACP 設定檔？</value>
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>將此生命週期原則套用至 ACP 工作階段？</value>
   </data>
+  <data name="acp.default_badge" xml:space="preserve">
+    <value>預設</value>
+  </data>
+  <data name="acp.default_disable_hint" xml:space="preserve">
+    <value>請先選擇另一個預設設定檔，再停用或刪除此設定檔。</value>
+  </data>
   <data name="acp.default_profile" xml:space="preserve">
     <value>預設設定檔</value>
   </data>
+  <data name="acp.delete" xml:space="preserve">
+    <value>刪除</value>
+  </data>
+  <data name="acp.delete_active_hint" xml:space="preserve">
+    <value>刪除前請先關閉此設定檔的活動工作階段。</value>
+  </data>
+  <data name="acp.delete_explainer" xml:space="preserve">
+    <value>這只會移除設定檔設定，不會刪除遠端對話紀錄。</value>
+  </data>
   <data name="acp.descendants" xml:space="preserve">
     <value>子孫程序數</value>
+  </data>
+  <data name="acp.diagnostics" xml:space="preserve">
+    <value>診斷</value>
+  </data>
+  <data name="acp.disable" xml:space="preserve">
+    <value>停用</value>
+  </data>
+  <data name="acp.display_name" xml:space="preserve">
+    <value>顯示名稱</value>
+  </data>
+  <data name="acp.edit" xml:space="preserve">
+    <value>編輯</value>
+  </data>
+  <data name="acp.edit_named" xml:space="preserve">
+    <value>編輯 {name}</value>
+  </data>
+  <data name="acp.edit_profile" xml:space="preserve">
+    <value>編輯設定檔</value>
   </data>
   <data name="acp.eligible" xml:space="preserve">
     <value>符合閒置關閉條件</value>
@@ -52,11 +133,23 @@
   <data name="acp.empty_sessions" xml:space="preserve">
     <value>沒有受管理的工作階段。</value>
   </data>
+  <data name="acp.enable" xml:space="preserve">
+    <value>啟用</value>
+  </data>
+  <data name="acp.enable_requirements" xml:space="preserve">
+    <value>請先啟用至少一個已設定命令的設定檔，並將它設為預設。</value>
+  </data>
+  <data name="acp.enabled_command_hint" xml:space="preserve">
+    <value>啟用的設定檔必須有有效的配接器命令。新設定檔可以先以停用狀態儲存，之後再補完。</value>
+  </data>
   <data name="acp.endpoint" xml:space="preserve">
     <value>端點</value>
   </data>
   <data name="acp.failures" xml:space="preserve">
     <value>自動關閉失敗</value>
+  </data>
+  <data name="acp.global_enabled" xml:space="preserve">
+    <value>允許新的工作階段使用 ACP</value>
   </data>
   <data name="acp.idle" xml:space="preserve">
     <value>閒置</value>
@@ -76,14 +169,23 @@
   <data name="acp.loaded" xml:space="preserve">
     <value>已載入</value>
   </data>
+  <data name="acp.make_default" xml:space="preserve">
+    <value>設為預設</value>
+  </data>
   <data name="acp.managed" xml:space="preserve">
     <value>受管理</value>
+  </data>
+  <data name="acp.manager_intro" xml:space="preserve">
+    <value>先管理 Coding Agent 設定檔，再查看執行中的工作階段與診斷資訊。</value>
   </data>
   <data name="acp.memory" xml:space="preserve">
     <value>共享記憶</value>
   </data>
   <data name="acp.minutes" xml:space="preserve">
     <value>{count, number} 分鐘</value>
+  </data>
+  <data name="acp.no_profiles" xml:space="preserve">
+    <value>目前尚未建立 ACP 設定檔。</value>
   </data>
   <data name="acp.observe" xml:space="preserve">
     <value>電腦觀察工作階段</value>
@@ -106,8 +208,38 @@
   <data name="acp.policy_persistent" xml:space="preserve">
     <value>持續保留</value>
   </data>
+  <data name="acp.preset_antigravity" xml:space="preserve">
+    <value>Antigravity</value>
+  </data>
+  <data name="acp.preset_codex" xml:space="preserve">
+    <value>Codex</value>
+  </data>
+  <data name="acp.preset_custom" xml:space="preserve">
+    <value>自訂配接器</value>
+  </data>
+  <data name="acp.preset_help_antigravity" xml:space="preserve">
+    <value>Antigravity 使用 AgentDock 強化版 ACP 路徑，同時維持既有 custom runtime kind。</value>
+  </data>
+  <data name="acp.preset_help_codex" xml:space="preserve">
+    <value>Codex 使用受支援的 Codex ACP 配接器；偵測與版本管理由 AgentDock 處理。</value>
+  </data>
+  <data name="acp.preset_help_custom" xml:space="preserve">
+    <value>指定自訂 ACP 執行檔；AgentDock 會依原順序保留每個參數。</value>
+  </data>
+  <data name="acp.preset_legacy" xml:space="preserve">
+    <value>舊版設定檔</value>
+  </data>
   <data name="acp.process_error" xml:space="preserve">
     <value>無法觀察程序健康狀態。</value>
+  </data>
+  <data name="acp.profile_id" xml:space="preserve">
+    <value>設定檔 ID</value>
+  </data>
+  <data name="acp.profiles" xml:space="preserve">
+    <value>設定檔</value>
+  </data>
+  <data name="acp.profiles_intro" xml:space="preserve">
+    <value>管理 AgentDock 建立新 Coding Agent 工作階段時可使用的配接器。</value>
   </data>
   <data name="acp.protocol" xml:space="preserve">
     <value>通訊協定版本</value>
@@ -118,11 +250,23 @@
   <data name="acp.ready" xml:space="preserve">
     <value>就緒</value>
   </data>
+  <data name="acp.restart_required" xml:space="preserve">
+    <value>設定已儲存。重新啟動 AgentDock Next Core 後，新工作階段才會套用這些變更。</value>
+  </data>
   <data name="acp.rss" xml:space="preserve">
     <value>RSS</value>
   </data>
   <data name="acp.running" xml:space="preserve">
     <value>執行中</value>
+  </data>
+  <data name="acp.runtime" xml:space="preserve">
+    <value>執行狀態</value>
+  </data>
+  <data name="acp.runtime_empty" xml:space="preserve">
+    <value>目前沒有回報中的 ACP 執行設定檔。</value>
+  </data>
+  <data name="acp.runtime_intro" xml:space="preserve">
+    <value>既有受管理工作階段會維持目前的執行環境，直到關閉或重新啟動。</value>
   </data>
   <data name="acp.session" xml:space="preserve">
     <value>工作階段</value>
@@ -190,11 +334,41 @@
   <data name="acp.unhealthy" xml:space="preserve">
     <value>不健康</value>
   </data>
+  <data name="acp.validation_command" xml:space="preserve">
+    <value>啟用的設定檔需要配接器命令。</value>
+  </data>
+  <data name="acp.validation_duplicate" xml:space="preserve">
+    <value>已有相同 ID 的設定檔。</value>
+  </data>
+  <data name="acp.validation_id" xml:space="preserve">
+    <value>請輸入設定檔 ID。</value>
+  </data>
   <data name="acp.version" xml:space="preserve">
     <value>版本</value>
   </data>
+  <data name="acp.version_checking" xml:space="preserve">
+    <value>檢查中</value>
+  </data>
+  <data name="acp.version_current" xml:space="preserve">
+    <value>已是目前版本</value>
+  </data>
+  <data name="acp.version_not_checked" xml:space="preserve">
+    <value>尚未檢查</value>
+  </data>
   <data name="acp.version_state" xml:space="preserve">
     <value>版本狀態</value>
+  </data>
+  <data name="acp.version_unavailable" xml:space="preserve">
+    <value>無法取得最新版本</value>
+  </data>
+  <data name="acp.version_unknown" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="acp.version_unsupported" xml:space="preserve">
+    <value>不支援更新</value>
+  </data>
+  <data name="acp.version_update_available" xml:space="preserve">
+    <value>有可用更新</value>
   </data>
   <data name="activity.clear_log" xml:space="preserve">
     <value>清除紀錄</value>

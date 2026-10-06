@@ -4,8 +4,23 @@
   <data name="acp.act" xml:space="preserve">
     <value>计算机操作会话</value>
   </data>
+  <data name="acp.active_sessions" xml:space="preserve">
+    <value>活动会话</value>
+  </data>
   <data name="acp.adapter" xml:space="preserve">
     <value>适配器进程健康状态</value>
+  </data>
+  <data name="acp.adapter_actions_pending" xml:space="preserve">
+    <value>适配器检测、版本检查与安全更新会在下一个 ACP Manager slice 补上。</value>
+  </data>
+  <data name="acp.adapter_type" xml:space="preserve">
+    <value>适配器</value>
+  </data>
+  <data name="acp.add_profile" xml:space="preserve">
+    <value>新增配置文件</value>
+  </data>
+  <data name="acp.advanced" xml:space="preserve">
+    <value>高级适配器设置</value>
   </data>
   <data name="acp.alive" xml:space="preserve">
     <value>存活</value>
@@ -13,8 +28,29 @@
   <data name="acp.apply_policy" xml:space="preserve">
     <value>应用策略</value>
   </data>
+  <data name="acp.arguments" xml:space="preserve">
+    <value>参数</value>
+  </data>
+  <data name="acp.arguments_hint" xml:space="preserve">
+    <value>每行一个参数</value>
+  </data>
+  <data name="acp.attention_required" xml:space="preserve">
+    <value>需要处理</value>
+  </data>
   <data name="acp.auto_close_failed" xml:space="preserve">
     <value>自动关闭失败。请刷新或尝试手动关闭。</value>
+  </data>
+  <data name="acp.availability" xml:space="preserve">
+    <value>可用状态</value>
+  </data>
+  <data name="acp.availability_available" xml:space="preserve">
+    <value>可用</value>
+  </data>
+  <data name="acp.availability_unavailable" xml:space="preserve">
+    <value>不可用</value>
+  </data>
+  <data name="acp.availability_unknown" xml:space="preserve">
+    <value>尚未检查</value>
   </data>
   <data name="acp.backend" xml:space="preserve">
     <value>后端</value>
@@ -34,17 +70,62 @@
   <data name="acp.closed" xml:space="preserve">
     <value>已关闭</value>
   </data>
+  <data name="acp.command" xml:space="preserve">
+    <value>适配器命令</value>
+  </data>
+  <data name="acp.command_hint" xml:space="preserve">
+    <value>请使用准确的可执行文件路径；启用配置文件前会由 AgentDock 验证。</value>
+  </data>
+  <data name="acp.configured_profiles" xml:space="preserve">
+    <value>配置文件数量</value>
+  </data>
   <data name="acp.confirm_close" xml:space="preserve">
     <value>关闭此 ACP 会话并释放其资源？</value>
+  </data>
+  <data name="acp.confirm_delete" xml:space="preserve">
+    <value>删除此 ACP 配置文件？</value>
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>将此生命周期策略应用于 ACP 会话？</value>
   </data>
+  <data name="acp.default_badge" xml:space="preserve">
+    <value>默认</value>
+  </data>
+  <data name="acp.default_disable_hint" xml:space="preserve">
+    <value>请先选择另一个默认配置文件，再禁用或删除此配置文件。</value>
+  </data>
   <data name="acp.default_profile" xml:space="preserve">
     <value>默认配置文件</value>
   </data>
+  <data name="acp.delete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="acp.delete_active_hint" xml:space="preserve">
+    <value>删除前请先关闭此配置文件的活动会话。</value>
+  </data>
+  <data name="acp.delete_explainer" xml:space="preserve">
+    <value>这只会移除配置文件设置，不会删除远端会话记录。</value>
+  </data>
   <data name="acp.descendants" xml:space="preserve">
     <value>子孙进程数</value>
+  </data>
+  <data name="acp.diagnostics" xml:space="preserve">
+    <value>诊断</value>
+  </data>
+  <data name="acp.disable" xml:space="preserve">
+    <value>禁用</value>
+  </data>
+  <data name="acp.display_name" xml:space="preserve">
+    <value>显示名称</value>
+  </data>
+  <data name="acp.edit" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="acp.edit_named" xml:space="preserve">
+    <value>编辑 {name}</value>
+  </data>
+  <data name="acp.edit_profile" xml:space="preserve">
+    <value>编辑配置文件</value>
   </data>
   <data name="acp.eligible" xml:space="preserve">
     <value>符合空闲关闭条件</value>
@@ -52,11 +133,23 @@
   <data name="acp.empty_sessions" xml:space="preserve">
     <value>没有受管理的会话。</value>
   </data>
+  <data name="acp.enable" xml:space="preserve">
+    <value>启用</value>
+  </data>
+  <data name="acp.enable_requirements" xml:space="preserve">
+    <value>请先启用至少一个已配置命令的配置文件，并将它设为默认。</value>
+  </data>
+  <data name="acp.enabled_command_hint" xml:space="preserve">
+    <value>启用的配置文件必须有有效的适配器命令。新配置文件可以先以禁用状态保存，之后再补全。</value>
+  </data>
   <data name="acp.endpoint" xml:space="preserve">
     <value>端点</value>
   </data>
   <data name="acp.failures" xml:space="preserve">
     <value>自动关闭失败</value>
+  </data>
+  <data name="acp.global_enabled" xml:space="preserve">
+    <value>允许新的会话使用 ACP</value>
   </data>
   <data name="acp.idle" xml:space="preserve">
     <value>空闲</value>
@@ -76,14 +169,23 @@
   <data name="acp.loaded" xml:space="preserve">
     <value>已加载</value>
   </data>
+  <data name="acp.make_default" xml:space="preserve">
+    <value>设为默认</value>
+  </data>
   <data name="acp.managed" xml:space="preserve">
     <value>受管理</value>
+  </data>
+  <data name="acp.manager_intro" xml:space="preserve">
+    <value>先管理 Coding Agent 配置文件，再查看运行中的会话与诊断信息。</value>
   </data>
   <data name="acp.memory" xml:space="preserve">
     <value>共享记忆</value>
   </data>
   <data name="acp.minutes" xml:space="preserve">
     <value>{count, number} 分钟</value>
+  </data>
+  <data name="acp.no_profiles" xml:space="preserve">
+    <value>目前还没有 ACP 配置文件。</value>
   </data>
   <data name="acp.observe" xml:space="preserve">
     <value>计算机观察会话</value>
@@ -106,8 +208,38 @@
   <data name="acp.policy_persistent" xml:space="preserve">
     <value>持续保留</value>
   </data>
+  <data name="acp.preset_antigravity" xml:space="preserve">
+    <value>Antigravity</value>
+  </data>
+  <data name="acp.preset_codex" xml:space="preserve">
+    <value>Codex</value>
+  </data>
+  <data name="acp.preset_custom" xml:space="preserve">
+    <value>自定义适配器</value>
+  </data>
+  <data name="acp.preset_help_antigravity" xml:space="preserve">
+    <value>Antigravity 使用 AgentDock 强化版 ACP 路径，同时保留现有 custom runtime kind。</value>
+  </data>
+  <data name="acp.preset_help_codex" xml:space="preserve">
+    <value>Codex 使用受支持的 Codex ACP 适配器；检测与版本管理由 AgentDock 处理。</value>
+  </data>
+  <data name="acp.preset_help_custom" xml:space="preserve">
+    <value>指定自定义 ACP 可执行文件；AgentDock 会按原顺序保留每个参数。</value>
+  </data>
+  <data name="acp.preset_legacy" xml:space="preserve">
+    <value>旧版配置文件</value>
+  </data>
   <data name="acp.process_error" xml:space="preserve">
     <value>无法观察进程健康状态。</value>
+  </data>
+  <data name="acp.profile_id" xml:space="preserve">
+    <value>配置文件 ID</value>
+  </data>
+  <data name="acp.profiles" xml:space="preserve">
+    <value>配置文件</value>
+  </data>
+  <data name="acp.profiles_intro" xml:space="preserve">
+    <value>管理 AgentDock 创建新 Coding Agent 会话时可以使用的适配器。</value>
   </data>
   <data name="acp.protocol" xml:space="preserve">
     <value>协议版本</value>
@@ -118,11 +250,23 @@
   <data name="acp.ready" xml:space="preserve">
     <value>就绪</value>
   </data>
+  <data name="acp.restart_required" xml:space="preserve">
+    <value>设置已保存。重新启动 AgentDock Next Core 后，新会话才会使用这些变更。</value>
+  </data>
   <data name="acp.rss" xml:space="preserve">
     <value>RSS</value>
   </data>
   <data name="acp.running" xml:space="preserve">
     <value>运行中</value>
+  </data>
+  <data name="acp.runtime" xml:space="preserve">
+    <value>运行状态</value>
+  </data>
+  <data name="acp.runtime_empty" xml:space="preserve">
+    <value>当前没有上报中的 ACP 运行配置文件。</value>
+  </data>
+  <data name="acp.runtime_intro" xml:space="preserve">
+    <value>现有受管理会话会保持当前运行环境，直到关闭或重新启动。</value>
   </data>
   <data name="acp.session" xml:space="preserve">
     <value>会话</value>
@@ -190,11 +334,41 @@
   <data name="acp.unhealthy" xml:space="preserve">
     <value>不健康</value>
   </data>
+  <data name="acp.validation_command" xml:space="preserve">
+    <value>启用的配置文件需要适配器命令。</value>
+  </data>
+  <data name="acp.validation_duplicate" xml:space="preserve">
+    <value>已有相同 ID 的配置文件。</value>
+  </data>
+  <data name="acp.validation_id" xml:space="preserve">
+    <value>请输入配置文件 ID。</value>
+  </data>
   <data name="acp.version" xml:space="preserve">
     <value>版本</value>
   </data>
+  <data name="acp.version_checking" xml:space="preserve">
+    <value>检查中</value>
+  </data>
+  <data name="acp.version_current" xml:space="preserve">
+    <value>已是当前版本</value>
+  </data>
+  <data name="acp.version_not_checked" xml:space="preserve">
+    <value>尚未检查</value>
+  </data>
   <data name="acp.version_state" xml:space="preserve">
     <value>版本状态</value>
+  </data>
+  <data name="acp.version_unavailable" xml:space="preserve">
+    <value>无法取得最新版本</value>
+  </data>
+  <data name="acp.version_unknown" xml:space="preserve">
+    <value>未知</value>
+  </data>
+  <data name="acp.version_unsupported" xml:space="preserve">
+    <value>不支持更新</value>
+  </data>
+  <data name="acp.version_update_available" xml:space="preserve">
+    <value>有可用更新</value>
   </data>
   <data name="activity.clear_log" xml:space="preserve">
     <value>清除日志</value>
