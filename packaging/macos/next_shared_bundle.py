@@ -93,4 +93,6 @@ def validate_bundle(path, *, shared=False, signatures=True):
         metadata = subprocess.check_output(["go", "version", "-m", str(contents / "MacOS/AgentDock")], text=True)
         require("github.com/wailsapp/wails/v3" in metadata, "Missing Wails Shared Desktop dependency")
         require("	build	-tags=production" in metadata, "Shared Desktop executable is not a production build")
+        core_metadata = subprocess.check_output(["go", "version", "-m", str(contents / "Helpers/agentdock")], text=True)
+        require("	build	CGO_ENABLED=1" in core_metadata, "AgentDock Next Core must enable cgo for macOS port ownership preflight")
     return path

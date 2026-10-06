@@ -35,7 +35,7 @@ SOURCE_DATE="$(git show -s --format=%cI HEAD)"
     -ldflags="-s -w -X 'main.productName=AgentDock Next' -X main.desktopVariant=next" \
     -o "$BUILD_DIR/AgentDock" .
 )
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -mod=readonly -trimpath \
+CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -mod=readonly -trimpath \
   -ldflags="-s -w -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$SOURCE_COMMIT -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$SOURCE_DATE" \
   -o "$BUILD_DIR/core/bin/agentdock" ./cmd/agentdock
 python3 packaging/build-core-skill-bundle.py --output "$BUILD_DIR/core/share/agentdock/core-skills"
