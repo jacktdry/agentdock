@@ -1,6 +1,6 @@
 # Pre-M9 Wave 3 — ACP Manager UX / IA Contract
 
-> 狀態：**Roundtable frozen for implementation（2026-10-06）**
+> 狀態：**Implemented / reviewed / P4 closeout complete（2026-10-06）**
 >
 > 前置：P3 stable / Next side-by-side validation 已 closeout。此文件只定義 Wave 3 第一個 domain「ACP Manager」的 Shared Desktop 產品 / API contract，不重開 P3，也不進 M9。
 
@@ -367,3 +367,34 @@ Configuration save 與 existing session lifecycle 分開。
 - connector / 開發 control plane 與產品功能是不同層；
 - 本開發 session 的 live mutation 只能由 stable `mac-dev` 執行；
 - 完成後的 AgentDock Next ACP Manager 仍必須能透過 backend authority 管理 Next-owned ACP settings。
+
+
+## 15. Implementation closeout — 2026-10-06
+
+本 contract 已落地並完成 P4 closeout。主要 implementation sequence：
+
+- `5b365a21` revisioned profile settings backend；
+- `85e3e75e` Shared profile manager UI；
+- `39b9c127` adapter detection / installed version；
+- `bb40bfd3` trusted Safe Update；
+- `f9972a67` protected args / update recovery；
+- `16f63708` update/detected-adapter trust hardening；
+- `fa3deb68` independent review findings；
+- `c58a6f93` stale editor base-revision pinning + broader secret detection。
+
+Roundtable acceptance criteria 對應實作結果：
+
+- Summary / Profiles / Runtime / Diagnostics hierarchy 已保持；
+- CRUD / Enable / Default / Detect / Version / Update actions 經 Desktop API authority 執行；
+- destructive/update actions 保持 explicit confirmation / backend eligibility；
+- protected args 不進一般 frontend state；detect result 不會自動持久化；
+- conflict 不會把 stale editor draft 靜默套到新的 revision；
+- runtime state 與 persisted desired state 分離，restart 前仍可管理現有 sessions；
+- Safe Update fail closed：approved source + digest + trusted redirect + Next-owned target/permissions 缺一不可；
+- unavailable/blocked update 會保留原因，不用全域 package manager mutation 補 parity。
+
+Final verification：Go core packages、Windows/Linux compile-only、frontend typecheck、88 tests、development build全綠；Codex targeted re-review 對 final HIGH findings回報 RESOLVED / no new blocker-high。Antigravity review 因 AGY OAuth timeout 未產出結果，明列為 review limitation。
+
+Live Next package from `c58a6f93` 已由 stable `mac-dev` 安裝到 `~/Applications/AgentDock Next.app`，只重新註冊 Next Core/Tunnel；stable Core 未重啟。部署後 `macbook-air-m3` 仍回報 Next-owned runtime root、ACP profiles 與 status。視覺 WebView inspection 因 Orca unavailable + macOS Accessibility/Screen Recording permission 不足未完成，因此不宣稱 live visual UAT；release-native signed GUI UAT 仍屬後續 gate。
+
+**此文件不再是待實作設計稿；P4 已 closeout。下一個 UI roundtable 對象為 P5 MCP Management。**

@@ -80,6 +80,53 @@ Verification completed on repository fixtures:
 - From stable `mac-dev`, a bounded `launchctl kickstart -k` was applied only to `dev.dropabit.agentdock.next.core`. Next Core restarted and returned healthy; stable Core retained the same PID and stayed healthy. Both connectors remained callable afterward.
 - No stable App/Core/state/registry/service mutation was performed. This closes P3 only; it is not release-native updater/UAT evidence.
 
+## P4 ACP Manager closeout — 2026-10-06
+
+Wave 3 第一個 domain 已完成。UX / IA contract 先凍結於
+[ACP Manager roundtable](pre-m9-acp-manager-roundtable.md)，實作與 hardening 依序為：
+
+- `5b365a21` — revisioned profile settings backend；
+- `85e3e75e` — Shared profile manager UI；
+- `39b9c127` — adapter detection / installed version probe；
+- `bb40bfd3` — trusted adapter update flow；
+- `f9972a67` — protected args / update recovery hardening；
+- `16f63708` — update redirect + detected-adapter trust hardening；
+- `fa3deb68` — independent review findings；
+- `c58a6f93` — editor base-revision pinning + broader secret detection。
+
+Security / correctness closeout:
+
+- settings writes use revisioned compare-and-save semantics；stale editor drafts remain pinned to the revision captured when the editor opened, so a conflict reload cannot silently retry the stale draft against a newer revision；
+- configured / detected protected args are not exposed to ordinary frontend snapshots；secret classification covers API-key/token/Authorization/JSON credential shapes used by adapter commands；
+- adapter detection may overlay detected metadata, but persistence requires explicit **Use detected**；profiles with protected args cannot use that automatic replacement path；
+- Safe Update requires an approved repository/release shape, SHA-256 asset digest, trusted final metadata/asset URL, Next-owned target, and Unix owner/permission/symlink checks；missing trusted AgentDock fork release keeps `canUpdate=false`；
+- update verification stages in the trusted Next-owned bin directory rather than executable `/tmp`，and version probing only accepts trusted adapter command shapes, bounded output and recognized version syntax；
+- persisted disable does not hide still-running runtime sessions before restart；runtime close/lifecycle controls follow observed running state rather than desired persisted enable state；
+- restart-required state remains sticky across later mutations until the actual runtime is reconciled.
+
+Verification:
+
+- Go `internal/config`, `internal/desktopruntime`, `internal/desktopapi`: pass；
+- Windows amd64 / Linux amd64 ACP/contract compile-only checks: pass；
+- Shared frontend typecheck: pass；
+- Shared frontend tests: **88/88 pass**；
+- Shared development build: pass；
+- independent Codex review found concrete HIGH issues and the fixes were re-reviewed; final targeted review reported the secret-detection and stale-editor-revision HIGH findings **RESOLVED** with no new blocker/high；
+- Antigravity independent review could not start because the AGY OAuth session timed out; this is recorded as a review limitation rather than counted as a pass.
+
+Next-only deployment / live evidence:
+
+- a fresh arm64 ad-hoc Shared package was built from `c58a6f93`; bundle verifier ran 8 tests, app/helpers were arm64, strict codesign passed, and ZIP/DMG validation passed；
+- stable `mac-dev` atomically replaced only `~/Applications/AgentDock Next.app/Contents` using the Next-only installer, then re-registered only `dev.dropabit.agentdock.next.core` and `dev.dropabit.agentdock.next.tunnel`；
+- live Next helper reports git revision `c58a6f93d6909ad5bb66d393f03947c2c2959b6c`; Next listener is `127.0.0.1:8767` while stable remains `127.0.0.1:8765`；
+- stable Core PID remained unchanged across the entire Next replacement / service re-registration, proving this mutation did not restart stable；
+- post-deploy `macbook-air-m3` returned `AGENTDOCK_HOME=/Users/wei/.agentdock-next`, default dir `/Users/wei/AgentDock Next`, ACP enabled with `codex` and `antigravity`, and observation-only status for both profiles；
+- public protected-resource metadata still declares `https://mac-dev-next.dropabit.dev/mcp`; unauthenticated public `/mcp` still returns the expected 401 challenge.
+
+GUI visual UAT limitation: the deployed Next GUI is running, but the Next Computer Control Broker reported Orca unavailable and the stable control plane does not currently have macOS Accessibility / Screen Recording permission. Therefore no claim is made that the live WebView was visually inspected in this pass. Repository component tests, production package verification, live service/connector checks and backend authority evidence are the acceptance evidence for P4; release-native signed GUI UAT remains a later gate.
+
+**P4 is closed. The next Wave 3 domain is P5 MCP Management.**
+
 ## Native installer concurrency debt
 
 The Next installer now participates in the Go owner-directory lock protocol;

@@ -1,6 +1,6 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；Wave 3 已解除阻塞，M9 仍須等待必要 parity + hardening integration review**
+> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；下一個 domain 為 P5 MCP Management。M9 仍須等待必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
@@ -164,18 +164,37 @@ P3 已 closeout，可進 P4+ / Wave 3。**後續 Next repo 修改、build/packag
 
 ### P4 — ACP Manager Full Parity
 
-在既有 M7 lifecycle / diagnostics UI 上補：
+**狀態：Complete / deployed to AgentDock Next（2026-10-06）。** UX / IA contract 先於實作凍結於 [ACP Manager roundtable](pre-m9-acp-manager-roundtable.md)。實作 sequence 為 `5b365a21` → `85e3e75e` → `39b9c127` → `bb40bfd3` → `f9972a67` → `16f63708` → `fa3deb68` → `c58a6f93`。
+
+已完成：
 
 - Add / Edit / Delete profile；
-- Enable / Disable；
-- Default profile；
-- detect installed；
-- installed/latest version；
-- update；
-- Codex / Antigravity presets；
-- custom adapter。
+- Enable / Disable 與 default profile；
+- installed adapter detection，且 detect result 只 overlay，explicit **Use detected** 才持久化；
+- installed/latest version 與 update state；
+- Safe Update 只允許 backend 可證明的 Next-owned target + approved release source + SHA-256 digest；目前沒有可信 AgentDock fork release 時 fail closed，不以 upstream artifact 取代 hardened fork；
+- Codex / Antigravity presets 與 custom adapter；
+- protected args 不回傳 frontend；敏感參數辨識涵蓋 API key/token/Authorization/JSON credential 等常見形狀；
+- revisioned settings / stale-write conflict，editor draft 固定使用開啟當下的 base revision，background reload 不會替 stale draft 升級 revision；
+- persisted disable 與 currently-running runtime state 分離：restart 前仍可看到與關閉現有 sessions；
+- Unix Next-owned update target 驗證 owner / permission / symlink 邊界；release metadata 與 asset redirect 均 fail closed；
+- update staging 不依賴 executable `/tmp`，version probe 限制 trusted adapter 形狀、輸出大小與版本格式。
 
-Shared ACP UI 不只做 Runtime Monitor，要完成 M7 原訂 package/profile management scope。
+Verification / review：
+
+- Go `internal/config` / `internal/desktopruntime` / `internal/desktopapi` 全綠；
+- Windows amd64 / Linux amd64 ACP / contract compile-only checks 全綠；
+- Shared frontend typecheck、88 tests、development build 全綠；
+- independent Codex security/correctness review 找出的 HIGH findings 已在 `fa3deb68` / `c58a6f93` 修正，final targeted re-review 對 secret detection 與 stale editor revision 均回報 **RESOLVED**，無新 blocker/high；
+- Antigravity reviewer 因 AGY OAuth timeout 未產出可用 review，因此不宣稱完成 cross-model review；
+- arm64 ad-hoc Shared package 由 `c58a6f93` 建置並通過 bundle identity、helper architecture、strict codesign、ZIP/DMG 與 8 個 package verifier tests；已由 stable `mac-dev` 原子替換 `~/Applications/AgentDock Next.app`，只重新註冊 Next Core/Tunnel；
+- live Next Core 仍在 `127.0.0.1:8767`，stable Core 仍在 `127.0.0.1:8765` 且整個 Next replacement / service re-registration 過程 stable Core PID 保持不變；
+- `macbook-air-m3` 在部署後可回報 `~/.agentdock-next` / `~/AgentDock Next`，ACP profiles 為 `codex` + `antigravity`，兩者 observation-only status 正常；
+- public protected-resource metadata 仍綁定 `https://mac-dev-next.dropabit.dev/mcp`，unauthenticated `/mcp` 仍回 401。
+
+Live GUI 的人工視覺 inspection **未宣稱完成**：Next 的 Orca Computer Control provider 當下 unavailable，stable control plane 又沒有 Accessibility / Screen Recording 權限，因此無法可靠擷取/讀取 WebView 畫面。此 limitation 不取代上述 build/API/runtime evidence，也不算 release-native GUI UAT；若要做人工視覺驗收，需由使用者直接看目前已啟動的 AgentDock Next 或另行授權對應 macOS 權限。
+
+Shared ACP UI 不再只是 Runtime Monitor；P4 closeout 後下一個 Wave 3 domain 是 **P5 MCP Management Shared UI**。
 
 ### P5 — MCP Management Shared UI
 
@@ -272,7 +291,7 @@ Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external
 | OAuth password | 有 | 有 | **explicit Show / Hide / Copy** | **P1 Complete**；ordinary snapshot 不含 secret |
 | Tunnel configuration | 有 | 有 | Local / Quick / Named + write-only token + endpoint + advanced autostart | **P2 Complete**；Named remote route 保持 manual prerequisite |
 | ACP lifecycle/health | 部分 | 有 | 有 | Complete / Next-enhanced |
-| ACP profile/package CRUD | 有 | 有/部分 | 未完整 | P4 Port |
+| ACP profile/package CRUD | 有 | 有 | 有 | **P4 Complete**；revisioned CRUD / detect/version / fail-closed safe update / protected args |
 | MCP management | Core/native | 有 | unavailable | P5 Port |
 | Plugin management | Core/native | 有 | unavailable | P6 Port |
 | Nexus | 有 | 有 | 未提供 | P7 Port |
@@ -300,9 +319,9 @@ P3 USER: connector created as macbook-air-m3
   ↓
 verify stable + Next side-by-side
   ↓
-P4 ACP Manager full parity
+P4 ACP Manager full parity ✅
   ↓
-P5 MCP Management
+P5 MCP Management ← next
   ↓
 P6 Plugin Management
   ↓
@@ -375,10 +394,10 @@ Connector 建立仍屬 user-owned gate；本次 side-by-side closeout 由主 orc
 
 ### Wave 3 — Domain parity（高度可平行）
 
-P3 side-by-side validation 已通過；現在可用獨立 worktree / branch 推進，預定順序為：
+P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成並部署。後續仍可用獨立 worktree / branch 推進，現在的順序為：
 
-- ACP Manager；
-- MCP Management；
+- ~~ACP Manager~~ — **Complete**；
+- **MCP Management — next**；
 - Plugin Management；
 - Nexus / Platform Essentials；
 - Browser Broker UI。
@@ -454,7 +473,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. **從 Wave 3 開始**，依 ACP Manager → MCP Management → Plugin Management → Nexus / Platform Essentials → Browser Broker UI 推進；
+4. Wave 3 已完成 ACP Manager；**從 P5 MCP Management 接續**，之後為 Plugin Management → Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
