@@ -118,7 +118,7 @@ onMounted(async () => {
       <div v-if="store.configuredProfiles.length" class="managed-profile-list">
         <ACPManagedProfileCard v-for="profile in store.configuredProfiles" :key="profile.id"
           :profile="profile" :is-default="store.settings?.defaultProfile === profile.id"
-          :busy="store.busy" :active-sessions="store.activeSessionsFor(profile.id)"
+          :global-enabled="store.settings?.enabled ?? false" :busy="store.busy" :active-sessions="store.activeSessionsFor(profile.id)"
           :can-detect="store.canProbeProfile" :can-check-update="store.canCheckProfileUpdate"
           :can-update-adapter="store.canUpdateProfileAdapter" :can-manage-settings="store.canSaveSettings"
           @edit="openEdit(profile)" @probe="store.probeProfile(profile.id)" @use-detected="store.useDetectedAdapter(profile.id)"

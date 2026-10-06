@@ -168,23 +168,18 @@ func (s *ACPService) Status(ctx context.Context) ACPStatusResult {
 		return result
 	}
 	result.Enabled, result.DefaultProfile = settings.Enabled, settings.DefaultProfile
-	if !settings.Enabled {
-		return result
-	}
+	// Configuration saves are persistence-only until Core restarts. Query every
+	// configured profile even when the desired config is disabled so existing
+	// runtime sessions remain visible and controllable during that gap.
 	access, err := s.readAccess(ctx, s.runtimeRoot)
 	if err != nil {
 		result.Error = safeContextServiceError(ctx, "acp_core_access_failed", err)
 		for _, p := range settings.Profiles {
-			if p.Enabled {
-				result.Profiles = append(result.Profiles, ACPProfileStatus{Profile: desktopACPProfileInfo(p), Error: result.Error})
-			}
+			result.Profiles = append(result.Profiles, ACPProfileStatus{Profile: desktopACPProfileInfo(p), Error: result.Error})
 		}
 		return result
 	}
 	for _, profile := range settings.Profiles {
-		if !profile.Enabled {
-			continue
-		}
 		status := ACPProfileStatus{Profile: desktopACPProfileInfo(profile), Sessions: []ACPSessionLifecycle{}, Resources: []ACPBrokerResources{}}
 		structured, callErr := s.callCore(ctx, access, "acp_session", map[string]any{"action": "status", "profile_id": profile.ID})
 		if callErr != nil {

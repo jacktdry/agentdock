@@ -71,7 +71,10 @@ export const useACPStore = defineStore('acp', () => {
   })
 
   function canInvoke(operation: 'close' | 'updateLifecycle') {
-    return !busy.value && !!status.value?.enabled && contract.canInvoke(Domain.DomainACP, operation)
+    // Desired configuration may be disabled while the currently running Core
+    // still owns sessions until restart. Runtime controls follow observed
+    // status presence rather than the persisted enable flag.
+    return !busy.value && !!status.value && contract.canInvoke(Domain.DomainACP, operation)
   }
 
   function activeSessionsFor(profileId: string) {
@@ -215,7 +218,7 @@ export const useACPStore = defineStore('acp', () => {
       if (result.profile) overlayManagedProfile(profileId, result.profile)
       mutationError.value = result.error ?? (result.completed ? null : clientError('acp_profile_update_incomplete', ''))
       if (mutationError.value || !result.profile) return false
-      restartRequired.value = result.restartRequired
+      restartRequired.value = restartRequired.value || result.restartRequired
       completed.value = true
       return true
     } finally {
@@ -228,7 +231,6 @@ export const useACPStore = defineStore('acp', () => {
     pending.value = true
     mutationError.value = null
     completed.value = false
-    restartRequired.value = false
     try {
       let result: ACPSettingsMutationResult
       try {
@@ -238,10 +240,14 @@ export const useACPStore = defineStore('acp', () => {
         return false
       }
       mutationError.value = result.error ?? (result.completed && result.persisted ? null : clientError('acp_settings_save_incomplete', ''))
-      if (mutationError.value || !result.snapshot) return false
+      if (mutationError.value) {
+        if (result.error?.code === 'acp_settings_conflict' && canReadSettings.value) await readSettings()
+        return false
+      }
+      if (!result.snapshot) return false
       settings.value = result.snapshot
       completed.value = true
-      restartRequired.value = result.restartRequired
+      restartRequired.value = restartRequired.value || result.restartRequired
       return true
     } finally {
       pending.value = false
@@ -266,12 +272,17 @@ export const useACPStore = defineStore('acp', () => {
 
   async function setProfileEnabled(profileId: string, enabled: boolean) {
     const snapshot = settings.value
-    if (!snapshot || (!enabled && snapshot.defaultProfile === profileId)) return false
+    if (!snapshot) return false
+    let defaultProfile = snapshot.defaultProfile
+    if (!enabled && defaultProfile === profileId) {
+      if (snapshot.enabled) return false
+      defaultProfile = ''
+    }
     const profiles = editableProfiles()
     const profile = profiles.find(item => item.id === profileId)
     if (!profile) return false
     profile.enabled = enabled
-    return saveConfiguration(snapshot.enabled, snapshot.defaultProfile, profiles)
+    return saveConfiguration(snapshot.enabled, defaultProfile, profiles)
   }
 
   async function makeDefault(profileId: string) {
@@ -283,8 +294,13 @@ export const useACPStore = defineStore('acp', () => {
 
   async function removeProfile(profileId: string) {
     const snapshot = settings.value
-    if (!snapshot || snapshot.defaultProfile === profileId || activeSessionsFor(profileId) > 0) return false
-    return saveConfiguration(snapshot.enabled, snapshot.defaultProfile, editableProfiles().filter(item => item.id !== profileId))
+    if (!snapshot || activeSessionsFor(profileId) > 0) return false
+    let defaultProfile = snapshot.defaultProfile
+    if (defaultProfile === profileId) {
+      if (snapshot.enabled) return false
+      defaultProfile = ''
+    }
+    return saveConfiguration(snapshot.enabled, defaultProfile, editableProfiles().filter(item => item.id !== profileId))
   }
 
   async function setGlobalEnabled(enabled: boolean) {

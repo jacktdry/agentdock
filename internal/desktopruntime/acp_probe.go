@@ -1,13 +1,13 @@
 package desktopruntime
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -66,7 +66,7 @@ func ProbeACPProfile(ctx context.Context, runtimeRoot, preset string, profile AC
 	versionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(versionCtx, command, "--version")
-	var output bytes.Buffer
+	var output cappedACPVersionOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 	if err := cmd.Run(); err != nil {
@@ -158,20 +158,54 @@ func codexPackageBinMatches(packageRoot string, raw json.RawMessage, entry strin
 	return filepath.Clean(candidate) == filepath.Clean(entry)
 }
 
+type cappedACPVersionOutput struct {
+	data []byte
+}
+
+func (w *cappedACPVersionOutput) Write(p []byte) (int, error) {
+	const limit = 4096
+	if remaining := limit - len(w.data); remaining > 0 {
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.data = append(w.data, p[:remaining]...)
+	}
+	return len(p), nil
+}
+
+func (w *cappedACPVersionOutput) String() string {
+	return string(w.data)
+}
+
+var acpVersionToken = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
 func normalizeACPVersion(raw string) string {
 	line := strings.TrimSpace(raw)
 	if index := strings.IndexByte(line, '\n'); index >= 0 {
 		line = strings.TrimSpace(line[:index])
 	}
-	if line == "" {
+	if line == "" || len(line) > 256 {
 		return ""
 	}
 	fields := strings.Fields(line)
-	for i := len(fields) - 1; i >= 0; i-- {
-		value := strings.TrimSpace(strings.TrimPrefix(fields[i], "v"))
-		if value != "" && strings.ContainsAny(value, "0123456789") {
-			return value
+	var value string
+	switch len(fields) {
+	case 1:
+		value = fields[0]
+	case 2:
+		label := strings.ToLower(strings.TrimSpace(fields[0]))
+		switch label {
+		case "antigravity-acp", "agy-acp", "codex-acp", "@agentclientprotocol/codex-acp", "claude-agent-acp", "grok":
+			value = fields[1]
+		default:
+			return ""
 		}
+	default:
+		return ""
 	}
-	return ""
+	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
+	if !acpVersionToken.MatchString(value) {
+		return ""
+	}
+	return value
 }

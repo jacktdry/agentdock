@@ -66,6 +66,32 @@ func TestACPServiceStatusUsesLocalCoreWithoutLeakingToken(t *testing.T) {
 	}
 }
 
+func TestACPServiceStatusKeepsRuntimeVisibleAfterConfigurationDisable(t *testing.T) {
+	s, calls := testACPService(t)
+	s.readSettings = func(context.Context, string) (desktopruntime.ACPSettings, error) {
+		return desktopruntime.ACPSettings{
+			Enabled: false,
+			Profiles: []desktopruntime.ACPProfileSettings{{
+				ID: "codex", Kind: "codex", Command: "/missing/codex-acp", Enabled: false,
+			}},
+		}, nil
+	}
+	result := s.Status(context.Background())
+	if result.Error != nil || result.Enabled || len(result.Profiles) != 1 || len(result.Profiles[0].Sessions) != 1 {
+		t.Fatalf("status=%+v", result)
+	}
+	foundStatus := false
+	for _, call := range *calls {
+		args, _ := call["args"].(map[string]any)
+		if call["tool"] == "acp_session" && args["action"] == "status" && args["profile_id"] == "codex" {
+			foundStatus = true
+		}
+	}
+	if !foundStatus {
+		t.Fatalf("disabled configuration hid runtime status calls: %#v", *calls)
+	}
+}
+
 func TestACPServiceMutationsCallExistingCoreSession(t *testing.T) {
 	s, calls := testACPService(t)
 	if got := s.Close(context.Background(), "codex", "acps-1"); !got.Completed || got.Error != nil {

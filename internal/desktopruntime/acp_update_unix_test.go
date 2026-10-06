@@ -18,6 +18,7 @@ func TestApplyACPProfileUpdateVerifiesStagingAndAtomicallyPromotes(t *testing.T)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing-noexec-style-temp"))
 	target := filepath.Join(home, ".agentdock-next", "bin", "antigravity-acp")
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		t.Fatal(err)

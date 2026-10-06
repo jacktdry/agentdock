@@ -26,14 +26,22 @@ func platformTrustedAntigravityTarget(runtimeRoot, target string) bool {
 	if filepath.Dir(target) != expectedDir || filepath.Base(target) != "antigravity-acp" {
 		return false
 	}
+	uid := uint32(unix.Geteuid())
 	for _, path := range []string{home, filepath.Join(home, ".agentdock-next"), expectedDir} {
-		info, err := os.Lstat(path)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		var stat unix.Stat_t
+		if err := unix.Lstat(path, &stat); err != nil ||
+			stat.Mode&unix.S_IFMT != unix.S_IFDIR ||
+			stat.Uid != uid ||
+			stat.Mode&0o022 != 0 {
 			return false
 		}
 	}
-	info, err := os.Lstat(target)
-	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0
+	var targetStat unix.Stat_t
+	return unix.Lstat(target, &targetStat) == nil &&
+		targetStat.Mode&unix.S_IFMT == unix.S_IFREG &&
+		targetStat.Uid == uid &&
+		targetStat.Mode&0o022 == 0 &&
+		targetStat.Mode&0o111 != 0
 }
 
 func platformPromoteACPUpdate(runtimeRoot, target string, data []byte) error {

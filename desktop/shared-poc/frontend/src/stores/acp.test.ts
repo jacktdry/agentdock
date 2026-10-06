@@ -175,8 +175,9 @@ describe('ACP settings mutations', () => {
     expect(store.completed).toBe(true)
   })
 
-  it('preserves the current snapshot when a stale revision is rejected', async () => {
-    mocks.settings.mockResolvedValue(configured)
+  it('reloads the latest revision after a stale save while preserving the conflict for retry', async () => {
+    const latest = { ...configured, revision: 'rev-2' }
+    mocks.settings.mockResolvedValueOnce(configured).mockResolvedValueOnce(latest)
     const store = useACPStore()
     await store.refresh()
     const conflict: APIError = {
@@ -196,8 +197,45 @@ describe('ACP settings mutations', () => {
 
     expect(await store.setGlobalEnabled(false)).toBe(false)
     expect(store.error).toEqual(conflict)
-    expect(store.settings).toEqual(configured)
+    expect(store.settings).toEqual(latest)
+    expect(mocks.settings).toHaveBeenCalledTimes(2)
     expect(store.restartRequired).toBe(false)
+  })
+
+  it('keeps an outstanding restart notice across a later failed save', async () => {
+    const savedSnapshot = { ...configured, revision: 'rev-2' }
+    const latestSnapshot = { ...configured, revision: 'rev-3' }
+    mocks.settings.mockResolvedValueOnce(configured).mockResolvedValueOnce(latestSnapshot)
+    mocks.saveSettings
+      .mockResolvedValueOnce({
+        completed: true,
+        persisted: true,
+        applied: false,
+        restartRequired: true,
+        runtimeImpact: 'existing_runtime_unchanged',
+        snapshot: savedSnapshot,
+      })
+      .mockResolvedValueOnce({
+        completed: false,
+        persisted: false,
+        applied: false,
+        restartRequired: false,
+        runtimeImpact: '',
+        error: {
+          code: 'acp_settings_conflict',
+          message: 'reload',
+          category: ErrorCategory.ErrorCategoryConflict,
+          retryable: false,
+        },
+      })
+
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.setGlobalEnabled(false)).toBe(true)
+    expect(store.restartRequired).toBe(true)
+    expect(await store.setGlobalEnabled(false)).toBe(false)
+    expect(store.restartRequired).toBe(true)
+    expect(store.settings?.revision).toBe('rev-3')
   })
 
   it('blocks disabling or deleting the default profile before calling the backend', async () => {
@@ -214,6 +252,40 @@ describe('ACP settings mutations', () => {
     expect(await store.setProfileEnabled('codex', false)).toBe(false)
     expect(await store.removeProfile('codex')).toBe(false)
     expect(mocks.saveSettings).not.toHaveBeenCalled()
+  })
+
+  it('allows clearing the sole default atomically while ACP is globally disabled', async () => {
+    const disabledDefault: ACPManagerSnapshot = {
+      ...configured,
+      enabled: false,
+      defaultProfile: 'codex',
+      profiles: [{ ...configured.profiles![0], enabled: true }],
+    }
+    mocks.settings.mockResolvedValue(disabledDefault)
+    mocks.saveSettings.mockImplementation(async (_revision, enabled, defaultProfile, profiles) => ({
+      completed: true,
+      persisted: true,
+      applied: false,
+      restartRequired: true,
+      runtimeImpact: 'existing_runtime_unchanged',
+      snapshot: { ...disabledDefault, revision: 'rev-2', enabled, defaultProfile, profiles: profiles.map((profile: any) => ({
+        ...disabledDefault.profiles![0],
+        enabled: profile.enabled,
+      })) },
+    }))
+    const store = useACPStore()
+    await store.refresh()
+
+    expect(await store.setProfileEnabled('codex', false)).toBe(true)
+    expect(mocks.saveSettings).toHaveBeenLastCalledWith('rev-1', false, '', [expect.objectContaining({ id: 'codex', enabled: false })])
+
+    setActivePinia(createPinia())
+    mocks.settings.mockResolvedValue(disabledDefault)
+    mocks.saveSettings.mockClear()
+    const deleteStore = useACPStore()
+    await deleteStore.refresh()
+    expect(await deleteStore.removeProfile('codex')).toBe(true)
+    expect(mocks.saveSettings).toHaveBeenLastCalledWith('rev-1', false, '', [])
   })
 
   it('requires an enabled default with a command before turning ACP on', async () => {
@@ -403,6 +475,39 @@ describe('ACP adapter updates', () => {
     expect(store.completed).toBe(true)
   })
 
+  it('does not clear a pending configuration restart after an adapter update', async () => {
+    const disabledSnapshot = { ...configured, revision: 'rev-2', enabled: false }
+    mocks.settings.mockResolvedValue(configured)
+    mocks.saveSettings.mockResolvedValue({
+      completed: true,
+      persisted: true,
+      applied: false,
+      restartRequired: true,
+      runtimeImpact: 'existing_runtime_unchanged',
+      snapshot: disabledSnapshot,
+    })
+    mocks.updateAdapter.mockResolvedValue({
+      completed: true,
+      restartRequired: false,
+      runtimeImpact: 'existing_sessions_unchanged',
+      profile: {
+        ...configured.profiles![0],
+        installedVersion: '1.2.0-agentdock.7',
+        latestVersion: '1.2.0-agentdock.7',
+        versionState: 'current',
+        canUpdate: false,
+        blockedReason: '',
+      },
+    })
+
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.setGlobalEnabled(false)).toBe(true)
+    expect(store.restartRequired).toBe(true)
+    expect(await store.updateProfileAdapter('antigravity', 'plan-7')).toBe(true)
+    expect(store.restartRequired).toBe(true)
+  })
+
   it('reconciles an outcome-unknown profile even when the mutation returns an error', async () => {
     mocks.settings.mockResolvedValue(configured)
     mocks.updateAdapter.mockResolvedValue({
@@ -516,7 +621,7 @@ describe.each(['close', 'updateLifecycle'] as const)('ACP %s', operation => {
     expect(store.busy).toBe(false)
   })
 
-  it('rechecks mutation permission and blocks runtime actions while ACP is disabled', async () => {
+  it('rechecks mutation permission but keeps observed runtime actions available after config disable', async () => {
     const store = useACPStore()
     await store.refresh()
     mocks.allowed.delete(operation)
@@ -526,9 +631,11 @@ describe.each(['close', 'updateLifecycle'] as const)('ACP %s', operation => {
 
     mocks.allowed.add(operation)
     mocks.status.mockResolvedValue({ ...status, enabled: false })
+    mutation().mockResolvedValue({ completed: true })
     await store.refresh()
+    expect(store.canInvoke(operation)).toBe(true)
     await invoke(store)
-    expect(mutation()).not.toHaveBeenCalled()
+    expect(mutation()).toHaveBeenCalledTimes(1)
   })
 
   it('serializes refresh and runtime mutations while work is pending', async () => {

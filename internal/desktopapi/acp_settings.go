@@ -296,21 +296,32 @@ func acpUpdatePlanToken(revision string, profile desktopruntime.ACPProfileSettin
 }
 
 func containsSensitiveACPArguments(args []string) bool {
-	sensitive := []string{"api-key", "apikey", "access-token", "auth-token", "bearer", "credential", "password", "passwd", "secret", "token"}
-	for index, arg := range args {
-		value := strings.ToLower(strings.TrimSpace(arg))
-		for _, marker := range sensitive {
-			if strings.Contains(value, marker) {
-				return true
-			}
+	for _, arg := range args {
+		value := strings.TrimSpace(arg)
+		if value == "" {
+			continue
 		}
-		if index > 0 {
-			previous := strings.ToLower(strings.TrimSpace(args[index-1]))
-			for _, marker := range sensitive {
-				if strings.Contains(previous, marker) {
-					return true
-				}
-			}
+		lower := strings.ToLower(value)
+		if strings.HasPrefix(lower, "bearer ") ||
+			strings.Contains(lower, "authorization:") ||
+			strings.Contains(lower, "proxy-authorization:") {
+			return true
+		}
+
+		key := value
+		if index := strings.IndexAny(key, "=:"); index >= 0 {
+			key = key[:index]
+		}
+		key = strings.TrimLeft(strings.TrimSpace(key), "-/")
+		normalized := strings.NewReplacer("-", "", "_", "", ".", "", " ", "").Replace(strings.ToLower(key))
+		switch normalized {
+		case "apikey", "accesstoken", "authtoken", "authorization", "credential", "credentials",
+			"clientsecret", "password", "passwd", "secret", "token", "bearertoken",
+			"refreshtoken", "idtoken", "privatekey", "secretkey", "signingkey", "accesskey":
+			return true
+		}
+		if strings.HasSuffix(normalized, "token") && normalized != "token" {
+			return true
 		}
 	}
 	return false

@@ -88,6 +88,33 @@ func TestACPSettingsSnapshotHidesSensitiveArguments(t *testing.T) {
 	}
 }
 
+func TestSensitiveACPArgumentVariantsAreProtected(t *testing.T) {
+	sensitive := [][]string{
+		{"--api_key", "PRIVATE"},
+		{"--apiKey=PRIVATE"},
+		{"API_KEY=PRIVATE"},
+		{"--github-token", "PRIVATE"},
+		{"Authorization: Basic PRIVATE"},
+		{"--header", "Authorization: Bearer PRIVATE"},
+		{"--client_secret=PRIVATE"},
+	}
+	for _, args := range sensitive {
+		if !containsSensitiveACPArguments(args) {
+			t.Errorf("args %#v were not protected", args)
+		}
+	}
+	for _, args := range [][]string{
+		{"--max-tokens", "4096"},
+		{"--tokenizer", "cl100k"},
+		{"--sort-key", "name"},
+		{"--mode", "safe"},
+	} {
+		if containsSensitiveACPArguments(args) {
+			t.Errorf("args %#v were falsely protected", args)
+		}
+	}
+}
+
 func TestACPProbeProfileDoesNotExposeProtectedDetectedArgs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("custom executable fixture is Unix-only")

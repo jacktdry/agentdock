@@ -156,7 +156,10 @@ func ApplyACPProfileUpdate(ctx context.Context, client *http.Client, source ACPU
 	if !matchesSHA256(data, update.Digest) {
 		return errors.New("ACP adapter update digest mismatch")
 	}
-	staged, err := os.CreateTemp("", ".agentdock-acp-verify-*")
+	// Verify from the already-trusted Next-owned installation directory.
+	// This avoids relying on /tmp being executable (common hardened Linux setup)
+	// while keeping the candidate outside the final target name until promotion.
+	staged, err := os.CreateTemp(filepath.Dir(update.TargetPath), ".agentdock-acp-verify-*")
 	if err != nil {
 		return fmt.Errorf("create ACP adapter verification file: %w", err)
 	}
@@ -212,6 +215,9 @@ func fetchACPRelease(ctx context.Context, client *http.Client, endpoint string) 
 		return acpRelease{}, 0, err
 	}
 	defer response.Body.Close()
+	if response.Request == nil || response.Request.URL == nil || !sameACPReleaseEndpoint(request.URL, response.Request.URL) {
+		return acpRelease{}, response.StatusCode, errors.New("ACP release metadata redirected away from the approved repository endpoint")
+	}
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 		return acpRelease{}, response.StatusCode, fmt.Errorf("ACP release endpoint returned %s", response.Status)
@@ -222,6 +228,18 @@ func fetchACPRelease(ctx context.Context, client *http.Client, endpoint string) 
 		return acpRelease{}, response.StatusCode, err
 	}
 	return release, response.StatusCode, nil
+}
+
+func sameACPReleaseEndpoint(expected, actual *url.URL) bool {
+	if expected == nil || actual == nil ||
+		expected.User != nil || actual.User != nil ||
+		expected.Fragment != "" || actual.Fragment != "" {
+		return false
+	}
+	return strings.EqualFold(expected.Scheme, actual.Scheme) &&
+		strings.EqualFold(expected.Host, actual.Host) &&
+		expected.EscapedPath() == actual.EscapedPath() &&
+		expected.RawQuery == actual.RawQuery
 }
 
 func downloadACPAsset(ctx context.Context, client *http.Client, rawURL string, allowedHosts []string, limit int64) ([]byte, error) {

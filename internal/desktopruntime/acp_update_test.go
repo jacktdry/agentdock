@@ -129,6 +129,57 @@ func TestCheckACPProfileUpdateRejectsSharedOrUnmanagedTargets(t *testing.T) {
 	}
 }
 
+func TestTrustedAntigravityTargetRejectsWritableOwnershipBoundary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission semantics required")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	target := prepareTrustedAntigravityTarget(t, home)
+	if !trustedAntigravityTarget(t.TempDir(), target) {
+		t.Fatal("secure target unexpectedly rejected")
+	}
+
+	if err := os.Chmod(target, 0o722); err != nil {
+		t.Fatal(err)
+	}
+	if trustedAntigravityTarget(t.TempDir(), target) {
+		t.Fatal("group/world-writable target unexpectedly trusted")
+	}
+	if err := os.Chmod(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Dir(target)
+	if err := os.Chmod(binDir, 0o722); err != nil {
+		t.Fatal(err)
+	}
+	if trustedAntigravityTarget(t.TempDir(), target) {
+		t.Fatal("group/world-writable bin directory unexpectedly trusted")
+	}
+}
+
+func TestFetchACPReleaseRejectsRedirectedRepositoryMetadata(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/latest":
+			http.Redirect(w, r, server.URL+"/transferred/latest", http.StatusFound)
+		case "/transferred/latest":
+			_ = json.NewEncoder(w).Encode(acpRelease{TagName: "v9.9.9-agentdock.99"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := fetchACPRelease(context.Background(), server.Client(), server.URL+"/latest")
+	if err == nil || !strings.Contains(err.Error(), "approved repository endpoint") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestDownloadACPAssetRejectsFinalRedirectHost(t *testing.T) {
 	client := &http.Client{Transport: acpRoundTripFunc(func(request *http.Request) (*http.Response, error) {
 		finalRequest := request.Clone(request.Context())

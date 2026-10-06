@@ -6,6 +6,7 @@ import { safeMetadata } from '../../features/acpLogic'
 const props = defineProps<{
   profile: ACPManagedProfile
   isDefault: boolean
+  globalEnabled: boolean
   busy: boolean
   activeSessions: number
   canDetect: boolean
@@ -105,17 +106,17 @@ const hasDifferentDetectedAdapter = () => !props.profile.protectedArgs && !!prop
       <button v-if="profile.canUpdate && profile.latestVersion && profile.updatePlan" type="button" :disabled="busy || !canUpdateAdapter" @click="emit('updateAdapter')">
         {{ t('acp.update_to', { version: profile.latestVersion }) }}
       </button>
-      <button type="button" :disabled="busy || !canManageSettings || (profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">
+      <button type="button" :disabled="busy || !canManageSettings || (globalEnabled && profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">
         {{ profile.enabled ? t('acp.disable') : t('acp.enable') }}
       </button>
       <button type="button" :disabled="busy || !canManageSettings || isDefault || !profile.enabled" @click="emit('makeDefault')">
         {{ t('acp.make_default') }}
       </button>
-      <button type="button" class="danger-button" :disabled="busy || !canManageSettings || isDefault || activeSessions > 0" @click="emit('delete')">
+      <button type="button" class="danger-button" :disabled="busy || !canManageSettings || (globalEnabled && isDefault) || activeSessions > 0" @click="emit('delete')">
         {{ t('acp.delete') }}
       </button>
     </div>
-    <p v-if="profile.enabled && isDefault" class="field-hint">{{ t('acp.default_disable_hint') }}</p>
+    <p v-if="globalEnabled && profile.enabled && isDefault" class="field-hint">{{ t('acp.default_disable_hint') }}</p>
     <p v-else-if="activeSessions > 0" class="field-hint">{{ t('acp.delete_active_hint') }}</p>
   </article>
 </template>
