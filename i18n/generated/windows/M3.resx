@@ -61,6 +61,21 @@
   <data name="acp.blocked_adapter_not_found" xml:space="preserve">
     <value>No usable adapter was found for this profile.</value>
   </data>
+  <data name="acp.blocked_installed_version" xml:space="preserve">
+    <value>The installed hardened adapter version could not be verified.</value>
+  </data>
+  <data name="acp.blocked_not_next_owned" xml:space="preserve">
+    <value>This adapter path is not owned by AgentDock Next, so update is blocked.</value>
+  </data>
+  <data name="acp.blocked_platform" xml:space="preserve">
+    <value>Safe updates are not available for this platform.</value>
+  </data>
+  <data name="acp.blocked_shared_install" xml:space="preserve">
+    <value>This adapter is installed outside AgentDock Next, so it will not be updated here.</value>
+  </data>
+  <data name="acp.blocked_trusted_release" xml:space="preserve">
+    <value>No complete trusted AgentDock fork release is currently available.</value>
+  </data>
   <data name="acp.blocked_update_not_available" xml:space="preserve">
     <value>Safe update is not available for this adapter yet.</value>
   </data>
@@ -72,6 +87,9 @@
   </data>
   <data name="acp.bytes" xml:space="preserve">
     <value>{count, number} bytes</value>
+  </data>
+  <data name="acp.check_update" xml:space="preserve">
+    <value>Check update</value>
   </data>
   <data name="acp.cleanup_issues" xml:space="preserve">
     <value>Browser cleanup issues</value>
@@ -102,6 +120,9 @@
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>Apply this lifecycle policy to the ACP session?</value>
+  </data>
+  <data name="acp.confirm_update_adapter" xml:space="preserve">
+    <value>Update this ACP adapter?</value>
   </data>
   <data name="acp.default_badge" xml:space="preserve">
     <value>Default</value>
@@ -189,6 +210,9 @@
   </data>
   <data name="acp.last_active" xml:space="preserve">
     <value>Last active</value>
+  </data>
+  <data name="acp.latest_version" xml:space="preserve">
+    <value>Latest version</value>
   </data>
   <data name="acp.loaded" xml:space="preserve">
     <value>Loaded</value>
@@ -360,6 +384,12 @@
   </data>
   <data name="acp.unhealthy" xml:space="preserve">
     <value>Unhealthy</value>
+  </data>
+  <data name="acp.update_adapter_explainer" xml:space="preserve">
+    <value>AgentDock Next will install trusted version {version}. Existing sessions keep running; new sessions use the updated adapter.</value>
+  </data>
+  <data name="acp.update_to" xml:space="preserve">
+    <value>Update to {version}</value>
   </data>
   <data name="acp.use_detected" xml:space="preserve">
     <value>Use detected</value>

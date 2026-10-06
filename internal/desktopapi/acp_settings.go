@@ -55,11 +55,21 @@ type ACPProfileProbeResult struct {
 	Error   *APIError          `json:"error,omitempty"`
 }
 
+type ACPProfileUpdateMutationResult struct {
+	Completed       bool               `json:"completed"`
+	RestartRequired bool               `json:"restartRequired"`
+	RuntimeImpact   string             `json:"runtimeImpact"`
+	Profile         *ACPManagedProfile `json:"profile,omitempty"`
+	Error           *APIError          `json:"error,omitempty"`
+}
+
 func acpSettingsOperations() []OperationCapability {
 	return []OperationCapability{
 		{Name: "settings", Access: AccessRead},
 		{Name: "probeProfile", Access: AccessRead},
+		{Name: "checkProfileUpdate", Access: AccessRead},
 		{Name: "saveSettings", Access: AccessMutating},
+		{Name: "updateProfileAdapter", Access: AccessMutating, RequiresConfirmation: true},
 	}
 }
 
@@ -76,31 +86,107 @@ func (s *ACPService) Settings(ctx context.Context) ACPManagerSnapshot {
 }
 
 func (s *ACPService) ProbeProfile(ctx context.Context, profileID string) ACPProfileProbeResult {
+	config, profile, failure := s.readACPManagedProfile(ctx, profileID)
+	if failure != nil {
+		return ACPProfileProbeResult{Error: failure}
+	}
+	_ = config
+	managed := acpManagedProfile(profile)
+	probe, err := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
+	if err != nil {
+		return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
+	}
+	applyACPProbe(&managed, probe)
+	return ACPProfileProbeResult{Profile: &managed}
+}
+
+func (s *ACPService) CheckProfileUpdate(ctx context.Context, profileID string) ACPProfileProbeResult {
+	_, profile, failure := s.readACPManagedProfile(ctx, profileID)
+	if failure != nil {
+		return ACPProfileProbeResult{Error: failure}
+	}
+	managed := acpManagedProfile(profile)
+	probe, err := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
+	if err != nil {
+		return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
+	}
+	applyACPProbe(&managed, probe)
+	update, err := desktopruntime.CheckACPProfileUpdate(ctx, s.updateClient, s.updateSource, s.runtimeRoot, managed.Preset, profile, probe)
+	if err != nil {
+		return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_update_check_failed", err)}
+	}
+	applyACPUpdate(&managed, update)
+	return ACPProfileProbeResult{Profile: &managed}
+}
+
+func (s *ACPService) UpdateProfileAdapter(ctx context.Context, profileID, expectedVersion string) ACPProfileUpdateMutationResult {
+	_, profile, failure := s.readACPManagedProfile(ctx, profileID)
+	if failure != nil {
+		return ACPProfileUpdateMutationResult{Error: failure}
+	}
+	managed := acpManagedProfile(profile)
+	probe, err := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
+	if err != nil {
+		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
+	}
+	update, err := desktopruntime.CheckACPProfileUpdate(ctx, s.updateClient, s.updateSource, s.runtimeRoot, managed.Preset, profile, probe)
+	if err != nil {
+		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_update_check_failed", err)}
+	}
+	if !update.Supported || !update.Available {
+		return ACPProfileUpdateMutationResult{Error: NewError("acp_profile_update_unavailable", "No trusted ACP adapter update is available", ErrorCategoryUnavailable, true, nil)}
+	}
+	if strings.TrimSpace(expectedVersion) == "" || strings.TrimSpace(expectedVersion) != update.LatestVersion {
+		return ACPProfileUpdateMutationResult{Error: NewError("acp_profile_update_conflict", "ACP adapter update changed; check again before applying", ErrorCategoryConflict, false, nil)}
+	}
+	if err := desktopruntime.ApplyACPProfileUpdate(ctx, s.updateClient, s.updateSource, s.runtimeRoot, update); err != nil {
+		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_update_failed", err)}
+	}
+	probe, err = desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
+	if err != nil {
+		return ACPProfileUpdateMutationResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
+	}
+	applyACPProbe(&managed, probe)
+	managed.LatestVersion = update.LatestVersion
+	managed.VersionState = "current"
+	managed.CanUpdate = false
+	managed.BlockedReason = ""
+	return ACPProfileUpdateMutationResult{
+		Completed: true, RestartRequired: false, RuntimeImpact: "existing_sessions_unchanged", Profile: &managed,
+	}
+}
+
+func (s *ACPService) readACPManagedProfile(ctx context.Context, profileID string) (desktopruntime.ACPConfiguration, desktopruntime.ACPProfileSettings, *APIError) {
 	if s.rootError != nil {
-		return ACPProfileProbeResult{Error: safeServiceError("acp_root_unavailable", s.rootError)}
+		return desktopruntime.ACPConfiguration{}, desktopruntime.ACPProfileSettings{}, safeServiceError("acp_root_unavailable", s.rootError)
 	}
 	config, err := s.readConfiguration(ctx, s.runtimeRoot)
 	if err != nil {
-		return ACPProfileProbeResult{Error: acpSettingsError(ctx, "acp_settings_read_failed", err)}
+		return desktopruntime.ACPConfiguration{}, desktopruntime.ACPProfileSettings{}, acpSettingsError(ctx, "acp_settings_read_failed", err)
 	}
+	id := strings.TrimSpace(profileID)
 	for _, profile := range config.Profiles {
-		if profile.ID != strings.TrimSpace(profileID) {
-			continue
+		if profile.ID == id {
+			return config, profile, nil
 		}
-		managed := acpManagedProfile(profile)
-		probe, err := desktopruntime.ProbeACPProfile(ctx, s.runtimeRoot, managed.Preset, profile)
-		if err != nil {
-			return ACPProfileProbeResult{Error: safeContextServiceError(ctx, "acp_profile_probe_failed", err)}
-		}
-		managed.DetectedCommand = probe.Command
-		managed.DetectedArgs = append([]string(nil), probe.Args...)
-		managed.Availability = probe.Availability
-		managed.InstalledVersion = probe.InstalledVersion
-		managed.VersionState = probe.VersionState
-		managed.BlockedReason = probe.BlockedReason
-		return ACPProfileProbeResult{Profile: &managed}
 	}
-	return ACPProfileProbeResult{Error: NewError("acp_profile_not_found", "ACP profile was not found", ErrorCategoryValidation, false, nil)}
+	return config, desktopruntime.ACPProfileSettings{}, NewError("acp_profile_not_found", "ACP profile was not found", ErrorCategoryValidation, false, nil)
+}
+
+func applyACPProbe(managed *ACPManagedProfile, probe desktopruntime.ACPAdapterProbe) {
+	managed.DetectedCommand = probe.Command
+	managed.DetectedArgs = append([]string(nil), probe.Args...)
+	managed.Availability = probe.Availability
+	managed.InstalledVersion = probe.InstalledVersion
+	managed.VersionState = probe.VersionState
+	managed.BlockedReason = probe.BlockedReason
+}
+
+func applyACPUpdate(managed *ACPManagedProfile, update desktopruntime.ACPAdapterUpdate) {
+	managed.LatestVersion = update.LatestVersion
+	managed.VersionState = update.VersionState
+	managed.CanUpdate = update.Available
+	managed.BlockedReason = update.BlockedReason
 }
 
 // Profiles use the existing simplified configuration DTO (id, displayName,

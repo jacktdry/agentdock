@@ -19,10 +19,16 @@
 "acp.availability_unknown" = "Not checked";
 "acp.backend" = "Backend";
 "acp.blocked_adapter_not_found" = "No usable adapter was found for this profile.";
+"acp.blocked_installed_version" = "The installed hardened adapter version could not be verified.";
+"acp.blocked_not_next_owned" = "This adapter path is not owned by AgentDock Next, so update is blocked.";
+"acp.blocked_platform" = "Safe updates are not available for this platform.";
+"acp.blocked_shared_install" = "This adapter is installed outside AgentDock Next, so it will not be updated here.";
+"acp.blocked_trusted_release" = "No complete trusted AgentDock fork release is currently available.";
 "acp.blocked_update_not_available" = "Safe update is not available for this adapter yet.";
 "acp.blocked_version_unavailable" = "The adapter is available, but its installed version could not be read.";
 "acp.browser_leases" = "Browser leases";
 "acp.bytes" = "{count, number} bytes";
+"acp.check_update" = "Check update";
 "acp.cleanup_issues" = "Browser cleanup issues";
 "acp.close" = "Close session";
 "acp.closed" = "Closed";
@@ -33,6 +39,7 @@
 "acp.confirm_close" = "Close this ACP session and release its resources?";
 "acp.confirm_delete" = "Delete this ACP profile?";
 "acp.confirm_policy" = "Apply this lifecycle policy to the ACP session?";
+"acp.confirm_update_adapter" = "Update this ACP adapter?";
 "acp.default_badge" = "Default";
 "acp.default_disable_hint" = "Choose another default before disabling or deleting this profile.";
 "acp.default_profile" = "Default profile";
@@ -62,6 +69,7 @@
 "acp.invalid_policy" = "Choose a supported policy and timeout within the supported range.";
 "acp.kind" = "Kind";
 "acp.last_active" = "Last active";
+"acp.latest_version" = "Latest version";
 "acp.loaded" = "Loaded";
 "acp.make_default" = "Make default";
 "acp.managed" = "Managed";
@@ -119,6 +127,8 @@
 "acp.ttl" = "Idle timeout (minutes)";
 "acp.ttl_hint" = "Supported range: 1 minute to 7 days. Default: 30 minutes.";
 "acp.unhealthy" = "Unhealthy";
+"acp.update_adapter_explainer" = "AgentDock Next will install trusted version {version}. Existing sessions keep running; new sessions use the updated adapter.";
+"acp.update_to" = "Update to {version}";
 "acp.use_detected" = "Use detected";
 "acp.validation_command" = "Enabled profiles require an adapter command.";
 "acp.validation_duplicate" = "A profile with this ID already exists.";

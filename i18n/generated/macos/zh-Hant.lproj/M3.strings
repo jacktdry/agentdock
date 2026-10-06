@@ -19,10 +19,16 @@
 "acp.availability_unknown" = "尚未檢查";
 "acp.backend" = "後端";
 "acp.blocked_adapter_not_found" = "找不到可供此設定檔使用的配接器。";
+"acp.blocked_installed_version" = "無法驗證目前安裝的 hardened 配接器版本。";
+"acp.blocked_not_next_owned" = "此配接器路徑不屬於 AgentDock Next，因此禁止更新。";
+"acp.blocked_platform" = "此平台目前不支援安全更新。";
+"acp.blocked_shared_install" = "此配接器安裝在 AgentDock Next 之外，因此不會在這裡更新。";
+"acp.blocked_trusted_release" = "目前沒有完整且可信任的 AgentDock fork release 可供更新。";
 "acp.blocked_update_not_available" = "目前尚未提供此配接器的安全更新。";
 "acp.blocked_version_unavailable" = "配接器可用，但無法讀取已安裝版本。";
 "acp.browser_leases" = "瀏覽器租約";
 "acp.bytes" = "{count, number} 位元組";
+"acp.check_update" = "檢查更新";
 "acp.cleanup_issues" = "瀏覽器清理問題";
 "acp.close" = "關閉工作階段";
 "acp.closed" = "已關閉";
@@ -33,6 +39,7 @@
 "acp.confirm_close" = "關閉此 ACP 工作階段並釋放其資源？";
 "acp.confirm_delete" = "刪除此 ACP 設定檔？";
 "acp.confirm_policy" = "將此生命週期原則套用至 ACP 工作階段？";
+"acp.confirm_update_adapter" = "更新此 ACP 配接器？";
 "acp.default_badge" = "預設";
 "acp.default_disable_hint" = "請先選擇另一個預設設定檔，再停用或刪除此設定檔。";
 "acp.default_profile" = "預設設定檔";
@@ -62,6 +69,7 @@
 "acp.invalid_policy" = "請選擇支援的原則與範圍內的逾時值。";
 "acp.kind" = "類型";
 "acp.last_active" = "最後活動時間";
+"acp.latest_version" = "最新版本";
 "acp.loaded" = "已載入";
 "acp.make_default" = "設為預設";
 "acp.managed" = "受管理";
@@ -119,6 +127,8 @@
 "acp.ttl" = "閒置逾時（分鐘）";
 "acp.ttl_hint" = "支援範圍：1 分鐘至 7 天。預設為 30 分鐘。";
 "acp.unhealthy" = "不健康";
+"acp.update_adapter_explainer" = "AgentDock Next 將安裝可信任的 {version}。既有工作階段會繼續執行，新工作階段才使用更新後的配接器。";
+"acp.update_to" = "更新至 {version}";
 "acp.use_detected" = "使用偵測結果";
 "acp.validation_command" = "啟用的設定檔需要配接器命令。";
 "acp.validation_duplicate" = "已有相同 ID 的設定檔。";

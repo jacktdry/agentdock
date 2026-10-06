@@ -23,6 +23,7 @@ type RuntimeConfirmation =
 
 const runtimeConfirmation = shallowRef<RuntimeConfirmation | null>(null)
 const deleteTarget = shallowRef<ACPManagedProfile | null>(null)
+const adapterUpdateTarget = shallowRef<ACPManagedProfile | null>(null)
 const editorOpen = ref(false)
 const editorProfile = shallowRef<ACPManagedProfile | null>(null)
 
@@ -52,6 +53,12 @@ async function confirmDelete() {
   const target = deleteTarget.value
   deleteTarget.value = null
   if (target) await store.removeProfile(target.id)
+}
+
+async function confirmAdapterUpdate() {
+  const target = adapterUpdateTarget.value
+  adapterUpdateTarget.value = null
+  if (target?.latestVersion) await store.updateProfileAdapter(target.id, target.latestVersion)
 }
 
 async function setGlobalEnabled(event: Event) {
@@ -111,9 +118,11 @@ onMounted(async () => {
       <div v-if="store.configuredProfiles.length" class="managed-profile-list">
         <ACPManagedProfileCard v-for="profile in store.configuredProfiles" :key="profile.id"
           :profile="profile" :is-default="store.settings?.defaultProfile === profile.id"
-          :busy="store.busy || !store.canSaveSettings" :active-sessions="store.activeSessionsFor(profile.id)"
-          :can-detect="store.canProbeProfile"
+          :busy="store.busy" :active-sessions="store.activeSessionsFor(profile.id)"
+          :can-detect="store.canProbeProfile" :can-check-update="store.canCheckProfileUpdate"
+          :can-update-adapter="store.canUpdateProfileAdapter" :can-manage-settings="store.canSaveSettings"
           @edit="openEdit(profile)" @probe="store.probeProfile(profile.id)" @use-detected="store.useDetectedAdapter(profile.id)"
+          @check-update="store.checkProfileUpdate(profile.id)" @update-adapter="adapterUpdateTarget = profile"
           @toggle="store.setProfileEnabled(profile.id, $event)"
           @make-default="store.makeDefault(profile.id)" @delete="deleteTarget = profile" />
       </div>
@@ -151,6 +160,12 @@ onMounted(async () => {
     <ConfirmDialog v-if="deleteTarget" :prompt="t('acp.confirm_delete')" @confirm="confirmDelete" @cancel="deleteTarget = null">
       <p>{{ safeMetadata(deleteTarget.displayName || deleteTarget.id) }}</p>
       <p>{{ t('acp.delete_explainer') }}</p>
+    </ConfirmDialog>
+
+    <ConfirmDialog v-if="adapterUpdateTarget" :prompt="t('acp.confirm_update_adapter')"
+      @confirm="confirmAdapterUpdate" @cancel="adapterUpdateTarget = null">
+      <p>{{ safeMetadata(adapterUpdateTarget.displayName || adapterUpdateTarget.id) }}</p>
+      <p>{{ t('acp.update_adapter_explainer', { version: adapterUpdateTarget.latestVersion || t('common.unavailable') }) }}</p>
     </ConfirmDialog>
 
     <ConfirmDialog v-if="runtimeConfirmation"

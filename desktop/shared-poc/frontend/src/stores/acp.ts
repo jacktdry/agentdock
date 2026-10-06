@@ -42,7 +42,9 @@ export const useACPStore = defineStore('acp', () => {
   const canRead = computed(() => contract.canInvoke(Domain.DomainACP, 'status'))
   const canReadSettings = computed(() => contract.canInvoke(Domain.DomainACP, 'settings'))
   const canProbeProfile = computed(() => contract.canInvoke(Domain.DomainACP, 'probeProfile'))
+  const canCheckProfileUpdate = computed(() => contract.canInvoke(Domain.DomainACP, 'checkProfileUpdate'))
   const canSaveSettings = computed(() => contract.canInvoke(Domain.DomainACP, 'saveSettings'))
+  const canUpdateProfileAdapter = computed(() => contract.canInvoke(Domain.DomainACP, 'updateProfileAdapter'))
   const state = computed(() => {
     if (loading.value && !settings.value) return 'loading'
     if (!canReadSettings.value || settingsError.value || !settings.value) return 'unavailable'
@@ -166,6 +168,60 @@ export const useACPStore = defineStore('acp', () => {
     }, profileId)
   }
 
+  function overlayManagedProfile(profileId: string, next: ACPManagedProfile) {
+    if (!settings.value) return
+    settings.value = {
+      ...settings.value,
+      profiles: (settings.value.profiles ?? []).map(profile => profile.id === profileId ? next : profile),
+    }
+  }
+
+  async function checkProfileUpdate(profileId: string) {
+    if (pending.value || !settings.value || !canCheckProfileUpdate.value) return false
+    pending.value = true
+    mutationError.value = null
+    completed.value = false
+    try {
+      let result
+      try {
+        result = await ACPService.CheckProfileUpdate(profileId)
+      } catch {
+        mutationError.value = clientError('acp_profile_update_check_failed', '')
+        return false
+      }
+      mutationError.value = result.error ?? null
+      if (mutationError.value || !result.profile) return false
+      overlayManagedProfile(profileId, result.profile)
+      return true
+    } finally {
+      pending.value = false
+    }
+  }
+
+  async function updateProfileAdapter(profileId: string, expectedVersion: string) {
+    if (pending.value || !settings.value || !canUpdateProfileAdapter.value || !expectedVersion) return false
+    pending.value = true
+    mutationError.value = null
+    completed.value = false
+    try {
+      let result
+      try {
+        result = await ACPService.UpdateProfileAdapter(profileId, expectedVersion)
+      } catch {
+        mutationError.value = clientError('acp_profile_update_failed', '')
+        return false
+      }
+      mutationError.value = result.error ?? (result.completed ? null : clientError('acp_profile_update_incomplete', ''))
+      if (mutationError.value || !result.profile) return false
+      overlayManagedProfile(profileId, result.profile)
+      restartRequired.value = result.restartRequired
+      completed.value = true
+      return true
+    } finally {
+      pending.value = false
+    }
+  }
+
   async function saveConfiguration(enabled: boolean, defaultProfile: string, profiles: ACPProfileSettings[]) {
     if (pending.value || !settings.value || !canSaveSettings.value) return false
     pending.value = true
@@ -250,7 +306,9 @@ export const useACPStore = defineStore('acp', () => {
     canRead,
     canReadSettings,
     canProbeProfile,
+    canCheckProfileUpdate,
     canSaveSettings,
+    canUpdateProfileAdapter,
     canEnableACP,
     state,
     configuredProfiles,
@@ -261,6 +319,8 @@ export const useACPStore = defineStore('acp', () => {
     refresh,
     probeProfile,
     useDetectedAdapter,
+    checkProfileUpdate,
+    updateProfileAdapter,
     upsertProfile,
     setProfileEnabled,
     makeDefault,

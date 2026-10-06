@@ -61,6 +61,21 @@
   <data name="acp.blocked_adapter_not_found" xml:space="preserve">
     <value>找不到可供此配置文件使用的适配器。</value>
   </data>
+  <data name="acp.blocked_installed_version" xml:space="preserve">
+    <value>无法验证当前安装的 hardened 适配器版本。</value>
+  </data>
+  <data name="acp.blocked_not_next_owned" xml:space="preserve">
+    <value>此适配器路径不属于 AgentDock Next，因此禁止更新。</value>
+  </data>
+  <data name="acp.blocked_platform" xml:space="preserve">
+    <value>此平台目前不支持安全更新。</value>
+  </data>
+  <data name="acp.blocked_shared_install" xml:space="preserve">
+    <value>此适配器安装在 AgentDock Next 之外，因此不会在这里更新。</value>
+  </data>
+  <data name="acp.blocked_trusted_release" xml:space="preserve">
+    <value>目前没有完整且可信的 AgentDock fork release 可供更新。</value>
+  </data>
   <data name="acp.blocked_update_not_available" xml:space="preserve">
     <value>目前尚未提供此适配器的安全更新。</value>
   </data>
@@ -72,6 +87,9 @@
   </data>
   <data name="acp.bytes" xml:space="preserve">
     <value>{count, number} 字节</value>
+  </data>
+  <data name="acp.check_update" xml:space="preserve">
+    <value>检查更新</value>
   </data>
   <data name="acp.cleanup_issues" xml:space="preserve">
     <value>浏览器清理问题</value>
@@ -102,6 +120,9 @@
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>将此生命周期策略应用于 ACP 会话？</value>
+  </data>
+  <data name="acp.confirm_update_adapter" xml:space="preserve">
+    <value>更新此 ACP 适配器？</value>
   </data>
   <data name="acp.default_badge" xml:space="preserve">
     <value>默认</value>
@@ -189,6 +210,9 @@
   </data>
   <data name="acp.last_active" xml:space="preserve">
     <value>最后活动时间</value>
+  </data>
+  <data name="acp.latest_version" xml:space="preserve">
+    <value>最新版本</value>
   </data>
   <data name="acp.loaded" xml:space="preserve">
     <value>已加载</value>
@@ -360,6 +384,12 @@
   </data>
   <data name="acp.unhealthy" xml:space="preserve">
     <value>不健康</value>
+  </data>
+  <data name="acp.update_adapter_explainer" xml:space="preserve">
+    <value>AgentDock Next 将安装可信的 {version}。现有会话会继续运行，新会话才使用更新后的适配器。</value>
+  </data>
+  <data name="acp.update_to" xml:space="preserve">
+    <value>更新至 {version}</value>
   </data>
   <data name="acp.use_detected" xml:space="preserve">
     <value>使用检测结果</value>

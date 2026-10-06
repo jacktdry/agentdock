@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,12 +138,20 @@ type ACPService struct {
 	saveConfiguration func(context.Context, string, string, desktopruntime.ACPSettings) (desktopruntime.ACPConfiguration, error)
 	readAccess        func(context.Context, string) (desktopruntime.LocalCoreAccess, error)
 	call              func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
+	updateClient      *http.Client
+	updateSource      desktopruntime.ACPUpdateSource
 	memoryURL         string
 }
 
 func NewACPService(root string) *ACPService {
 	root, err := resolveRuntimeRoot(root)
-	return &ACPService{runtimeRoot: root, rootError: err, readSettings: desktopruntime.ReadACPSettings, readConfiguration: desktopruntime.ReadACPConfiguration, saveConfiguration: desktopruntime.SaveACPSettings, readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool, memoryURL: defaultSharedMemoryMCPURL}
+	return &ACPService{
+		runtimeRoot: root, rootError: err,
+		readSettings: desktopruntime.ReadACPSettings, readConfiguration: desktopruntime.ReadACPConfiguration, saveConfiguration: desktopruntime.SaveACPSettings,
+		readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool,
+		updateClient: &http.Client{Timeout: 2 * time.Minute}, updateSource: desktopruntime.DefaultACPUpdateSource(),
+		memoryURL: defaultSharedMemoryMCPURL,
+	}
 }
 
 func (s *ACPService) Status(ctx context.Context) ACPStatusResult {

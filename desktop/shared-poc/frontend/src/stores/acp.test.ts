@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   settings: vi.fn(),
   probe: vi.fn(),
+  checkUpdate: vi.fn(),
+  updateAdapter: vi.fn(),
   saveSettings: vi.fn(),
   close: vi.fn(),
   update: vi.fn(),
@@ -17,6 +19,8 @@ vi.mock('../../bindings/github.com/uvwt/agentdock/internal/desktopapi/acpservice
   Status: mocks.status,
   Settings: mocks.settings,
   ProbeProfile: mocks.probe,
+  CheckProfileUpdate: mocks.checkUpdate,
+  UpdateProfileAdapter: mocks.updateAdapter,
   SaveSettings: mocks.saveSettings,
   Close: mocks.close,
   UpdateLifecycle: mocks.update,
@@ -52,7 +56,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   setActivePinia(createPinia())
   mocks.allowed.clear()
-  for (const op of ['status', 'settings', 'probeProfile', 'saveSettings', 'close', 'updateLifecycle']) mocks.allowed.add(op)
+  for (const op of ['status', 'settings', 'probeProfile', 'checkProfileUpdate', 'saveSettings', 'updateProfileAdapter', 'close', 'updateLifecycle']) mocks.allowed.add(op)
   mocks.status.mockResolvedValue(status)
   mocks.settings.mockResolvedValue(manager)
 })
@@ -308,6 +312,113 @@ describe('ACP adapter probe', () => {
     await store.refresh()
     expect(await store.probeProfile('codex')).toBe(false)
     expect(store.error?.code).toBe('acp_profile_probe_failed')
+    expect(JSON.stringify(store.error)).not.toContain('private')
+  })
+})
+
+describe('ACP adapter updates', () => {
+  const configured: ACPManagerSnapshot = {
+    revision: 'rev-1',
+    enabled: true,
+    defaultProfile: 'antigravity',
+    capabilities: [],
+    profiles: [{
+      id: 'antigravity',
+      displayName: 'Antigravity',
+      runtimeKind: 'custom',
+      preset: 'antigravity',
+      source: 'custom-fork',
+      enabled: true,
+      configuredCommand: '/Users/test/.agentdock-next/bin/antigravity-acp',
+      configuredArgs: [],
+      availability: 'available',
+      installedVersion: '1.2.0-agentdock.6',
+      versionState: 'not_checked',
+      canDetect: true,
+      canUpdate: false,
+    }],
+  }
+
+  it('checks for updates without mutating settings or binaries', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.checkUpdate.mockResolvedValue({
+      profile: {
+        ...configured.profiles![0],
+        latestVersion: '1.2.0-agentdock.7',
+        versionState: 'update_available',
+        canUpdate: true,
+        blockedReason: '',
+      },
+    })
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.checkProfileUpdate('antigravity')).toBe(true)
+    expect(mocks.checkUpdate).toHaveBeenCalledWith('antigravity')
+    expect(store.configuredProfiles[0].latestVersion).toBe('1.2.0-agentdock.7')
+    expect(store.configuredProfiles[0].canUpdate).toBe(true)
+    expect(mocks.updateAdapter).not.toHaveBeenCalled()
+    expect(mocks.saveSettings).not.toHaveBeenCalled()
+  })
+
+  it('applies only the explicitly checked version and preserves restart state', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.updateAdapter.mockResolvedValue({
+      completed: true,
+      restartRequired: false,
+      runtimeImpact: 'existing_sessions_unchanged',
+      profile: {
+        ...configured.profiles![0],
+        installedVersion: '1.2.0-agentdock.7',
+        latestVersion: '1.2.0-agentdock.7',
+        versionState: 'current',
+        canUpdate: false,
+        blockedReason: '',
+      },
+    })
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(true)
+    expect(mocks.updateAdapter).toHaveBeenCalledWith('antigravity', '1.2.0-agentdock.7')
+    expect(store.configuredProfiles[0].installedVersion).toBe('1.2.0-agentdock.7')
+    expect(store.restartRequired).toBe(false)
+    expect(store.completed).toBe(true)
+  })
+
+  it('preserves backend conflict and blocks calls without update capability', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    mocks.updateAdapter.mockResolvedValue({ completed: false, error: {
+      code: 'acp_profile_update_conflict',
+      message: 'check again',
+      category: ErrorCategory.ErrorCategoryConflict,
+      retryable: false,
+    } })
+    const store = useACPStore()
+    await store.refresh()
+    expect(await store.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(false)
+    expect(store.error?.code).toBe('acp_profile_update_conflict')
+
+    mocks.allowed.delete('updateProfileAdapter')
+    setActivePinia(createPinia())
+    const denied = useACPStore()
+    mocks.settings.mockResolvedValue(configured)
+    await denied.refresh()
+    expect(await denied.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(false)
+    expect(mocks.updateAdapter).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps rejected update checks and updates to safe client errors', async () => {
+    mocks.settings.mockResolvedValue(configured)
+    const store = useACPStore()
+    await store.refresh()
+
+    mocks.checkUpdate.mockRejectedValue(new Error('token private'))
+    expect(await store.checkProfileUpdate('antigravity')).toBe(false)
+    expect(store.error?.code).toBe('acp_profile_update_check_failed')
+    expect(JSON.stringify(store.error)).not.toContain('private')
+
+    mocks.updateAdapter.mockRejectedValue(new Error('token private'))
+    expect(await store.updateProfileAdapter('antigravity', '1.2.0-agentdock.7')).toBe(false)
+    expect(store.error?.code).toBe('acp_profile_update_failed')
     expect(JSON.stringify(store.error)).not.toContain('private')
   })
 })

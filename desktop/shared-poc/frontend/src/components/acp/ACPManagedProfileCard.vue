@@ -9,6 +9,9 @@ const props = defineProps<{
   busy: boolean
   activeSessions: number
   canDetect: boolean
+  canCheckUpdate: boolean
+  canUpdateAdapter: boolean
+  canManageSettings: boolean
 }>()
 const emit = defineEmits<{
   edit: []
@@ -17,6 +20,8 @@ const emit = defineEmits<{
   delete: []
   probe: []
   useDetected: []
+  checkUpdate: []
+  updateAdapter: []
 }>()
 const { t } = useI18n()
 
@@ -34,6 +39,14 @@ const blockedKey = () => {
   case 'adapter_not_found': return 'acp.blocked_adapter_not_found'
   case 'version_unavailable': return 'acp.blocked_version_unavailable'
   case 'update_not_available': return 'acp.blocked_update_not_available'
+  case 'shared_install_not_managed': return 'acp.blocked_shared_install'
+  case 'update_target_not_next_owned': return 'acp.blocked_not_next_owned'
+  case 'installed_version_unavailable': return 'acp.blocked_installed_version'
+  case 'installed_version_invalid': return 'acp.blocked_installed_version'
+  case 'trusted_release_unavailable': return 'acp.blocked_trusted_release'
+  case 'trusted_release_invalid': return 'acp.blocked_trusted_release'
+  case 'trusted_release_incomplete': return 'acp.blocked_trusted_release'
+  case 'platform_unsupported': return 'acp.blocked_platform'
   default: return ''
   }
 }
@@ -55,7 +68,7 @@ const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
         </div>
         <p class="execution-meta">{{ t(presetKey() as any) }} · {{ text(profile.id) }}</p>
       </div>
-      <button type="button" :disabled="busy" :aria-label="t('acp.edit_named', { name: text(profile.displayName || profile.id) })" @click="emit('edit')">
+      <button type="button" :disabled="busy || !canManageSettings" :aria-label="t('acp.edit_named', { name: text(profile.displayName || profile.id) })" @click="emit('edit')">
         {{ t('acp.edit') }}
       </button>
     </div>
@@ -63,6 +76,7 @@ const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
     <dl class="status-grid managed-profile-status">
       <div><dt>{{ t('acp.availability') }}</dt><dd>{{ t(('acp.availability_' + profile.availability) as any) }}</dd></div>
       <div><dt>{{ t('acp.installed_version') }}</dt><dd>{{ text(profile.installedVersion) }}</dd></div>
+      <div v-if="profile.latestVersion"><dt>{{ t('acp.latest_version') }}</dt><dd>{{ text(profile.latestVersion) }}</dd></div>
       <div><dt>{{ t('acp.version_state') }}</dt><dd>{{ t(('acp.version_' + profile.versionState) as any) }}</dd></div>
       <div><dt>{{ t('acp.active_sessions') }}</dt><dd>{{ activeSessions }}</dd></div>
     </dl>
@@ -81,16 +95,22 @@ const hasDifferentDetectedAdapter = () => !!props.profile.detectedCommand && (
       <button type="button" :disabled="busy || !canDetect || !profile.canDetect" @click="emit('probe')">
         {{ profile.availability === 'unknown' ? t('acp.detect') : t('acp.recheck') }}
       </button>
-      <button v-if="hasDifferentDetectedAdapter()" type="button" :disabled="busy" @click="emit('useDetected')">
+      <button v-if="hasDifferentDetectedAdapter()" type="button" :disabled="busy || !canManageSettings" @click="emit('useDetected')">
         {{ t('acp.use_detected') }}
       </button>
-      <button type="button" :disabled="busy || (profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">
+      <button type="button" :disabled="busy || !canCheckUpdate || profile.availability !== 'available'" @click="emit('checkUpdate')">
+        {{ t('acp.check_update') }}
+      </button>
+      <button v-if="profile.canUpdate && profile.latestVersion" type="button" :disabled="busy || !canUpdateAdapter" @click="emit('updateAdapter')">
+        {{ t('acp.update_to', { version: profile.latestVersion }) }}
+      </button>
+      <button type="button" :disabled="busy || !canManageSettings || (profile.enabled && isDefault)" @click="emit('toggle', !profile.enabled)">
         {{ profile.enabled ? t('acp.disable') : t('acp.enable') }}
       </button>
-      <button type="button" :disabled="busy || isDefault || !profile.enabled" @click="emit('makeDefault')">
+      <button type="button" :disabled="busy || !canManageSettings || isDefault || !profile.enabled" @click="emit('makeDefault')">
         {{ t('acp.make_default') }}
       </button>
-      <button type="button" class="danger-button" :disabled="busy || isDefault || activeSessions > 0" @click="emit('delete')">
+      <button type="button" class="danger-button" :disabled="busy || !canManageSettings || isDefault || activeSessions > 0" @click="emit('delete')">
         {{ t('acp.delete') }}
       </button>
     </div>

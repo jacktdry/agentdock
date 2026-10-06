@@ -61,6 +61,21 @@
   <data name="acp.blocked_adapter_not_found" xml:space="preserve">
     <value>找不到可供此設定檔使用的配接器。</value>
   </data>
+  <data name="acp.blocked_installed_version" xml:space="preserve">
+    <value>無法驗證目前安裝的 hardened 配接器版本。</value>
+  </data>
+  <data name="acp.blocked_not_next_owned" xml:space="preserve">
+    <value>此配接器路徑不屬於 AgentDock Next，因此禁止更新。</value>
+  </data>
+  <data name="acp.blocked_platform" xml:space="preserve">
+    <value>此平台目前不支援安全更新。</value>
+  </data>
+  <data name="acp.blocked_shared_install" xml:space="preserve">
+    <value>此配接器安裝在 AgentDock Next 之外，因此不會在這裡更新。</value>
+  </data>
+  <data name="acp.blocked_trusted_release" xml:space="preserve">
+    <value>目前沒有完整且可信任的 AgentDock fork release 可供更新。</value>
+  </data>
   <data name="acp.blocked_update_not_available" xml:space="preserve">
     <value>目前尚未提供此配接器的安全更新。</value>
   </data>
@@ -72,6 +87,9 @@
   </data>
   <data name="acp.bytes" xml:space="preserve">
     <value>{count, number} 位元組</value>
+  </data>
+  <data name="acp.check_update" xml:space="preserve">
+    <value>檢查更新</value>
   </data>
   <data name="acp.cleanup_issues" xml:space="preserve">
     <value>瀏覽器清理問題</value>
@@ -102,6 +120,9 @@
   </data>
   <data name="acp.confirm_policy" xml:space="preserve">
     <value>將此生命週期原則套用至 ACP 工作階段？</value>
+  </data>
+  <data name="acp.confirm_update_adapter" xml:space="preserve">
+    <value>更新此 ACP 配接器？</value>
   </data>
   <data name="acp.default_badge" xml:space="preserve">
     <value>預設</value>
@@ -189,6 +210,9 @@
   </data>
   <data name="acp.last_active" xml:space="preserve">
     <value>最後活動時間</value>
+  </data>
+  <data name="acp.latest_version" xml:space="preserve">
+    <value>最新版本</value>
   </data>
   <data name="acp.loaded" xml:space="preserve">
     <value>已載入</value>
@@ -360,6 +384,12 @@
   </data>
   <data name="acp.unhealthy" xml:space="preserve">
     <value>不健康</value>
+  </data>
+  <data name="acp.update_adapter_explainer" xml:space="preserve">
+    <value>AgentDock Next 將安裝可信任的 {version}。既有工作階段會繼續執行，新工作階段才使用更新後的配接器。</value>
+  </data>
+  <data name="acp.update_to" xml:space="preserve">
+    <value>更新至 {version}</value>
   </data>
   <data name="acp.use_detected" xml:space="preserve">
     <value>使用偵測結果</value>

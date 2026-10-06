@@ -13,6 +13,10 @@ import * as desktopruntime$0 from "../desktopruntime/models.js";
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function CheckProfileUpdate(profileID: string): $CancellablePromise<$models.ACPProfileProbeResult> {
+    return $Call.ByID(3524749791, profileID);
+}
+
 export function Close(profileID: string, sessionID: string): $CancellablePromise<$models.ACPMutationResult> {
     return $Call.ByID(2847673345, profileID, sessionID);
 }
@@ -42,4 +46,8 @@ export function Status(): $CancellablePromise<$models.ACPStatusResult> {
 
 export function UpdateLifecycle(update: $models.ACPLifecycleUpdate): $CancellablePromise<$models.ACPMutationResult> {
     return $Call.ByID(107031406, update);
+}
+
+export function UpdateProfileAdapter(profileID: string, expectedVersion: string): $CancellablePromise<$models.ACPProfileUpdateMutationResult> {
+    return $Call.ByID(3803654350, profileID, expectedVersion);
 }

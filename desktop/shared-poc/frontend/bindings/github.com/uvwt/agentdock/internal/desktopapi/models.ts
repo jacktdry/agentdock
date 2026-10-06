@@ -133,6 +133,14 @@ export interface ACPProfileStatus {
     "error"?: APIError | null;
 }
 
+export interface ACPProfileUpdateMutationResult {
+    "completed": boolean;
+    "restartRequired": boolean;
+    "runtimeImpact": string;
+    "profile"?: ACPManagedProfile | null;
+    "error"?: APIError | null;
+}
+
 export interface ACPSessionLifecycle {
     "sessionId": string;
     "status": string;
