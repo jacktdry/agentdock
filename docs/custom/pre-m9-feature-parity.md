@@ -1,6 +1,6 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；下一個 domain 為 P5 MCP Management。M9 仍須等待必要 parity + hardening integration review**
+> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management contract 已凍結，現在進 Core/Desktop authority implementation。M9 仍須等待必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
@@ -198,17 +198,32 @@ Shared ACP UI 不再只是 Runtime Monitor；P4 closeout 後下一個 Wave 3 dom
 
 ### P5 — MCP Management Shared UI
 
-補 `DomainMCP`：
+**狀態：UX / IA + authority contract frozen（2026-10-06）；implementation next。** 詳見 [P5 MCP Management roundtable](pre-m9-mcp-management-roundtable.md)。
 
-- configured / enabled state；
-- health；
+P5 不直接把 Core `mcp_manage` 做成表單，而是先建立 Desktop-owned authority。Scope：
+
+- standalone MCP configured / enabled / observed state；
+- Plugin-owned MCP read-only inventory + owner attribution；mutation留給 P6；
 - safe config summary；
-- add / edit / delete / enable / disable；
-- protocol/version；
-- restart/reconnect-required semantics；
-- dynamic MCP status。
+- add / atomic edit / delete / enable / disable；
+- protocol compatibility pin / timeout；
+- write-only environment/credential management；
+- Remote MCP OAuth flow；
+- explicit **Reconnect and rediscover tools**；
+- cached tool inventory，不自動連線 discovery。
 
-Secrets 不在一般 list/status 中明文呈現。
+Frozen security rules：
+
+- secrets / raw OAuth token / protected args / secret-bearing URL/query不進 ordinary frontend state；
+- Shared write的 non-loopback endpoint必須 HTTPS；
+- Shared editor不接受 endpoint query；legacy query只提供 protected preserve semantics；
+- registry / server / environment / authorization使用 revision/generation防 stale mutation；
+- reconnect teardown失敗就 fail closed；
+- HTTP credentials不可跨-origin redirect；
+- plugin-owned mutation在 P5 backend一律拒絕；
+- no offline writes、no automatic tool discovery、no tool-call console。
+
+目前 Core已有 list/inspect/add/remove/enable/disable/env/refresh/OAuth，但仍需補 atomic update、revision/generation、authoritative safe reads、OAuth generation fence、redirect isolation與 truthful partial-outcome semantics，完成後才開 Shared UI。
 
 ### P6 — Plugin Management Shared UI
 
@@ -321,7 +336,7 @@ verify stable + Next side-by-side
   ↓
 P4 ACP Manager full parity ✅
   ↓
-P5 MCP Management ← next
+P5 MCP Management ← **contract frozen / implementation next**
   ↓
 P6 Plugin Management
   ↓
@@ -397,7 +412,7 @@ Connector 建立仍屬 user-owned gate；本次 side-by-side closeout 由主 orc
 P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成並部署。後續仍可用獨立 worktree / branch 推進，現在的順序為：
 
 - ~~ACP Manager~~ — **Complete**；
-- **MCP Management — next**；
+- **MCP Management — contract frozen / implementation next**；
 - Plugin Management；
 - Nexus / Platform Essentials；
 - Browser Broker UI。
