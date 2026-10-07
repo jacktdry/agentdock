@@ -196,6 +196,18 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		body, _ := json.Marshal(typed)
 		var args map[string]any
 		_ = json.Unmarshal(body, &args)
+		// DesktopManageRequest keeps presence metadata for protected args outside
+		// its JSON shape. Reinsert the decoded semantic value so an explicit []
+		// (clear) is not collapsed by omitempty into an omitted field (preserve).
+		if typed.ArgsProvided() {
+			if typed.Args == nil {
+				args["args"] = nil
+			} else {
+				decodedArgs := make([]string, len(typed.Args))
+				copy(decodedArgs, typed.Args)
+				args["args"] = decodedArgs
+			}
+		}
 		result, err := runtime.RuntimeMCPDesktopManage(ctx, args)
 		return map[string]any(result), err
 	case path == "/internal/runtime/mcp" && method == http.MethodPost:

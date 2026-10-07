@@ -61,11 +61,19 @@ func validDesktopMCPRequestID(value string) bool {
 }
 
 func (r *Runtime) desktopMCPRequestFingerprint(request toolmcp.DesktopManageRequest) (string, error) {
+	argsState := "omitted"
+	if request.ArgsProvided() {
+		if request.Args == nil {
+			argsState = "null"
+		} else {
+			argsState = "value"
+		}
+	}
 	canonical, err := json.Marshal(struct {
-		Request     toolmcp.DesktopManageRequest `json:"request"`
-		ArgsPresent bool                         `json:"args_present"`
+		Request   toolmcp.DesktopManageRequest `json:"request"`
+		ArgsState string                       `json:"args_state"`
 	}{
-		Request: request, ArgsPresent: request.ArgsProvided(),
+		Request: request, ArgsState: argsState,
 	})
 	if err != nil {
 		return "", err

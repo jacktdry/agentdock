@@ -38,6 +38,38 @@ func TestRuntimeDesktopMCPPreservesIdentityFieldsAndProtocol(t *testing.T) {
 	}
 }
 
+func TestRuntimeDesktopMCPPreservesExplicitArgsSemantics(t *testing.T) {
+	for name, body := range map[string][]byte{
+		"empty":      []byte(`{"action":"desktop_update","name":"demo","args":[],"expected_registry_revision":"registry","expected_generation":"generation"}`),
+		"mixed-case": []byte(`{"action":"desktop_update","name":"demo","Args":[],"expected_registry_revision":"registry","expected_generation":"generation"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			runtime := &runtimeStub{}
+			if _, err := Dispatch(context.Background(), runtime, Request{
+				Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: body,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			args, ok := runtime.mcpArgs["args"].([]string)
+			if !ok || args == nil || len(args) != 0 {
+				t.Fatalf("explicit empty args lost at transport boundary: %#v", runtime.mcpArgs["args"])
+			}
+		})
+	}
+
+	runtime := &runtimeStub{}
+	if _, err := Dispatch(context.Background(), runtime, Request{
+		Method: "POST", Path: "/internal/runtime/mcp/desktop",
+		Body: []byte(`{"action":"desktop_update","name":"demo","args":null,"expected_registry_revision":"registry","expected_generation":"generation"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	value, present := runtime.mcpArgs["args"]
+	if !present || value != nil {
+		t.Fatalf("explicit null args lost at transport boundary: present=%v value=%#v", present, value)
+	}
+}
+
 func TestRuntimeDesktopMCPRejectsLegacyActionAndUnknownFields(t *testing.T) {
 	for _, body := range [][]byte{
 		[]byte(`{"action":"add"}`),

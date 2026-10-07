@@ -81,16 +81,27 @@ func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	explicitNull, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","args":null,"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	mixedCaseEmpty, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","Args":[],"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() || !mixedCaseEmpty.ArgsProvided() {
-		t.Fatalf("args presence omitted=%v explicit=%v mixed=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided(), mixedCaseEmpty.ArgsProvided())
+	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() || !explicitNull.ArgsProvided() || !mixedCaseEmpty.ArgsProvided() {
+		t.Fatalf("args presence omitted=%v empty=%v null=%v mixed=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided(), explicitNull.ArgsProvided(), mixedCaseEmpty.ArgsProvided())
 	}
 	omittedFingerprint, err := rt.desktopMCPRequestFingerprint(omitted)
 	if err != nil {
 		t.Fatal(err)
+	}
+	nullFingerprint, err := rt.desktopMCPRequestFingerprint(explicitNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omittedFingerprint == nullFingerprint {
+		t.Fatal("omitted args collided with explicit null args")
 	}
 	for label, request := range map[string]toolmcp.DesktopManageRequest{"lowercase": explicitEmpty, "mixed-case": mixedCaseEmpty} {
 		explicitFingerprint, err := rt.desktopMCPRequestFingerprint(request)
@@ -99,6 +110,9 @@ func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *te
 		}
 		if omittedFingerprint == explicitFingerprint {
 			t.Fatalf("omitted args (preserve) collided with %s explicit empty args (clear)", label)
+		}
+		if nullFingerprint == explicitFingerprint {
+			t.Fatalf("explicit null args (preserve) collided with %s explicit empty args (clear)", label)
 		}
 	}
 }
