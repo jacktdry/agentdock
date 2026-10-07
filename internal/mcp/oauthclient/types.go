@@ -1,6 +1,7 @@
 package oauthclient
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -78,7 +79,14 @@ func (e *FlowError) Unwrap() error {
 }
 
 func newFlowError(code, message string, cause error) *FlowError {
-	return &FlowError{Code: code, Message: message, Cause: cause}
+	return &FlowError{Code: code, Message: message, Cause: sanitizeOAuthErrorCause(cause)}
+}
+
+func sanitizeOAuthErrorCause(cause error) error {
+	if errors.Is(cause, errOAuthRedirectRejected) {
+		return errOAuthRedirectRejected
+	}
+	return cause
 }
 
 func formatExpiry(value time.Time) string {

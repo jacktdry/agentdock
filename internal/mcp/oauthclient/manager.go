@@ -883,7 +883,7 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 			_ = s.manager.store.clearChecked(s.storageKey, &s.epoch)
 			return nil, &AuthRequiredError{}
 		}
-		return nil, err
+		return nil, sanitizeOAuthErrorCause(err)
 	}
 	if grantTokenChanged(s.grant, token) {
 		s.grant.AccessToken = token.AccessToken

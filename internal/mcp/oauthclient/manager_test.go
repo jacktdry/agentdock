@@ -634,6 +634,10 @@ func TestAuthorizationCodeExchangeRejectsCrossOriginRedirect(t *testing.T) {
 		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_TOKEN_EXCHANGE_FAILED" {
 			t.Fatalf("exchange redirect error = %#v", flowErr)
 		}
+		if !errors.Is(typed.Cause, errOAuthRedirectRejected) ||
+			strings.Contains(typed.Cause.Error(), attacker.URL) || strings.Contains(typed.Cause.Error(), "steal") {
+			t.Fatalf("exchange redirect cause was not sanitized: %#v", typed.Cause)
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("redirected token exchange did not finish")
 	}
@@ -683,6 +687,9 @@ func TestRefreshTokenRejectsCrossOriginRedirect(t *testing.T) {
 	}
 	if _, err := source.Token(); err == nil {
 		t.Fatal("cross-origin refresh redirect succeeded")
+	} else if !errors.Is(err, errOAuthRedirectRejected) ||
+		strings.Contains(err.Error(), attacker.URL) || strings.Contains(err.Error(), "steal-refresh") {
+		t.Fatalf("refresh redirect error was not sanitized: %v", err)
 	}
 	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "refresh-1") {
 		t.Fatalf("cross-origin refresh redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
