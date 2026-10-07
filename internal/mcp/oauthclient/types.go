@@ -3,6 +3,7 @@ package oauthclient
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -85,6 +86,10 @@ func newFlowError(code, message string, cause error) *FlowError {
 func sanitizeOAuthErrorCause(cause error) error {
 	if errors.Is(cause, errOAuthRedirectRejected) {
 		return errOAuthRedirectRejected
+	}
+	var urlErr *url.Error
+	if errors.As(cause, &urlErr) {
+		return errOAuthHTTPFailed
 	}
 	return cause
 }

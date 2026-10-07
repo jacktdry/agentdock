@@ -71,6 +71,26 @@ func TestDesktopAdmissionDescriptorRedactsProtectedConfiguration(t *testing.T) {
 	}
 }
 
+func TestDesktopPrivateFingerprintIgnoresOperationID(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	request := toolmcp.DesktopManageRequest{
+		Action: "desktop_remove", RequestID: "11111111111111111111111111111111", Name: "demo",
+		ExpectedRegistryRevision: "rev-1", ExpectedGeneration: "gen-1",
+	}
+	first, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "22222222222222222222222222222222"
+	second, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("operation id changed semantic approval fingerprint")
+	}
+}
+
 func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *testing.T) {
 	rt := newPermissionRuntime(t)
 	omitted, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))

@@ -61,6 +61,10 @@ func validDesktopMCPRequestID(value string) bool {
 }
 
 func (r *Runtime) desktopMCPRequestFingerprint(request toolmcp.DesktopManageRequest) (string, error) {
+	// request_id is an idempotency/journal key, not mutation semantics.
+	// Excluding it lets the caller's exact semantic retry consume a one-time
+	// approval even when the retry uses a fresh operation id.
+	request.RequestID = ""
 	argsState := "omitted"
 	if request.ArgsProvided() {
 		if request.Args == nil {
@@ -106,6 +110,10 @@ func (r *Runtime) runDesktopMCPMutation(ctx context.Context, request toolmcp.Des
 	}
 
 	result, runErr := r.runRuntimeManagementMutationBound(ctx, "runtime_mcp", request.Action, descriptor, fingerprint, dispatch)
+	if desktopMCPAdmissionRetryRequired(runErr) {
+		r.abandonDesktopMCPOperation(requestID)
+		return result, runErr
+	}
 	outcome := desktopMCPOperationOutcome(result, runErr)
 	recordedResult := cloneDesktopMCPJournalResult(result)
 	if recordedResult == nil {
@@ -120,6 +128,17 @@ func (r *Runtime) runDesktopMCPMutation(ctx context.Context, request toolmcp.Des
 		result["outcome"] = outcome
 	}
 	return result, runErr
+}
+
+func desktopMCPAdmissionRetryRequired(err error) bool {
+	var typed *ToolError
+	return errors.As(err, &typed) && typed.Code == "APPROVAL_REQUIRED"
+}
+
+func (r *Runtime) abandonDesktopMCPOperation(requestID string) {
+	r.mcpDesktopOpsMu.Lock()
+	delete(r.mcpDesktopOps, requestID)
+	r.mcpDesktopOpsMu.Unlock()
 }
 
 func (r *Runtime) beginDesktopMCPOperation(requestID, action, target, fingerprint string) (Result, error, bool) {

@@ -31,7 +31,10 @@ const (
 	maxOAuthRedirects   = 10
 )
 
-var errOAuthRedirectRejected = errors.New("OAuth HTTP redirect rejected")
+var (
+	errOAuthRedirectRejected = errors.New("OAuth HTTP redirect rejected")
+	errOAuthHTTPFailed       = errors.New("OAuth HTTP request failed")
+)
 
 type challengeState struct {
 	endpoint string

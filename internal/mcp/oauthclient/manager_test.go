@@ -100,7 +100,8 @@ func (f *fakeOAuthService) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		redirectURL := f.tokenRedirectURL
 		f.mu.Unlock()
 		if redirectURL != "" {
-			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+			w.Header().Set("Location", redirectURL)
+			w.WriteHeader(http.StatusTemporaryRedirect)
 			return
 		}
 		if err := r.ParseForm(); err != nil {
@@ -693,5 +694,75 @@ func TestRefreshTokenRejectsCrossOriginRedirect(t *testing.T) {
 	}
 	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "refresh-1") {
 		t.Fatalf("cross-origin refresh redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
+	}
+}
+
+func TestAuthorizationCodeExchangeSanitizesMalformedRedirectLocation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	const canary = "MALFORMED_LOCATION_SECRET_CANARY"
+	fake.mu.Lock()
+	fake.tokenRedirectURL = "http://[" + canary
+	fake.mu.Unlock()
+
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Code: "code-1", Issuer: fake.server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_TOKEN_EXCHANGE_FAILED" || !errors.Is(typed.Cause, errOAuthHTTPFailed) {
+			t.Fatalf("malformed redirect exchange error = %#v", flowErr)
+		}
+		if strings.Contains(typed.Cause.Error(), canary) {
+			t.Fatalf("malformed Location leaked: %v", typed.Cause)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("malformed redirect exchange did not finish")
+	}
+}
+
+func TestRefreshTokenSanitizesMalformedRedirectLocation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	home := t.TempDir()
+	manager := prepareOAuthManager(t, fake, home)
+	authorizeFakeService(t, manager, fake)
+
+	grant, err := manager.store.loadGrant("cloudflare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant.Expiry = time.Now().Add(-time.Minute)
+	if err := manager.store.saveGrant("cloudflare", grant); err != nil {
+		t.Fatal(err)
+	}
+
+	const canary = "MALFORMED_REFRESH_LOCATION_SECRET_CANARY"
+	fake.mu.Lock()
+	fake.tokenRedirectURL = "http://[" + canary
+	fake.mu.Unlock()
+
+	restarted, err := New(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := restarted.tokenSource("cloudflare", fake.endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source == nil {
+		t.Fatal("token source missing")
+	}
+	_, err = source.Token()
+	if !errors.Is(err, errOAuthHTTPFailed) || strings.Contains(err.Error(), canary) {
+		t.Fatalf("malformed refresh Location was not sanitized: %v", err)
 	}
 }

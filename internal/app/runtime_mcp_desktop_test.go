@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/permission"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
@@ -137,6 +138,51 @@ func TestRuntimeDesktopPassiveAndMutationAdmission(t *testing.T) {
 		if _, err := rt.RuntimeMCPDesktopManage(context.Background(), args); err == nil {
 			t.Fatal("invalid direct request accepted")
 		}
+	}
+}
+
+func TestRuntimeDesktopApprovalRetryIsNotJournalBlocked(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	replaceRuntimePermissionPolicy(t, rt, func(p *permission.Policy) { p.GlobalMode = permission.Rules })
+	principal := requestmeta.NewStableAuthPrincipal("static_bearer", "desktop-approval-retry-test")
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), principal)
+	snapshot, err := rt.RuntimeMCPDesktop(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const firstID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	request := map[string]any{
+		"action": "desktop_create", "request_id": firstID,
+		"name": "approval-retry", "description": "Approval retry", "transport": "stdio", "command": "never-run",
+		"expected_registry_revision": snapshot["registry_revision"],
+	}
+	_, err = rt.RuntimeMCPDesktopManage(ctx, request)
+	approval := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	status, statusErr := rt.RuntimeMCPDesktopManage(ctx, map[string]any{
+		"action": "desktop_operation_status", "request_id": firstID,
+	})
+	if statusErr != nil || status["found"] != false {
+		t.Fatalf("approval-required operation remained journaled: status=%#v err=%v", status, statusErr)
+	}
+
+	approvalID, _ := approval.Details["approval_id"].(string)
+	if _, err := rt.permissions.ApproveOnce(context.Background(), permission.Mutation{
+		ApprovalID:      approvalID,
+		ApprovalVersion: permissionDetailUint64(t, approval.Details, "approval_version"),
+		PolicyRevision:  permissionDetailUint64(t, approval.Details, "policy_revision"),
+		Actor:           "test-desktop-control",
+	}); err != nil {
+		t.Fatalf("ApproveOnce: %v", err)
+	}
+
+	request["request_id"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	result, err := rt.RuntimeMCPDesktopManage(ctx, request)
+	if err != nil {
+		t.Fatalf("approved semantic retry failed: %#v", err)
+	}
+	if result["outcome"] != "completed" {
+		t.Fatalf("approved retry result = %#v", result)
 	}
 }
 
