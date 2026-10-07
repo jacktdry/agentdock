@@ -1205,14 +1205,212 @@ func TestPersistedMutationInvalidatesOAuthIdentityBeforeCleanup(t *testing.T) {
 			if !result.Persisted || result.RuntimeApplied {
 				t.Fatalf("unexpected mutation result: %#v", result)
 			}
-			_, err = os.Stat(path)
+			data, err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 			invalidate := change == "endpoint" || change == "transport" || change == "remove"
 			if invalidate {
-				if !errors.Is(err, os.ErrNotExist) {
-					t.Fatalf("old authorization survived: %v", err)
+				var envelope struct {
+					SchemaVersion int                `json:"schema_version"`
+					Epoch         string             `json:"epoch"`
+					Grant         *oauthclient.Grant `json:"grant"`
 				}
-			} else if err != nil {
-				t.Fatalf("unrelated update removed authorization: %v", err)
+				if err := json.Unmarshal(data, &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if envelope.SchemaVersion != 2 || envelope.Epoch == "" || envelope.Grant != nil {
+					t.Fatal("missing authorization tombstone")
+				}
+			} else if m.oauth.Status("demo", "https://example.invalid/mcp") != oauthclient.StatusAuthorized {
+				t.Fatal("unrelated update removed authorization")
+			}
+		})
+	}
+}
+
+func TestAuthorizeReservationOrdersAcrossIndependentManagers(t *testing.T) {
+	for _, change := range []string{"endpoint", "recreate"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			first, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true}
+			if _, err := first.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if err := first.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+			second, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := second.Registry()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			snapshotHeld := make(chan struct{})
+			allowReserve := make(chan struct{})
+			reserved := make(chan struct{})
+			allowBegin := make(chan struct{})
+			var snapshotOnce, reservedOnce sync.Once
+			first.authorizeSnapshotHook = func() {
+				snapshotOnce.Do(func() { close(snapshotHeld) })
+				<-allowReserve
+			}
+			first.authorizeReservedHook = func() {
+				reservedOnce.Do(func() { close(reserved) })
+				<-allowBegin
+			}
+
+			authOutcome := make(chan error, 1)
+			go func() {
+				result, err := first.Authorize(context.Background(), "demo", oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					authOutcome <- errors.New("stale flow created")
+					return
+				}
+				authOutcome <- err
+			}()
+			select {
+			case <-snapshotHeld:
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not enter locked snapshot")
+			}
+
+			mutationStarted := make(chan struct{})
+			mutationDone := make(chan error, 1)
+			go func() {
+				close(mutationStarted)
+				switch change {
+				case "endpoint":
+					updated := cfg
+					updated.URL += "/new"
+					_, err := second.Update("demo", updated, snapshot.Revision, snapshot.Servers["demo"].Generation)
+					mutationDone <- err
+				case "recreate":
+					_, err := second.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+					if err == nil {
+						_, err = second.Add(cfg)
+					}
+					mutationDone <- err
+				}
+			}()
+			<-mutationStarted
+			close(allowReserve)
+
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish reservation")
+			}
+			select {
+			case err := <-mutationDone:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("independent registry mutation did not finish after reservation")
+			}
+			close(allowBegin)
+
+			select {
+			case err := <-authOutcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated cross-manager reservation performed discovery")
+			}
+		})
+	}
+}
+
+func TestAuthorizeReservationInvalidatedByRegistryTransition(t *testing.T) {
+	for _, change := range []string{"endpoint", "remove", "recreate"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
+			defer server.Close()
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true}
+			if _, err := m.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+			reserved, resume := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(resume) }) }
+			defer release()
+			m.authorizeReservedHook = func() { close(reserved); <-resume }
+			outcome := make(chan error, 1)
+			go func() {
+				result, err := m.Authorize(context.Background(), "demo", oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					outcome <- errors.New("stale flow created")
+					return
+				}
+				outcome <- err
+			}()
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("reservation did not finish")
+			}
+			// Mutation finishing before resume also proves discovery is outside registryMu.
+			mutation := make(chan error, 1)
+			go func() {
+				snapshot, err := m.Registry()
+				if err == nil {
+					if change == "endpoint" {
+						cfg.URL += "/new"
+						_, err = m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+					} else {
+						_, err = m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+						if err == nil && change == "recreate" {
+							_, err = m.Add(cfg)
+						}
+					}
+				}
+				mutation <- err
+			}()
+			select {
+			case err := <-mutation:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("registry transition blocked by authorization")
+			}
+			release()
+			select {
+			case err := <-outcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated reservation performed discovery")
+			}
+			if m.oauth.Status("demo", cfg.URL) == oauthclient.StatusAuthorized {
+				t.Fatal("stale grant survived")
 			}
 		})
 	}

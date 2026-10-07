@@ -85,26 +85,62 @@ func (s *store) grantPath(storageKey string) (string, error) {
 	return filepath.Join(s.root, "grant-"+storageKey+".json"), nil
 }
 
-func (s *store) loadGrant(storageKey string) (Grant, error) {
-	path, err := s.grantPath(storageKey)
-	if err != nil {
-		return Grant{}, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Grant{}, err
-	}
-	var grant Grant
-	if err := json.Unmarshal(data, &grant); err != nil {
-		return Grant{}, fmt.Errorf("decode MCP OAuth grant: %w", err)
-	}
-	if grant.SchemaVersion != storeSchemaVersion {
-		return Grant{}, fmt.Errorf("unsupported MCP OAuth grant schema version %d", grant.SchemaVersion)
-	}
-	return grant, nil
+// grantEnvelope is versioned separately from the unchanged v1 client registry.
+// Epoch is random authorization identity, never derived from credential material.
+type grantEnvelope struct {
+	SchemaVersion int    `json:"schema_version"`
+	Epoch         string `json:"epoch"`
+	Grant         *Grant `json:"grant,omitempty"`
 }
 
-func (s *store) saveGrant(storageKey string, grant Grant) error {
+func (s *store) readEnvelope(storageKey string) (grantEnvelope, error) {
+	path, err := s.grantPath(storageKey)
+	if err != nil {
+		return grantEnvelope{}, err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return grantEnvelope{}, nil
+	}
+	if err != nil {
+		return grantEnvelope{}, err
+	}
+	var envelope grantEnvelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return grantEnvelope{}, errors.New("decode MCP OAuth authorization")
+	}
+	switch envelope.SchemaVersion {
+	case 1:
+		var grant Grant
+		if err := json.Unmarshal(data, &grant); err != nil {
+			return grantEnvelope{}, errors.New("decode MCP OAuth grant")
+		}
+		envelope.Grant = &grant
+	case 2:
+		if envelope.Epoch == "" {
+			return grantEnvelope{}, errors.New("missing MCP OAuth authorization epoch")
+		}
+	default:
+		return grantEnvelope{}, errors.New("unsupported MCP OAuth authorization schema")
+	}
+	return envelope, nil
+}
+
+func (s *store) loadGrant(storageKey string) (Grant, error) {
+	envelope, err := s.readEnvelope(storageKey)
+	if err != nil {
+		return Grant{}, err
+	}
+	if envelope.Grant == nil {
+		return Grant{}, os.ErrNotExist
+	}
+	return *envelope.Grant, nil
+}
+
+// mutateAuthorization serializes read/compare/write with the same lock used by
+// every reservation, grant writer and tombstone writer. No callback performs I/O
+// outside this store (in particular, no network requests).
+func (s *store) mutateAuthorization(storageKey string, change func(*grantEnvelope) error) error {
 	path, err := s.grantPath(storageKey)
 	if err != nil {
 		return err
@@ -116,36 +152,98 @@ func (s *store) saveGrant(storageKey string, grant Grant) error {
 		return fmt.Errorf("lock MCP OAuth grant: %w", err)
 	}
 	defer release()
-	grant.SchemaVersion = storeSchemaVersion
-	grant.UpdatedAt = time.Now().UTC()
-	data, err := json.MarshalIndent(grant, "", "  ")
+	envelope, err := s.readEnvelope(storageKey)
 	if err != nil {
-		return fmt.Errorf("encode MCP OAuth grant: %w", err)
+		return err
 	}
-	data = append(data, '\n')
-	if err := atomicfile.Write(path, data, 0o600); err != nil {
-		return fmt.Errorf("persist MCP OAuth grant: %w", err)
+	if err := change(&envelope); err != nil {
+		return err
+	}
+	if envelope.Epoch == "" {
+		envelope.Epoch, err = randomState()
+		if err != nil {
+			return err
+		}
+	}
+	envelope.SchemaVersion = 2
+	data, err := json.MarshalIndent(envelope, "", "  ")
+	if err != nil {
+		return errors.New("encode MCP OAuth authorization")
+	}
+	if err := atomicfile.Write(path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("persist MCP OAuth authorization: %w", err)
 	}
 	return securepath.EnsurePrivate(path)
 }
 
-func (s *store) removeGrant(storageKey string) error {
-	path, err := s.grantPath(storageKey)
+func (s *store) reserve(storageKey string) (string, error) {
+	epoch, err := randomState()
+	if err != nil {
+		return "", err
+	}
+	err = s.mutateAuthorization(storageKey, func(e *grantEnvelope) error { e.Epoch = epoch; return nil })
+	return epoch, err
+}
+
+func (s *store) checkEpoch(storageKey, epoch string) error {
+	e, err := s.readEnvelope(storageKey)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	release, err := filelock.Acquire(ctx, path+".lock")
-	if err != nil {
-		return fmt.Errorf("lock MCP OAuth grant: %w", err)
-	}
-	defer release()
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove MCP OAuth grant: %w", err)
+	if epoch == "" || e.Epoch != epoch {
+		return &AuthRequiredError{}
 	}
 	return nil
 }
+
+func (s *store) saveGrantChecked(storageKey, epoch string, grant Grant) error {
+	return s.mutateAuthorization(storageKey, func(e *grantEnvelope) error {
+		if epoch == "" || e.Epoch != epoch {
+			return &AuthRequiredError{}
+		}
+		grant.SchemaVersion = 1
+		grant.UpdatedAt = time.Now().UTC()
+		e.Grant = &grant
+		return nil
+	})
+}
+
+// loadGrantWithEpoch migrates legacy grants before any refresh network request.
+func (s *store) loadGrantWithEpoch(storageKey string) (Grant, string, error) {
+	var grant Grant
+	var epoch string
+	err := s.mutateAuthorization(storageKey, func(e *grantEnvelope) error {
+		if e.Grant == nil {
+			return os.ErrNotExist
+		}
+		if e.Epoch == "" {
+			var err error
+			e.Epoch, err = randomState()
+			if err != nil {
+				return err
+			}
+		}
+		grant, epoch = *e.Grant, e.Epoch
+		return nil
+	})
+	return grant, epoch, err
+}
+
+func (s *store) clearChecked(storageKey string, expected *string) error {
+	return s.mutateAuthorization(storageKey, func(e *grantEnvelope) error {
+		if expected != nil && (*expected == "" || e.Epoch != *expected) {
+			return &AuthRequiredError{}
+		}
+		epoch, err := randomState()
+		if err != nil {
+			return err
+		}
+		*e = grantEnvelope{Epoch: epoch}
+		return nil
+	})
+}
+
+func (s *store) removeGrant(storageKey string) error { return s.clearChecked(storageKey, nil) }
 
 func registrationKey(issuer, redirectURL string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(issuer) + "\x00" + strings.TrimSpace(redirectURL)))

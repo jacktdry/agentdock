@@ -19,15 +19,17 @@ import (
 )
 
 type Manager struct {
-	registryMu sync.Mutex
-	closed     atomic.Bool
-	mu         sync.RWMutex
-	store      *store
-	envs       *envstore.Store
-	oauth      *oauthclient.Manager
-	servers    map[string]ServerConfig
-	owned      map[string]ServerConfig
-	states     map[string]*serverState
+	registryMu            sync.Mutex
+	authorizeSnapshotHook func() // test checkpoint, while shared registry file lock is held
+	authorizeReservedHook func() // test checkpoint, after releasing registryMu
+	closed                atomic.Bool
+	mu                    sync.RWMutex
+	store                 *store
+	envs                  *envstore.Store
+	oauth                 *oauthclient.Manager
+	servers               map[string]ServerConfig
+	owned                 map[string]ServerConfig
+	states                map[string]*serverState
 }
 
 type serverState struct {
@@ -486,21 +488,14 @@ func (m *Manager) RemoveOAuthCallback(id string) {
 }
 
 func (m *Manager) Authorize(ctx context.Context, name, callbackID string) (oauthclient.BeginResult, error) {
-	cfg, _, err := m.Inspect(name)
+	cfg, reservation, err := m.reserveAuthorization(name, callbackID)
 	if err != nil {
 		return oauthclient.BeginResult{}, err
 	}
-	if !cfg.Enabled {
-		return oauthclient.BeginResult{}, newError("MCP_SERVER_DISABLED", "dynamic MCP server is disabled", false, map[string]any{"server": cfg.Name}, nil)
+	if m.authorizeReservedHook != nil {
+		m.authorizeReservedHook()
 	}
-	if cfg.Transport != TransportStreamableHTTP {
-		return oauthclient.BeginResult{}, newError("MCP_AUTH_UNSUPPORTED", "OAuth authorization is only available for streamable HTTP MCP servers", false, map[string]any{"server": cfg.Name}, nil)
-	}
-	storageKey := cfg.StorageKey
-	if storageKey == "" {
-		storageKey = cfg.Name
-	}
-	result, done, err := m.oauth.Begin(ctx, cfg.Name, storageKey, cfg.URL, callbackID)
+	result, done, err := m.oauth.BeginReserved(ctx, reservation)
 	if err != nil {
 		return oauthclient.BeginResult{}, oauthFlowError(cfg.Name, err)
 	}
@@ -519,6 +514,61 @@ func (m *Manager) Authorize(ctx context.Context, name, callbackID string) (oauth
 	}
 	go m.watchAuthorization(cfg.Name, done)
 	return result, nil
+}
+
+// Reserve from authoritative persisted configuration while registry transitions
+// and ownership replacement are excluded. Network work belongs to BeginReserved.
+func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
+	m.registryMu.Lock()
+	defer m.registryMu.Unlock()
+	if err := m.ensureOpenLocked(); err != nil {
+		return ServerConfig{}, nil, err
+	}
+	var cfg ServerConfig
+	var reservation *oauthclient.AuthorizationReservation
+	err := m.store.withSnapshotLocked(func(snapshot RegistrySnapshot) error {
+		authoritative, err := m.registryWithOwned(snapshot)
+		if err != nil {
+			return err
+		}
+		var ok bool
+		cfg, ok = authoritative.Servers[strings.TrimSpace(name)]
+		if !ok {
+			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, nil, nil)
+		}
+		if cfg.SourceType != "standalone" {
+			return newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, nil, nil)
+		}
+		if cfg.Generation == "" {
+			return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation unavailable", false, nil, nil)
+		}
+		if !cfg.Enabled {
+			return newError("MCP_SERVER_DISABLED", "dynamic MCP server is disabled", false, nil, nil)
+		}
+		if cfg.Transport != TransportStreamableHTTP {
+			return newError("MCP_AUTH_UNSUPPORTED", "OAuth authorization is only available for streamable HTTP MCP servers", false, nil, nil)
+		}
+		if m.authorizeSnapshotHook != nil {
+			m.authorizeSnapshotHook()
+		}
+		reservation, err = m.oauth.ReserveAuthorization(cfg.Name, cfg.Name, cfg.URL, callbackID)
+		if err != nil {
+			return oauthFlowError(cfg.Name, err)
+		}
+		return nil
+	})
+	if err != nil {
+		var mcpErr *Error
+		if errors.As(err, &mcpErr) {
+			return ServerConfig{}, nil, err
+		}
+		var flowErr *oauthclient.FlowError
+		if errors.As(err, &flowErr) {
+			return ServerConfig{}, nil, oauthFlowError(cfg.Name, err)
+		}
+		return ServerConfig{}, nil, newError("MCP_REGISTRY_READ_FAILED", "read dynamic MCP registry", true, nil, err)
+	}
+	return cfg, reservation, nil
 }
 
 func (m *Manager) DeliverOAuthCallback(result oauthclient.CallbackResult) error {

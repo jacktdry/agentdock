@@ -58,6 +58,22 @@ func (s *store) snapshot() (RegistrySnapshot, error) {
 	return s.loadUnlocked()
 }
 
+// withSnapshotLocked keeps the cross-process registry lock held while the
+// caller validates the authoritative snapshot and reserves related local state.
+// The callback must not perform network or process I/O.
+func (s *store) withSnapshotLocked(fn func(RegistrySnapshot) error) error {
+	release, err := s.acquire()
+	if err != nil {
+		return err
+	}
+	defer release()
+	snapshot, err := s.loadUnlocked()
+	if err != nil {
+		return err
+	}
+	return fn(snapshot)
+}
+
 func (s *store) loadUnlocked() (RegistrySnapshot, error) {
 	registryHandle, err := os.Open(s.path)
 	if errors.Is(err, os.ErrNotExist) {

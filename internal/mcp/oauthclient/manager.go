@@ -35,6 +35,7 @@ type challengeState struct {
 
 type flow struct {
 	generation       uint64
+	epoch            string
 	state            string
 	server           string
 	storageKey       string
@@ -130,7 +131,7 @@ func (m *Manager) Status(storageKey, endpoint string) string {
 	endpoint = strings.TrimSpace(endpoint)
 	m.mu.Lock()
 	if state := m.activeByStorage[storageKey]; state != "" {
-		if f := m.flows[state]; f != nil && time.Now().Before(f.expiresAt) {
+		if f := m.flows[state]; f != nil && time.Now().Before(f.expiresAt) && m.store.checkEpoch(storageKey, f.epoch) == nil {
 			m.mu.Unlock()
 			return StatusAuthorizing
 		}
@@ -147,19 +148,19 @@ func (m *Manager) Status(storageKey, endpoint string) string {
 	return StatusUnauthorized
 }
 
-func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callbackID string) (BeginResult, <-chan error, error) {
+func (m *Manager) ReserveAuthorization(server, storageKey, endpoint, callbackID string) (*AuthorizationReservation, error) {
 	server = strings.TrimSpace(server)
 	storageKey = strings.TrimSpace(storageKey)
 	endpoint = strings.TrimSpace(endpoint)
 	callbackID = strings.TrimSpace(callbackID)
 	if server == "" || storageKey == "" || endpoint == "" {
-		return BeginResult{}, nil, newFlowError("MCP_AUTH_INVALID", "OAuth authorization requires server, storage key, and endpoint", nil)
+		return nil, newFlowError("MCP_AUTH_INVALID", "OAuth authorization requires server, storage key, and endpoint", nil)
 	}
 
 	m.mu.Lock()
 	m.cleanupExpiredLocked(time.Now())
 	if state := m.activeByStorage[storageKey]; state != "" {
-		if existing := m.flows[state]; existing != nil {
+		if existing := m.flows[state]; existing != nil && existing.endpoint == endpoint && m.store.checkEpoch(storageKey, existing.epoch) == nil {
 			result := BeginResult{
 				AuthorizationURL: existing.authorizationURL,
 				CallbackID:       existing.callbackID,
@@ -167,7 +168,7 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 			}
 			done := existing.done
 			m.mu.Unlock()
-			return result, done, nil
+			return &AuthorizationReservation{manager: m, storageKey: storageKey, epoch: existing.epoch, result: result, done: done}, nil
 		}
 	}
 	options := cloneCallbackOptions(m.callbacks)
@@ -176,10 +177,10 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 
 	selected, selectionRequired, err := selectCallback(options, callbackID)
 	if err != nil {
-		return BeginResult{}, nil, err
+		return nil, err
 	}
 	if selectionRequired {
-		return BeginResult{CallbackOptions: options}, nil, nil
+		return &AuthorizationReservation{manager: m, result: BeginResult{CallbackOptions: options}}, nil
 	}
 
 	// discovery / DCR 会发网络请求，不能一直持有 Manager 锁；但同一 StorageKey
@@ -187,21 +188,66 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 	// Flow 建立后再由 activeByStorage 接管。
 	m.mu.Lock()
 	if state := m.activeByStorage[storageKey]; state != "" {
-		if existing := m.flows[state]; existing != nil {
+		if existing := m.flows[state]; existing != nil && existing.endpoint == endpoint && m.store.checkEpoch(storageKey, existing.epoch) == nil {
 			result := BeginResult{AuthorizationURL: existing.authorizationURL, CallbackID: existing.callbackID, ExpiresAt: formatExpiry(existing.expiresAt)}
 			done := existing.done
 			m.mu.Unlock()
-			return result, done, nil
+			return &AuthorizationReservation{manager: m, storageKey: storageKey, epoch: existing.epoch, result: result, done: done}, nil
 		}
 	}
 	if _, busy := m.beginning[storageKey]; busy {
 		m.mu.Unlock()
-		return BeginResult{}, nil, newFlowError("MCP_AUTH_IN_PROGRESS", "OAuth authorization is already being prepared", nil)
+		return nil, newFlowError("MCP_AUTH_IN_PROGRESS", "OAuth authorization is already being prepared", nil)
+	}
+	epoch, err := m.store.reserve(storageKey)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
 	}
 	m.generations[storageKey]++
 	generation := m.generations[storageKey]
 	m.beginning[storageKey] = generation
 	m.mu.Unlock()
+	return &AuthorizationReservation{manager: m, server: server, storageKey: storageKey, endpoint: endpoint, selected: selected, challenge: challenge, generation: generation, epoch: epoch}, nil
+}
+
+// AuthorizationReservation binds captured configuration to a durable incarnation.
+// Its fields are private so callers cannot substitute an endpoint after reservation.
+type AuthorizationReservation struct {
+	manager                             *Manager
+	server, storageKey, endpoint, epoch string
+	selected                            CallbackOption
+	challenge                           challengeState
+	generation                          uint64
+	result                              BeginResult
+	done                                <-chan error
+}
+
+func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callbackID string) (BeginResult, <-chan error, error) {
+	reservation, err := m.ReserveAuthorization(server, storageKey, endpoint, callbackID)
+	if err != nil {
+		return BeginResult{}, nil, err
+	}
+	return m.BeginReserved(ctx, reservation)
+}
+
+// BeginReserved performs discovery and registration only after the caller has
+// released its configuration lock. Invalidation never renews this reservation.
+func (m *Manager) BeginReserved(ctx context.Context, r *AuthorizationReservation) (BeginResult, <-chan error, error) {
+	if r == nil || r.manager != m {
+		return BeginResult{}, nil, newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
+	}
+	if r.epoch == "" {
+		return r.result, r.done, nil
+	}
+	server, storageKey, endpoint, generation := r.server, r.storageKey, r.endpoint, r.generation
+	selected, challenge := r.selected, r.challenge
+	if r.result.AuthorizationURL != "" {
+		if err := m.store.checkEpoch(storageKey, r.epoch); err != nil {
+			return BeginResult{}, nil, newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
+		}
+		return r.result, r.done, nil
+	}
 	flowCreated := false
 	defer func() {
 		if flowCreated {
@@ -213,6 +259,10 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 		}
 		m.mu.Unlock()
 	}()
+
+	if err := m.store.checkEpoch(storageKey, r.epoch); err != nil {
+		return BeginResult{}, nil, newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
+	}
 
 	discovered, err := discoverAuthorization(ctx, m.httpClient, endpoint, challenge.headers)
 	if err != nil {
@@ -246,7 +296,7 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 	authorizationURL := config.AuthCodeURL(state, authOptions...)
 	now := time.Now().UTC()
 	f := &flow{
-		state: state, server: server, storageKey: storageKey, endpoint: endpoint, generation: generation,
+		state: state, server: server, storageKey: storageKey, endpoint: endpoint, generation: generation, epoch: r.epoch,
 		callbackID: selected.ID, redirectURL: selected.RedirectURL,
 		resource: discovered.Resource, issuer: discovered.Issuer,
 		issuerInResponse: discovered.Metadata.AuthorizationResponseIssParameterSupported,
@@ -256,7 +306,7 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 		callback: make(chan CallbackResult, 1), cancel: make(chan struct{}), done: make(chan error, 1),
 	}
 	m.mu.Lock()
-	if m.generations[storageKey] != generation || m.beginning[storageKey] != generation {
+	if m.generations[storageKey] != generation || m.beginning[storageKey] != generation || m.store.checkEpoch(storageKey, r.epoch) != nil {
 		m.mu.Unlock()
 		return BeginResult{}, nil, newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
 	}
@@ -294,6 +344,7 @@ func (m *Manager) Clear(storageKey string) error {
 	storageKey = strings.TrimSpace(storageKey)
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	err := m.store.removeGrant(storageKey)
 	m.generations[storageKey]++
 	delete(m.beginning, storageKey)
 	delete(m.challenges, storageKey)
@@ -304,7 +355,7 @@ func (m *Manager) Clear(storageKey string) error {
 			close(f.cancel)
 		}
 	}
-	return m.store.removeGrant(storageKey)
+	return err
 }
 
 func (m *Manager) RemoveGrant(storageKey string) error {
@@ -381,7 +432,11 @@ func (m *Manager) exchange(f *flow, result CallbackResult) error {
 	if m.generations[f.storageKey] != f.generation || m.flows[f.state] != f || m.activeByStorage[f.storageKey] != f.state {
 		return newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
 	}
-	if err := m.store.saveGrant(f.storageKey, grant); err != nil {
+	if err := m.store.saveGrantChecked(f.storageKey, f.epoch, grant); err != nil {
+		var required *AuthRequiredError
+		if errors.As(err, &required) {
+			return newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
+		}
 		return newFlowError("MCP_AUTH_PERSIST_FAILED", "persist OAuth token", err)
 	}
 	m.store.touchClient(f.registrationKey)
@@ -444,7 +499,7 @@ func (m *Manager) clientFor(ctx context.Context, discovered discoveredAuth, call
 func (m *Manager) tokenSource(storageKey, endpoint string) (oauth2.TokenSource, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	grant, err := m.store.loadGrant(storageKey)
+	grant, epoch, err := m.store.loadGrantWithEpoch(storageKey)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -455,7 +510,7 @@ func (m *Manager) tokenSource(storageKey, endpoint string) (oauth2.TokenSource, 
 		return nil, nil
 	}
 	if !grant.Expiry.IsZero() && time.Now().After(grant.Expiry) && strings.TrimSpace(grant.RefreshToken) == "" {
-		_ = m.store.removeGrant(storageKey)
+		_ = m.store.clearChecked(storageKey, &epoch)
 		return nil, nil
 	}
 	client, err := m.store.loadClient(grant.RegistrationKey)
@@ -474,7 +529,7 @@ func (m *Manager) tokenSource(storageKey, endpoint string) (oauth2.TokenSource, 
 	refreshClient.Transport = resourceRefreshRoundTripper{base: baseTransport, tokenURL: grant.TokenURL, resource: grant.Resource}
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &refreshClient)
 	base := config.TokenSource(ctx, tokenFromGrant(grant))
-	return &persistingTokenSource{source: base, manager: m, generation: m.generations[storageKey], storageKey: storageKey, grant: grant}, nil
+	return &persistingTokenSource{source: base, manager: m, epoch: epoch, generation: m.generations[storageKey], storageKey: storageKey, grant: grant}, nil
 }
 
 func (m *Manager) cleanupExpiredLocked(now time.Time) {
@@ -657,6 +712,7 @@ type persistingTokenSource struct {
 	source     oauth2.TokenSource
 	manager    *Manager
 	generation uint64
+	epoch      string
 	storageKey string
 	grant      Grant
 }
@@ -667,19 +723,19 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 	s.manager.mu.Lock()
 	valid := s.manager.generations[s.storageKey] == s.generation
 	s.manager.mu.Unlock()
-	if !valid {
+	if !valid || s.manager.store.checkEpoch(s.storageKey, s.epoch) != nil {
 		return nil, &AuthRequiredError{}
 	}
 	token, err := s.source.Token()
 	s.manager.mu.Lock()
 	defer s.manager.mu.Unlock()
-	if s.manager.generations[s.storageKey] != s.generation {
+	if s.manager.generations[s.storageKey] != s.generation || s.manager.store.checkEpoch(s.storageKey, s.epoch) != nil {
 		return nil, &AuthRequiredError{}
 	}
 	if err != nil {
 		var retrieveErr *oauth2.RetrieveError
 		if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
-			_ = s.manager.store.removeGrant(s.storageKey)
+			_ = s.manager.store.clearChecked(s.storageKey, &s.epoch)
 			return nil, &AuthRequiredError{}
 		}
 		return nil, err
@@ -689,7 +745,7 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 		s.grant.RefreshToken = token.RefreshToken
 		s.grant.TokenType = token.TokenType
 		s.grant.Expiry = token.Expiry
-		if err := s.manager.store.saveGrant(s.storageKey, s.grant); err != nil {
+		if err := s.manager.store.saveGrantChecked(s.storageKey, s.epoch, s.grant); err != nil {
 			return nil, err
 		}
 	}
