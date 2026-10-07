@@ -228,7 +228,11 @@ func DefaultManifest() Manifest {
 					{Name: "reject", Access: AccessPrivileged, RequiresConfirmation: true},
 				}, Streams: []StreamCapability{}, Reason: "Core-owned permission state and distinct native Desktop control; explicit confirmation and caller retry",
 			},
-			unavailableCapability(DomainMCP, "MCP management has not been adapted to the shared desktop API yet"),
+			{
+				Domain: DomainMCP, Version: 1, Availability: AvailabilityAvailable,
+				Operations: mcpOperations(), Streams: []StreamCapability{},
+				Reason: "Core-owned protected MCP inventory and revisioned standalone management; Plugin-owned entries remain read-only",
+			},
 			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),
 			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
 			availableCapability(DomainDiagnostics, "Local file availability only; logs, content and environment are omitted", "snapshot"),

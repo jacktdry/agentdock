@@ -354,6 +354,134 @@ export enum ErrorCategory {
     ErrorCategoryInternal = "internal",
 };
 
+export interface MCPActionResult {
+    "completed": boolean;
+    "error"?: APIError | null;
+}
+
+export interface MCPAuthCallback {
+    "id": string;
+    "label": string;
+}
+
+export interface MCPAuthorizationResult {
+    "authorizationUrl"?: string;
+    "callbackId"?: string;
+    "expiresAt"?: string;
+    "callbackOptions": MCPAuthCallback[] | null;
+    "error"?: APIError | null;
+}
+
+export interface MCPAuthorizationStatus {
+    "status": string;
+    "callbackOptions": MCPAuthCallback[] | null;
+}
+
+export interface MCPAuthorizationStatusResult {
+    "authorization": MCPAuthorizationStatus;
+    "error"?: APIError | null;
+}
+
+export interface MCPConfigInput {
+    "name"?: string;
+    "description"?: string;
+    "transport"?: string;
+    "protocolVersion"?: string;
+    "url"?: string;
+    "command"?: string;
+    "args"?: string[] | null;
+    "cwd"?: string;
+    "headerEnv"?: { [_ in string]?: string } | null;
+    "envFromEnv"?: { [_ in string]?: string } | null;
+    "enabled"?: boolean | null;
+    "timeoutMs"?: number | null;
+}
+
+export interface MCPEnvironmentEntry {
+    "key": string;
+    "configured": boolean;
+}
+
+export interface MCPEnvironmentResult {
+    "revision"?: string;
+    "items": MCPEnvironmentEntry[] | null;
+    "error"?: APIError | null;
+}
+
+export interface MCPManagedServer {
+    "name": string;
+    "displayName": string;
+    "description": string;
+    "sourceType": string;
+    "pluginName"?: string;
+    "transport": string;
+    "protocolVersion"?: string;
+    "url"?: string;
+    "urlProtected": boolean;
+    "command"?: string;
+    "cwd"?: string;
+    "args"?: string[] | null;
+    "argsProtected": boolean;
+    "enabled": boolean;
+    "timeoutMs": number;
+    "headerEnv"?: { [_ in string]?: string } | null;
+    "envFromEnv"?: { [_ in string]?: string } | null;
+    "generation": string;
+    "observation": MCPObservation;
+}
+
+export interface MCPMutationResult {
+    "completed": boolean;
+    "persisted": boolean;
+    "runtimeApplied": boolean;
+    "recoveryRequired": boolean;
+    "registryRevision"?: string;
+    "server"?: MCPManagedServer | null;
+    "error"?: APIError | null;
+}
+
+export interface MCPObservation {
+    "connection": string;
+    "status": string;
+    "authStatus": string;
+    "toolCount"?: number | null;
+    "observedAt"?: string;
+    "lastErrorCode"?: string;
+    "stale": boolean;
+}
+
+export interface MCPReconnectResult {
+    "server"?: MCPManagedServer | null;
+    "tools": MCPToolSummary[] | null;
+    "toolCount": number;
+    "error"?: APIError | null;
+}
+
+export interface MCPServerResult {
+    "registryRevision"?: string;
+    "server"?: MCPManagedServer | null;
+    "error"?: APIError | null;
+}
+
+export interface MCPSnapshot {
+    "registryRevision": string;
+    "authoritative": boolean;
+    "servers": MCPManagedServer[] | null;
+}
+
+export interface MCPSnapshotResult {
+    "snapshot": MCPSnapshot;
+    "error"?: APIError | null;
+}
+
+export interface MCPToolSummary {
+    "name": string;
+    "qualifiedName": string;
+    "server": string;
+    "sourceType": string;
+    "pluginName"?: string;
+}
+
 export interface Manifest {
     "protocolVersion": number;
     "minClientVersion": number;

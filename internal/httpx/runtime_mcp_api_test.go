@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/auth"
@@ -88,6 +89,15 @@ func TestRuntimeMCPDesktopHTTPRouteReadsPOSTBody(t *testing.T) {
 	handler.ServeHTTP(response, remote)
 	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "\"code\":\"LOCAL_ACCESS_REQUIRED\"") {
 		t.Fatalf("remote desktop route status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRuntimeMCPDesktopUsesBoundedLongOperationTimeout(t *testing.T) {
+	if got := runtimeAPIRequestTimeout("/internal/runtime/mcp/desktop"); got != runtimeMCPDesktopTimeout || got <= 5*time.Minute {
+		t.Fatalf("Desktop MCP timeout = %s", got)
+	}
+	if got := runtimeAPIRequestTimeout("/internal/runtime/status"); got != 8*time.Second {
+		t.Fatalf("ordinary Runtime API timeout = %s", got)
 	}
 }
 

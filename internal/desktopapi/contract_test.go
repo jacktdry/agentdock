@@ -67,11 +67,23 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 			t.Fatalf("unexpected ACP operation: %q", operation.Name)
 		}
 	}
-	for _, domain := range []Domain{
-		DomainBrowser,
-		DomainMCP,
-		DomainPlugin,
-	} {
+	mcpCapability := seen[DomainMCP]
+	if mcpCapability.Availability != AvailabilityAvailable || len(mcpCapability.Operations) != 14 {
+		t.Fatalf("MCP capability = %#v", mcpCapability)
+	}
+	for _, operation := range mcpCapability.Operations {
+		switch operation.Name {
+		case "snapshot", "inspect", "environment", "authorizationStatus":
+			if operation.Access != AccessRead || operation.RequiresConfirmation {
+				t.Fatalf("MCP read operation = %#v", operation)
+			}
+		default:
+			if operation.Access == AccessRead || !operation.RequiresConfirmation {
+				t.Fatalf("MCP mutation operation = %#v", operation)
+			}
+		}
+	}
+	for _, domain := range []Domain{DomainBrowser, DomainPlugin} {
 		if seen[domain].Availability != AvailabilityUnavailable {
 			t.Fatalf("%s should remain unavailable in M2 scaffold, got %#v", domain, seen[domain])
 		}

@@ -6,6 +6,7 @@ import * as BasicSettingsService from "./basicsettingsservice.js";
 import * as ConnectionService from "./connectionservice.js";
 import * as ContractService from "./contractservice.js";
 import * as DiagnosticsService from "./diagnosticsservice.js";
+import * as MCPService from "./mcpservice.js";
 import * as PermissionService from "./permissionservice.js";
 import * as RuntimeService from "./runtimeservice.js";
 import * as UpdateService from "./updateservice.js";
@@ -15,6 +16,7 @@ export {
     ConnectionService,
     ContractService,
     DiagnosticsService,
+    MCPService,
     PermissionService,
     RuntimeService,
     UpdateService
@@ -62,6 +64,22 @@ export type {
     DiagnosticsResult,
     DiagnosticsSnapshot,
     DomainCapability,
+    MCPActionResult,
+    MCPAuthCallback,
+    MCPAuthorizationResult,
+    MCPAuthorizationStatus,
+    MCPAuthorizationStatusResult,
+    MCPConfigInput,
+    MCPEnvironmentEntry,
+    MCPEnvironmentResult,
+    MCPManagedServer,
+    MCPMutationResult,
+    MCPObservation,
+    MCPReconnectResult,
+    MCPServerResult,
+    MCPSnapshot,
+    MCPSnapshotResult,
+    MCPToolSummary,
     Manifest,
     NegotiationRequest,
     NegotiationResult,

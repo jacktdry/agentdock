@@ -44,6 +44,15 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 	mux.HandleFunc("/internal/runtime/mcp/", h)
 }
 
+const runtimeMCPDesktopTimeout = 305 * time.Second
+
+func runtimeAPIRequestTimeout(cleanPath string) time.Duration {
+	if cleanPath == "/internal/runtime/mcp/desktop" {
+		return runtimeMCPDesktopTimeout
+	}
+	return 8 * time.Second
+}
+
 func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore *auth.OAuthStore) http.HandlerFunc {
 	authRequired := cfg.AuthRequired()
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +82,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "failed to read runtime request body")
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), runtimeAPIRequestTimeout(cleanPath))
 		defer cancel()
 		ctx = requestmeta.WithAuthPrincipal(ctx, authn.Principal)
 		result, err := runtimeapi.Dispatch(ctx, runtime, runtimeapi.Request{
