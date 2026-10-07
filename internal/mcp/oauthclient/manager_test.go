@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ type fakeOAuthService struct {
 	registrations     int
 	refreshes         int
 	invalidRefresh    bool
+	tokenRedirectURL  string
 	lastRegistration  oauthex.ClientRegistrationMetadata
 	registrationStart chan struct{}
 	registrationGate  chan struct{}
@@ -93,6 +96,13 @@ func (f *fakeOAuthService) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			"application_type":           meta.ApplicationType,
 		})
 	case "/token":
+		f.mu.Lock()
+		redirectURL := f.tokenRedirectURL
+		f.mu.Unlock()
+		if redirectURL != "" {
+			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+			return
+		}
 		if err := r.ParseForm(); err != nil {
 			writeTestJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request"})
 			return
@@ -568,5 +578,113 @@ func TestGrantPathPrefixesWindowsReservedStorageNames(t *testing.T) {
 		if got, want := filepath.Base(path), "grant-"+storageKey+".json"; got != want {
 			t.Fatalf("grantPath(%q) basename = %q, want %q", storageKey, got, want)
 		}
+	}
+}
+
+func TestOAuthRedirectPolicyAllowsSameOriginAndRejectsForeignOrigins(t *testing.T) {
+	initial, _ := http.NewRequest(http.MethodPost, "https://example.test/token", nil)
+	same, _ := http.NewRequest(http.MethodPost, "https://example.test/next", nil)
+	if err := oauthRedirectPolicy(same, []*http.Request{initial}); err != nil {
+		t.Fatalf("same-origin redirect rejected: %v", err)
+	}
+	for name, target := range map[string]string{
+		"cross-port": "https://example.test:444/next",
+		"subdomain":  "https://sub.example.test/next",
+		"downgrade":  "http://example.test/next",
+	} {
+		t.Run(name, func(t *testing.T) {
+			next, _ := http.NewRequest(http.MethodPost, target, nil)
+			if !errors.Is(oauthRedirectPolicy(next, []*http.Request{initial}), errOAuthRedirectRejected) {
+				t.Fatalf("redirect to %s was not rejected", target)
+			}
+		})
+	}
+}
+
+func TestAuthorizationCodeExchangeRejectsCrossOriginRedirect(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	var attackerRequests atomic.Int32
+	var attackerBody string
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerRequests.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		attackerBody = string(data)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer attacker.Close()
+	fake.mu.Lock()
+	fake.tokenRedirectURL = attacker.URL + "/steal"
+	fake.mu.Unlock()
+
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Code: "code-1", Issuer: fake.server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_TOKEN_EXCHANGE_FAILED" {
+			t.Fatalf("exchange redirect error = %#v", flowErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("redirected token exchange did not finish")
+	}
+	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "code-1") {
+		t.Fatalf("cross-origin token redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
+	}
+}
+
+func TestRefreshTokenRejectsCrossOriginRedirect(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	home := t.TempDir()
+	manager := prepareOAuthManager(t, fake, home)
+	authorizeFakeService(t, manager, fake)
+
+	grant, err := manager.store.loadGrant("cloudflare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant.Expiry = time.Now().Add(-time.Minute)
+	if err := manager.store.saveGrant("cloudflare", grant); err != nil {
+		t.Fatal(err)
+	}
+
+	var attackerRequests atomic.Int32
+	var attackerBody string
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerRequests.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		attackerBody = string(data)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer attacker.Close()
+	fake.mu.Lock()
+	fake.tokenRedirectURL = attacker.URL + "/steal-refresh"
+	fake.mu.Unlock()
+
+	restarted, err := New(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := restarted.tokenSource("cloudflare", fake.endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source == nil {
+		t.Fatal("token source missing")
+	}
+	if _, err := source.Token(); err == nil {
+		t.Fatal("cross-origin refresh redirect succeeded")
+	}
+	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "refresh-1") {
+		t.Fatalf("cross-origin refresh redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
 	}
 }

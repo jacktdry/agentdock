@@ -28,7 +28,10 @@ const (
 	maxFlowStatuses     = 128
 	exchangeTTL         = 30 * time.Second
 	httpTimeout         = 20 * time.Second
+	maxOAuthRedirects   = 10
 )
+
+var errOAuthRedirectRejected = errors.New("OAuth HTTP redirect rejected")
 
 type challengeState struct {
 	endpoint string
@@ -91,7 +94,7 @@ func New(agentDockHome string) (*Manager, error) {
 	}
 	return &Manager{
 		store:           store,
-		httpClient:      &http.Client{Timeout: httpTimeout},
+		httpClient:      &http.Client{Timeout: httpTimeout, CheckRedirect: oauthRedirectPolicy},
 		callbacks:       make(map[string]CallbackOption),
 		challenges:      make(map[string]challengeState),
 		flows:           make(map[string]*flow),
@@ -100,6 +103,49 @@ func New(agentDockHome string) (*Manager, error) {
 		flowStatuses:    make(map[string]flowObservation),
 		generations:     make(map[string]uint64),
 	}, nil
+}
+
+func oauthRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if req == nil || req.URL == nil || len(via) == 0 || via[0] == nil || via[0].URL == nil {
+		return errOAuthRedirectRejected
+	}
+	if len(via) >= maxOAuthRedirects {
+		return errOAuthRedirectRejected
+	}
+	if req.URL.User != nil || !sameOAuthOrigin(via[0].URL, req.URL) {
+		return errOAuthRedirectRejected
+	}
+	return nil
+}
+
+func sameOAuthOrigin(first, next *url.URL) bool {
+	if first == nil || next == nil {
+		return false
+	}
+	if !strings.EqualFold(first.Scheme, next.Scheme) {
+		return false
+	}
+	if !strings.EqualFold(first.Hostname(), next.Hostname()) {
+		return false
+	}
+	return oauthEffectivePort(first) == oauthEffectivePort(next)
+}
+
+func oauthEffectivePort(value *url.URL) string {
+	if value == nil {
+		return ""
+	}
+	if port := value.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(value.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
 }
 
 func (m *Manager) SetCallback(option CallbackOption) error {
