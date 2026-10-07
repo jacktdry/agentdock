@@ -584,3 +584,50 @@ P6 Plugin Management roundtable
 同一階段的 writer不可共享 unsafe write boundary。Core safety/revision先於 Desktop API；Desktop API contract freeze後才開始 Shared UI。
 
 P5 完成不代表可進 M9。仍須完成後續 Plugin、Nexus/Platform Essentials、Browser Broker與 Pre-M9 hardening integration review。
+
+## 20. Implementation / security checkpoint — 2026-10-07
+
+P5 的 Core authority、Desktop bridge 與 Shared UI 已完成到 **review-ready**，但本 checkpoint **不是 P5 closeout**，也尚未開始 Next-only package/live UAT。
+
+已完成的 implementation / hardening：
+
+- revisioned registry + opaque server generation、atomic update、truthful partial persistence/runtime outcome；
+- Desktop-only checked authority：standalone mutation、write-only env、OAuth、explicit reconnect；plugin-owned 在 P5 維持 read-only；
+- passive snapshot / inspect / env snapshot / auth status / cached tools 不會 connect、spawn、discover、refresh 或 reconnect；
+- native OAuth browser handoff，authorization URL 不進普通 renderer state；
+- Shared MCP Management navigation、list/detail/editor、confirmations、retained-env reuse gate、OAuth flow、cached tool summary與 narrow-window behavior；
+- independent review 第一輪曾回報 **6 HIGH / 0 BLOCKER**。修正序列：
+  - `002f15ee` private Desktop request identity；
+  - `08ac180c` Desktop mutation incarnation fencing；
+  - `8c14e9df` OAuth redirect origin policy；
+  - `a247e71a` / `1ef3eb77` / `c40ce121` request identity regression coverage；
+  - `39bbd1da` explicit args（omitted / null / [] / value）identity + HTTP boundary preservation；
+  - `4031c546` OAuth redirect error sanitization；
+  - `23a6e29f` approval retry consumption / journal reconciliation。
+
+2026-10-07 final local release-blocking checklist：
+
+- private HMAC request binding包含完整 semantic request，`request_id` 只作 journal/idempotency key；redacted admission descriptor 不含 raw command/CWD/endpoint origin/write-only value；
+- Desktop side effects在 Core boundary fail closed：create 要 registry revision；既有 server mutation/reconnect/auth 要 revision + generation；env write另要 env revision；
+- Desktop OAuth completion綁 exact server incarnation，且成功後等待 explicit reconnect，不會自動 retarget 同名新 server；
+- post-OAuth legacy reconnect log只記 safe error code；
+- OAuth code exchange與 refresh 共用 origin-aware redirect policy，cross-origin / downgrade不會收到 token/client credentials；redirect/URL error cause 會被 sanitize；
+- HTTP `/internal/runtime/mcp/desktop` 保留 explicit `args: []` / `args: null` semantics，不再因 remarshal + `omitempty` collapse；
+- passive paths維持 zero network/process side effects。
+
+Verification：
+
+- P5 targeted Go tests與 race tests全綠；
+- Windows / Linux P5 internal package compile-only 全綠；
+- Shared Go tests全綠（僅既有 macOS linker target warning）；
+- Shared frontend `typecheck`、14 files / 102 tests、`build:dev` 全綠；
+- repo-wide `go test ./cmd/... ./internal/...` 唯一失敗為既有 `internal/tool/command/session::TestStartCapturesFastCommandOutputRepeatedly` timing flaky；該 package 隨後 `-count=5` 全綠，且與 P5 MCP 修改無關；
+- i18n generator成功；strict checker仍是既有 Permission / ACP / Connection 24 筆，P5-owned paths為 0。
+
+Final independent re-review limitation：
+
+- 新 Codex read-only reviewer在 2026-10-07 因 ACP usage quota 直接中止，未產出 verdict；
+- Antigravity / Claude read-only reviewer完成一輪程式讀取，但 run 未輸出 final verdict；要求補 verdict 時 AGY individual quota exhausted；
+- 因此目前只有已完成的第一輪 independent findings + 後續本地 defensive re-review / tests，**沒有宣稱 final independent PASS**。
+
+Gate decision：維持 **review-ready / live-UAT blocked**。在取得 final independent re-review 的 0 BLOCKER / 0 HIGH verdict 前，不 package/reinstall/restart AgentDock Next、不執行 P5 live UAT；stable AgentDock / Core 8765 / stable services完全不動。取得 PASS 後才進 Implementation order 的 E（Next-only package/live validation through stable `mac-dev`）。

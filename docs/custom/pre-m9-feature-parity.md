@@ -1,6 +1,6 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management contract 已凍結，現在進 Core/Desktop authority implementation。M9 仍須等待必要 parity + hardening integration review**
+> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management 已完成 implementation + security hardening 到 review-ready，但 final independent re-review / Next live UAT 尚未完成。M9 仍須等待必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
@@ -198,7 +198,7 @@ Shared ACP UI 不再只是 Runtime Monitor；P4 closeout 後下一個 Wave 3 dom
 
 ### P5 — MCP Management Shared UI
 
-**狀態：UX / IA + authority contract frozen（2026-10-06）；implementation next。** 詳見 [P5 MCP Management roundtable](pre-m9-mcp-management-roundtable.md)。
+**狀態：implementation + security hardening 已完成到 review-ready（2026-10-07）；final independent re-review 因 ACP quota 尚未取得 verdict，Next live UAT 仍 blocked。** 詳見 [P5 MCP Management roundtable](pre-m9-mcp-management-roundtable.md#20-implementation--security-checkpoint--2026-10-07)。
 
 P5 不直接把 Core `mcp_manage` 做成表單，而是先建立 Desktop-owned authority。Scope：
 
@@ -223,7 +223,7 @@ Frozen security rules：
 - plugin-owned mutation在 P5 backend一律拒絕；
 - no offline writes、no automatic tool discovery、no tool-call console。
 
-目前 Core已有 list/inspect/add/remove/enable/disable/env/refresh/OAuth，但仍需補 atomic update、revision/generation、authoritative safe reads、OAuth generation fence、redirect isolation與 truthful partial-outcome semantics，完成後才開 Shared UI。
+Core/Desktop authority與 Shared UI 已完成，包含 atomic update、revision/generation、authoritative safe reads、OAuth incarnation fence、redirect isolation、truthful partial-outcome、private request binding與 operation reconciliation。第一輪 independent review 的 6 HIGH 已逐項修正並通過本地 targeted/race/cross-platform/frontend gates；但 final independent PASS 因 reviewer quota 尚未取得，所以不進 package/live UAT，也不宣稱 P5 closeout。
 
 ### P6 — Plugin Management Shared UI
 
@@ -336,7 +336,7 @@ verify stable + Next side-by-side
   ↓
 P4 ACP Manager full parity ✅
   ↓
-P5 MCP Management ← **contract frozen / implementation next**
+P5 MCP Management ← **review-ready / final independent re-review + live UAT pending**
   ↓
 P6 Plugin Management
   ↓
@@ -412,7 +412,7 @@ Connector 建立仍屬 user-owned gate；本次 side-by-side closeout 由主 orc
 P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成並部署。後續仍可用獨立 worktree / branch 推進，現在的順序為：
 
 - ~~ACP Manager~~ — **Complete**；
-- **MCP Management — contract frozen / implementation next**；
+- **MCP Management — review-ready / final independent re-review + live UAT pending**；
 - Plugin Management；
 - Nexus / Platform Essentials；
 - Browser Broker UI。
@@ -488,7 +488,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager；**從 P5 MCP Management 接續**，之後為 Plugin Management → Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager；P5 MCP Management 已到 review-ready，**先完成 final independent re-review + Next-only live UAT**，之後才接 Plugin Management → Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
