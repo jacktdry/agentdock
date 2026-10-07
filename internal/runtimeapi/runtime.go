@@ -93,3 +93,7 @@ type PluginDesktopRuntime interface {
 	RuntimePluginDesktop(context.Context) (app.Result, error)
 	RuntimePluginDesktopManage(context.Context, map[string]any) (app.Result, error)
 }
+
+type PluginDesktopCandidateRuntime interface {
+	RuntimePluginDesktopCandidate(context.Context, map[string]any) (app.Result, error)
+}

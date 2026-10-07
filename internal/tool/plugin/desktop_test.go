@@ -258,10 +258,13 @@ func TestDecodeDesktopPluginRequestStrictFields(t *testing.T) {
 	generation := strings.Repeat("b", 64)
 	envRevision := strings.Repeat("c", 64)
 	requestID := strings.Repeat("d", 32)
+	candidateID := strings.Repeat("e", 64)
 	valid := []string{
 		`{"action":"desktop_snapshot"}`,
 		`{"action":"desktop_inspect","name":"demo"}`,
 		`{"action":"desktop_operation_status","request_id":"` + requestID + `"}`,
+		`{"action":"desktop_install_candidate","request_id":"` + requestID + `","candidate_id":"` + candidateID + `","name":"demo","expected_registry_revision":"` + revision + `"}`,
+		`{"action":"desktop_update_candidate","request_id":"` + requestID + `","candidate_id":"` + candidateID + `","name":"demo","expected_registry_revision":"` + revision + `","expected_generation":"` + generation + `"}`,
 		`{"action":"desktop_set_enabled","request_id":"` + requestID + `","name":"demo","enabled":true,"expected_registry_revision":"` + revision + `","expected_generation":"` + generation + `"}`,
 		`{"action":"desktop_remove_keep","request_id":"` + requestID + `","name":"demo","expected_registry_revision":"` + revision + `","expected_generation":"` + generation + `"}`,
 		`{"action":"desktop_env_snapshot","name":"demo","component":"one"}`,
@@ -279,6 +282,9 @@ func TestDecodeDesktopPluginRequestStrictFields(t *testing.T) {
 		`{"action":"desktop_inspect","name":"demo","request_id":"` + requestID + `"}`,
 		`{"action":"desktop_operation_status"}`,
 		`{"action":"desktop_operation_status","request_id":"short"}`,
+		`{"action":"desktop_install_candidate","request_id":"` + requestID + `","candidate_id":"short","name":"demo","expected_registry_revision":"` + revision + `"}`,
+		`{"action":"desktop_install_candidate","request_id":"` + requestID + `","candidate_id":"` + candidateID + `","name":"demo","expected_registry_revision":"` + revision + `","expected_generation":"` + generation + `"}`,
+		`{"action":"desktop_update_candidate","request_id":"` + requestID + `","candidate_id":"` + candidateID + `","name":"demo","expected_registry_revision":"` + revision + `"}`,
 		`{"action":"desktop_set_enabled","request_id":"` + requestID + `","name":"demo","enabled":true,"expected_registry_revision":"` + revision + `"}`,
 		`{"action":"desktop_remove_keep","request_id":"` + requestID + `","name":"demo","expected_registry_revision":"` + revision + `","expected_generation":"` + generation + `","enabled":false}`,
 		`{"action":"desktop_env_snapshot","name":"demo"}`,

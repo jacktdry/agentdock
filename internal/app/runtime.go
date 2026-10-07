@@ -365,6 +365,7 @@ func (r *Runtime) Close() error {
 			}
 		}
 		if r.plugins != nil {
+			r.plugins.ReleaseDesktopCandidates()
 			r.plugins.ReleaseMCPLeases()
 		}
 		r.closeErr = errors.Join(closeErrors...)

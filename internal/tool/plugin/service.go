@@ -27,8 +27,10 @@ type Service struct {
 	envs       *envstore.Store
 	ws         *workspace.Workspace
 
-	mcpLeaseMu sync.Mutex
-	mcpLeases  map[string]func()
+	mcpLeaseMu         sync.Mutex
+	mcpLeases          map[string]func()
+	desktopCandidateMu sync.Mutex
+	desktopCandidates  map[string]*desktopCandidateRecord
 }
 
 type CapabilityItem struct {
@@ -65,7 +67,7 @@ func (s *Service) CapabilityItems() ([]CapabilityItem, error) {
 func New(cfg config.Config, manager *pluginruntime.Manager, mcpClients *mcpclient.Manager, envs *envstore.Store, ws *workspace.Workspace) *Service {
 	return &Service{
 		cfg: cfg, manager: manager, mcpClients: mcpClients, envs: envs, ws: ws,
-		mcpLeases: make(map[string]func()),
+		mcpLeases: make(map[string]func()), desktopCandidates: make(map[string]*desktopCandidateRecord),
 	}
 }
 
@@ -129,6 +131,21 @@ func (s *Service) ReleaseMCPLeases() {
 	s.mcpLeases = make(map[string]func())
 	s.mcpLeaseMu.Unlock()
 	releasePluginLeases(leases)
+}
+
+func (s *Service) ReleaseDesktopCandidates() {
+	if s == nil {
+		return
+	}
+	s.desktopCandidateMu.Lock()
+	candidates := s.desktopCandidates
+	s.desktopCandidates = make(map[string]*desktopCandidateRecord)
+	s.desktopCandidateMu.Unlock()
+	for _, candidate := range candidates {
+		if candidate != nil && candidate.prepared != nil {
+			candidate.prepared.Close()
+		}
+	}
 }
 
 func releasePluginLeases(leases map[string]func()) {

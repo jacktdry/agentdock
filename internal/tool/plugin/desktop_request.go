@@ -19,6 +19,7 @@ import (
 type DesktopManageRequest struct {
 	Action                   string  `json:"action"`
 	RequestID                string  `json:"request_id,omitempty"`
+	CandidateID              string  `json:"candidate_id,omitempty"`
 	Name                     string  `json:"name,omitempty"`
 	Component                string  `json:"component,omitempty"`
 	Enabled                  *bool   `json:"enabled,omitempty"`
@@ -52,20 +53,22 @@ func DecodeDesktopRequest(body []byte) (DesktopManageRequest, error) {
 	}
 	request.Action = strings.ToLower(strings.TrimSpace(request.Action))
 	switch request.Action {
-	case "desktop_snapshot", "desktop_inspect", "desktop_operation_status", "desktop_set_enabled", "desktop_remove_keep", "desktop_remove_purge", "desktop_env_snapshot", "desktop_env_set", "desktop_env_unset":
+	case "desktop_snapshot", "desktop_inspect", "desktop_operation_status", "desktop_install_candidate", "desktop_update_candidate", "desktop_set_enabled", "desktop_remove_keep", "desktop_remove_purge", "desktop_env_snapshot", "desktop_env_set", "desktop_env_unset":
 	default:
 		return invalid()
 	}
 	allowed := map[string]map[string]bool{
-		"desktop_snapshot":         {"action": true},
-		"desktop_inspect":          {"action": true, "name": true},
-		"desktop_operation_status": {"action": true, "request_id": true},
-		"desktop_set_enabled":      {"action": true, "request_id": true, "name": true, "enabled": true, "expected_registry_revision": true, "expected_generation": true},
-		"desktop_remove_keep":      {"action": true, "request_id": true, "name": true, "expected_registry_revision": true, "expected_generation": true},
-		"desktop_remove_purge":     {"action": true, "request_id": true, "name": true, "expected_registry_revision": true, "expected_generation": true},
-		"desktop_env_snapshot":     {"action": true, "name": true, "component": true},
-		"desktop_env_set":          {"action": true, "request_id": true, "name": true, "component": true, "key": true, "value": true, "expected_registry_revision": true, "expected_generation": true, "expected_env_revision": true},
-		"desktop_env_unset":        {"action": true, "request_id": true, "name": true, "component": true, "key": true, "expected_registry_revision": true, "expected_generation": true, "expected_env_revision": true},
+		"desktop_snapshot":          {"action": true},
+		"desktop_inspect":           {"action": true, "name": true},
+		"desktop_operation_status":  {"action": true, "request_id": true},
+		"desktop_install_candidate": {"action": true, "request_id": true, "candidate_id": true, "name": true, "expected_registry_revision": true},
+		"desktop_update_candidate":  {"action": true, "request_id": true, "candidate_id": true, "name": true, "expected_registry_revision": true, "expected_generation": true},
+		"desktop_set_enabled":       {"action": true, "request_id": true, "name": true, "enabled": true, "expected_registry_revision": true, "expected_generation": true},
+		"desktop_remove_keep":       {"action": true, "request_id": true, "name": true, "expected_registry_revision": true, "expected_generation": true},
+		"desktop_remove_purge":      {"action": true, "request_id": true, "name": true, "expected_registry_revision": true, "expected_generation": true},
+		"desktop_env_snapshot":      {"action": true, "name": true, "component": true},
+		"desktop_env_set":           {"action": true, "request_id": true, "name": true, "component": true, "key": true, "value": true, "expected_registry_revision": true, "expected_generation": true, "expected_env_revision": true},
+		"desktop_env_unset":         {"action": true, "request_id": true, "name": true, "component": true, "key": true, "expected_registry_revision": true, "expected_generation": true, "expected_env_revision": true},
 	}[request.Action]
 	for key := range raw {
 		if !allowed[key] {
@@ -98,11 +101,17 @@ func DecodeDesktopRequest(body []byte) (DesktopManageRequest, error) {
 		_, err := hex.DecodeString(value)
 		return err == nil
 	}
-	mutation := request.Action == "desktop_set_enabled" || request.Action == "desktop_remove_keep" || request.Action == "desktop_remove_purge" || request.Action == "desktop_env_set" || request.Action == "desktop_env_unset"
+	mutation := request.Action == "desktop_install_candidate" || request.Action == "desktop_update_candidate" || request.Action == "desktop_set_enabled" || request.Action == "desktop_remove_keep" || request.Action == "desktop_remove_purge" || request.Action == "desktop_env_set" || request.Action == "desktop_env_unset"
 	if (mutation || request.Action == "desktop_operation_status") && !validRequestID(request.RequestID) {
 		return invalid()
 	}
-	if mutation && (request.ExpectedRegistryRevision == "" || request.ExpectedGeneration == "") {
+	if mutation && request.ExpectedRegistryRevision == "" {
+		return invalid()
+	}
+	if request.Action != "desktop_install_candidate" && mutation && request.ExpectedGeneration == "" {
+		return invalid()
+	}
+	if (request.Action == "desktop_install_candidate" || request.Action == "desktop_update_candidate") && !validDesktopCandidateID(request.CandidateID) {
 		return invalid()
 	}
 	if request.Action == "desktop_set_enabled" && request.Enabled == nil {

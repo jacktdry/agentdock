@@ -60,3 +60,60 @@ func TestPluginServiceSafeErrorsAndUnknownOutcome(t *testing.T) {
 		t.Fatalf("unavailable %#v", result)
 	}
 }
+
+func TestPluginServiceCandidatePickerKeepsNativePathPrivate(t *testing.T) {
+	privatePath := "/Users/example/private/secret-plugin.zip"
+	candidateID := strings.Repeat("a", 64)
+	service := &PluginService{
+		core: testMCPService(t, func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			switch r.URL.Path {
+			case pluginDesktopCandidatePath:
+				if !strings.Contains(string(body), privatePath) {
+					t.Fatal("private candidate route did not receive picker path")
+				}
+				_, _ = io.WriteString(w, `{"ok":true,"candidate":{"candidate_id":"`+candidateID+`","kind":"install","expires_at":"2026-10-08T02:00:00Z","review":{"valid":true,"name":"demo","version":"1.0.0","format":"portable","package_fingerprint":"sha256:safe","skills":[],"mcp":[{"name":"remote","transport":"streamable-http","endpoint":"https://example.invalid"}],"executables":[],"warnings":[],"issues":[],"review_token":"RAW_REVIEW_CANARY","storage_key":"RAW_STORAGE_CANARY"},"source":"`+privatePath+`"}}`)
+			case pluginDesktopPath:
+				if strings.Contains(string(body), privatePath) || strings.Contains(string(body), "source") {
+					t.Fatal("main Desktop mutation carried native path")
+				}
+				if !strings.Contains(string(body), candidateID) {
+					t.Fatal("candidate id missing from mutation")
+				}
+				_, _ = io.WriteString(w, `{"ok":true,"request_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","outcome":"completed","completed":true,"persisted":true,"runtime_applied":true,"runtime_impact":"installed_disabled"}`)
+			default:
+				t.Fatalf("unexpected path %s", r.URL.Path)
+			}
+		}),
+		picker: func(sourceType string) (string, error) {
+			if sourceType != "zip" {
+				t.Fatalf("sourceType=%s", sourceType)
+			}
+			return privatePath, nil
+		},
+	}
+	chosen := service.ChooseCandidate(context.Background(), PluginCandidatePickerInput{Kind: "install", SourceType: "zip"})
+	if chosen.Error != nil || chosen.Cancelled || chosen.Candidate == nil || chosen.Candidate.CandidateID != candidateID || chosen.SourceLabel != "secret-plugin.zip" {
+		t.Fatalf("chosen %#v", chosen)
+	}
+	data, _ := json.Marshal(chosen)
+	for _, forbidden := range []string{privatePath, "RAW_REVIEW_CANARY", "RAW_STORAGE_CANARY", "review_token", "storage_key"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("renderer candidate leaked %q: %s", forbidden, data)
+		}
+	}
+	result := service.InstallCandidate(context.Background(), PluginCandidateMutationInput{
+		RequestID: strings.Repeat("b", 32), CandidateID: candidateID, Name: "demo", ExpectedRegistryRevision: strings.Repeat("c", 64),
+	})
+	if result.Error != nil || !result.Completed {
+		t.Fatalf("install result %#v", result)
+	}
+}
+
+func TestPluginServiceCandidatePickerCancelIsNotError(t *testing.T) {
+	service := &PluginService{core: testMCPService(t, func(http.ResponseWriter, *http.Request) { t.Fatal("Core called after picker cancel") }), picker: func(string) (string, error) { return "", nil }}
+	result := service.ChooseCandidate(context.Background(), PluginCandidatePickerInput{Kind: "install", SourceType: "folder"})
+	if !result.Cancelled || result.Error != nil || result.Candidate != nil {
+		t.Fatalf("cancel result %#v", result)
+	}
+}

@@ -45,6 +45,37 @@ func main() {
 		}
 		return app.Browser.OpenURL(rawURL)
 	})
+	pluginService := desktopapi.NewPluginServiceWithPicker(*runtimeRootFlag, func(sourceType string) (string, error) {
+		if app == nil || app.Dialog == nil {
+			return "", errors.New("desktop file picker unavailable")
+		}
+		switch sourceType {
+		case "folder":
+			return app.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+				CanChooseDirectories: true,
+				CanChooseFiles:       false,
+				CanCreateDirectories: false,
+				ResolvesAliases:      true,
+				Title:                "Choose Plugin folder",
+				ButtonText:           "Choose",
+			}).PromptForSingleSelection()
+		case "zip":
+			return app.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+				CanChooseDirectories: false,
+				CanChooseFiles:       true,
+				CanCreateDirectories: false,
+				ResolvesAliases:      true,
+				AllowsOtherFileTypes: false,
+				Filters: []application.FileFilter{
+					{DisplayName: "ZIP archives", Pattern: "*.zip"},
+				},
+				Title:      "Choose Plugin ZIP file",
+				ButtonText: "Choose",
+			}).PromptForSingleSelection()
+		default:
+			return "", errors.New("unsupported Plugin source type")
+		}
+	})
 
 	app = application.New(application.Options{
 		Name:        productName,
@@ -58,6 +89,7 @@ func main() {
 			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewACPService(*runtimeRootFlag)),
 			application.NewService(mcpService),
+			application.NewService(pluginService),
 			application.NewService(desktopapi.NewPermissionService(*runtimeRootFlag)),
 			application.NewService(settings),
 			application.NewService(activityProbeService),

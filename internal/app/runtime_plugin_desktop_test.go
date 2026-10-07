@@ -56,6 +56,7 @@ func TestRuntimeDesktopPluginApprovalFingerprintJournalAndNoLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mutate := range []func(*toolplugin.DesktopManageRequest){
+		func(r *toolplugin.DesktopManageRequest) { r.CandidateID = strings.Repeat("c", 64) },
 		func(r *toolplugin.DesktopManageRequest) { other := "OTHER_CANARY"; r.Value = &other },
 		func(r *toolplugin.DesktopManageRequest) { r.Name = "other" }, func(r *toolplugin.DesktopManageRequest) { r.Component = "other" },
 		func(r *toolplugin.DesktopManageRequest) { r.Key = "OTHER" }, func(r *toolplugin.DesktopManageRequest) { r.ExpectedRegistryRevision = "other" },
@@ -175,12 +176,75 @@ func TestRuntimeDesktopPluginJournalEvictsOldestCompletedAtCapacity(t *testing.T
 	}
 }
 
+func TestRuntimeDesktopPluginCandidateApprovalRetryDoesNotConsumeCandidate(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	source := writeAppPluginForTest(t, rt.ws.Root(), "1.0.0")
+	candidate, err := rt.plugins.PrepareDesktopCandidate(context.Background(), source, "install", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(rt.plugins.ReleaseDesktopCandidates)
+	snapshot, err := rt.RuntimePluginDesktop(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{
+		"action": "desktop_install_candidate", "request_id": strings.Repeat("a", 32),
+		"candidate_id": candidate.CandidateID, "name": candidate.Review.Name,
+		"expected_registry_revision": snapshot["registry_revision"],
+	}
+	replaceRuntimePermissionPolicy(t, rt, func(p *permission.Policy) { p.GlobalMode = permission.Rules })
+	ctx := requestmeta.WithAuthPrincipal(context.Background(), requestmeta.NewStableAuthPrincipal("static_bearer", "plugin-candidate-test"))
+	_, err = rt.RuntimePluginDesktopManage(ctx, args)
+	approval := requirePermissionError(t, err, "APPROVAL_REQUIRED")
+	if _, err := rt.permissions.ApproveOnce(context.Background(), permission.Mutation{
+		ApprovalID: approval.Details["approval_id"].(string), ApprovalVersion: permissionDetailUint64(t, approval.Details, "approval_version"),
+		PolicyRevision: permissionDetailUint64(t, approval.Details, "policy_revision"), Actor: "test-desktop-control",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	args["request_id"] = strings.Repeat("b", 32)
+	result, err := rt.RuntimePluginDesktopManage(ctx, args)
+	if err != nil || result["outcome"] != "completed" {
+		t.Fatalf("approved candidate result %#v err=%v", result, err)
+	}
+	installed, err := rt.RuntimePlugin(context.Background(), candidate.Review.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installed["enabled"] != false {
+		t.Fatalf("Desktop candidate install was not disabled: %#v", installed)
+	}
+
+	originalBody, _ := json.Marshal(args)
+	originalRequest, err := toolplugin.DecodeDesktopRequest(originalBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := rt.desktopPluginRequestFingerprint(originalRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := originalRequest
+	other.CandidateID = strings.Repeat("d", 64)
+	changed, err := rt.desktopPluginRequestFingerprint(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed == original {
+		t.Fatal("candidate id was not bound into approval semantics")
+	}
+}
+
 func TestRuntimeDesktopPluginPermissionFactsClassifyLifecycleEffects(t *testing.T) {
 	rt := newPermissionRuntime(t)
 	for _, test := range []struct {
 		action            string
 		network, commands bool
 	}{
+		{action: "desktop_install_candidate"},
+		{action: "desktop_update_candidate", network: true, commands: true},
 		{action: "desktop_set_enabled", network: true, commands: true},
 		{action: "desktop_remove_keep", network: true, commands: true},
 		{action: "desktop_remove_purge", network: true, commands: true},

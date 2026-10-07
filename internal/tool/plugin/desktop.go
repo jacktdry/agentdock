@@ -163,9 +163,16 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		}
 		return nil, DesktopError("PLUGIN_NOT_FOUND", "not_found")
 	}
-	_, state, err := s.desktopBasis(r)
-	if err != nil {
-		return nil, err
+	var state pluginruntime.State
+	if r.Action == "desktop_install_candidate" {
+		if r.ExpectedRegistryRevision == "" || r.ExpectedRegistryRevision != reg.Revision {
+			return nil, DesktopError("PLUGIN_REGISTRY_CONFLICT", "conflict")
+		}
+	} else {
+		_, state, err = s.desktopBasis(r)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if r.Action == "desktop_env_set" || r.Action == "desktop_env_unset" {
 		return s.desktopEnvironment(ctx, r, state)
@@ -173,6 +180,18 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 	check := func() error { _, _, err := s.desktopBasis(r); return err }
 	var changed pluginruntime.ChangeResult
 	switch r.Action {
+	case "desktop_install_candidate":
+		candidate, takeErr := s.takeDesktopCandidate(r.CandidateID, "install", r.Name, "")
+		if takeErr != nil {
+			return nil, takeErr
+		}
+		changed, err = s.desktopInstallPreparedCandidate(ctx, candidate)
+	case "desktop_update_candidate":
+		candidate, takeErr := s.takeDesktopCandidate(r.CandidateID, "update", r.Name, r.ExpectedGeneration)
+		if takeErr != nil {
+			return nil, takeErr
+		}
+		changed, err = s.desktopUpdatePreparedCandidate(ctx, candidate, r.ExpectedGeneration)
 	case "desktop_set_enabled":
 		if r.Enabled == nil {
 			return nil, DesktopError("INVALID_PLUGIN_REQUEST", "validation")
@@ -203,7 +222,11 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 	default:
 		return nil, DesktopError("INVALID_PLUGIN_REQUEST", "validation")
 	}
-	result := Result{"action": r.Action, "name": r.Name, "completed": err == nil, "persisted": err == nil, "runtime_applied": err == nil, "recovery_required": err != nil, "runtime_impact": "applied", "changed": changed.Changed}
+	runtimeImpact := "applied"
+	if r.Action == "desktop_install_candidate" {
+		runtimeImpact = "installed_disabled"
+	}
+	result := Result{"action": r.Action, "name": r.Name, "completed": err == nil, "persisted": err == nil, "runtime_applied": err == nil, "recovery_required": err != nil, "runtime_impact": runtimeImpact, "changed": changed.Changed}
 	if strings.HasPrefix(r.Action, "desktop_remove_") {
 		result["data_policy"] = "keep"
 		result["data_preserved"] = true
@@ -245,11 +268,112 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 	return result, nil
 }
 
+func (s *Service) desktopInstallPreparedCandidate(ctx context.Context, candidate *pluginruntime.PreparedCandidate) (pluginruntime.ChangeResult, error) {
+	result, err := s.manager.InstallPreparedCandidate(ctx, candidate, false)
+	if err != nil {
+		return pluginruntime.ChangeResult{}, pluginToolError(err)
+	}
+	if !result.Changed {
+		return result, nil
+	}
+	if err := s.reconcileMCPActivation(result.Name); err != nil {
+		abortErr := s.manager.AbortActivation(ctx, result.Name)
+		reconcileErr := s.ReconcileMCP()
+		return pluginruntime.ChangeResult{}, toolcore.NewErrorCause(
+			"PLUGIN_RUNTIME_ACTIVATION_FAILED",
+			"Plugin install candidate could not activate its runtime; installation was aborted",
+			"runtime",
+			nil,
+			errors.Join(err, abortErr, reconcileErr),
+		)
+	}
+	if err := s.manager.FinalizeActivation(result.Name); err != nil {
+		deactivateErr := s.reconcileMCPExcluding(result.Name)
+		abortErr := s.manager.AbortActivation(ctx, result.Name)
+		reconcileErr := s.ReconcileMCP()
+		return pluginruntime.ChangeResult{}, toolcore.NewErrorCause(
+			"PLUGIN_INSTALL_FINALIZE_FAILED",
+			"Plugin install could not be finalized",
+			"runtime",
+			nil,
+			errors.Join(err, deactivateErr, abortErr, reconcileErr),
+		)
+	}
+	return result, nil
+}
+
+func (s *Service) desktopUpdatePreparedCandidate(ctx context.Context, candidate *pluginruntime.PreparedCandidate, expectedGeneration string) (pluginruntime.ChangeResult, error) {
+	deactivated := false
+	var deactivationErr error
+	result, err := s.manager.UpdatePreparedCandidate(ctx, candidate, func(state pluginruntime.State) error {
+		if pluginruntime.DesktopGeneration(state) != expectedGeneration {
+			return DesktopError("PLUGIN_GENERATION_CONFLICT", "conflict")
+		}
+		if !state.Enabled {
+			return nil
+		}
+		if reconcileErr := s.reconcileMCPExcluding(state.Name); reconcileErr != nil {
+			deactivationErr = toolcore.NewErrorCause(
+				"PLUGIN_RUNTIME_DEACTIVATION_FAILED",
+				"Plugin runtime could not stop before update",
+				"runtime",
+				nil,
+				reconcileErr,
+			)
+			return deactivationErr
+		}
+		deactivated = true
+		return nil
+	})
+	if err != nil {
+		if deactivationErr != nil {
+			return pluginruntime.ChangeResult{}, deactivationErr
+		}
+		if deactivated {
+			reconcileErr := s.ReconcileMCP()
+			if reconcileErr != nil {
+				return pluginruntime.ChangeResult{}, toolcore.NewErrorCause(
+					"PLUGIN_UPDATE_FAILED",
+					"Plugin update failed and the previous runtime could not be fully restored",
+					"runtime",
+					nil,
+					errors.Join(err, reconcileErr),
+				)
+			}
+		}
+		return pluginruntime.ChangeResult{}, pluginToolError(err)
+	}
+	if err := s.reconcileMCPActivation(result.Name); err != nil {
+		restoreErr := s.manager.AbortActivation(ctx, result.Name)
+		reconcileErr := s.ReconcileMCP()
+		return pluginruntime.ChangeResult{}, toolcore.NewErrorCause(
+			"PLUGIN_RUNTIME_ACTIVATION_FAILED",
+			"Plugin update could not activate its runtime; the previous Plugin state was restored",
+			"runtime",
+			nil,
+			errors.Join(err, restoreErr, reconcileErr),
+		)
+	}
+	if err := s.manager.FinalizeActivation(result.Name); err != nil {
+		deactivateErr := s.reconcileMCPExcluding(result.Name)
+		restoreErr := s.manager.AbortActivation(ctx, result.Name)
+		reconcileErr := s.ReconcileMCP()
+		return pluginruntime.ChangeResult{}, toolcore.NewErrorCause(
+			"PLUGIN_UPDATE_FINALIZE_FAILED",
+			"Plugin update could not be finalized; the previous Plugin state was restored",
+			"runtime",
+			nil,
+			errors.Join(err, deactivateErr, restoreErr, reconcileErr),
+		)
+	}
+	return result, nil
+}
+
 func safeDesktopFailure(err error) *toolcore.ToolError {
 	var typed *toolcore.ToolError
 	if errors.As(err, &typed) {
 		switch typed.Code {
-		case "PLUGIN_REGISTRY_CONFLICT", "PLUGIN_GENERATION_CONFLICT", "PLUGIN_RECOVERY_REQUIRED", "PLUGIN_ENV_CONFLICT", "PLUGIN_CREDENTIAL_REQUIRED", "PLUGIN_ENV_OWNERSHIP_INVALID":
+		case "PLUGIN_REGISTRY_CONFLICT", "PLUGIN_GENERATION_CONFLICT", "PLUGIN_RECOVERY_REQUIRED", "PLUGIN_ENV_CONFLICT", "PLUGIN_CREDENTIAL_REQUIRED", "PLUGIN_ENV_OWNERSHIP_INVALID", "PLUGIN_CANDIDATE_INVALID", "PLUGIN_CANDIDATE_UNAVAILABLE", "PLUGIN_CANDIDATE_TARGET_MISMATCH", "PLUGIN_ALREADY_INSTALLED", "PLUGIN_NOT_FOUND":
 			return DesktopError(typed.Code, typed.Category)
 		}
 	}

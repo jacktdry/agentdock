@@ -576,7 +576,7 @@ func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOper
 		facts.Management = true
 		facts.MCP = true
 		switch facts.Action {
-		case "desktop_set_enabled", "desktop_remove_keep", "desktop_remove_purge":
+		case "desktop_update_candidate", "desktop_set_enabled", "desktop_remove_keep", "desktop_remove_purge":
 			// Plugin lifecycle can stop/start local-process MCP servers and
 			// remote MCP connections. Conservatively classify both effects.
 			facts.Network = true
