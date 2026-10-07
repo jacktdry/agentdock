@@ -275,12 +275,21 @@ func (m *Manager) Add(cfg ServerConfig) (ServerSummary, error) {
 
 // AddChecked requires the authoritative registry revision, including ownership.
 func (m *Manager) AddChecked(cfg ServerConfig, expectedRevision string) (MutationResult, error) {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return MutationResult{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
 	return m.mutateRegistry("create", cfg.Name, cfg, false, &registryExpectation{revision: expectedRevision})
 }
 
 // Update atomically replaces an existing standalone config. Name is immutable.
 // Both tokens are mandatory; there is no remove/add intermediate state.
 func (m *Manager) Update(name string, cfg ServerConfig, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return MutationResult{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return MutationResult{}, newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
+	}
 	return m.mutateRegistry("update", name, cfg, false, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
@@ -290,6 +299,12 @@ func (m *Manager) Remove(name string) error {
 }
 
 func (m *Manager) RemoveChecked(name, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return MutationResult{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return MutationResult{}, newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
+	}
 	return m.mutateRegistry("remove", name, ServerConfig{}, false, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
@@ -299,6 +314,12 @@ func (m *Manager) SetEnabled(name string, enabled bool) (ServerSummary, error) {
 }
 
 func (m *Manager) SetEnabledChecked(name string, enabled bool, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return MutationResult{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return MutationResult{}, newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
+	}
 	return m.mutateRegistry("enabled", name, ServerConfig{}, enabled, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
@@ -307,6 +328,12 @@ func (m *Manager) SetEnabledChecked(name string, enabled bool, expectedRevision,
 // configured scoped environment values. The acknowledgement is explicit and
 // request-scoped; no secret or credential history is persisted in the registry.
 func (m *Manager) DesktopSetEnabledChecked(name string, enabled, reuseConfiguredEnvironment bool, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return MutationResult{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return MutationResult{}, newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
+	}
 	var guard registryMutationGuard
 	if enabled && !reuseConfiguredEnvironment {
 		guard = func(_ RegistrySnapshot, previous ServerConfig) error {
@@ -569,6 +596,14 @@ func (m *Manager) Authorize(ctx context.Context, name, callbackID string) (oauth
 }
 
 func (m *Manager) beginAuthorization(ctx context.Context, cfg ServerConfig, reservation *oauthclient.AuthorizationReservation) (oauthclient.BeginResult, error) {
+	return m.beginAuthorizationReserved(ctx, cfg, reservation, false)
+}
+
+func (m *Manager) beginDesktopAuthorization(ctx context.Context, cfg ServerConfig, reservation *oauthclient.AuthorizationReservation) (oauthclient.BeginResult, error) {
+	return m.beginAuthorizationReserved(ctx, cfg, reservation, true)
+}
+
+func (m *Manager) beginAuthorizationReserved(ctx context.Context, cfg ServerConfig, reservation *oauthclient.AuthorizationReservation, desktop bool) (oauthclient.BeginResult, error) {
 	if m.authorizeReservedHook != nil {
 		m.authorizeReservedHook()
 	}
@@ -579,17 +614,17 @@ func (m *Manager) beginAuthorization(ctx context.Context, cfg ServerConfig, rese
 	if done == nil || result.AuthorizationURL == "" {
 		return result, nil
 	}
-	m.mu.RLock()
-	state := m.states[cfg.Name]
-	m.mu.RUnlock()
-	if state != nil {
-		state.mu.Lock()
+	if state := m.lockAuthorizationState(cfg); state != nil {
 		state.oauthStatus = oauthclient.StatusAuthorizing
 		state.lastError = ""
 		state.lastErrorCode = ""
 		state.mu.Unlock()
 	}
-	go m.watchAuthorization(cfg.Name, done)
+	if desktop {
+		go m.watchDesktopAuthorization(cfg, done)
+	} else {
+		go m.watchAuthorization(cfg, done)
+	}
 	return result, nil
 }
 
@@ -619,6 +654,12 @@ func (m *Manager) reserveAuthorizationExpected(name, callbackID, revision, gener
 		}
 		if standaloneOnly && cfg.SourceType != "standalone" {
 			return newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, nil, nil)
+		}
+		if standaloneOnly && strings.TrimSpace(revision) == "" {
+			return newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+		}
+		if standaloneOnly && strings.TrimSpace(generation) == "" {
+			return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
 		}
 		if revision != "" && revision != authoritative.Revision {
 			return newError("MCP_REGISTRY_CONFLICT", "MCP registry revision changed", false, nil, nil)
@@ -694,55 +735,139 @@ func (m *Manager) RemoveOAuthGrant(storageKey string) error {
 	return nil
 }
 
-func (m *Manager) watchAuthorization(name string, done <-chan error) {
-	err, ok := <-done
-	if !ok {
-		return
+func authorizationStorageKey(cfg ServerConfig) string {
+	storageKey := strings.TrimSpace(cfg.StorageKey)
+	if storageKey == "" {
+		storageKey = strings.TrimSpace(cfg.Name)
+	}
+	return storageKey
+}
+
+func sameAuthorizationIncarnation(expected, current ServerConfig) bool {
+	return expected.Name == current.Name &&
+		expected.Generation != "" &&
+		expected.Generation == current.Generation &&
+		expected.Transport == current.Transport &&
+		expected.URL == current.URL &&
+		authorizationStorageKey(expected) == authorizationStorageKey(current) &&
+		expected.SourceType == current.SourceType &&
+		expected.PluginName == current.PluginName
+}
+
+// lockAuthorizationState returns the current state locked only when the exact
+// server incarnation that started the OAuth flow is still authoritative.
+// Registry transitions take registryMu before replacing m.servers/m.states, so
+// a same-name delete/recreate cannot receive a late flow completion.
+func (m *Manager) lockAuthorizationState(cfg ServerConfig) *serverState {
+	m.registryMu.Lock()
+	defer m.registryMu.Unlock()
+	if m.closed.Load() {
+		return nil
 	}
 	m.mu.RLock()
-	state := m.states[name]
+	current, ok := m.servers[cfg.Name]
+	state := m.states[cfg.Name]
+	if !ok || state == nil || !sameAuthorizationIncarnation(cfg, current) {
+		m.mu.RUnlock()
+		return nil
+	}
+	state.mu.Lock()
 	m.mu.RUnlock()
-	if state == nil {
+	return state
+}
+
+func (m *Manager) watchDesktopAuthorization(cfg ServerConfig, done <-chan error) {
+	err, ok := <-done
+	if !ok {
 		return
 	}
 	if err != nil {
 		var flowErr *oauthclient.FlowError
 		if errors.As(err, &flowErr) && flowErr.Code == "MCP_AUTH_CANCELLED" {
-			// auth_clear 会负责关闭 session 并把状态恢复为 idle；这里不能在它之后
-			// 又异步写回一个“取消失败”，否则状态会产生竞态回弹。
 			return
 		}
-		state.mu.Lock()
+		state := m.lockAuthorizationState(cfg)
+		if state == nil {
+			return
+		}
+		defer state.mu.Unlock()
 		state.oauthStatus = ""
-		converted := oauthFlowError(name, err)
+		converted := oauthFlowError(cfg.Name, err)
 		recordStateError(state, converted)
 		if errors.As(err, &flowErr) {
-			// Flow 失败后 grant 仍不可用。无论是用户拒绝、超时、token exchange、issuer
-			// 校验还是落盘失败，都让模型/UI 保留“可重新授权”的下一步；具体原因继续
-			// 通过 last_error_code 暴露。auth_clear 的 CANCELLED 已在上方单独吞掉。
+			state.oauthStatus = oauthclient.StatusAuthRequired
+		}
+		return
+	}
+	state := m.lockAuthorizationState(cfg)
+	if state == nil {
+		return
+	}
+	state.lastError = ""
+	state.lastErrorCode = ""
+	state.oauthStatus = oauthclient.StatusAuthorized
+	state.mu.Unlock()
+}
+
+func (m *Manager) watchAuthorization(cfg ServerConfig, done <-chan error) {
+	err, ok := <-done
+	if !ok {
+		return
+	}
+	if err != nil {
+		var flowErr *oauthclient.FlowError
+		if errors.As(err, &flowErr) && flowErr.Code == "MCP_AUTH_CANCELLED" {
+			return
+		}
+		state := m.lockAuthorizationState(cfg)
+		if state == nil {
+			return
+		}
+		state.oauthStatus = ""
+		converted := oauthFlowError(cfg.Name, err)
+		recordStateError(state, converted)
+		if errors.As(err, &flowErr) {
 			state.oauthStatus = oauthclient.StatusAuthRequired
 		}
 		state.mu.Unlock()
 		return
 	}
 
-	state.mu.Lock()
+	state := m.lockAuthorizationState(cfg)
+	if state == nil {
+		return
+	}
 	state.lastError = ""
 	state.lastErrorCode = ""
-	// 保持 authorizing 直到 MCP 真正重新初始化完成，避免 callback 收到后 UI 短暂
-	// 回到 idle。refreshStateLocked 成功后会切到 authorized/ready。
 	state.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if _, _, refreshErr := m.Refresh(ctx, name); refreshErr != nil {
-		state.mu.Lock()
-		if state.oauthStatus == oauthclient.StatusAuthorizing {
-			state.oauthStatus = ""
+	if _, _, refreshErr := m.Refresh(ctx, cfg.Name); refreshErr != nil {
+		if current := m.lockAuthorizationState(cfg); current != nil {
+			if current.oauthStatus == oauthclient.StatusAuthorizing {
+				current.oauthStatus = ""
+			}
+			current.mu.Unlock()
 		}
-		state.mu.Unlock()
-		slog.Warn("refresh MCP after OAuth authorization failed", "server", name, "error", refreshErr)
+		slog.Warn("refresh MCP after OAuth authorization failed", "server", cfg.Name, "error_code", safeMCPLogErrorCode(refreshErr))
 	}
+}
+
+func safeMCPLogErrorCode(err error) string {
+	var typed *Error
+	if errors.As(err, &typed) {
+		if code := SafeErrorCode(typed.Code); code != "" {
+			return code
+		}
+	}
+	var flowErr *oauthclient.FlowError
+	if errors.As(err, &flowErr) {
+		if code := SafeErrorCode(flowErr.Code); code != "" {
+			return code
+		}
+	}
+	return "MCP_ERROR"
 }
 
 func oauthFlowError(server string, err error) error {

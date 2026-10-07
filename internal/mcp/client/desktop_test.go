@@ -1,8 +1,11 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -191,16 +194,21 @@ func TestDesktopEnvironmentCheckedAndPluginFence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	value := desktopCanary
-	updated, err := m.DesktopEnvironment("local", "set", "Z", &value, snapshot.Revision, "", "")
+	registry, err := m.Registry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = m.DesktopEnvironment("local", "set", "A", &value, snapshot.Revision, "", "")
+	revision, generation := registry.Revision, registry.Servers["local"].Generation
+	value := desktopCanary
+	updated, err := m.DesktopEnvironment("local", "set", "Z", &value, snapshot.Revision, revision, generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.DesktopEnvironment("local", "set", "A", &value, snapshot.Revision, revision, generation)
 	requireMCPClientErrorCode(t, err, "MCP_ENV_CONFLICT")
-	_, err = m.DesktopEnvironment("local", "purge", "", nil, "", "", "")
+	_, err = m.DesktopEnvironment("local", "purge", "", nil, "", revision, generation)
 	requireMCPClientErrorCode(t, err, "MCP_ENV_CONFLICT")
-	updated, err = m.DesktopEnvironment("local", "set", "A", &value, updated.Revision, "", "")
+	updated, err = m.DesktopEnvironment("local", "set", "A", &value, updated.Revision, revision, generation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,11 +216,11 @@ func TestDesktopEnvironmentCheckedAndPluginFence(t *testing.T) {
 	if len(updated.Entries) != 2 || updated.Entries[0].Key != "A" || !updated.Entries[0].Configured {
 		t.Fatalf("env = %#v", updated)
 	}
-	updated, err = m.DesktopEnvironment("local", "unset", "A", nil, updated.Revision, "", "")
+	updated, err = m.DesktopEnvironment("local", "unset", "A", nil, updated.Revision, revision, generation)
 	if err != nil || len(updated.Entries) != 1 {
 		t.Fatalf("unset = %#v, %v", updated, err)
 	}
-	updated, err = m.DesktopEnvironment("local", "purge", "", nil, updated.Revision, "", "")
+	updated, err = m.DesktopEnvironment("local", "purge", "", nil, updated.Revision, revision, generation)
 	if err != nil || len(updated.Entries) != 0 {
 		t.Fatalf("purge = %#v, %v", updated, err)
 	}
@@ -247,7 +255,11 @@ func TestDesktopEnableRequiresExplicitConfiguredEnvironmentReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.DesktopEnvironment("local", "set", "TOKEN", &value, env.Revision, "", ""); err != nil {
+	registry, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.DesktopEnvironment("local", "set", "TOKEN", &value, env.Revision, registry.Revision, registry.Servers["local"].Generation); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, err := m.DesktopSnapshot()
@@ -405,4 +417,192 @@ func TestDesktopAuthorizationStatusAndClearStayLocal(t *testing.T) {
 		t.Fatalf("clear = %#v, %v", status, err)
 	}
 	assertProtected(t, status)
+}
+
+func TestDesktopMutationIdentityTokensAreMandatory(t *testing.T) {
+	m := desktopFixture(t)
+	if _, err := m.Add(ServerConfig{Name: "local", Description: "Local", Transport: TransportStdio, Command: "never-run", Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Add(ServerConfig{Name: "remote", Description: "Remote", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := registry.Servers["local"]
+	updated := local
+	updated.Description = "Changed"
+
+	if _, err := m.AddChecked(ServerConfig{Name: "other", Description: "Other", Transport: TransportStdio, Command: "never-run"}, ""); err == nil {
+		t.Fatal("checked create accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+	if _, err := m.Update("local", updated, "", local.Generation); err == nil {
+		t.Fatal("checked update accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+	if _, err := m.Update("local", updated, registry.Revision, ""); err == nil {
+		t.Fatal("checked update accepted empty generation")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+	}
+	if _, err := m.RemoveChecked("local", "", local.Generation); err == nil {
+		t.Fatal("checked remove accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+	if _, err := m.SetEnabledChecked("local", true, registry.Revision, ""); err == nil {
+		t.Fatal("checked enable accepted empty generation")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+	}
+	if _, err := m.DesktopSetEnabledChecked("local", true, false, "", local.Generation); err == nil {
+		t.Fatal("Desktop enable accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+
+	env, err := m.DesktopEnvironment("local", "snapshot", "", nil, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := "write-only"
+	if _, err := m.DesktopEnvironment("local", "set", "TOKEN", &value, env.Revision, "", local.Generation); err == nil {
+		t.Fatal("Desktop environment mutation accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+	if _, _, err := m.DesktopReconnect(context.Background(), "local", registry.Revision, ""); err == nil {
+		t.Fatal("Desktop reconnect accepted empty generation")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+	}
+
+	remote := registry.Servers["remote"]
+	if _, err := m.DesktopAuthorize(context.Background(), "remote", "", "", remote.Generation); err == nil {
+		t.Fatal("Desktop authorize accepted empty registry revision")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+	}
+	if err := m.DesktopClearAuthorization("remote", registry.Revision, ""); err == nil {
+		t.Fatal("Desktop auth clear accepted empty generation")
+	} else {
+		requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+	}
+}
+
+func TestDesktopOAuthCompletionWaitsForExplicitReconnect(t *testing.T) {
+	m := desktopFixture(t)
+	if _, err := m.Add(ServerConfig{Name: "remote", Description: "Remote", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := registry.Servers["remote"]
+	p := &desktopProtocol{}
+	var creates atomic.Int32
+	m.protocolClientHook = func(ServerConfig) (protocolClient, error) {
+		creates.Add(1)
+		return p, nil
+	}
+
+	done := make(chan error, 1)
+	done <- nil
+	close(done)
+	m.watchDesktopAuthorization(cfg, done)
+	if creates.Load() != 0 || p.starts.Load() != 0 {
+		t.Fatal("Desktop OAuth completion reconnected implicitly")
+	}
+	m.states["remote"].mu.Lock()
+	status := m.states["remote"].oauthStatus
+	m.states["remote"].mu.Unlock()
+	if status != oauthclient.StatusAuthorized {
+		t.Fatalf("Desktop OAuth completion status = %q", status)
+	}
+
+	if _, _, err := m.DesktopReconnect(context.Background(), "remote", registry.Revision, cfg.Generation); err != nil {
+		t.Fatal(err)
+	}
+	if creates.Load() != 1 || p.starts.Load() != 1 {
+		t.Fatal("explicit reconnect did not create the MCP client")
+	}
+}
+
+func TestDesktopOAuthCompletionDoesNotRetargetRecreatedServer(t *testing.T) {
+	m := desktopFixture(t)
+	initial := ServerConfig{Name: "remote", Description: "Remote", Transport: TransportStreamableHTTP, URL: "https://old.example.invalid/mcp", Enabled: true}
+	if _, err := m.Add(initial); err != nil {
+		t.Fatal(err)
+	}
+	before, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := before.Servers["remote"]
+	if _, err := m.RemoveChecked("remote", before.Revision, old.Generation); err != nil {
+		t.Fatal(err)
+	}
+	afterRemove, _ := m.Registry()
+	recreated := initial
+	recreated.URL = "https://new.example.invalid/mcp"
+	if _, err := m.AddChecked(recreated, afterRemove.Revision); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	done <- nil
+	close(done)
+	m.watchDesktopAuthorization(old, done)
+
+	current, _ := m.Registry()
+	newCfg := current.Servers["remote"]
+	if newCfg.Generation == old.Generation {
+		t.Fatal("test did not recreate a new server generation")
+	}
+	m.states["remote"].mu.Lock()
+	status := m.states["remote"].oauthStatus
+	m.states["remote"].mu.Unlock()
+	if status == oauthclient.StatusAuthorized {
+		t.Fatal("stale OAuth completion marked the recreated server authorized")
+	}
+}
+
+func TestPostOAuthRefreshLogUsesSafeErrorCodeOnly(t *testing.T) {
+	m := desktopFixture(t)
+	if _, err := m.Add(ServerConfig{Name: "remote", Description: "Remote", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := registry.Servers["remote"]
+	const canary = "PROVIDER_LOG_CANARY_DO_NOT_EXPOSE"
+	m.protocolClientHook = func(ServerConfig) (protocolClient, error) {
+		return nil, errors.New(canary)
+	}
+
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
+	defer slog.SetDefault(previous)
+
+	done := make(chan error, 1)
+	done <- nil
+	close(done)
+	m.watchAuthorization(cfg, done)
+
+	logged := output.String()
+	if strings.Contains(logged, canary) {
+		t.Fatalf("post-OAuth refresh log exposed provider error: %s", logged)
+	}
+	if !strings.Contains(logged, "error_code=MCP_ERROR") {
+		t.Fatalf("post-OAuth refresh log missing safe error code: %s", logged)
+	}
 }

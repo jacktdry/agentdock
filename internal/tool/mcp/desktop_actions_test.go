@@ -137,16 +137,25 @@ func TestDesktopEnvironmentIsWriteOnlyAndErrorsAreProtected(t *testing.T) {
 	const canary = "B1_SECRET_CANARY_do_not_expose_123456789"
 	value := canary
 	snapshot := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_snapshot", Name: "local"})
-	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value, ExpectedEnvRevision: snapshot["env_revision"].(string)})
+	inventory := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
+	server := inventory["servers"].([]mcpclient.ProtectedServer)[0]
+	set := desktopManage(t, s, DesktopManageRequest{
+		Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value,
+		ExpectedEnvRevision:      snapshot["env_revision"].(string),
+		ExpectedRegistryRevision: inventory["registry_revision"].(string), ExpectedGeneration: server.Generation,
+	})
 	if set["runtime_impact"] != "next_connection" || set["reconnect_required"] != true {
 		t.Fatalf("env_set runtime impact = %#v", set)
 	}
-	inventory := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
-	server := inventory["servers"].([]mcpclient.ProtectedServer)[0]
 	enabled := true
 	desktopError(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ExpectedRegistryRevision: inventory["registry_revision"].(string), ExpectedGeneration: server.Generation}, "MCP_RETAINED_ENV_CONFIRMATION_REQUIRED")
 	desktopManage(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ReuseConfiguredEnvironment: true, ExpectedRegistryRevision: inventory["registry_revision"].(string), ExpectedGeneration: server.Generation})
-	desktopError(t, s, DesktopManageRequest{Action: "desktop_env_unset", Name: "local", Key: "KEY", ExpectedEnvRevision: snapshot["env_revision"].(string)}, "MCP_ENV_CONFLICT")
+	current := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
+	currentServer := current["servers"].([]mcpclient.ProtectedServer)[0]
+	desktopError(t, s, DesktopManageRequest{
+		Action: "desktop_env_unset", Name: "local", Key: "KEY", ExpectedEnvRevision: snapshot["env_revision"].(string),
+		ExpectedRegistryRevision: current["registry_revision"].(string), ExpectedGeneration: currentServer.Generation,
+	}, "MCP_ENV_CONFLICT")
 	data, _ := json.Marshal(set)
 	if strings.Contains(string(data), canary) {
 		t.Fatal("env_set echoed value")

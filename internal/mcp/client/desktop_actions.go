@@ -10,7 +10,8 @@ import (
 )
 
 // desktopTarget is used only while registryMu and the registry file lock are
-// held. Optional identity tokens fence runtime/env actions when supplied.
+// held. Passive reads may omit identity tokens; side effects must use
+// desktopMutationTarget so delete/recreate cannot retarget a request by name.
 func (m *Manager) desktopTarget(snapshot RegistrySnapshot, name, revision, generation string) (ServerConfig, error) {
 	r, err := m.registryWithOwned(snapshot)
 	if err != nil {
@@ -32,6 +33,20 @@ func (m *Manager) desktopTarget(snapshot RegistrySnapshot, name, revision, gener
 	return cfg, nil
 }
 
+func (m *Manager) desktopMutationTarget(snapshot RegistrySnapshot, name, revision, generation string) (ServerConfig, error) {
+	cfg, err := m.desktopTarget(snapshot, name, revision, generation)
+	if err != nil {
+		return ServerConfig{}, err
+	}
+	if strings.TrimSpace(revision) == "" {
+		return ServerConfig{}, newError("MCP_REGISTRY_CONFLICT", "MCP registry revision is required", false, nil, nil)
+	}
+	if strings.TrimSpace(generation) == "" {
+		return ServerConfig{}, newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation is required", false, nil, nil)
+	}
+	return cfg, nil
+}
+
 // DesktopEnvironment pins authoritative ownership throughout the checked env
 // operation, including against other Manager instances' registry mutations.
 func (m *Manager) DesktopEnvironment(name, operation, key string, value *string, expectedEnv, revision, generation string) (envstore.Snapshot, error) {
@@ -42,7 +57,13 @@ func (m *Manager) DesktopEnvironment(name, operation, key string, value *string,
 	}
 	var result envstore.Snapshot
 	err := m.store.withSnapshotLocked(func(snapshot RegistrySnapshot) error {
-		cfg, err := m.desktopTarget(snapshot, name, revision, generation)
+		var cfg ServerConfig
+		var err error
+		if operation == "snapshot" {
+			cfg, err = m.desktopTarget(snapshot, name, revision, generation)
+		} else {
+			cfg, err = m.desktopMutationTarget(snapshot, name, revision, generation)
+		}
 		if err != nil {
 			return err
 		}
@@ -89,7 +110,7 @@ func (m *Manager) DesktopReconnect(ctx context.Context, name, revision, generati
 	var state *serverState
 	err := m.store.withSnapshotLocked(func(snapshot RegistrySnapshot) error {
 		var err error
-		cfg, err = m.desktopTarget(snapshot, name, revision, generation)
+		cfg, err = m.desktopMutationTarget(snapshot, name, revision, generation)
 		if err != nil {
 			return err
 		}
@@ -142,7 +163,7 @@ func (m *Manager) DesktopAuthorize(ctx context.Context, name, callbackID, revisi
 	if err != nil {
 		return ProtectedAuthorization{}, err
 	}
-	auth, err := m.beginAuthorization(ctx, cfg, reservation)
+	auth, err := m.beginDesktopAuthorization(ctx, cfg, reservation)
 	if err != nil {
 		return ProtectedAuthorization{}, err
 	}
@@ -161,7 +182,7 @@ func (m *Manager) DesktopClearAuthorization(name, revision, generation string) e
 	}
 	var state *serverState
 	err := m.store.withSnapshotLocked(func(snapshot RegistrySnapshot) error {
-		cfg, err := m.desktopTarget(snapshot, name, revision, generation)
+		cfg, err := m.desktopMutationTarget(snapshot, name, revision, generation)
 		if err != nil {
 			return err
 		}
