@@ -34,6 +34,7 @@ type challengeState struct {
 }
 
 type flow struct {
+	generation       uint64
 	state            string
 	server           string
 	storageKey       string
@@ -66,7 +67,9 @@ type Manager struct {
 	challenges      map[string]challengeState
 	flows           map[string]*flow
 	activeByStorage map[string]string
-	beginning       map[string]struct{}
+	beginning       map[string]uint64
+	// mu serializes generation checks and local grant persistence, never network I/O.
+	generations map[string]uint64
 }
 
 func New(agentDockHome string) (*Manager, error) {
@@ -81,7 +84,8 @@ func New(agentDockHome string) (*Manager, error) {
 		challenges:      make(map[string]challengeState),
 		flows:           make(map[string]*flow),
 		activeByStorage: make(map[string]string),
-		beginning:       make(map[string]struct{}),
+		beginning:       make(map[string]uint64),
+		generations:     make(map[string]uint64),
 	}, nil
 }
 
@@ -194,7 +198,9 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 		m.mu.Unlock()
 		return BeginResult{}, nil, newFlowError("MCP_AUTH_IN_PROGRESS", "OAuth authorization is already being prepared", nil)
 	}
-	m.beginning[storageKey] = struct{}{}
+	m.generations[storageKey]++
+	generation := m.generations[storageKey]
+	m.beginning[storageKey] = generation
 	m.mu.Unlock()
 	flowCreated := false
 	defer func() {
@@ -202,7 +208,9 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 			return
 		}
 		m.mu.Lock()
-		delete(m.beginning, storageKey)
+		if m.beginning[storageKey] == generation {
+			delete(m.beginning, storageKey)
+		}
 		m.mu.Unlock()
 	}()
 
@@ -238,7 +246,7 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 	authorizationURL := config.AuthCodeURL(state, authOptions...)
 	now := time.Now().UTC()
 	f := &flow{
-		state: state, server: server, storageKey: storageKey, endpoint: endpoint,
+		state: state, server: server, storageKey: storageKey, endpoint: endpoint, generation: generation,
 		callbackID: selected.ID, redirectURL: selected.RedirectURL,
 		resource: discovered.Resource, issuer: discovered.Issuer,
 		issuerInResponse: discovered.Metadata.AuthorizationResponseIssParameterSupported,
@@ -248,6 +256,10 @@ func (m *Manager) Begin(ctx context.Context, server, storageKey, endpoint, callb
 		callback: make(chan CallbackResult, 1), cancel: make(chan struct{}), done: make(chan error, 1),
 	}
 	m.mu.Lock()
+	if m.generations[storageKey] != generation || m.beginning[storageKey] != generation {
+		m.mu.Unlock()
+		return BeginResult{}, nil, newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
+	}
 	m.flows[state] = f
 	m.activeByStorage[storageKey] = state
 	delete(m.beginning, storageKey)
@@ -281,6 +293,9 @@ func (m *Manager) DeliverCallback(result CallbackResult) error {
 func (m *Manager) Clear(storageKey string) error {
 	storageKey = strings.TrimSpace(storageKey)
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.generations[storageKey]++
+	delete(m.beginning, storageKey)
 	delete(m.challenges, storageKey)
 	if state := m.activeByStorage[storageKey]; state != "" {
 		if f := m.flows[state]; f != nil {
@@ -289,7 +304,6 @@ func (m *Manager) Clear(storageKey string) error {
 			close(f.cancel)
 		}
 	}
-	m.mu.Unlock()
 	return m.store.removeGrant(storageKey)
 }
 
@@ -318,7 +332,7 @@ func (m *Manager) completeFlow(f *flow) {
 	if m.activeByStorage[f.storageKey] == f.state {
 		delete(m.activeByStorage, f.storageKey)
 	}
-	if err == nil {
+	if err == nil && m.generations[f.storageKey] == f.generation {
 		delete(m.challenges, f.storageKey)
 	}
 	m.mu.Unlock()
@@ -361,6 +375,11 @@ func (m *Manager) exchange(f *flow, result CallbackResult) error {
 		RegistrationKey: f.registrationKey, TokenURL: f.tokenURL,
 		AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenType: token.TokenType,
 		Expiry: token.Expiry, GrantedScopes: uniqueStrings(scopes),
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.generations[f.storageKey] != f.generation || m.flows[f.state] != f || m.activeByStorage[f.storageKey] != f.state {
+		return newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
 	}
 	if err := m.store.saveGrant(f.storageKey, grant); err != nil {
 		return newFlowError("MCP_AUTH_PERSIST_FAILED", "persist OAuth token", err)
@@ -423,6 +442,8 @@ func (m *Manager) clientFor(ctx context.Context, discovered discoveredAuth, call
 }
 
 func (m *Manager) tokenSource(storageKey, endpoint string) (oauth2.TokenSource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	grant, err := m.store.loadGrant(storageKey)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -453,7 +474,7 @@ func (m *Manager) tokenSource(storageKey, endpoint string) (oauth2.TokenSource, 
 	refreshClient.Transport = resourceRefreshRoundTripper{base: baseTransport, tokenURL: grant.TokenURL, resource: grant.Resource}
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &refreshClient)
 	base := config.TokenSource(ctx, tokenFromGrant(grant))
-	return &persistingTokenSource{source: base, store: m.store, storageKey: storageKey, grant: grant}, nil
+	return &persistingTokenSource{source: base, manager: m, generation: m.generations[storageKey], storageKey: storageKey, grant: grant}, nil
 }
 
 func (m *Manager) cleanupExpiredLocked(now time.Time) {
@@ -634,7 +655,8 @@ func (t resourceRefreshRoundTripper) RoundTrip(request *http.Request) (*http.Res
 type persistingTokenSource struct {
 	mu         sync.Mutex
 	source     oauth2.TokenSource
-	store      *store
+	manager    *Manager
+	generation uint64
 	storageKey string
 	grant      Grant
 }
@@ -642,11 +664,22 @@ type persistingTokenSource struct {
 func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.manager.mu.Lock()
+	valid := s.manager.generations[s.storageKey] == s.generation
+	s.manager.mu.Unlock()
+	if !valid {
+		return nil, &AuthRequiredError{}
+	}
 	token, err := s.source.Token()
+	s.manager.mu.Lock()
+	defer s.manager.mu.Unlock()
+	if s.manager.generations[s.storageKey] != s.generation {
+		return nil, &AuthRequiredError{}
+	}
 	if err != nil {
 		var retrieveErr *oauth2.RetrieveError
 		if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
-			_ = s.store.removeGrant(s.storageKey)
+			_ = s.manager.store.removeGrant(s.storageKey)
 			return nil, &AuthRequiredError{}
 		}
 		return nil, err
@@ -656,7 +689,7 @@ func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
 		s.grant.RefreshToken = token.RefreshToken
 		s.grant.TokenType = token.TokenType
 		s.grant.Expiry = token.Expiry
-		if err := s.store.saveGrant(s.storageKey, s.grant); err != nil {
+		if err := s.manager.store.saveGrant(s.storageKey, s.grant); err != nil {
 			return nil, err
 		}
 	}

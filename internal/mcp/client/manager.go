@@ -285,6 +285,7 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 	if err := m.ensureOpenLocked(); err != nil {
 		return MutationResult{}, err
 	}
+	invalidateAuthorization := operation == "remove"
 	snapshot, err := m.store.update(func(snapshot RegistrySnapshot) error {
 		// Validate the entire overlay before writing, including collisions unrelated
 		// to the target. Ownership cannot change while registryMu is held.
@@ -315,6 +316,9 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 				return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation changed", false, nil, nil)
 			}
 		}
+		if operation == "update" {
+			invalidateAuthorization = previous.Transport != cfg.Transport || previous.URL != cfg.URL
+		}
 		switch operation {
 		case "create", "update":
 			snapshot.Servers[name] = cfg
@@ -333,15 +337,20 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 		}
 		return MutationResult{}, newError("MCP_REGISTRY_WRITE_FAILED", "persist dynamic MCP registry", false, map[string]any{"server": name}, err)
 	}
+	// Invalidate immediately after persistence, even if runtime cleanup fails.
+	var authorizationErr error
+	if invalidateAuthorization {
+		authorizationErr = m.oauth.RemoveGrant(name)
+	}
 	authoritative, err := m.registryWithOwned(snapshot)
 	if err != nil {
-		return MutationResult{Persisted: true}, err
+		return MutationResult{Persisted: true}, errors.Join(err, authorizationErr)
 	}
 	// Return independent config copies so callers cannot mutate Manager state.
 	result := MutationResult{Registry: authoritative, Persisted: true}
 	merged, err := m.mergeOwned(snapshot.Servers)
 	if err != nil {
-		return result, err
+		return result, errors.Join(err, authorizationErr)
 	}
 	states, staleStates := m.planRegistryReplacement(merged)
 	cleanupErr := closeServerStates(staleStates)
@@ -353,10 +362,7 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 		m.mu.Unlock()
 	}
 	result.RuntimeApplied = runtimeApplied
-	if operation == "remove" {
-		// Preserve scoped environment values; OAuth grant removal follows persistence.
-		cleanupErr = errors.Join(cleanupErr, m.oauth.RemoveGrant(name))
-	} else {
+	if operation != "remove" {
 		result.Server = authoritative.Servers[name]
 		if runtimeApplied {
 			m.mu.RLock()
@@ -365,7 +371,7 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 			result.Summary = summaryFor(result.Server, state)
 		}
 	}
-	return result, cleanupErr
+	return result, errors.Join(cleanupErr, authorizationErr)
 }
 
 func (m *Manager) planRegistryReplacement(servers map[string]ServerConfig) (map[string]*serverState, []*serverState) {

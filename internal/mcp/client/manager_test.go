@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
 )
 
 func TestManagerStreamableHTTPFlowAndPersistence(t *testing.T) {
@@ -1152,5 +1153,67 @@ func TestP5ReplacementHelperProcess(t *testing.T) {
 			os.Exit(2)
 		}
 		os.Exit(0)
+	}
+}
+
+func TestPersistedMutationInvalidatesOAuthIdentityBeforeCleanup(t *testing.T) {
+	for _, change := range []string{"endpoint", "transport", "description", "timeout", "enabled", "remove"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}
+			if _, err := m.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(home, "data", "mcp", "grant-demo.json")
+			data, err := json.Marshal(oauthclient.Grant{SchemaVersion: 1, Endpoint: cfg.URL, AccessToken: "test-access"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := m.Registry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.states["demo"].client = &failingCloseProtocolClient{}
+			switch change {
+			case "endpoint":
+				cfg.URL += "/new"
+			case "transport":
+				cfg.Transport = TransportStdio
+				cfg.URL = ""
+				cfg.Command = "test-command"
+			case "description":
+				cfg.Description = "new description"
+			case "timeout":
+				cfg.TimeoutMS = 12345
+			case "enabled":
+				cfg.Enabled = false
+			}
+			var result MutationResult
+			if change == "remove" {
+				result, err = m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+			} else {
+				result, err = m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			}
+			requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+			if !result.Persisted || result.RuntimeApplied {
+				t.Fatalf("unexpected mutation result: %#v", result)
+			}
+			_, err = os.Stat(path)
+			invalidate := change == "endpoint" || change == "transport" || change == "remove"
+			if invalidate {
+				if !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("old authorization survived: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unrelated update removed authorization: %v", err)
+			}
+		})
 	}
 }
