@@ -54,7 +54,10 @@ type DesktopManageRequest struct {
 	ExpectedGeneration         string            `json:"expected_generation,omitempty"`
 	ExpectedEnvRevision        string            `json:"expected_env_revision,omitempty"`
 	ReuseConfiguredEnvironment bool              `json:"reuse_configured_environment,omitempty"`
+	argsPresent                bool
 }
+
+func (r DesktopManageRequest) ArgsProvided() bool { return r.argsPresent }
 
 type SearchRequest struct {
 	Query  string `json:"query"`
@@ -101,6 +104,11 @@ func DecodeDesktopRequest(body []byte) (DesktopManageRequest, error) {
 	if err := decoder.Decode(&request); err != nil {
 		return invalid()
 	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return invalid()
+	}
+	_, request.argsPresent = raw["args"]
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return invalid()

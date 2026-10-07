@@ -70,3 +70,29 @@ func TestDesktopAdmissionDescriptorRedactsProtectedConfiguration(t *testing.T) {
 		t.Fatal("raw endpoint origin remained in admission descriptor")
 	}
 }
+
+func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	omitted, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitEmpty, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","args":[],"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() {
+		t.Fatalf("args presence omitted=%v explicit=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided())
+	}
+	omittedFingerprint, err := rt.desktopMCPRequestFingerprint(omitted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitFingerprint, err := rt.desktopMCPRequestFingerprint(explicitEmpty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omittedFingerprint == explicitFingerprint {
+		t.Fatal("omitted args (preserve) collided with explicit empty args (clear)")
+	}
+}
