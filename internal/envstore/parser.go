@@ -1,18 +1,29 @@
 package envstore
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 )
 
 func parse(data []byte) (map[string]string, error) {
+	values, _, err := parseDocument(data)
+	return values, err
+}
+
+func parseDocument(data []byte) (map[string]string, string, error) {
 	input := string(data)
 	values := map[string]string{}
+	revision := ""
 	for index := 0; ; {
-		index = skipSpaceAndComments(input, index)
+		var err error
+		index, err = skipSpaceAndComments(input, index, &revision)
+		if err != nil {
+			return nil, "", err
+		}
 		if index >= len(input) {
-			return values, nil
+			return values, revision, nil
 		}
 
 		if strings.HasPrefix(input[index:], "export") {
@@ -27,22 +38,22 @@ func parse(data []byte) (map[string]string, error) {
 			index++
 		}
 		if start == index {
-			return nil, fmt.Errorf("line %d: expected environment variable name", lineNumber(input, index))
+			return nil, "", fmt.Errorf("line %d: expected environment variable name", lineNumber(input, index))
 		}
 		key := input[start:index]
 		if err := ValidateKey(key); err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNumber(input, start), err)
+			return nil, "", fmt.Errorf("line %d: %w", lineNumber(input, start), err)
 		}
 		index = skipHorizontalSpace(input, index)
 		if index >= len(input) || input[index] != '=' {
-			return nil, fmt.Errorf("line %d: expected '=' after %s", lineNumber(input, index), key)
+			return nil, "", fmt.Errorf("line %d: expected '=' after %s", lineNumber(input, index), key)
 		}
 		index++
 		index = skipHorizontalSpace(input, index)
 
 		value, next, err := parseValue(input, index)
 		if err != nil {
-			return nil, fmt.Errorf("line %d: parse %s: %w", lineNumber(input, index), key, err)
+			return nil, "", fmt.Errorf("line %d: parse %s: %w", lineNumber(input, index), key, err)
 		}
 		values[key] = value
 		index = next
@@ -163,24 +174,36 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-func skipSpaceAndComments(input string, index int) int {
+func skipSpaceAndComments(input string, index int, revision *string) (int, error) {
 	for index < len(input) {
 		index = skipHorizontalSpace(input, index)
 		if index >= len(input) {
-			return index
+			return index, nil
 		}
 		if input[index] == '\n' {
 			index++
 			continue
 		}
 		if input[index] != '#' {
-			return index
+			return index, nil
 		}
+		start := index
 		for index < len(input) && input[index] != '\n' {
 			index++
 		}
+		comment := strings.TrimSpace(input[start+1 : index])
+		if strings.HasPrefix(comment, revisionMarker) {
+			if *revision != "" {
+				return index, errors.New("duplicate environment revision metadata")
+			}
+			token := strings.TrimPrefix(comment, revisionMarker+": ")
+			if !validRevision(token) {
+				return index, errors.New("malformed environment revision metadata")
+			}
+			*revision = token
+		}
 	}
-	return index
+	return index, nil
 }
 
 func skipHorizontalSpace(input string, index int) int {

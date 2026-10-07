@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -104,71 +103,20 @@ func (s *Store) RemovePluginSkillScopes(plugin string) error {
 	return os.RemoveAll(root)
 }
 
+// Set remains an unconditional write, but advances the shared scope revision.
 func (s *Store) Set(scope Scope, key, value string) error {
-	if err := validateScope(scope); err != nil {
-		return err
-	}
-	if err := ValidateKey(key); err != nil {
-		return err
-	}
-
-	release, err := s.acquireStoreLock()
-	if err != nil {
-		return err
-	}
-	defer release()
-
-	values, err := s.loadLocked(scope)
-	if err != nil {
-		return err
-	}
-	values[key] = value
-	return s.writeLocked(scope, values)
+	_, _, err := s.mutate(scope, key, value, "set", nil)
+	return err
 }
 
 func (s *Store) Unset(scope Scope, key string) (bool, error) {
-	if err := validateScope(scope); err != nil {
-		return false, err
-	}
-	if err := ValidateKey(key); err != nil {
-		return false, err
-	}
-
-	release, err := s.acquireStoreLock()
-	if err != nil {
-		return false, err
-	}
-	defer release()
-
-	values, err := s.loadLocked(scope)
-	if err != nil {
-		return false, err
-	}
-	if _, exists := values[key]; !exists {
-		return false, nil
-	}
-	delete(values, key)
-	if err := s.writeLocked(scope, values); err != nil {
-		return false, err
-	}
-	return true, nil
+	removed, _, err := s.mutate(scope, key, "", "unset", nil)
+	return removed, err
 }
 
 func (s *Store) List(scope Scope) ([]Entry, error) {
-	values, err := s.Load(scope)
-	if err != nil {
-		return nil, err
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	items := make([]Entry, 0, len(keys))
-	for _, key := range keys {
-		items = append(items, Entry{Key: key, Configured: values[key] != ""})
-	}
-	return items, nil
+	snapshot, err := s.Snapshot(scope)
+	return snapshot.Entries, err
 }
 
 func (s *Store) Load(scope Scope) (map[string]string, error) {
@@ -185,55 +133,61 @@ func (s *Store) Load(scope Scope) (map[string]string, error) {
 }
 
 func (s *Store) loadLocked(scope Scope) (map[string]string, error) {
+	values, _, err := s.loadSnapshotLocked(scope)
+	return values, err
+}
+
+func (s *Store) loadSnapshotLocked(scope Scope) (map[string]string, Snapshot, error) {
 	if err := s.ensureDirectories(); err != nil {
-		return nil, err
+		return nil, Snapshot{}, err
 	}
 	path, err := s.Path(scope)
 	if err != nil {
-		return nil, err
+		return nil, Snapshot{}, err
 	}
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]string{}, nil
+		return map[string]string{}, protectedSnapshot(metadataRevision("absent", path, 0), nil), nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s environment: %w", scope.Kind, err)
+		return nil, Snapshot{}, fmt.Errorf("read %s environment: %w", scope.Kind, err)
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxEnvironmentFileBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read %s environment: %w", scope.Kind, err)
+		return nil, Snapshot{}, fmt.Errorf("read %s environment: %w", scope.Kind, err)
 	}
 	if len(data) > maxEnvironmentFileBytes {
-		return nil, fmt.Errorf("%s environment exceeds %d bytes", scope.Kind, maxEnvironmentFileBytes)
+		return nil, Snapshot{}, fmt.Errorf("%s environment exceeds %d bytes", scope.Kind, maxEnvironmentFileBytes)
 	}
 	if err := secureFile(path); err != nil {
-		return nil, err
+		return nil, Snapshot{}, err
 	}
-	values, err := parse(data)
+	values, revision, err := parseDocument(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse %s environment %q: %w", scope.Kind, scope.Name, err)
+		return nil, Snapshot{}, fmt.Errorf("parse %s environment %q: %w", scope.Kind, scope.Name, err)
 	}
-	return values, nil
+	if revision == "" {
+		info, err := file.Stat()
+		if err != nil {
+			return nil, Snapshot{}, fmt.Errorf("stat %s environment: %w", scope.Kind, err)
+		}
+		revision = metadataRevision("legacy", path, info.ModTime().UnixNano())
+	}
+	return values, protectedSnapshot(revision, values), nil
 }
 
-func (s *Store) writeLocked(scope Scope, values map[string]string) error {
+func (s *Store) writeLocked(scope Scope, values map[string]string, revision string) error {
 	path, err := s.Path(scope)
 	if err != nil {
 		return err
-	}
-	if len(values) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove empty %s environment: %w", scope.Kind, err)
-		}
-		return nil
 	}
 	for key := range values {
 		if err := ValidateKey(key); err != nil {
 			return err
 		}
 	}
-	data := marshal(values)
+	data := append([]byte("# "+revisionMarker+": "+revision+"\n"), marshal(values)...)
 	if len(data) > maxEnvironmentFileBytes {
 		return fmt.Errorf("%s environment exceeds %d bytes", scope.Kind, maxEnvironmentFileBytes)
 	}
