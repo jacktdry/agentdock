@@ -1,7 +1,37 @@
 package mcp
 
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"slices"
+	"strings"
+)
+
 // ManageRequest 是 mcp_manage 进入动态 MCP capability 后的稳定输入契约。
 type ManageRequest struct {
+	Action          string            `json:"action"`
+	Name            string            `json:"name,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Transport       string            `json:"transport,omitempty"`
+	ProtocolVersion string            `json:"protocol_version,omitempty"`
+	URL             string            `json:"url,omitempty"`
+	Command         string            `json:"command,omitempty"`
+	Args            []string          `json:"args,omitempty"`
+	CWD             string            `json:"cwd,omitempty"`
+	HeaderEnv       map[string]string `json:"header_env,omitempty"`
+	EnvFromEnv      map[string]string `json:"env_from_env,omitempty"`
+	Key             string            `json:"key,omitempty"`
+	Value           *string           `json:"value,omitempty"`
+	Enabled         *bool             `json:"enabled,omitempty"`
+	TimeoutMS       *int              `json:"timeout_ms,omitempty"`
+	CallbackID      string            `json:"callback_id,omitempty"`
+}
+
+// DesktopManageRequest is internal Runtime API input. It is deliberately
+// separate from model-facing mcp_manage so optimistic-concurrency fields and
+// write-only values never become part of the public tool schema.
+type DesktopManageRequest struct {
 	Action                   string            `json:"action"`
 	Name                     string            `json:"name,omitempty"`
 	Description              string            `json:"description,omitempty"`
@@ -51,4 +81,30 @@ func boolValue(value *bool, fallback bool) bool {
 		return fallback
 	}
 	return *value
+}
+
+// DecodeDesktopRequest is shared by the transport and internal application boundary.
+// Decoder errors are deliberately fixed text: unknown keys may contain secrets.
+func DecodeDesktopRequest(body []byte) (DesktopManageRequest, error) {
+	invalid := func() (DesktopManageRequest, error) {
+		return DesktopManageRequest{}, toolErrorDetails("INVALID_MCP_REQUEST", "Invalid Desktop MCP request", "validation", nil)
+	}
+	if len(body) > 64*1024 {
+		return invalid()
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	var request DesktopManageRequest
+	if err := decoder.Decode(&request); err != nil {
+		return invalid()
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return invalid()
+	}
+	request.Action = strings.ToLower(strings.TrimSpace(request.Action))
+	if !slices.Contains(desktopActions, request.Action) {
+		return invalid()
+	}
+	return request, nil
 }

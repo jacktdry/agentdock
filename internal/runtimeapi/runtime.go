@@ -27,6 +27,8 @@ type Runtime interface {
 	RuntimeCapabilities(context.Context, bool) (app.Result, error)
 	RuntimeMCPServers(context.Context) (app.Result, error)
 	RuntimeMCPServer(context.Context, string) (app.Result, error)
+	RuntimeMCPDesktop(context.Context) (app.Result, error)
+	RuntimeMCPDesktopManage(context.Context, map[string]any) (app.Result, error)
 	RuntimeMCPManage(context.Context, map[string]any) (app.Result, error)
 	RuntimeEvolve(context.Context, map[string]any) (app.Result, error)
 }

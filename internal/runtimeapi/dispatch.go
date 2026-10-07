@@ -12,6 +12,7 @@ import (
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
 	"github.com/uvwt/agentdock/internal/permission"
+	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
 )
 
 // MethodAllowed 返回指定 Runtime API 路径允许当前方法与否。
@@ -26,7 +27,7 @@ func MethodAllowed(method, path string) bool {
 		_, ok := runtimeTaskID(cleanPath)
 		return ok
 	}
-	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
+	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
 }
 
 func AllowHeader(path string) string {
@@ -34,7 +35,7 @@ func AllowHeader(path string) string {
 	if _, ok := runtimeTaskID(cleanPath); ok {
 		return "GET, DELETE"
 	}
-	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" {
+	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" {
 		return "GET, POST"
 	}
 	if cleanPath == "/internal/runtime/insertions" {
@@ -183,6 +184,20 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 			return nil, err
 		}
 		return map[string]any{"accepted": true}, nil
+	case path == "/internal/runtime/mcp/desktop":
+		if method == http.MethodGet {
+			result, err := runtime.RuntimeMCPDesktop(ctx)
+			return map[string]any(result), err
+		}
+		typed, err := toolmcp.DecodeDesktopRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(typed)
+		var args map[string]any
+		_ = json.Unmarshal(body, &args)
+		result, err := runtime.RuntimeMCPDesktopManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/mcp" && method == http.MethodPost:
 		args, err := decodeRuntimeMCPRequest(request.Body)
 		if err != nil {
@@ -219,32 +234,25 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 }
 
 type runtimeMCPRequest struct {
-	ExpectedRegistryRevision string            `json:"expected_registry_revision"`
-	ExpectedGeneration       string            `json:"expected_generation"`
-	ExpectedEnvRevision      string            `json:"expected_env_revision"`
-	Action                   string            `json:"action"`
-	Name                     string            `json:"name"`
-	Description              string            `json:"description"`
-	Transport                string            `json:"transport"`
-	ProtocolVersion          string            `json:"protocol_version"`
-	URL                      string            `json:"url"`
-	Command                  string            `json:"command"`
-	Args                     []string          `json:"args"`
-	Cwd                      string            `json:"cwd"`
-	HeaderEnv                map[string]string `json:"header_env"`
-	EnvFromEnv               map[string]string `json:"env_from_env"`
-	Enabled                  *bool             `json:"enabled"`
-	TimeoutMS                int               `json:"timeout_ms"`
-	Key                      string            `json:"key"`
-	Value                    *string           `json:"value"`
-	CallbackID               string            `json:"callback_id"`
+	Action          string            `json:"action"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Transport       string            `json:"transport"`
+	ProtocolVersion string            `json:"protocol_version"`
+	URL             string            `json:"url"`
+	Command         string            `json:"command"`
+	Args            []string          `json:"args"`
+	Cwd             string            `json:"cwd"`
+	HeaderEnv       map[string]string `json:"header_env"`
+	EnvFromEnv      map[string]string `json:"env_from_env"`
+	Enabled         *bool             `json:"enabled"`
+	TimeoutMS       int               `json:"timeout_ms"`
+	Key             string            `json:"key"`
+	Value           *string           `json:"value"`
+	CallbackID      string            `json:"callback_id"`
 }
 
 var runtimeMCPManageActions = map[string]bool{
-	"desktop_snapshot": true, "desktop_inspect": true, "desktop_create": true, "desktop_update": true,
-	"desktop_remove": true, "desktop_set_enabled": true, "desktop_env_snapshot": true,
-	"desktop_env_set": true, "desktop_env_unset": true, "desktop_env_purge": true,
-	"desktop_reconnect": true, "desktop_auth_status": true, "desktop_authorize": true, "desktop_auth_clear": true,
 	"add": true, "remove": true, "enable": true, "disable": true,
 	"env_set": true, "env_unset": true, "env_list": true, "refresh": true,
 	"authorize": true, "auth_clear": true,
@@ -272,15 +280,6 @@ func decodeRuntimeMCPRequest(body []byte) (map[string]any, error) {
 		return nil, &app.ToolError{Code: "MCP_ACTION_UNSUPPORTED", Message: "dynamic MCP action is not available through the Runtime API", Category: "validation"}
 	}
 	args := map[string]any{"action": action}
-	if request.ExpectedRegistryRevision != "" {
-		args["expected_registry_revision"] = request.ExpectedRegistryRevision
-	}
-	if request.ExpectedGeneration != "" {
-		args["expected_generation"] = request.ExpectedGeneration
-	}
-	if request.ExpectedEnvRevision != "" {
-		args["expected_env_revision"] = request.ExpectedEnvRevision
-	}
 	// Runtime API 与模型工具最终进入同一份公共契约。只转发请求中真正提供的可选字段，
 	// 避免 Go 零值被解释成 schema 中有语义的空 enum 值或未声明允许的 null。
 	if request.Name != "" {

@@ -32,7 +32,7 @@ func protectedMCPError(err error) *ToolError {
 	return toolErrorDetails(code, "Desktop MCP operation could not complete", category, nil)
 }
 
-func desktopConfig(r ManageRequest) mcpclient.ServerConfig {
+func desktopConfig(r DesktopManageRequest) mcpclient.ServerConfig {
 	return mcpclient.ServerConfig{
 		Name: r.Name, Description: r.Description, Transport: strings.ToLower(strings.TrimSpace(r.Transport)), ProtocolVersion: r.ProtocolVersion,
 		URL: r.URL, Command: r.Command, Args: r.Args, Cwd: r.CWD, HeaderEnv: cloneStringMap(r.HeaderEnv),
@@ -40,7 +40,9 @@ func desktopConfig(r ManageRequest) mcpclient.ServerConfig {
 	}
 }
 
-func (s *Service) desktopManage(ctx context.Context, action string, r ManageRequest) (Result, error) {
+// DesktopManage is the protected internal Runtime API entry point, never a model tool.
+func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Result, error) {
+	action := strings.ToLower(strings.TrimSpace(r.Action))
 	var err error
 	result := Result{"action": action}
 	switch action {

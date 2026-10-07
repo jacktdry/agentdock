@@ -28,18 +28,18 @@ func desktopService(t *testing.T) (*Service, *mcpclient.Manager) {
 	return New(m, envs), m
 }
 
-func desktopManage(t *testing.T, s *Service, r ManageRequest) Result {
+func desktopManage(t *testing.T, s *Service, r DesktopManageRequest) Result {
 	t.Helper()
-	result, err := s.Manage(context.Background(), r)
+	result, err := s.DesktopManage(context.Background(), r)
 	if err != nil {
 		t.Fatalf("%s: %v", r.Action, err)
 	}
 	return result
 }
 
-func desktopError(t *testing.T, s *Service, r ManageRequest, code string) {
+func desktopError(t *testing.T, s *Service, r DesktopManageRequest, code string) {
 	t.Helper()
-	_, err := s.Manage(context.Background(), r)
+	_, err := s.DesktopManage(context.Background(), r)
 	var typed *ToolError
 	if !errors.As(err, &typed) || typed.Code != code {
 		t.Fatalf("%s error = %#v, want %s", r.Action, err, code)
@@ -48,8 +48,8 @@ func desktopError(t *testing.T, s *Service, r ManageRequest, code string) {
 
 func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *testing.T) {
 	s, m := desktopService(t)
-	initial := desktopManage(t, s, ManageRequest{Action: "desktop_snapshot"})
-	r := ManageRequest{Action: "desktop_create", Name: "local", Description: "Local", Transport: "stdio", Command: "never-run", ProtocolVersion: "2025-11-25", ExpectedRegistryRevision: initial["registry_revision"].(string)}
+	initial := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
+	r := DesktopManageRequest{Action: "desktop_create", Name: "local", Description: "Local", Transport: "stdio", Command: "never-run", ProtocolVersion: "2025-11-25", ExpectedRegistryRevision: initial["registry_revision"].(string)}
 	created := desktopManage(t, s, r)
 	server := created["server"].(mcpclient.ProtectedServer)
 	if server.Enabled || server.ProtocolVersion != "2025-11-25" || created["persisted"] != true {
@@ -77,20 +77,20 @@ func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *t
 		t.Fatalf("rename = %v", err)
 	}
 	enabled := true
-	set := desktopManage(t, s, ManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ExpectedRegistryRevision: updated["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation})
+	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ExpectedRegistryRevision: updated["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation})
 	setServer := set["server"].(mcpclient.ProtectedServer)
 	if !setServer.Enabled || setServer.Observation.Connection != "not_connected" {
 		t.Fatalf("set enabled = %#v", set)
 	}
-	desktopError(t, s, ManageRequest{Action: "desktop_remove", Name: "local", ExpectedRegistryRevision: set["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation}, "MCP_SERVER_GENERATION_CONFLICT")
-	desktopManage(t, s, ManageRequest{Action: "desktop_remove", Name: "local", ExpectedRegistryRevision: set["registry_revision"].(string), ExpectedGeneration: setServer.Generation})
+	desktopError(t, s, DesktopManageRequest{Action: "desktop_remove", Name: "local", ExpectedRegistryRevision: set["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation}, "MCP_SERVER_GENERATION_CONFLICT")
+	desktopManage(t, s, DesktopManageRequest{Action: "desktop_remove", Name: "local", ExpectedRegistryRevision: set["registry_revision"].(string), ExpectedGeneration: setServer.Generation})
 	// Legacy secret-bearing config can be preserved, but never echoed.
 	const canary = "B1_SECRET_CANARY_do_not_expose_123456789"
 	if _, err := m.Add(mcpclient.ServerConfig{Name: "legacy", Description: "Legacy", Transport: "stdio", Command: "never-run", Args: []string{"--secret", canary}}); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := m.Registry()
-	preserved := desktopManage(t, s, ManageRequest{Action: "desktop_update", Name: "legacy", Description: "Edited", Transport: "stdio", Command: "never-run", ExpectedRegistryRevision: before.Revision, ExpectedGeneration: before.Servers["legacy"].Generation})
+	preserved := desktopManage(t, s, DesktopManageRequest{Action: "desktop_update", Name: "legacy", Description: "Edited", Transport: "stdio", Command: "never-run", ExpectedRegistryRevision: before.Revision, ExpectedGeneration: before.Servers["legacy"].Generation})
 	after, _ := m.Registry()
 	if !reflect.DeepEqual(before.Servers["legacy"].Args, after.Servers["legacy"].Args) {
 		t.Fatal("omitted protected args were lost")
@@ -99,7 +99,7 @@ func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *t
 	if strings.Contains(string(data), canary) {
 		t.Fatal("protected update exposed args")
 	}
-	desktopError(t, s, ManageRequest{Action: "desktop_create", Name: "bad", Description: "Bad", Transport: "stdio", Command: "never-run", Args: []string{"--secret", canary}, ExpectedRegistryRevision: after.Revision}, "MCP_CONFIG_INVALID")
+	desktopError(t, s, DesktopManageRequest{Action: "desktop_create", Name: "bad", Description: "Bad", Transport: "stdio", Command: "never-run", Args: []string{"--secret", canary}, ExpectedRegistryRevision: after.Revision}, "MCP_CONFIG_INVALID")
 }
 
 func TestDesktopPluginInventoryAndEveryMutationFence(t *testing.T) {
@@ -108,18 +108,18 @@ func TestDesktopPluginInventoryAndEveryMutationFence(t *testing.T) {
 	if err := m.SetOwnedServers([]mcpclient.ServerConfig{{Name: name, Description: "Plugin", Transport: "stdio", Command: "never-run", SourceType: "plugin", PluginName: "demo", StorageKey: name, PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(), Enabled: true}}); err != nil {
 		t.Fatal(err)
 	}
-	snapshot := desktopManage(t, s, ManageRequest{Action: "desktop_snapshot"})
+	snapshot := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
 	servers := snapshot["servers"].([]mcpclient.ProtectedServer)
 	if len(servers) != 1 || servers[0].SourceType != "plugin" || servers[0].PluginName != "demo" {
 		t.Fatalf("inventory = %#v", snapshot)
 	}
-	desktopManage(t, s, ManageRequest{Action: "desktop_inspect", Name: name})
+	desktopManage(t, s, DesktopManageRequest{Action: "desktop_inspect", Name: name})
 	value := "write-only"
 	enabled := false
 	for _, action := range []string{"desktop_update", "desktop_remove", "desktop_set_enabled", "desktop_env_snapshot", "desktop_env_set", "desktop_env_unset", "desktop_env_purge", "desktop_reconnect", "desktop_authorize", "desktop_auth_clear"} {
-		desktopError(t, s, ManageRequest{Action: action, Name: name, Description: "Attempt", Transport: "stdio", Command: "never-run", Key: "KEY", Value: &value, Enabled: &enabled, ExpectedRegistryRevision: snapshot["registry_revision"].(string), ExpectedGeneration: servers[0].Generation, ExpectedEnvRevision: "unused"}, "MCP_OWNED_BY_PLUGIN")
+		desktopError(t, s, DesktopManageRequest{Action: action, Name: name, Description: "Attempt", Transport: "stdio", Command: "never-run", Key: "KEY", Value: &value, Enabled: &enabled, ExpectedRegistryRevision: snapshot["registry_revision"].(string), ExpectedGeneration: servers[0].Generation, ExpectedEnvRevision: "unused"}, "MCP_OWNED_BY_PLUGIN")
 	}
-	after := desktopManage(t, s, ManageRequest{Action: "desktop_snapshot"})
+	after := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
 	if !reflect.DeepEqual(snapshot, after) {
 		t.Fatal("rejected Desktop mutations changed plugin inventory")
 	}
@@ -132,9 +132,9 @@ func TestDesktopEnvironmentIsWriteOnlyAndErrorsAreProtected(t *testing.T) {
 	}
 	const canary = "B1_SECRET_CANARY_do_not_expose_123456789"
 	value := canary
-	snapshot := desktopManage(t, s, ManageRequest{Action: "desktop_env_snapshot", Name: "local"})
-	set := desktopManage(t, s, ManageRequest{Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value, ExpectedEnvRevision: snapshot["env_revision"].(string)})
-	desktopError(t, s, ManageRequest{Action: "desktop_env_unset", Name: "local", Key: "KEY", ExpectedEnvRevision: snapshot["env_revision"].(string)}, "MCP_ENV_CONFLICT")
+	snapshot := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_snapshot", Name: "local"})
+	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value, ExpectedEnvRevision: snapshot["env_revision"].(string)})
+	desktopError(t, s, DesktopManageRequest{Action: "desktop_env_unset", Name: "local", Key: "KEY", ExpectedEnvRevision: snapshot["env_revision"].(string)}, "MCP_ENV_CONFLICT")
 	data, _ := json.Marshal(set)
 	if strings.Contains(string(data), canary) {
 		t.Fatal("env_set echoed value")
@@ -148,24 +148,16 @@ func TestDesktopEnvironmentIsWriteOnlyAndErrorsAreProtected(t *testing.T) {
 	}
 }
 
-func TestDesktopSchemaIncludesActionsAndRevisions(t *testing.T) {
+func TestPublicManageExcludesDesktop(t *testing.T) {
 	schema, _ := InputSchema(ToolManage)
-	props := schema["properties"].(map[string]any)
-	actions := props["action"].(map[string]any)["enum"].([]string)
-	for _, expected := range append([]string{"list", "inspect", "add", "authorize", "auth_clear"}, desktopActions...) {
-		found := false
-		for _, action := range actions {
-			if action == expected {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("missing action %s", expected)
-		}
+	data, _ := json.Marshal(schema)
+	if strings.Contains(string(data), "desktop_") || strings.Contains(string(data), "expected_") {
+		t.Fatal("Desktop exposed in schema")
 	}
-	for _, field := range []string{"expected_registry_revision", "expected_generation", "expected_env_revision", "protocol_version", "value"} {
-		if props[field] == nil {
-			t.Fatalf("missing field %s", field)
+	s, _ := desktopService(t)
+	for _, action := range desktopActions {
+		if _, err := s.Manage(context.Background(), ManageRequest{Action: action}); err == nil {
+			t.Fatalf("public dispatch allowed %s", action)
 		}
 	}
 }
@@ -181,10 +173,10 @@ func TestDesktopAuthorizationCallbackSelectionIsProtected(t *testing.T) {
 		}
 	}
 	r, _ := m.Registry()
-	status := desktopManage(t, s, ManageRequest{Action: "desktop_auth_status", Name: "remote"})
+	status := desktopManage(t, s, DesktopManageRequest{Action: "desktop_auth_status", Name: "remote"})
 	// With multiple callback routes, Begin returns choices without discovery or
 	// launching a flow. The private native/public redirect paths remain Core-only.
-	selection := desktopManage(t, s, ManageRequest{Action: "desktop_authorize", Name: "remote", ExpectedRegistryRevision: r.Revision, ExpectedGeneration: r.Servers["remote"].Generation})
+	selection := desktopManage(t, s, DesktopManageRequest{Action: "desktop_authorize", Name: "remote", ExpectedRegistryRevision: r.Revision, ExpectedGeneration: r.Servers["remote"].Generation})
 	for _, result := range []Result{status, selection} {
 		data, _ := json.Marshal(result)
 		if strings.Contains(string(data), "private-") || strings.Contains(string(data), "redirect_url") {
@@ -194,5 +186,5 @@ func TestDesktopAuthorizationCallbackSelectionIsProtected(t *testing.T) {
 			t.Fatal("callback capabilities missing")
 		}
 	}
-	desktopError(t, s, ManageRequest{Action: "desktop_authorize", Name: "remote", ExpectedRegistryRevision: "stale", ExpectedGeneration: r.Servers["remote"].Generation}, "MCP_REGISTRY_CONFLICT")
+	desktopError(t, s, DesktopManageRequest{Action: "desktop_authorize", Name: "remote", ExpectedRegistryRevision: "stale", ExpectedGeneration: r.Servers["remote"].Generation}, "MCP_REGISTRY_CONFLICT")
 }

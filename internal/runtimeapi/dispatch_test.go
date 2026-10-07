@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"reflect"
@@ -244,5 +245,47 @@ func TestDispatchKeepsRouteSpecificValidationErrors(t *testing.T) {
 				t.Fatalf("error = %#v, want ToolError code %s", err, test.code)
 			}
 		})
+	}
+}
+
+func (r *runtimeStub) RuntimeMCPDesktop(context.Context) (app.Result, error) {
+	return app.Result{"action": "desktop_snapshot"}, nil
+}
+func (r *runtimeStub) RuntimeMCPDesktopManage(_ context.Context, args map[string]any) (app.Result, error) {
+	r.mcpArgs = args
+	return app.Result{"ok": true}, nil
+}
+
+func TestDesktopRouteBoundary(t *testing.T) {
+	const canary = "DESKTOP_SECRET_CANARY"
+	r := &runtimeStub{}
+	result, err := Dispatch(context.Background(), r, Request{Method: "GET", Path: "/internal/runtime/mcp/desktop"})
+	if err != nil || result["action"] != "desktop_snapshot" {
+		t.Fatalf("snapshot: %v %v", result, err)
+	}
+	body := []byte(`{"action":"desktop_env_set","name":"demo","key":"KEY","value":"` + canary + `","expected_env_revision":"rev"}`)
+	result, err = Dispatch(context.Background(), r, Request{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: body})
+	if err != nil || r.mcpArgs["value"] != canary {
+		t.Fatal("write-only value did not reach Desktop runtime")
+	}
+	data, _ := json.Marshal(result)
+	if strings.Contains(string(data), canary) {
+		t.Fatal("result leaked value")
+	}
+	for _, req := range []Request{
+		{Method: "POST", Path: "/internal/runtime/mcp", Body: body},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"add"}`)},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"desktop_snapshot","unknown":"` + canary + `"}`)},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(strings.Repeat("x", 65537))},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"desktop_snapshot"} {}`)},
+	} {
+		r.mcpArgs = nil
+		_, err := Dispatch(context.Background(), r, req)
+		if err == nil || r.mcpArgs != nil || strings.Contains(err.Error(), canary) {
+			t.Fatalf("boundary failed: %v", err)
+		}
+	}
+	if !MethodAllowed("POST", "/internal/runtime/mcp/desktop") || MethodAllowed("DELETE", "/internal/runtime/mcp/desktop") || AllowHeader("/internal/runtime/mcp/desktop") != "GET, POST" {
+		t.Fatal("method contract")
 	}
 }

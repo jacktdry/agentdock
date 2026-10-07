@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
@@ -255,4 +257,61 @@ func (r *Runtime) dispatchRuntimeMCPManage(ctx context.Context, request toolmcp.
 	result["ok"] = true
 	result["source"] = runtimeAPISource
 	return result, nil
+}
+
+// RuntimeMCPDesktop only observes authoritative configuration and cached state.
+func (r *Runtime) RuntimeMCPDesktop(ctx context.Context) (Result, error) {
+	return r.RuntimeMCPDesktopManage(ctx, map[string]any{"action": "desktop_snapshot"})
+}
+
+func (r *Runtime) RuntimeMCPDesktopManage(ctx context.Context, args map[string]any) (Result, error) {
+	body, err := json.Marshal(args)
+	if err != nil {
+		return nil, toolError("INVALID_MCP_REQUEST", "Invalid Desktop MCP request", "validation")
+	}
+	request, err := toolmcp.DecodeDesktopRequest(body)
+	if err != nil {
+		return nil, err
+	}
+	dispatch := func() (Result, error) {
+		result, err := r.dynamicMCP.DesktopManage(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		result["ok"], result["source"] = true, runtimeAPISource
+		return result, nil
+	}
+	switch request.Action {
+	case "desktop_snapshot", "desktop_inspect", "desktop_env_snapshot", "desktop_auth_status":
+		return dispatch()
+	}
+	return r.runRuntimeManagementMutation(ctx, "runtime_mcp", request.Action, desktopAdmissionDescriptor(request), dispatch)
+}
+
+// Never pass the write-only value, raw args or endpoint query to admission, even
+// on invalid requests. Only this descriptor is snapshotted/fingerprinted.
+func desktopAdmissionDescriptor(r toolmcp.DesktopManageRequest) map[string]any {
+	d := map[string]any{
+		"action": r.Action, "name": r.Name, "key": r.Key,
+		"expected_registry_revision": r.ExpectedRegistryRevision,
+		"expected_generation":        r.ExpectedGeneration, "expected_env_revision": r.ExpectedEnvRevision,
+	}
+	switch r.Action {
+	case "desktop_env_set":
+		d["value_configured"] = r.Value != nil && *r.Value != ""
+	case "desktop_set_enabled":
+		d["enabled"] = r.Enabled
+	case "desktop_authorize":
+		d["callback_id"] = r.CallbackID
+	case "desktop_create", "desktop_update":
+		d["transport"], d["protocol_version"], d["enabled"], d["timeout_ms"] = r.Transport, r.ProtocolVersion, r.Enabled, r.TimeoutMS
+		d["command"], d["cwd"] = r.Command, r.CWD
+		d["header_env"], d["env_from_env"] = r.HeaderEnv, r.EnvFromEnv
+		d["args_configured"], d["args_count"] = r.Args != nil, len(r.Args)
+		d["endpoint_configured"] = r.URL != ""
+		if endpoint, err := url.Parse(r.URL); err == nil && endpoint.User == nil && (endpoint.Scheme == "https" || endpoint.Scheme == "http") {
+			d["endpoint_origin"] = endpoint.Scheme + "://" + endpoint.Host
+		}
+	}
+	return d
 }
