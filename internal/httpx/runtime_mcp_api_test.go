@@ -60,6 +60,27 @@ func TestRuntimeMCPAPIManagesServersWithoutReturningSecrets(t *testing.T) {
 	}
 }
 
+func TestRuntimeMCPDesktopHTTPRouteReadsPOSTBody(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	defer runtime.Close()
+	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+
+	for _, request := range []*http.Request{
+		httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/desktop", nil),
+		httptest.NewRequest(http.MethodPost, "/internal/runtime/mcp/desktop", strings.NewReader("{\"action\":\"desktop_snapshot\"}")),
+	} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "\"registry_revision\"") {
+			t.Fatalf("%s desktop snapshot status=%d body=%s", request.Method, response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestRuntimeMCPAPIAcceptsTrailingSlash(t *testing.T) {
 	cfg := testConfig(t)
 	runtime, err := app.NewRuntime(cfg)
