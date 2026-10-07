@@ -53,7 +53,8 @@ func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *t
 	r := DesktopManageRequest{Action: "desktop_create", Name: "local", Description: "Local", Transport: "stdio", Command: "never-run", ProtocolVersion: "2025-11-25", Enabled: &wantEnabled, ExpectedRegistryRevision: initial["registry_revision"].(string)}
 	created := desktopManage(t, s, r)
 	server := created["server"].(mcpclient.ProtectedServer)
-	if server.Enabled || server.ProtocolVersion != "2025-11-25" || created["persisted"] != true {
+	if server.Enabled || server.ProtocolVersion != "2025-11-25" || created["persisted"] != true ||
+		created["runtime_impact"] != "applied" || created["reconnect_required"] != false {
 		t.Fatalf("created = %#v", created)
 	}
 	desktopError(t, s, r, "MCP_REGISTRY_CONFLICT")
@@ -81,7 +82,8 @@ func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *t
 	enabled := true
 	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ExpectedRegistryRevision: updated["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation})
 	setServer := set["server"].(mcpclient.ProtectedServer)
-	if !setServer.Enabled || setServer.Observation.Connection != "not_connected" {
+	if !setServer.Enabled || setServer.Observation.Connection != "not_connected" ||
+		set["runtime_impact"] != "applied" || set["reconnect_required"] != false {
 		t.Fatalf("set enabled = %#v", set)
 	}
 	desktopError(t, s, DesktopManageRequest{Action: "desktop_remove", Name: "local", ExpectedRegistryRevision: set["registry_revision"].(string), ExpectedGeneration: updatedServer.Generation}, "MCP_SERVER_GENERATION_CONFLICT")
@@ -136,6 +138,9 @@ func TestDesktopEnvironmentIsWriteOnlyAndErrorsAreProtected(t *testing.T) {
 	value := canary
 	snapshot := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_snapshot", Name: "local"})
 	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value, ExpectedEnvRevision: snapshot["env_revision"].(string)})
+	if set["runtime_impact"] != "next_connection" || set["reconnect_required"] != true {
+		t.Fatalf("env_set runtime impact = %#v", set)
+	}
 	inventory := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
 	server := inventory["servers"].([]mcpclient.ProtectedServer)[0]
 	enabled := true

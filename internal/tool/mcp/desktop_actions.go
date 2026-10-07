@@ -110,6 +110,11 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		if mutation.Persisted {
 			result["persisted"], result["runtime_applied"], result["completed"] = true, mutation.RuntimeApplied, err == nil
 			result["recovery_required"] = err != nil
+			if mutation.RuntimeApplied {
+				result["runtime_impact"], result["reconnect_required"] = "applied", false
+			} else {
+				result["runtime_impact"], result["reconnect_required"] = "persisted_runtime_stale", true
+			}
 			result["registry_revision"] = mutation.Registry.Revision
 			if mutation.Server.Name != "" {
 				result["server"] = s.mcpClients.ProtectedServer(mutation.Server)
@@ -123,11 +128,17 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		snapshot, envErr := s.mcpClients.DesktopEnvironment(r.Name, strings.TrimPrefix(action, "desktop_env_"), r.Key, r.Value, r.ExpectedEnvRevision, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 		err = envErr
 		result["env_revision"], result["items"], result["count"] = snapshot.Revision, snapshot.Entries, len(snapshot.Entries)
+		if err == nil && action != "desktop_env_snapshot" {
+			result["runtime_impact"], result["reconnect_required"] = "next_connection", true
+		}
 	case "desktop_reconnect":
 		var server mcpclient.ProtectedServer
 		var tools []mcpclient.ToolSummary
 		server, tools, err = s.mcpClients.DesktopReconnect(ctx, r.Name, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 		result["server"], result["tools"], result["tool_count"] = server, tools, len(tools)
+		if err == nil {
+			result["runtime_impact"], result["reconnect_required"] = "reconnected", false
+		}
 	case "desktop_auth_status":
 		var status mcpclient.AuthorizationStatus
 		var statusErr error
@@ -151,9 +162,20 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		if len(auth.CallbackOptions) > 0 {
 			result["callback_options"] = auth.CallbackOptions
 		}
+		if err == nil {
+			if auth.FlowID != "" {
+				result["runtime_impact"] = "authorization_pending"
+			} else {
+				result["runtime_impact"] = "callback_selection_required"
+			}
+			result["reconnect_required"] = false
+		}
 	case "desktop_auth_clear":
 		err = s.mcpClients.DesktopClearAuthorization(r.Name, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 		result["removed"] = err == nil
+		if err == nil {
+			result["runtime_impact"], result["reconnect_required"] = "authorization_cleared", false
+		}
 	default:
 		return nil, toolErrorDetails("INVALID_ACTION", "Unsupported Desktop MCP action", "validation", nil)
 	}

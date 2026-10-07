@@ -355,6 +355,11 @@ export enum ErrorCategory {
 };
 
 export interface MCPActionResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
     "completed": boolean;
     "error"?: APIError | null;
 }
@@ -365,6 +370,12 @@ export interface MCPAuthCallback {
 }
 
 export interface MCPAuthorizationResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
+    "flowId"?: string;
     "authorizationUrl"?: string;
     "callbackId"?: string;
     "expiresAt"?: string;
@@ -373,7 +384,10 @@ export interface MCPAuthorizationResult {
 }
 
 export interface MCPAuthorizationStatus {
+    "flowId"?: string;
     "status": string;
+    "expiresAt"?: string;
+    "errorCode"?: string;
     "callbackOptions": MCPAuthCallback[] | null;
 }
 
@@ -393,7 +407,6 @@ export interface MCPConfigInput {
     "cwd"?: string;
     "headerEnv"?: { [_ in string]?: string } | null;
     "envFromEnv"?: { [_ in string]?: string } | null;
-    "enabled"?: boolean | null;
     "timeoutMs"?: number | null;
 }
 
@@ -403,6 +416,11 @@ export interface MCPEnvironmentEntry {
 }
 
 export interface MCPEnvironmentResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
     "revision"?: string;
     "items": MCPEnvironmentEntry[] | null;
     "error"?: APIError | null;
@@ -427,10 +445,18 @@ export interface MCPManagedServer {
     "headerEnv"?: { [_ in string]?: string } | null;
     "envFromEnv"?: { [_ in string]?: string } | null;
     "generation": string;
+    "environmentConfigured": boolean;
+    "enableRequiresEnvironmentConfirmation": boolean;
+    "blockedReasons"?: string[] | null;
     "observation": MCPObservation;
 }
 
 export interface MCPMutationResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
     "completed": boolean;
     "persisted": boolean;
     "runtimeApplied": boolean;
@@ -450,7 +476,24 @@ export interface MCPObservation {
     "stale": boolean;
 }
 
+export interface MCPOperationStatusResult {
+    "requestId": string;
+    "found": boolean;
+    "pending": boolean;
+    "outcome": string;
+    "outcomeUnknown": boolean;
+    "operationAction"?: string;
+    "startedAt"?: string;
+    "completedAt"?: string;
+    "error"?: APIError | null;
+}
+
 export interface MCPReconnectResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
     "server"?: MCPManagedServer | null;
     "tools": MCPToolSummary[] | null;
     "toolCount": number;

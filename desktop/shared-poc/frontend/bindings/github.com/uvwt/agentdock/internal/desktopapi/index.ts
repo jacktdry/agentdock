@@ -75,6 +75,7 @@ export type {
     MCPManagedServer,
     MCPMutationResult,
     MCPObservation,
+    MCPOperationStatusResult,
     MCPReconnectResult,
     MCPServerResult,
     MCPSnapshot,

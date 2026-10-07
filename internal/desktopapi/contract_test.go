@@ -68,12 +68,12 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 		}
 	}
 	mcpCapability := seen[DomainMCP]
-	if mcpCapability.Availability != AvailabilityAvailable || len(mcpCapability.Operations) != 14 {
+	if mcpCapability.Availability != AvailabilityAvailable || len(mcpCapability.Operations) != 16 {
 		t.Fatalf("MCP capability = %#v", mcpCapability)
 	}
 	for _, operation := range mcpCapability.Operations {
 		switch operation.Name {
-		case "snapshot", "inspect", "environment", "authorizationStatus":
+		case "snapshot", "inspect", "environment", "authorizationStatus", "authorizationFlowStatus", "operationStatus":
 			if operation.Access != AccessRead || operation.RequiresConfirmation {
 				t.Fatalf("MCP read operation = %#v", operation)
 			}

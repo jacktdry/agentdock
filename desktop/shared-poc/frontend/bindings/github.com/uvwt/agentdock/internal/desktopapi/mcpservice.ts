@@ -9,20 +9,24 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function AuthorizationFlowStatus(flowID: string): $CancellablePromise<$models.MCPAuthorizationStatusResult> {
+    return $Call.ByID(2939905946, flowID);
+}
+
 export function AuthorizationStatus(name: string): $CancellablePromise<$models.MCPAuthorizationStatusResult> {
     return $Call.ByID(2862500754, name);
 }
 
-export function Authorize(name: string, callbackID: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPAuthorizationResult> {
-    return $Call.ByID(218423642, name, callbackID, expectedRevision, expectedGeneration);
+export function Authorize(requestID: string, name: string, callbackID: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPAuthorizationResult> {
+    return $Call.ByID(218423642, requestID, name, callbackID, expectedRevision, expectedGeneration);
 }
 
-export function ClearAuthorization(name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPActionResult> {
-    return $Call.ByID(3403326913, name, expectedRevision, expectedGeneration);
+export function ClearAuthorization(requestID: string, name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPActionResult> {
+    return $Call.ByID(3403326913, requestID, name, expectedRevision, expectedGeneration);
 }
 
-export function Create(expectedRevision: string, input: $models.MCPConfigInput): $CancellablePromise<$models.MCPMutationResult> {
-    return $Call.ByID(4293104111, expectedRevision, input);
+export function Create(requestID: string, expectedRevision: string, input: $models.MCPConfigInput): $CancellablePromise<$models.MCPMutationResult> {
+    return $Call.ByID(4293104111, requestID, expectedRevision, input);
 }
 
 export function Environment(name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPEnvironmentResult> {
@@ -33,34 +37,38 @@ export function Inspect(name: string): $CancellablePromise<$models.MCPServerResu
     return $Call.ByID(2307741105, name);
 }
 
-export function PurgeEnvironment(name: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
-    return $Call.ByID(134977999, name, expectedRevision, expectedGeneration, expectedEnvRevision);
+export function OperationStatus(requestID: string): $CancellablePromise<$models.MCPOperationStatusResult> {
+    return $Call.ByID(2545379774, requestID);
 }
 
-export function Reconnect(name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPReconnectResult> {
-    return $Call.ByID(1224557772, name, expectedRevision, expectedGeneration);
+export function PurgeEnvironment(requestID: string, name: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
+    return $Call.ByID(134977999, requestID, name, expectedRevision, expectedGeneration, expectedEnvRevision);
 }
 
-export function Remove(name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPMutationResult> {
-    return $Call.ByID(2455885323, name, expectedRevision, expectedGeneration);
+export function Reconnect(requestID: string, name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPReconnectResult> {
+    return $Call.ByID(1224557772, requestID, name, expectedRevision, expectedGeneration);
 }
 
-export function SetEnabled(name: string, enabled: boolean, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPMutationResult> {
-    return $Call.ByID(1608132134, name, enabled, expectedRevision, expectedGeneration);
+export function Remove(requestID: string, name: string, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPMutationResult> {
+    return $Call.ByID(2455885323, requestID, name, expectedRevision, expectedGeneration);
 }
 
-export function SetEnvironment(name: string, key: string, value: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
-    return $Call.ByID(2073178530, name, key, value, expectedRevision, expectedGeneration, expectedEnvRevision);
+export function SetEnabled(requestID: string, name: string, enabled: boolean, reuseConfiguredEnvironment: boolean, expectedRevision: string, expectedGeneration: string): $CancellablePromise<$models.MCPMutationResult> {
+    return $Call.ByID(1608132134, requestID, name, enabled, reuseConfiguredEnvironment, expectedRevision, expectedGeneration);
+}
+
+export function SetEnvironment(requestID: string, name: string, key: string, value: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
+    return $Call.ByID(2073178530, requestID, name, key, value, expectedRevision, expectedGeneration, expectedEnvRevision);
 }
 
 export function Snapshot(): $CancellablePromise<$models.MCPSnapshotResult> {
     return $Call.ByID(3527668959);
 }
 
-export function UnsetEnvironment(name: string, key: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
-    return $Call.ByID(3308846601, name, key, expectedRevision, expectedGeneration, expectedEnvRevision);
+export function UnsetEnvironment(requestID: string, name: string, key: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string): $CancellablePromise<$models.MCPEnvironmentResult> {
+    return $Call.ByID(3308846601, requestID, name, key, expectedRevision, expectedGeneration, expectedEnvRevision);
 }
 
-export function Update(name: string, expectedRevision: string, expectedGeneration: string, input: $models.MCPConfigInput): $CancellablePromise<$models.MCPMutationResult> {
-    return $Call.ByID(1813817558, name, expectedRevision, expectedGeneration, input);
+export function Update(requestID: string, name: string, expectedRevision: string, expectedGeneration: string, input: $models.MCPConfigInput): $CancellablePromise<$models.MCPMutationResult> {
+    return $Call.ByID(1813817558, requestID, name, expectedRevision, expectedGeneration, input);
 }
