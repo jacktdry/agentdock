@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/uvwt/agentdock/internal/envstore"
+	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/permission"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
 	"strings"
@@ -19,38 +20,56 @@ func TestRuntimeDesktopSecretAdmissionAndDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = rt.RuntimeMCPDesktopManage(ctx, map[string]any{"action": "desktop_create", "name": "demo", "description": "Demo", "transport": "stdio", "command": "never-run", "expected_registry_revision": snapshot["registry_revision"]})
+	created, err := rt.RuntimeMCPDesktopManage(ctx, map[string]any{"action": "desktop_create", "name": "demo", "description": "Demo", "transport": "stdio", "command": "never-run", "expected_registry_revision": snapshot["registry_revision"]})
 	if err != nil {
 		t.Fatal(err)
+	}
+	createdServer, ok := created["server"].(mcpclient.ProtectedServer)
+	if !ok || createdServer.Generation == "" {
+		t.Fatalf("created server = %#v", created["server"])
 	}
 	env, err := rt.RuntimeMCPDesktopManage(ctx, map[string]any{"action": "desktop_env_snapshot", "name": "demo"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const canary = "DESKTOP_ENV_SECRET_CANARY_123456789"
-	args := map[string]any{"action": "desktop_env_set", "name": "demo", "key": "KEY", "value": canary, "expected_env_revision": env["env_revision"]}
+	args := map[string]any{
+		"action": "desktop_env_set", "name": "demo", "key": "KEY", "value": canary,
+		"expected_env_revision":      env["env_revision"],
+		"expected_registry_revision": created["registry_revision"], "expected_generation": createdServer.Generation,
+	}
 	body, _ := json.Marshal(args)
 	request, err := toolmcp.DecodeDesktopRequest(body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	descriptor := desktopAdmissionDescriptor(request)
-	fingerprint, err := hostOperationFingerprint("runtime_mcp", request.Action, descriptor)
+	fingerprint, err := rt.desktopMCPRequestFingerprint(request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	other := "different secret"
-	request.Value = &other
-	otherFingerprint, _ := hostOperationFingerprint("runtime_mcp", request.Action, desktopAdmissionDescriptor(request))
-	if fingerprint != otherFingerprint {
-		t.Fatal("secret influenced admission fingerprint")
+	changedSecret := request
+	changedSecret.Value = &other
+	otherFingerprint, _ := rt.desktopMCPRequestFingerprint(changedSecret)
+	if fingerprint == otherFingerprint {
+		t.Fatal("private fingerprint did not bind write-only secret")
 	}
-	for _, field := range []string{"name", "key", "expected_registry_revision", "expected_generation", "expected_env_revision"} {
-		changed := desktopAdmissionDescriptor(request)
-		changed[field] = "changed"
-		next, _ := hostOperationFingerprint("runtime_mcp", request.Action, changed)
+	for _, mutate := range []struct {
+		name string
+		fn   func(*toolmcp.DesktopManageRequest)
+	}{
+		{"name", func(r *toolmcp.DesktopManageRequest) { r.Name = "changed" }},
+		{"key", func(r *toolmcp.DesktopManageRequest) { r.Key = "CHANGED" }},
+		{"expected_registry_revision", func(r *toolmcp.DesktopManageRequest) { r.ExpectedRegistryRevision = "changed" }},
+		{"expected_generation", func(r *toolmcp.DesktopManageRequest) { r.ExpectedGeneration = "changed" }},
+		{"expected_env_revision", func(r *toolmcp.DesktopManageRequest) { r.ExpectedEnvRevision = "changed" }},
+	} {
+		changed := request
+		mutate.fn(&changed)
+		next, _ := rt.desktopMCPRequestFingerprint(changed)
 		if next == fingerprint {
-			t.Fatalf("fingerprint did not bind %s", field)
+			t.Fatalf("private fingerprint did not bind %s", mutate.name)
 		}
 	}
 	replaceRuntimePermissionPolicy(t, rt, func(p *permission.Policy) { p.GlobalMode = permission.Rules })
@@ -218,8 +237,11 @@ func TestRuntimeDesktopOperationJournalNeverStoresWriteOnlyEnvironmentValue(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, _ := created["server"].(map[string]any)
-	generation, _ := server["generation"].(string)
+	server, ok := created["server"].(mcpclient.ProtectedServer)
+	if !ok || server.Generation == "" {
+		t.Fatalf("created server = %#v", created["server"])
+	}
+	generation := server.Generation
 	env, err := rt.RuntimeMCPDesktopManage(ctx, map[string]any{
 		"action": "desktop_env_snapshot", "name": "secret-demo",
 		"expected_registry_revision": created["registry_revision"], "expected_generation": generation,
