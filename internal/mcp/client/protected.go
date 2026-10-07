@@ -177,6 +177,37 @@ func (m *Manager) DesktopInspect(name string) (string, ProtectedServer, error) {
 	return r.Revision, m.ProtectedServer(cfg), nil
 }
 
+// DesktopCachedTools returns only the tool catalog already observed in memory
+// for the exact persisted server generation. It never connects, refreshes,
+// starts a process, or reads provider data from the network.
+func (m *Manager) DesktopCachedTools(name, generation string) []ToolSummary {
+	m.mu.RLock()
+	cfg, ok := m.servers[strings.TrimSpace(name)]
+	if !ok || cfg.Generation != strings.TrimSpace(generation) {
+		m.mu.RUnlock()
+		return []ToolSummary{}
+	}
+	state := m.states[cfg.Name]
+	if state == nil {
+		m.mu.RUnlock()
+		return []ToolSummary{}
+	}
+	state.mu.Lock()
+	m.mu.RUnlock()
+	defer state.mu.Unlock()
+	if state.generation != "" && state.generation != cfg.Generation {
+		return []ToolSummary{}
+	}
+	items := summarizeTools(cfg, state.tools)
+	for i := range items {
+		items[i].Name = protectedText(items[i].Name)
+		items[i].QualifiedName = qualifiedToolName(cfg.Name, items[i].Name)
+		items[i].Title = ""
+		items[i].Description = ""
+	}
+	return items
+}
+
 func (m *Manager) decorateDesktopEnvironmentState(server *ProtectedServer, cfg ServerConfig) {
 	if server == nil || cfg.SourceType == "plugin" {
 		return

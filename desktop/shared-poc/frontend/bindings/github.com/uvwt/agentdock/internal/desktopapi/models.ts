@@ -502,6 +502,8 @@ export interface MCPReconnectResult {
 export interface MCPServerResult {
     "registryRevision"?: string;
     "server"?: MCPManagedServer | null;
+    "tools": MCPToolSummary[] | null;
+    "toolCount": number;
     "error"?: APIError | null;
 }
 

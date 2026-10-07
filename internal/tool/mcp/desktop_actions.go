@@ -55,7 +55,11 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		var revision string
 		var server mcpclient.ProtectedServer
 		revision, server, err = s.mcpClients.DesktopInspect(r.Name)
-		result["registry_revision"], result["server"] = revision, server
+		var tools []mcpclient.ToolSummary
+		if err == nil {
+			tools = s.mcpClients.DesktopCachedTools(server.Name, server.Generation)
+		}
+		result["registry_revision"], result["server"], result["tools"], result["tool_count"] = revision, server, tools, len(tools)
 	case "desktop_create", "desktop_update", "desktop_remove", "desktop_set_enabled":
 		var mutation mcpclient.MutationResult
 		cfg := desktopConfig(r)

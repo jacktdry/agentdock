@@ -71,6 +71,8 @@ type MCPSnapshotResult struct {
 type MCPServerResult struct {
 	RegistryRevision string            `json:"registryRevision,omitempty"`
 	Server           *MCPManagedServer `json:"server,omitempty"`
+	Tools            []MCPToolSummary  `json:"tools"`
+	ToolCount        int               `json:"toolCount"`
 	Error            *APIError         `json:"error,omitempty"`
 }
 
@@ -267,10 +269,14 @@ func (s *MCPService) Inspect(ctx context.Context, name string) MCPServerResult {
 	var wire mcpWireResponse
 	apiErr := s.request(ctx, http.MethodPost, mcpWireRequest{Action: "desktop_inspect", Name: strings.TrimSpace(name)}, &wire)
 	if apiErr != nil {
-		return MCPServerResult{Error: apiErr}
+		return MCPServerResult{Tools: []MCPToolSummary{}, Error: apiErr}
 	}
 	server := serverFromWire(wire.Server)
-	return MCPServerResult{RegistryRevision: wire.RegistryRevision, Server: &server}
+	tools := make([]MCPToolSummary, 0, len(wire.Tools))
+	for _, item := range wire.Tools {
+		tools = append(tools, MCPToolSummary{Name: item.Name, QualifiedName: item.QualifiedName, Server: item.Server, SourceType: item.SourceType, PluginName: item.PluginName})
+	}
+	return MCPServerResult{RegistryRevision: wire.RegistryRevision, Server: &server, Tools: tools, ToolCount: wire.ToolCount}
 }
 
 func (s *MCPService) Create(ctx context.Context, requestID, expectedRevision string, input MCPConfigInput) MCPMutationResult {

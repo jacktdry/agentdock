@@ -84,7 +84,7 @@ func TestDesktopReadsArePassiveProtectedAndGenerationAware(t *testing.T) {
 	m.states["local"].client = failing
 	m.states["local"].lastError = desktopCanary
 	m.states["local"].lastErrorCode = desktopCanary
-	m.states["local"].tools = map[string]Tool{"old": {Name: "old"}}
+	m.states["local"].tools = map[string]Tool{"old": {Name: "old", Description: desktopCanary}}
 	m.states["local"].refreshedAt = time.Now()
 	var creates atomic.Int32
 	m.protocolClientHook = func(ServerConfig) (protocolClient, error) {
@@ -151,6 +151,11 @@ func TestDesktopReadsArePassiveProtectedAndGenerationAware(t *testing.T) {
 	}
 	if creates.Load() != 0 || failing.closeCalls.Load() != 0 || requests.Load() != 0 {
 		t.Fatal("passive read affected runtime")
+	}
+	tools := m.DesktopCachedTools("local", snapshot.Servers[0].Generation)
+	assertProtected(t, tools)
+	if len(tools) != 1 || tools[0].Name != "old" || tools[0].Description != "" || creates.Load() != 0 || failing.closeCalls.Load() != 0 {
+		t.Fatalf("cached tools = %#v creates=%d closes=%d", tools, creates.Load(), failing.closeCalls.Load())
 	}
 	// Independent writer changes persisted generation without updating this cache.
 	r, _ := m.Registry()
