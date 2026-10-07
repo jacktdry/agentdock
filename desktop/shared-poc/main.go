@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"errors"
 	"flag"
 	"log"
 	"path/filepath"
@@ -37,8 +38,15 @@ func main() {
 	runtimeService := desktopapi.NewRuntimeService(*runtimeRootFlag)
 	activityProbeService := NewActivityProbeService()
 	coreActivityService := NewCoreActivityService(*runtimeRootFlag)
+	var app *application.App
+	mcpService := desktopapi.NewMCPServiceWithOpenURL(*runtimeRootFlag, func(rawURL string) error {
+		if app == nil || app.Browser == nil {
+			return errors.New("desktop browser unavailable")
+		}
+		return app.Browser.OpenURL(rawURL)
+	})
 
-	app := application.New(application.Options{
+	app = application.New(application.Options{
 		Name:        productName,
 		Description: "Cross-platform AgentDock desktop",
 		Services: []application.Service{
@@ -49,7 +57,7 @@ func main() {
 			application.NewService(desktopapi.NewUpdateService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewACPService(*runtimeRootFlag)),
-			application.NewService(desktopapi.NewMCPService(*runtimeRootFlag)),
+			application.NewService(mcpService),
 			application.NewService(desktopapi.NewPermissionService(*runtimeRootFlag)),
 			application.NewService(settings),
 			application.NewService(activityProbeService),

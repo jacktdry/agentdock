@@ -376,7 +376,6 @@ export interface MCPAuthorizationResult {
     "runtimeImpact"?: string;
     "reconnectRequired": boolean;
     "flowId"?: string;
-    "authorizationUrl"?: string;
     "callbackId"?: string;
     "expiresAt"?: string;
     "callbackOptions": MCPAuthCallback[] | null;

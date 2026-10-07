@@ -164,7 +164,6 @@ type MCPAuthorizationResult struct {
 	RuntimeImpact     string            `json:"runtimeImpact,omitempty"`
 	ReconnectRequired bool              `json:"reconnectRequired"`
 	FlowID            string            `json:"flowId,omitempty"`
-	AuthorizationURL  string            `json:"authorizationUrl,omitempty"`
 	CallbackID        string            `json:"callbackId,omitempty"`
 	ExpiresAt         string            `json:"expiresAt,omitempty"`
 	CallbackOptions   []MCPAuthCallback `json:"callbackOptions"`
@@ -203,6 +202,7 @@ type MCPService struct {
 	rootError   error
 	client      *http.Client
 	readAccess  func(string) (mcpCoreAccess, error)
+	openURL     func(string) error
 }
 
 func NewMCPService(root string) *MCPService {
@@ -226,6 +226,12 @@ func NewMCPService(root string) *MCPService {
 			return mcpCoreAccess{Endpoint: connection.Endpoint(), Token: connection.AuthToken()}, nil
 		},
 	}
+}
+
+func NewMCPServiceWithOpenURL(root string, openURL func(string) error) *MCPService {
+	service := NewMCPService(root)
+	service.openURL = openURL
+	return service
 }
 
 func mcpOperations() []OperationCapability {
@@ -347,7 +353,25 @@ func (s *MCPService) Authorize(ctx context.Context, requestID, name, callbackID,
 	if apiErr != nil {
 		return MCPAuthorizationResult{RequestID: request.RequestID, Outcome: uncertainMCPOutcome(apiErr), OutcomeUnknown: isMCPOutcomeUnknown(apiErr), CallbackOptions: []MCPAuthCallback{}, Error: apiErr}
 	}
-	return MCPAuthorizationResult{RequestID: firstNonEmpty(wire.RequestID, request.RequestID), Outcome: wire.Outcome, RuntimeImpact: wire.RuntimeImpact, ReconnectRequired: wire.ReconnectRequired, FlowID: wire.FlowID, AuthorizationURL: wire.AuthorizationURL, CallbackID: wire.CallbackID, ExpiresAt: wire.ExpiresAt, CallbackOptions: callbacksFromWire(wire.CallbackOptions)}
+	result := MCPAuthorizationResult{
+		RequestID: firstNonEmpty(wire.RequestID, request.RequestID), Outcome: wire.Outcome,
+		RuntimeImpact: wire.RuntimeImpact, ReconnectRequired: wire.ReconnectRequired,
+		FlowID: wire.FlowID, CallbackID: wire.CallbackID, ExpiresAt: wire.ExpiresAt,
+		CallbackOptions: callbacksFromWire(wire.CallbackOptions),
+	}
+	if strings.TrimSpace(wire.AuthorizationURL) == "" {
+		return result
+	}
+	if s.openURL == nil {
+		result.Outcome = "partial"
+		result.Error = NewError("MCP_BROWSER_OPEN_UNAVAILABLE", "Unable to open the authorization page", ErrorCategoryUnavailable, true, nil)
+		return result
+	}
+	if err := s.openURL(wire.AuthorizationURL); err != nil {
+		result.Outcome = "partial"
+		result.Error = NewError("MCP_BROWSER_OPEN_FAILED", "Unable to open the authorization page", ErrorCategoryUnavailable, true, nil)
+	}
+	return result
 }
 
 func (s *MCPService) ClearAuthorization(ctx context.Context, requestID, name, expectedRevision, expectedGeneration string) MCPActionResult {

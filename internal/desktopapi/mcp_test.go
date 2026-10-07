@@ -3,6 +3,7 @@ package desktopapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -170,6 +171,45 @@ func TestMCPServiceAuthorizationFlowStatusUsesOpaqueFlowID(t *testing.T) {
 	if result.Error != nil || result.Authorization.FlowID != flowID || result.Authorization.Status != "denied" ||
 		result.Authorization.ErrorCode != "MCP_AUTH_DENIED" {
 		t.Fatalf("flow status = %#v", result)
+	}
+}
+
+func TestMCPServiceAuthorizeOpensBrowserWithoutReturningAuthorizationURL(t *testing.T) {
+	const requestID = "77777777777777777777777777777777"
+	const authorizationURL = "https://provider.example/authorize?code=AUTH_URL_CANARY"
+	var opened string
+	service := testMCPService(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"ok":true,"request_id":"`+requestID+`","outcome":"completed","flow_id":"flow-1","authorization_url":"`+authorizationURL+`","callback_id":"local","expires_at":"2026-10-07T03:15:00Z"}`)
+	})
+	service.openURL = func(rawURL string) error {
+		opened = rawURL
+		return nil
+	}
+	result := service.Authorize(context.Background(), requestID, "demo", "local", "rev-1", "gen-1")
+	data, _ := json.Marshal(result)
+	if result.Error != nil || result.FlowID != "flow-1" || opened != authorizationURL {
+		t.Fatalf("authorize = %#v opened=%q", result, opened)
+	}
+	if strings.Contains(string(data), "provider.example") || strings.Contains(string(data), "AUTH_URL_CANARY") {
+		t.Fatalf("renderer result leaked authorization URL: %s", data)
+	}
+}
+
+func TestMCPServiceAuthorizeBrowserOpenFailureIsSafeAndRetryable(t *testing.T) {
+	const requestID = "88888888888888888888888888888888"
+	const canary = "BROWSER_OPEN_ERROR_CANARY"
+	service := testMCPService(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"ok":true,"request_id":"`+requestID+`","outcome":"completed","flow_id":"flow-2","authorization_url":"https://provider.example/authorize","callback_id":"local"}`)
+	})
+	service.openURL = func(string) error { return errors.New(canary) }
+	result := service.Authorize(context.Background(), requestID, "demo", "local", "rev-1", "gen-1")
+	data, _ := json.Marshal(result)
+	if result.Error == nil || result.Error.Code != "MCP_BROWSER_OPEN_FAILED" || !result.Error.Retryable ||
+		result.FlowID != "flow-2" || result.Outcome != "partial" {
+		t.Fatalf("authorize failure = %#v", result)
+	}
+	if strings.Contains(string(data), canary) || strings.Contains(string(data), "provider.example") {
+		t.Fatalf("browser open failure leaked unsafe data: %s", data)
 	}
 }
 
