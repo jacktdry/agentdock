@@ -338,7 +338,7 @@ P4 ACP Manager full parity ✅
   ↓
 P5 MCP Management ✅
   ↓
-P6 Plugin Management ← **next**
+P6 Plugin Management ← **contract frozen / implementation in progress**
   ↓
 P7 Nexus / startup / platform essentials
   ↓
@@ -413,7 +413,7 @@ P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成�
 
 - ~~ACP Manager~~ — **Complete**；
 - ~~MCP Management~~ — **Complete**；
-- **Plugin Management — next**；
+- **Plugin Management — contract frozen / implementation in progress**；
 - Nexus / Platform Essentials；
 - Browser Broker UI。
 
@@ -488,7 +488,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；**下一個 domain 是 Plugin Management**，之後依序為 Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**現在從 Core/Desktop authority → opaque candidate staging → Shared UI 實作**；之後依序為 Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
