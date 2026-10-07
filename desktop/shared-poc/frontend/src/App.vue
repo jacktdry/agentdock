@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PermissionPanel from './components/permission/PermissionPanel.vue'
 import ACPPanel from './components/acp/ACPPanel.vue'
+import MCPPanel from './components/mcp/MCPPanel.vue'
 import ActivityStreamPanel from './components/activity/ActivityStreamPanel.vue'
 import ExecutionCenterPanel from './components/execution/ExecutionCenterPanel.vue'
 import ContractStatusPanel from './components/contract/ContractStatusPanel.vue'
@@ -58,6 +59,7 @@ function changeLocale(event: Event) {
         <ExecutionCenterPanel v-else-if="section === 'execution'" />
         <ConnectionPanel v-else-if="section === 'connection'" />
         <ACPPanel v-else-if="section === 'acp'" />
+        <MCPPanel v-else-if="section === 'mcp'" />
         <PermissionPanel v-else-if="section === 'permission'" />
         <BasicSettingsPanel v-else-if="section === 'settings'" />
         <div v-else-if="section === 'system'" class="feature-stack">

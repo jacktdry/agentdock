@@ -2,6 +2,7 @@ import * as ConnectionService from '../../bindings/github.com/uvwt/agentdock/int
 import * as BasicSettingsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/basicsettingsservice'
 import * as UpdateService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/updateservice'
 import * as DiagnosticsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/diagnosticsservice'
+import * as MCPService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/mcpservice'
 import { JSONStream, type JSONSocket } from '@wailsio/runtime'
 import * as ActivityProbeService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/activityprobeservice'
 import * as CoreActivityService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/coreactivityservice'
@@ -42,6 +43,21 @@ import type {
   RuntimeActionResult,
   RuntimeStatus,
   RuntimeStatusResult,
+  MCPActionResult,
+  MCPAuthCallback,
+  MCPAuthorizationResult,
+  MCPAuthorizationStatus,
+  MCPAuthorizationStatusResult,
+  MCPConfigInput,
+  MCPEnvironmentResult,
+  MCPManagedServer,
+  MCPMutationResult,
+  MCPOperationStatusResult,
+  MCPReconnectResult,
+  MCPServerResult,
+  MCPSnapshot,
+  MCPSnapshotResult,
+  MCPToolSummary,
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import {
   OAuthPasswordState,
@@ -111,6 +127,21 @@ export type {
   RuntimeStatus,
   RuntimeStatusResult,
   SavePreferencesResult,
+  MCPActionResult,
+  MCPAuthCallback,
+  MCPAuthorizationResult,
+  MCPAuthorizationStatus,
+  MCPAuthorizationStatusResult,
+  MCPConfigInput,
+  MCPEnvironmentResult,
+  MCPManagedServer,
+  MCPMutationResult,
+  MCPOperationStatusResult,
+  MCPReconnectResult,
+  MCPServerResult,
+  MCPSnapshot,
+  MCPSnapshotResult,
+  MCPToolSummary,
 }
 
 export const DESKTOP_API_VERSION = 1
@@ -257,6 +288,33 @@ export const desktopApi = {
   saveBasicSettings: (settings: BasicSettings) => BasicSettingsService.Save(settings),
   checkUpdate: () => UpdateService.Check(),
   diagnostics: () => DiagnosticsService.Snapshot(),
+  mcpSnapshot: () => MCPService.Snapshot(),
+  mcpInspect: (name: string) => MCPService.Inspect(name),
+  mcpCreate: (requestID: string, expectedRevision: string, input: MCPConfigInput) =>
+    MCPService.Create(requestID, expectedRevision, input),
+  mcpUpdate: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string, input: MCPConfigInput) =>
+    MCPService.Update(requestID, name, expectedRevision, expectedGeneration, input),
+  mcpRemove: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.Remove(requestID, name, expectedRevision, expectedGeneration),
+  mcpSetEnabled: (requestID: string, name: string, enabled: boolean, reuseConfiguredEnvironment: boolean, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.SetEnabled(requestID, name, enabled, reuseConfiguredEnvironment, expectedRevision, expectedGeneration),
+  mcpEnvironment: (name: string, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.Environment(name, expectedRevision, expectedGeneration),
+  mcpSetEnvironment: (requestID: string, name: string, key: string, value: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string) =>
+    MCPService.SetEnvironment(requestID, name, key, value, expectedRevision, expectedGeneration, expectedEnvRevision),
+  mcpUnsetEnvironment: (requestID: string, name: string, key: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string) =>
+    MCPService.UnsetEnvironment(requestID, name, key, expectedRevision, expectedGeneration, expectedEnvRevision),
+  mcpPurgeEnvironment: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string, expectedEnvRevision: string) =>
+    MCPService.PurgeEnvironment(requestID, name, expectedRevision, expectedGeneration, expectedEnvRevision),
+  mcpReconnect: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.Reconnect(requestID, name, expectedRevision, expectedGeneration),
+  mcpAuthorizationStatus: (name: string) => MCPService.AuthorizationStatus(name),
+  mcpAuthorizationFlowStatus: (flowID: string) => MCPService.AuthorizationFlowStatus(flowID),
+  mcpAuthorize: (requestID: string, name: string, callbackID: string, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.Authorize(requestID, name, callbackID, expectedRevision, expectedGeneration),
+  mcpClearAuthorization: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string) =>
+    MCPService.ClearAuthorization(requestID, name, expectedRevision, expectedGeneration),
+  mcpOperationStatus: (requestID: string) => MCPService.OperationStatus(requestID),
   manifest: () => ContractService.Manifest(),
   negotiate: (domains: Domain[] = []) =>
     ContractService.Negotiate({

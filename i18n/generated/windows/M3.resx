@@ -1231,6 +1231,447 @@
   <data name="execution.waiting_hint" xml:space="preserve">
     <value>This call is waiting for user input.</value>
   </data>
+  <data name="mcp.add_server" xml:space="preserve">
+    <value>Add server</value>
+  </data>
+  <data name="mcp.advanced" xml:space="preserve">
+    <value>Advanced settings</value>
+  </data>
+  <data name="mcp.args" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="mcp.args_protected" xml:space="preserve">
+    <value>Protected arguments</value>
+  </data>
+  <data name="mcp.args_protected_hint" xml:space="preserve">
+    <value>Saved arguments may contain credentials. Keep them unchanged or replace the whole argument list.</value>
+  </data>
+  <data name="mcp.authorization_state" xml:space="preserve">
+    <value>Authorization status</value>
+  </data>
+  <data name="mcp.back_to_servers" xml:space="preserve">
+    <value>Back to servers</value>
+  </data>
+  <data name="mcp.cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="mcp.child_env" xml:space="preserve">
+    <value>Child environment → host environment</value>
+  </data>
+  <data name="mcp.child_env_hint" xml:space="preserve">
+    <value>One binding per line as CHILD_ENV=HOST_ENV.</value>
+  </data>
+  <data name="mcp.choose_callback" xml:space="preserve">
+    <value>Choose how the provider returns to AgentDock</value>
+  </data>
+  <data name="mcp.clear_authorization" xml:space="preserve">
+    <value>Clear local authorization</value>
+  </data>
+  <data name="mcp.clear_authorization_hint" xml:space="preserve">
+    <value>This removes AgentDock&#39;s local grant and closes the connection. It does not claim to revoke consent at the remote provider.</value>
+  </data>
+  <data name="mcp.command" xml:space="preserve">
+    <value>Executable / command</value>
+  </data>
+  <data name="mcp.configuration" xml:space="preserve">
+    <value>Connection configuration</value>
+  </data>
+  <data name="mcp.configured" xml:space="preserve">
+    <value>Configured</value>
+  </data>
+  <data name="mcp.confirm_clear_authorization" xml:space="preserve">
+    <value>Clear AgentDock&#39;s local authorization for this server?</value>
+  </data>
+  <data name="mcp.confirm_disable" xml:space="preserve">
+    <value>Disable this MCP server and close its current connection?</value>
+  </data>
+  <data name="mcp.confirm_enable" xml:space="preserve">
+    <value>Enable this MCP server?</value>
+  </data>
+  <data name="mcp.confirm_enable_hint" xml:space="preserve">
+    <value>Enabling can connect to a remote endpoint or allow a local process to start when the server is used.</value>
+  </data>
+  <data name="mcp.confirm_enable_reuse" xml:space="preserve">
+    <value>This server has saved scoped environment values. Enable it and explicitly reuse those configured values?</value>
+  </data>
+  <data name="mcp.confirm_purge_environment" xml:space="preserve">
+    <value>Remove all saved values for this MCP server?</value>
+  </data>
+  <data name="mcp.confirm_reconnect" xml:space="preserve">
+    <value>Reconnect this MCP server and rediscover its tools?</value>
+  </data>
+  <data name="mcp.confirm_remove" xml:space="preserve">
+    <value>Remove this MCP server?</value>
+  </data>
+  <data name="mcp.confirm_remove_hint" xml:space="preserve">
+    <value>This unregisters the server and clears its local OAuth grant. Saved server-scoped environment values are retained unless you purge them separately.</value>
+  </data>
+  <data name="mcp.confirm_unset" xml:space="preserve">
+    <value>Remove the saved value for {key}?</value>
+  </data>
+  <data name="mcp.connection_title" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="mcp.create_disabled_hint" xml:space="preserve">
+    <value>New servers are saved disabled. Review credentials and settings, then enable explicitly.</value>
+  </data>
+  <data name="mcp.cwd" xml:space="preserve">
+    <value>Working directory</value>
+  </data>
+  <data name="mcp.default_value" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="mcp.description" xml:space="preserve">
+    <value>Description</value>
+  </data>
+  <data name="mcp.detail_title" xml:space="preserve">
+    <value>Server details</value>
+  </data>
+  <data name="mcp.disable" xml:space="preserve">
+    <value>Disable</value>
+  </data>
+  <data name="mcp.disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="mcp.edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="mcp.edit_server" xml:space="preserve">
+    <value>Edit server</value>
+  </data>
+  <data name="mcp.empty_plugin" xml:space="preserve">
+    <value>No plugin-provided MCP servers are currently registered.</value>
+  </data>
+  <data name="mcp.empty_standalone" xml:space="preserve">
+    <value>No standalone MCP servers are configured.</value>
+  </data>
+  <data name="mcp.enable" xml:space="preserve">
+    <value>Enable</value>
+  </data>
+  <data name="mcp.enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="mcp.endpoint" xml:space="preserve">
+    <value>MCP endpoint</value>
+  </data>
+  <data name="mcp.endpoint_hint" xml:space="preserve">
+    <value>Remote endpoints must use HTTPS unless they are loopback addresses. Query strings are not accepted here.</value>
+  </data>
+  <data name="mcp.endpoint_protected" xml:space="preserve">
+    <value>Protected endpoint</value>
+  </data>
+  <data name="mcp.endpoint_protected_hint" xml:space="preserve">
+    <value>The saved endpoint contains protected information. Keep it unchanged or replace it with a new safe endpoint.</value>
+  </data>
+  <data name="mcp.environment_empty" xml:space="preserve">
+    <value>No server-scoped values are configured.</value>
+  </data>
+  <data name="mcp.environment_hint" xml:space="preserve">
+    <value>Saved values are write-only. This view shows only key names and whether a value is configured.</value>
+  </data>
+  <data name="mcp.environment_key" xml:space="preserve">
+    <value>Environment key</value>
+  </data>
+  <data name="mcp.environment_reuse_required" xml:space="preserve">
+    <value>Saved scoped values exist. Enabling requires explicit confirmation to reuse them.</value>
+  </data>
+  <data name="mcp.environment_title" xml:space="preserve">
+    <value>Server-scoped environment</value>
+  </data>
+  <data name="mcp.environment_value" xml:space="preserve">
+    <value>New value</value>
+  </data>
+  <data name="mcp.environment_write_only" xml:space="preserve">
+    <value>The saved value cannot be revealed later. Enter a new value to replace it.</value>
+  </data>
+  <data name="mcp.header_env" xml:space="preserve">
+    <value>HTTP header → host environment</value>
+  </data>
+  <data name="mcp.header_env_hint" xml:space="preserve">
+    <value>One binding per line as Header=HOST_ENV. Values are read from the host environment and are never shown here.</value>
+  </data>
+  <data name="mcp.intro" xml:space="preserve">
+    <value>Manage standalone MCP servers and inspect MCP servers provided by plugins. Configuration and credentials stay under Core authority.</value>
+  </data>
+  <data name="mcp.known_tools" xml:space="preserve">
+    <value>Known tools</value>
+  </data>
+  <data name="mcp.last_observed" xml:space="preserve">
+    <value>Last observed</value>
+  </data>
+  <data name="mcp.loading" xml:space="preserve">
+    <value>Loading MCP state…</value>
+  </data>
+  <data name="mcp.missing" xml:space="preserve">
+    <value>Missing</value>
+  </data>
+  <data name="mcp.mutation_error" xml:space="preserve">
+    <value>The MCP operation could not be completed. Review the refreshed state before trying again.</value>
+  </data>
+  <data name="mcp.name" xml:space="preserve">
+    <value>Server name</value>
+  </data>
+  <data name="mcp.name_hint" xml:space="preserve">
+    <value>Use a stable name with letters, numbers, dots, hyphens or underscores.</value>
+  </data>
+  <data name="mcp.name_immutable" xml:space="preserve">
+    <value>Server names cannot be changed after creation.</value>
+  </data>
+  <data name="mcp.never_observed" xml:space="preserve">
+    <value>Not observed yet</value>
+  </data>
+  <data name="mcp.oauth_hint" xml:space="preserve">
+    <value>OAuth sign-in is available for supported remote MCP servers. AgentDock opens the provider page using the native desktop browser handoff.</value>
+  </data>
+  <data name="mcp.oauth_reconnect_pending" xml:space="preserve">
+    <value>Authorization completed. Reconnect and rediscover tools to make the server available.</value>
+  </data>
+  <data name="mcp.oauth_status_auth_required" xml:space="preserve">
+    <value>Sign-in required</value>
+  </data>
+  <data name="mcp.oauth_status_authorized" xml:space="preserve">
+    <value>Authorized</value>
+  </data>
+  <data name="mcp.oauth_status_authorizing" xml:space="preserve">
+    <value>Signing in</value>
+  </data>
+  <data name="mcp.oauth_status_callback_received" xml:space="preserve">
+    <value>Callback received</value>
+  </data>
+  <data name="mcp.oauth_status_cancelled" xml:space="preserve">
+    <value>Authorization cancelled</value>
+  </data>
+  <data name="mcp.oauth_status_denied" xml:space="preserve">
+    <value>Authorization denied</value>
+  </data>
+  <data name="mcp.oauth_status_expired" xml:space="preserve">
+    <value>Authorization expired</value>
+  </data>
+  <data name="mcp.oauth_status_failed" xml:space="preserve">
+    <value>Authorization failed</value>
+  </data>
+  <data name="mcp.oauth_status_finishing" xml:space="preserve">
+    <value>Finishing sign-in</value>
+  </data>
+  <data name="mcp.oauth_status_not_applicable" xml:space="preserve">
+    <value>Not applicable</value>
+  </data>
+  <data name="mcp.oauth_status_unauthorized" xml:space="preserve">
+    <value>Not signed in</value>
+  </data>
+  <data name="mcp.oauth_status_unknown" xml:space="preserve">
+    <value>Authorization status unavailable</value>
+  </data>
+  <data name="mcp.oauth_title" xml:space="preserve">
+    <value>Authorization</value>
+  </data>
+  <data name="mcp.outcome_unknown" xml:space="preserve">
+    <value>The operation result is unknown. AgentDock will reconcile by request ID before another mutation.</value>
+  </data>
+  <data name="mcp.partial_title" xml:space="preserve">
+    <value>Configuration saved; runtime recovery is still required</value>
+  </data>
+  <data name="mcp.plugin_hint" xml:space="preserve">
+    <value>These servers are shown for visibility only. Manage their configuration and lifecycle from Plugin Management.</value>
+  </data>
+  <data name="mcp.plugin_owner" xml:space="preserve">
+    <value>Plugin: {name}</value>
+  </data>
+  <data name="mcp.plugin_title" xml:space="preserve">
+    <value>Provided by plugins</value>
+  </data>
+  <data name="mcp.protected_value" xml:space="preserve">
+    <value>Protected</value>
+  </data>
+  <data name="mcp.protocol_auto" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="mcp.protocol_pin" xml:space="preserve">
+    <value>Protocol pin</value>
+  </data>
+  <data name="mcp.protocol_version" xml:space="preserve">
+    <value>Protocol version</value>
+  </data>
+  <data name="mcp.purge_environment" xml:space="preserve">
+    <value>Purge all scoped values</value>
+  </data>
+  <data name="mcp.purge_environment_warning" xml:space="preserve">
+    <value>This cannot be undone. The server configuration itself will remain.</value>
+  </data>
+  <data name="mcp.read_error" xml:space="preserve">
+    <value>MCP state could not be loaded.</value>
+  </data>
+  <data name="mcp.read_only_plugin" xml:space="preserve">
+    <value>Managed by plugin</value>
+  </data>
+  <data name="mcp.reconnect" xml:space="preserve">
+    <value>Reconnect and rediscover tools</value>
+  </data>
+  <data name="mcp.reconnect_hint" xml:space="preserve">
+    <value>This closes the existing client and connects again. A local stdio server may start a process.</value>
+  </data>
+  <data name="mcp.reconnect_required" xml:space="preserve">
+    <value>Reconnect is required for the new configuration to take effect.</value>
+  </data>
+  <data name="mcp.reload_status" xml:space="preserve">
+    <value>Reload status</value>
+  </data>
+  <data name="mcp.remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="mcp.remove_retains_environment" xml:space="preserve">
+    <value>Removing a server keeps its scoped values by default. Purge them separately if they should not be reused.</value>
+  </data>
+  <data name="mcp.replace_args" xml:space="preserve">
+    <value>Replace arguments</value>
+  </data>
+  <data name="mcp.replace_endpoint" xml:space="preserve">
+    <value>Replace endpoint</value>
+  </data>
+  <data name="mcp.replace_value" xml:space="preserve">
+    <value>Replace value</value>
+  </data>
+  <data name="mcp.runtime_state" xml:space="preserve">
+    <value>Runtime status</value>
+  </data>
+  <data name="mcp.save" xml:space="preserve">
+    <value>Save server</value>
+  </data>
+  <data name="mcp.save_value" xml:space="preserve">
+    <value>Save value</value>
+  </data>
+  <data name="mcp.select_server" xml:space="preserve">
+    <value>Select a server to inspect its configuration and status.</value>
+  </data>
+  <data name="mcp.sign_in" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  <data name="mcp.source" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="mcp.source_plugin" xml:space="preserve">
+    <value>Plugin</value>
+  </data>
+  <data name="mcp.source_standalone" xml:space="preserve">
+    <value>Standalone</value>
+  </data>
+  <data name="mcp.stale_hint" xml:space="preserve">
+    <value>Core state is unavailable or changed while this page was open. Mutations are disabled until a fresh snapshot is loaded.</value>
+  </data>
+  <data name="mcp.stale_title" xml:space="preserve">
+    <value>Last known MCP state</value>
+  </data>
+  <data name="mcp.standalone_hint" xml:space="preserve">
+    <value>Servers configured directly in AgentDock Next.</value>
+  </data>
+  <data name="mcp.standalone_title" xml:space="preserve">
+    <value>Standalone servers</value>
+  </data>
+  <data name="mcp.status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="mcp.status_available" xml:space="preserve">
+    <value>Available</value>
+  </data>
+  <data name="mcp.status_disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="mcp.status_needs_attention" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
+  <data name="mcp.status_not_connected" xml:space="preserve">
+    <value>Not connected yet</value>
+  </data>
+  <data name="mcp.status_sign_in_required" xml:space="preserve">
+    <value>Sign-in required</value>
+  </data>
+  <data name="mcp.status_signing_in" xml:space="preserve">
+    <value>Signing in</value>
+  </data>
+  <data name="mcp.status_status_unavailable" xml:space="preserve">
+    <value>Status unavailable</value>
+  </data>
+  <data name="mcp.stdio_warning" xml:space="preserve">
+    <value>This starts a local process with your current user permissions. Review the executable before enabling or reconnecting.</value>
+  </data>
+  <data name="mcp.summary_attention" xml:space="preserve">
+    <value>{count, number} need attention</value>
+  </data>
+  <data name="mcp.summary_auth_required" xml:space="preserve">
+    <value>{count, number} need sign-in</value>
+  </data>
+  <data name="mcp.summary_available" xml:space="preserve">
+    <value>{count, number} available</value>
+  </data>
+  <data name="mcp.summary_plugin" xml:space="preserve">
+    <value>{count, number} plugin-provided</value>
+  </data>
+  <data name="mcp.summary_standalone" xml:space="preserve">
+    <value>{count, number} standalone</value>
+  </data>
+  <data name="mcp.timeout" xml:space="preserve">
+    <value>Request timeout (ms)</value>
+  </data>
+  <data name="mcp.title" xml:space="preserve">
+    <value>MCP Management</value>
+  </data>
+  <data name="mcp.tool_count" xml:space="preserve">
+    <value>{count, number} known tools</value>
+  </data>
+  <data name="mcp.tools_empty" xml:space="preserve">
+    <value>The most recent discovery returned zero tools.</value>
+  </data>
+  <data name="mcp.tools_unknown" xml:space="preserve">
+    <value>Tools have not been discovered yet.</value>
+  </data>
+  <data name="mcp.transport" xml:space="preserve">
+    <value>Transport</value>
+  </data>
+  <data name="mcp.transport_http" xml:space="preserve">
+    <value>Remote HTTP</value>
+  </data>
+  <data name="mcp.transport_label" xml:space="preserve">
+    <value>Transport</value>
+  </data>
+  <data name="mcp.transport_stdio" xml:space="preserve">
+    <value>Local process (stdio)</value>
+  </data>
+  <data name="mcp.unset" xml:space="preserve">
+    <value>Remove value</value>
+  </data>
+  <data name="mcp.validation_args_secret" xml:space="preserve">
+    <value>Move credential-like arguments to environment bindings.</value>
+  </data>
+  <data name="mcp.validation_command" xml:space="preserve">
+    <value>Enter the executable or command.</value>
+  </data>
+  <data name="mcp.validation_cwd" xml:space="preserve">
+    <value>The working directory must be an absolute path.</value>
+  </data>
+  <data name="mcp.validation_description" xml:space="preserve">
+    <value>Enter a description.</value>
+  </data>
+  <data name="mcp.validation_name" xml:space="preserve">
+    <value>Enter a valid server name.</value>
+  </data>
+  <data name="mcp.validation_timeout" xml:space="preserve">
+    <value>Timeout must be between 1 and 300000 ms.</value>
+  </data>
+  <data name="mcp.validation_transport" xml:space="preserve">
+    <value>Choose Remote HTTP or Local process.</value>
+  </data>
+  <data name="mcp.validation_url" xml:space="preserve">
+    <value>Enter a valid absolute MCP endpoint.</value>
+  </data>
+  <data name="mcp.validation_url_https" xml:space="preserve">
+    <value>Non-loopback MCP endpoints must use HTTPS.</value>
+  </data>
+  <data name="mcp.validation_url_protocol" xml:space="preserve">
+    <value>The endpoint must use HTTP or HTTPS.</value>
+  </data>
+  <data name="mcp.validation_url_sensitive" xml:space="preserve">
+    <value>User info, query strings and fragments are not accepted in the Shared editor.</value>
+  </data>
   <data name="nav.developer" xml:space="preserve">
     <value>Developer / Architecture</value>
   </data>

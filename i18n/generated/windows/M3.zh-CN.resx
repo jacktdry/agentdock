@@ -1231,6 +1231,447 @@
   <data name="execution.waiting_hint" xml:space="preserve">
     <value>此调用正在等待用户输入。</value>
   </data>
+  <data name="mcp.add_server" xml:space="preserve">
+    <value>添加 server</value>
+  </data>
+  <data name="mcp.advanced" xml:space="preserve">
+    <value>高级设置</value>
+  </data>
+  <data name="mcp.args" xml:space="preserve">
+    <value>参数</value>
+  </data>
+  <data name="mcp.args_protected" xml:space="preserve">
+    <value>受保护的参数</value>
+  </data>
+  <data name="mcp.args_protected_hint" xml:space="preserve">
+    <value>已保存参数可能包含凭据。可以保持不变，或完整替换参数列表。</value>
+  </data>
+  <data name="mcp.authorization_state" xml:space="preserve">
+    <value>授权状态</value>
+  </data>
+  <data name="mcp.back_to_servers" xml:space="preserve">
+    <value>返回 server 列表</value>
+  </data>
+  <data name="mcp.cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="mcp.child_env" xml:space="preserve">
+    <value>子进程环境变量 → 主机环境变量</value>
+  </data>
+  <data name="mcp.child_env_hint" xml:space="preserve">
+    <value>每行一项 CHILD_ENV=HOST_ENV。</value>
+  </data>
+  <data name="mcp.choose_callback" xml:space="preserve">
+    <value>选择 provider 返回 AgentDock 的方式</value>
+  </data>
+  <data name="mcp.clear_authorization" xml:space="preserve">
+    <value>清除本地授权</value>
+  </data>
+  <data name="mcp.clear_authorization_hint" xml:space="preserve">
+    <value>这会移除 AgentDock 本地 grant 并关闭连接，不代表已撤销远程 provider 的同意。</value>
+  </data>
+  <data name="mcp.command" xml:space="preserve">
+    <value>可执行文件／命令</value>
+  </data>
+  <data name="mcp.configuration" xml:space="preserve">
+    <value>连接配置</value>
+  </data>
+  <data name="mcp.configured" xml:space="preserve">
+    <value>已配置</value>
+  </data>
+  <data name="mcp.confirm_clear_authorization" xml:space="preserve">
+    <value>清除 AgentDock 对此 server 的本地授权？</value>
+  </data>
+  <data name="mcp.confirm_disable" xml:space="preserve">
+    <value>停用此 MCP server 并关闭当前连接？</value>
+  </data>
+  <data name="mcp.confirm_enable" xml:space="preserve">
+    <value>启用此 MCP server？</value>
+  </data>
+  <data name="mcp.confirm_enable_hint" xml:space="preserve">
+    <value>启用后可能连接远程 endpoint，或在 server 被使用时启动本地进程。</value>
+  </data>
+  <data name="mcp.confirm_enable_reuse" xml:space="preserve">
+    <value>此 server 已有保存的专用环境值。要启用并明确重用这些值吗？</value>
+  </data>
+  <data name="mcp.confirm_purge_environment" xml:space="preserve">
+    <value>移除此 MCP server 的所有已保存值？</value>
+  </data>
+  <data name="mcp.confirm_reconnect" xml:space="preserve">
+    <value>重新连接此 MCP server 并重新探索工具？</value>
+  </data>
+  <data name="mcp.confirm_remove" xml:space="preserve">
+    <value>移除此 MCP server？</value>
+  </data>
+  <data name="mcp.confirm_remove_hint" xml:space="preserve">
+    <value>这会取消注册 server 并清除本地 OAuth grant；server 专用环境值会保留，除非另行清除。</value>
+  </data>
+  <data name="mcp.confirm_unset" xml:space="preserve">
+    <value>移除 {key} 的已保存值？</value>
+  </data>
+  <data name="mcp.connection_title" xml:space="preserve">
+    <value>连接</value>
+  </data>
+  <data name="mcp.create_disabled_hint" xml:space="preserve">
+    <value>新 server 一律先以停用状态保存。检查配置与凭据后，再明确启用。</value>
+  </data>
+  <data name="mcp.cwd" xml:space="preserve">
+    <value>工作目录</value>
+  </data>
+  <data name="mcp.default_value" xml:space="preserve">
+    <value>默认</value>
+  </data>
+  <data name="mcp.description" xml:space="preserve">
+    <value>说明</value>
+  </data>
+  <data name="mcp.detail_title" xml:space="preserve">
+    <value>Server 详细信息</value>
+  </data>
+  <data name="mcp.disable" xml:space="preserve">
+    <value>停用</value>
+  </data>
+  <data name="mcp.disabled" xml:space="preserve">
+    <value>已停用</value>
+  </data>
+  <data name="mcp.edit" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="mcp.edit_server" xml:space="preserve">
+    <value>编辑 server</value>
+  </data>
+  <data name="mcp.empty_plugin" xml:space="preserve">
+    <value>目前没有 Plugin 提供的 MCP server。</value>
+  </data>
+  <data name="mcp.empty_standalone" xml:space="preserve">
+    <value>尚未配置任何独立 MCP server。</value>
+  </data>
+  <data name="mcp.enable" xml:space="preserve">
+    <value>启用</value>
+  </data>
+  <data name="mcp.enabled" xml:space="preserve">
+    <value>已启用</value>
+  </data>
+  <data name="mcp.endpoint" xml:space="preserve">
+    <value>MCP endpoint</value>
+  </data>
+  <data name="mcp.endpoint_hint" xml:space="preserve">
+    <value>除 loopback 地址外，远程 endpoint 必须使用 HTTPS；此界面不接受 query string。</value>
+  </data>
+  <data name="mcp.endpoint_protected" xml:space="preserve">
+    <value>受保护的 endpoint</value>
+  </data>
+  <data name="mcp.endpoint_protected_hint" xml:space="preserve">
+    <value>已保存的 endpoint 含受保护信息。可以保持不变，或输入新的安全 endpoint 完整替换。</value>
+  </data>
+  <data name="mcp.environment_empty" xml:space="preserve">
+    <value>目前没有 server 专用环境值。</value>
+  </data>
+  <data name="mcp.environment_hint" xml:space="preserve">
+    <value>已保存的值只能写入，不能回读；这里只显示 key 与是否已配置。</value>
+  </data>
+  <data name="mcp.environment_key" xml:space="preserve">
+    <value>环境变量 key</value>
+  </data>
+  <data name="mcp.environment_reuse_required" xml:space="preserve">
+    <value>已有保存的专用值；启用前必须明确确认重用。</value>
+  </data>
+  <data name="mcp.environment_title" xml:space="preserve">
+    <value>Server 专用环境值</value>
+  </data>
+  <data name="mcp.environment_value" xml:space="preserve">
+    <value>新值</value>
+  </data>
+  <data name="mcp.environment_write_only" xml:space="preserve">
+    <value>保存后无法再次显示原值；更新时请输入新的值。</value>
+  </data>
+  <data name="mcp.header_env" xml:space="preserve">
+    <value>HTTP header → 主机环境变量</value>
+  </data>
+  <data name="mcp.header_env_hint" xml:space="preserve">
+    <value>每行一项 Header=HOST_ENV。值从主机环境读取，不会显示在此界面。</value>
+  </data>
+  <data name="mcp.intro" xml:space="preserve">
+    <value>管理独立 MCP server，并查看由 Plugin 提供的 MCP server。配置与凭据仍由 Core 掌握权限。</value>
+  </data>
+  <data name="mcp.known_tools" xml:space="preserve">
+    <value>已知工具</value>
+  </data>
+  <data name="mcp.last_observed" xml:space="preserve">
+    <value>最后观察时间</value>
+  </data>
+  <data name="mcp.loading" xml:space="preserve">
+    <value>正在加载 MCP 状态…</value>
+  </data>
+  <data name="mcp.missing" xml:space="preserve">
+    <value>未配置</value>
+  </data>
+  <data name="mcp.mutation_error" xml:space="preserve">
+    <value>MCP 操作未完成。再次操作前请先检查重新加载后的状态。</value>
+  </data>
+  <data name="mcp.name" xml:space="preserve">
+    <value>Server 名称</value>
+  </data>
+  <data name="mcp.name_hint" xml:space="preserve">
+    <value>使用稳定名称，可包含字母、数字、句点、连字符或下划线。</value>
+  </data>
+  <data name="mcp.name_immutable" xml:space="preserve">
+    <value>创建后不能更改 server 名称。</value>
+  </data>
+  <data name="mcp.never_observed" xml:space="preserve">
+    <value>尚未观察</value>
+  </data>
+  <data name="mcp.oauth_hint" xml:space="preserve">
+    <value>支持的远程 MCP server 可使用 OAuth 登录。AgentDock 会通过原生桌面机制打开 provider 页面。</value>
+  </data>
+  <data name="mcp.oauth_reconnect_pending" xml:space="preserve">
+    <value>授权已完成。请重新连接并重新探索工具，让 server 变为可用状态。</value>
+  </data>
+  <data name="mcp.oauth_status_auth_required" xml:space="preserve">
+    <value>需要登录</value>
+  </data>
+  <data name="mcp.oauth_status_authorized" xml:space="preserve">
+    <value>已授权</value>
+  </data>
+  <data name="mcp.oauth_status_authorizing" xml:space="preserve">
+    <value>登录中</value>
+  </data>
+  <data name="mcp.oauth_status_callback_received" xml:space="preserve">
+    <value>已收到回调</value>
+  </data>
+  <data name="mcp.oauth_status_cancelled" xml:space="preserve">
+    <value>授权已取消</value>
+  </data>
+  <data name="mcp.oauth_status_denied" xml:space="preserve">
+    <value>授权被拒绝</value>
+  </data>
+  <data name="mcp.oauth_status_expired" xml:space="preserve">
+    <value>授权已过期</value>
+  </data>
+  <data name="mcp.oauth_status_failed" xml:space="preserve">
+    <value>授权失败</value>
+  </data>
+  <data name="mcp.oauth_status_finishing" xml:space="preserve">
+    <value>正在完成登录</value>
+  </data>
+  <data name="mcp.oauth_status_not_applicable" xml:space="preserve">
+    <value>不适用</value>
+  </data>
+  <data name="mcp.oauth_status_unauthorized" xml:space="preserve">
+    <value>尚未登录</value>
+  </data>
+  <data name="mcp.oauth_status_unknown" xml:space="preserve">
+    <value>无法获取授权状态</value>
+  </data>
+  <data name="mcp.oauth_title" xml:space="preserve">
+    <value>授权</value>
+  </data>
+  <data name="mcp.outcome_unknown" xml:space="preserve">
+    <value>操作结果未知。AgentDock 会先按 request ID 对账，再允许其他修改。</value>
+  </data>
+  <data name="mcp.partial_title" xml:space="preserve">
+    <value>配置已保存，但运行环境仍需要恢复</value>
+  </data>
+  <data name="mcp.plugin_hint" xml:space="preserve">
+    <value>此处仅供查看。配置与生命周期请到 Plugin Management 管理。</value>
+  </data>
+  <data name="mcp.plugin_owner" xml:space="preserve">
+    <value>Plugin：{name}</value>
+  </data>
+  <data name="mcp.plugin_title" xml:space="preserve">
+    <value>由 Plugin 提供</value>
+  </data>
+  <data name="mcp.protected_value" xml:space="preserve">
+    <value>受保护</value>
+  </data>
+  <data name="mcp.protocol_auto" xml:space="preserve">
+    <value>自动</value>
+  </data>
+  <data name="mcp.protocol_pin" xml:space="preserve">
+    <value>协议固定版本</value>
+  </data>
+  <data name="mcp.protocol_version" xml:space="preserve">
+    <value>协议版本</value>
+  </data>
+  <data name="mcp.purge_environment" xml:space="preserve">
+    <value>清除所有专用值</value>
+  </data>
+  <data name="mcp.purge_environment_warning" xml:space="preserve">
+    <value>此操作无法撤销；server 配置本身会保留。</value>
+  </data>
+  <data name="mcp.read_error" xml:space="preserve">
+    <value>无法加载 MCP 状态。</value>
+  </data>
+  <data name="mcp.read_only_plugin" xml:space="preserve">
+    <value>由 Plugin 管理</value>
+  </data>
+  <data name="mcp.reconnect" xml:space="preserve">
+    <value>重新连接并探索工具</value>
+  </data>
+  <data name="mcp.reconnect_hint" xml:space="preserve">
+    <value>这会关闭当前 client 后重新连接；本地 stdio server 可能会启动进程。</value>
+  </data>
+  <data name="mcp.reconnect_required" xml:space="preserve">
+    <value>新配置需要重新连接才会生效。</value>
+  </data>
+  <data name="mcp.reload_status" xml:space="preserve">
+    <value>重新加载状态</value>
+  </data>
+  <data name="mcp.remove" xml:space="preserve">
+    <value>移除</value>
+  </data>
+  <data name="mcp.remove_retains_environment" xml:space="preserve">
+    <value>移除 server 默认会保留专用环境值；如不希望日后重用，请另外清除。</value>
+  </data>
+  <data name="mcp.replace_args" xml:space="preserve">
+    <value>替换参数</value>
+  </data>
+  <data name="mcp.replace_endpoint" xml:space="preserve">
+    <value>替换 endpoint</value>
+  </data>
+  <data name="mcp.replace_value" xml:space="preserve">
+    <value>替换值</value>
+  </data>
+  <data name="mcp.runtime_state" xml:space="preserve">
+    <value>运行状态</value>
+  </data>
+  <data name="mcp.save" xml:space="preserve">
+    <value>保存 server</value>
+  </data>
+  <data name="mcp.save_value" xml:space="preserve">
+    <value>保存值</value>
+  </data>
+  <data name="mcp.select_server" xml:space="preserve">
+    <value>选择一个 server 以查看配置与状态。</value>
+  </data>
+  <data name="mcp.sign_in" xml:space="preserve">
+    <value>登录</value>
+  </data>
+  <data name="mcp.source" xml:space="preserve">
+    <value>来源</value>
+  </data>
+  <data name="mcp.source_plugin" xml:space="preserve">
+    <value>Plugin</value>
+  </data>
+  <data name="mcp.source_standalone" xml:space="preserve">
+    <value>独立</value>
+  </data>
+  <data name="mcp.stale_hint" xml:space="preserve">
+    <value>Core 状态当前不可用，或页面打开后状态已更改。重新获取最新快照前会停用修改操作。</value>
+  </data>
+  <data name="mcp.stale_title" xml:space="preserve">
+    <value>显示最后已知 MCP 状态</value>
+  </data>
+  <data name="mcp.standalone_hint" xml:space="preserve">
+    <value>直接在 AgentDock Next 中配置的 MCP server。</value>
+  </data>
+  <data name="mcp.standalone_title" xml:space="preserve">
+    <value>独立 server</value>
+  </data>
+  <data name="mcp.status" xml:space="preserve">
+    <value>状态</value>
+  </data>
+  <data name="mcp.status_available" xml:space="preserve">
+    <value>可用</value>
+  </data>
+  <data name="mcp.status_disabled" xml:space="preserve">
+    <value>已停用</value>
+  </data>
+  <data name="mcp.status_needs_attention" xml:space="preserve">
+    <value>需要处理</value>
+  </data>
+  <data name="mcp.status_not_connected" xml:space="preserve">
+    <value>尚未连接</value>
+  </data>
+  <data name="mcp.status_sign_in_required" xml:space="preserve">
+    <value>需要登录</value>
+  </data>
+  <data name="mcp.status_signing_in" xml:space="preserve">
+    <value>登录中</value>
+  </data>
+  <data name="mcp.status_status_unavailable" xml:space="preserve">
+    <value>无法获取状态</value>
+  </data>
+  <data name="mcp.stdio_warning" xml:space="preserve">
+    <value>这会以当前用户权限启动本地进程。启用或重新连接前请确认可执行文件来源。</value>
+  </data>
+  <data name="mcp.summary_attention" xml:space="preserve">
+    <value>{count, number} 个需要处理</value>
+  </data>
+  <data name="mcp.summary_auth_required" xml:space="preserve">
+    <value>{count, number} 个需要登录</value>
+  </data>
+  <data name="mcp.summary_available" xml:space="preserve">
+    <value>{count, number} 个可用</value>
+  </data>
+  <data name="mcp.summary_plugin" xml:space="preserve">
+    <value>{count, number} 个 Plugin 提供</value>
+  </data>
+  <data name="mcp.summary_standalone" xml:space="preserve">
+    <value>{count, number} 个独立 server</value>
+  </data>
+  <data name="mcp.timeout" xml:space="preserve">
+    <value>请求超时（毫秒）</value>
+  </data>
+  <data name="mcp.title" xml:space="preserve">
+    <value>MCP 管理</value>
+  </data>
+  <data name="mcp.tool_count" xml:space="preserve">
+    <value>{count, number} 个已知工具</value>
+  </data>
+  <data name="mcp.tools_empty" xml:space="preserve">
+    <value>最近一次探索返回 0 个工具。</value>
+  </data>
+  <data name="mcp.tools_unknown" xml:space="preserve">
+    <value>尚未探索工具。</value>
+  </data>
+  <data name="mcp.transport" xml:space="preserve">
+    <value>传输方式</value>
+  </data>
+  <data name="mcp.transport_http" xml:space="preserve">
+    <value>远程 HTTP</value>
+  </data>
+  <data name="mcp.transport_label" xml:space="preserve">
+    <value>传输方式</value>
+  </data>
+  <data name="mcp.transport_stdio" xml:space="preserve">
+    <value>本地进程（stdio）</value>
+  </data>
+  <data name="mcp.unset" xml:space="preserve">
+    <value>移除值</value>
+  </data>
+  <data name="mcp.validation_args_secret" xml:space="preserve">
+    <value>请将疑似凭据的参数移到环境变量 binding。</value>
+  </data>
+  <data name="mcp.validation_command" xml:space="preserve">
+    <value>请输入可执行文件或命令。</value>
+  </data>
+  <data name="mcp.validation_cwd" xml:space="preserve">
+    <value>工作目录必须是绝对路径。</value>
+  </data>
+  <data name="mcp.validation_description" xml:space="preserve">
+    <value>请输入说明。</value>
+  </data>
+  <data name="mcp.validation_name" xml:space="preserve">
+    <value>请输入有效的 server 名称。</value>
+  </data>
+  <data name="mcp.validation_timeout" xml:space="preserve">
+    <value>超时必须介于 1 到 300000 毫秒。</value>
+  </data>
+  <data name="mcp.validation_transport" xml:space="preserve">
+    <value>请选择远程 HTTP 或本地进程。</value>
+  </data>
+  <data name="mcp.validation_url" xml:space="preserve">
+    <value>请输入有效的绝对 MCP endpoint。</value>
+  </data>
+  <data name="mcp.validation_url_https" xml:space="preserve">
+    <value>非 loopback MCP endpoint 必须使用 HTTPS。</value>
+  </data>
+  <data name="mcp.validation_url_protocol" xml:space="preserve">
+    <value>Endpoint 必须使用 HTTP 或 HTTPS。</value>
+  </data>
+  <data name="mcp.validation_url_sensitive" xml:space="preserve">
+    <value>Shared 编辑器不接受用户信息、query string 或 fragment。</value>
+  </data>
   <data name="nav.developer" xml:space="preserve">
     <value>开发者／架构</value>
   </data>
