@@ -1,6 +1,6 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
-> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management 已完成 implementation + security hardening 到 review-ready，但 final independent re-review / Next live UAT 尚未完成。M9 仍須等待必要 parity + hardening integration review**
+> 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management 已於 2026-10-07 完成 final independent review、Next-only deployment / live UAT 並 closeout。下一個 domain 是 P6 Plugin Management；M9 仍須等待其餘必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。
 >
@@ -336,9 +336,9 @@ verify stable + Next side-by-side
   ↓
 P4 ACP Manager full parity ✅
   ↓
-P5 MCP Management ← **review-ready / final independent re-review + live UAT pending**
+P5 MCP Management ✅
   ↓
-P6 Plugin Management
+P6 Plugin Management ← **next**
   ↓
 P7 Nexus / startup / platform essentials
   ↓
@@ -409,11 +409,11 @@ Connector 建立仍屬 user-owned gate；本次 side-by-side closeout 由主 orc
 
 ### Wave 3 — Domain parity（高度可平行）
 
-P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成並部署。後續仍可用獨立 worktree / branch 推進，現在的順序為：
+P3 side-by-side validation 已通過；P4 ACP Manager 已於 2026-10-06 完成並部署；P5 MCP Management 已於 2026-10-07 完成 final independent review、Next-only live deployment / UAT 並 closeout。後續仍可用獨立 worktree / branch 推進，現在的順序為：
 
 - ~~ACP Manager~~ — **Complete**；
-- **MCP Management — review-ready / final independent re-review + live UAT pending**；
-- Plugin Management；
+- ~~MCP Management~~ — **Complete**；
+- **Plugin Management — next**；
 - Nexus / Platform Essentials；
 - Browser Broker UI。
 
@@ -488,7 +488,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager；P5 MCP Management 已到 review-ready，**先完成 final independent re-review + Next-only live UAT**，之後才接 Plugin Management → Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；**下一個 domain 是 Plugin Management**，之後依序為 Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 

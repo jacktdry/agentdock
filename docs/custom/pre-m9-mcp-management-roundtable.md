@@ -624,10 +624,43 @@ Verification：
 - repo-wide `go test ./cmd/... ./internal/...` 唯一失敗為既有 `internal/tool/command/session::TestStartCapturesFastCommandOutputRepeatedly` timing flaky；該 package 隨後 `-count=5` 全綠，且與 P5 MCP 修改無關；
 - i18n generator成功；strict checker仍是既有 Permission / ACP / Connection 24 筆，P5-owned paths為 0。
 
-Final independent re-review limitation：
+Final independent re-review limitation（此段為當時 checkpoint，已由下方 P5 closeout supersede）：
 
 - 新 Codex read-only reviewer在 2026-10-07 因 ACP usage quota 直接中止，未產出 verdict；
 - Antigravity / Claude read-only reviewer完成一輪程式讀取，但 run 未輸出 final verdict；要求補 verdict 時 AGY individual quota exhausted；
 - 因此目前只有已完成的第一輪 independent findings + 後續本地 defensive re-review / tests，**沒有宣稱 final independent PASS**。
 
-Gate decision：維持 **review-ready / live-UAT blocked**。在取得 final independent re-review 的 0 BLOCKER / 0 HIGH verdict 前，不 package/reinstall/restart AgentDock Next、不執行 P5 live UAT；stable AgentDock / Core 8765 / stable services完全不動。取得 PASS 後才進 Implementation order 的 E（Next-only package/live validation through stable `mac-dev`）。
+當時 gate decision：維持 **review-ready / live-UAT blocked**。在取得 final independent re-review 的 0 BLOCKER / 0 HIGH verdict 前，不 package/reinstall/restart AgentDock Next、不執行 P5 live UAT；stable AgentDock / Core 8765 / stable services完全不動。取得 PASS 後才進 Implementation order 的 E（Next-only package/live validation through stable `mac-dev`）。
+
+## 21. P5 closeout — 2026-10-07
+
+先前 review quota blocker 已解除，P5 現正式 **Complete**。
+
+Final independent review：
+
+- 使用 Antigravity ACP 的 **Gemini 3.1 Pro / High / Plan（read-only）**，範圍固定為 contract freeze `539fd7d7` 到 checkpoint `6c409b49`；
+- reviewer 直接檢查 Core / Desktop / OAuth / env / request-identity 實作，而不是只讀文件；重新跑 Shared frontend 14 files / 102 tests 與 targeted backend checks；
+- HMAC semantic binding、revision + generation incarnation fencing、env revision、plugin-owned read-only、passive-path zero side effects、OAuth epoch/origin、token confinement、explicit args presence、approval retry/idempotency 與 error sanitization 均重新驗證；
+- final verdict：**PASS — 0 BLOCKER / 0 HIGH**；reviewer 同時回報 0 MEDIUM / 0 LOW。
+
+Next-only package / deployment：
+
+- 從 `6c409b49` 建立 fresh arm64 Shared package；frontend production build通過，Core Skills / payload checksum通過；
+- App/Core/cloudflared/registrar 均為 arm64；ad-hoc recursive codesign與 Designated Requirement通過，ZIP / DMG驗證與 package verifier **8/8** 通過；
+- stable `mac-dev` 僅用 `install-next-shared.py` 原子替換 `~/Applications/AgentDock Next.app/Contents`，top-level app inode保留；舊 Contents依 installer recovery contract留在 private replacement path，不在 P5 cleanup中刪除；
+- bundle-local `AgentDockServiceRegistrar` 只重新註冊 `dev.dropabit.agentdock.next.core` / `dev.dropabit.agentdock.next.tunnel`；
+- stable Core PID `44832` 在整個 replacement / re-registration / GUI relaunch期間維持不變，仍監聽 `127.0.0.1:8765`；
+- Next Core由 PID `59181` 更新為 `11366`、Tunnel由 `53780` 更新為 `11602`，Next Core仍監聽 `127.0.0.1:8767`；
+- installed helper回報 commit `6c409b4987d3`；Next GUI由舊 PID `55131` 精確終止後重新啟動為 PID `21779`，沒有 global kill；
+- public protected-resource metadata仍指向 `https://mac-dev-next.dropabit.dev/mcp`，unauthenticated public `/mcp`仍回預期 401 Bearer challenge。
+
+P5 Desktop bridge live UAT：
+
+- 透過與 Shared UI 相同的 `desktopapi.MCPService` → local Core boundary 執行，不以 model-facing `mcp_manage` 代替 Desktop authority；
+- initial authoritative snapshot成功；暫時建立 disabled `p5-live-uat` stdio server，Inspect回 0 tools / disabled，證明 passive inspect未啟動測試 command；
+- environment snapshot與 write-only `P5_UAT_SECRET` set成功，回傳只有 key/configured state，未揭露 value；
+- 使用 stale generation 的 remove被 fail closed為 `MCP_SERVER_GENERATION_CONFLICT`；
+- env purge與正確 generation remove成功；final authoritative snapshot回到原本 server count，UAT server與 scoped env沒有殘留；
+- `macbook-air-m3` read-only connector validation回報 `AGENTDOCK_HOME=/Users/wei/.agentdock-next`、default dir `/Users/wei/AgentDock Next`、Codex / Antigravity profiles正常；`mcp_manage list`最後只看到原本 `memory` standalone server。
+
+P5 closeout不宣稱 release-native signed updater / visual GUI UAT完成；這些仍屬後續 release-candidate native UAT gate。P5 domain gate本身已通過，下一個 Wave 3 domain為 **Plugin Management**。
