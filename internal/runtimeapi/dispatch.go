@@ -13,6 +13,7 @@ import (
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
 	"github.com/uvwt/agentdock/internal/permission"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
+	toolplugin "github.com/uvwt/agentdock/internal/tool/plugin"
 )
 
 // MethodAllowed 返回指定 Runtime API 路径允许当前方法与否。
@@ -27,7 +28,7 @@ func MethodAllowed(method, path string) bool {
 		_, ok := runtimeTaskID(cleanPath)
 		return ok
 	}
-	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
+	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
 }
 
 func AllowHeader(path string) string {
@@ -35,7 +36,7 @@ func AllowHeader(path string) string {
 	if _, ok := runtimeTaskID(cleanPath); ok {
 		return "GET, DELETE"
 	}
-	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" {
+	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" {
 		return "GET, POST"
 	}
 	if cleanPath == "/internal/runtime/insertions" {
@@ -154,6 +155,24 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		default:
 			return nil, &app.ToolError{Code: "NOT_FOUND", Message: "runtime Skill API route not found", Category: "not_found"}
 		}
+	case path == "/internal/runtime/plugin/desktop":
+		desktop, ok := runtime.(PluginDesktopRuntime)
+		if !ok {
+			return nil, toolplugin.DesktopError("PLUGIN_CORE_UNAVAILABLE", "unavailable")
+		}
+		if method == http.MethodGet {
+			result, err := desktop.RuntimePluginDesktop(ctx)
+			return map[string]any(result), err
+		}
+		typed, err := toolplugin.DecodeDesktopRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(typed)
+		var args map[string]any
+		_ = json.Unmarshal(body, &args)
+		result, err := desktop.RuntimePluginDesktopManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/plugins":
 		result, err := runtime.RuntimePlugins(ctx)
 		return map[string]any(result), err

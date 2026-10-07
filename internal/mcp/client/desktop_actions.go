@@ -208,3 +208,37 @@ func (m *Manager) DesktopClearAuthorization(name, revision, generation string) e
 	// first, retaining the pinned state and Manager ownership transition lock.
 	return closeStateLocked(state)
 }
+
+// WithPluginEnvironmentScope pins standalone/owned registry ownership for a
+// Core-resolved Plugin component, including while the Plugin is disabled.
+// The callback may access scoped environment/OAuth storage, but must not
+// reenter registry or lifecycle methods on Manager.
+func (m *Manager) WithPluginEnvironmentScope(pluginName, runtimeName, storageKey string, write func() error) error {
+	m.registryMu.Lock()
+	defer m.registryMu.Unlock()
+	if err := m.ensureOpenLocked(); err != nil {
+		return err
+	}
+	if pluginName == "" || runtimeName == "" || storageKey == "" || write == nil {
+		return newError("MCP_CONFIG_INVALID", "Invalid Plugin environment scope", false, nil, nil)
+	}
+	return m.store.withSnapshotLocked(func(snapshot RegistrySnapshot) error {
+		for _, cfg := range snapshot.Servers {
+			if cfg.Name == runtimeName || cfg.Name == storageKey || cfg.StorageKey == storageKey {
+				return newError("MCP_SERVER_COLLISION", "Plugin environment scope conflicts with a standalone server", false, nil, nil)
+			}
+		}
+		m.mu.RLock()
+		collision := false
+		for _, cfg := range m.owned {
+			if (cfg.Name == runtimeName || cfg.StorageKey == storageKey) && (cfg.PluginName != pluginName || cfg.Name != runtimeName || cfg.StorageKey != storageKey) {
+				collision = true
+			}
+		}
+		m.mu.RUnlock()
+		if collision {
+			return newError("MCP_SERVER_COLLISION", "Plugin environment ownership changed", false, nil, nil)
+		}
+		return write()
+	})
+}

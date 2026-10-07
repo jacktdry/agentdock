@@ -72,6 +72,7 @@ type State struct {
 	Version        string         `json:"version"`
 	Description    string         `json:"description,omitempty"`
 	PackageDigest  string         `json:"package_digest"`
+	Generation     string         `json:"generation,omitempty"`
 	Provenance     *Provenance    `json:"provenance,omitempty"`
 	Enabled        bool           `json:"enabled"`
 	InstalledAt    time.Time      `json:"installed_at"`

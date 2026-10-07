@@ -31,6 +31,13 @@ type removalRecord struct {
 	RemovedState *State `json:"removed_state,omitempty"`
 }
 
+// RemovalStatus is the safe lifecycle projection used by passive management
+// snapshots. It deliberately omits retained storage keys and removed state.
+type RemovalStatus struct {
+	Name    string
+	Purging bool
+}
+
 const removalPhasePurging = "purging"
 
 func purgeOwnershipFromState(state State) PurgeOwnership {
@@ -112,13 +119,30 @@ func (s *Store) LoadRemovalOwnership(name string) (PurgeOwnership, error) {
 }
 
 func (s *Store) LoadRemovalRecord(name string) (removalRecord, error) {
+	return s.loadRemovalRecord(name, true)
+}
+
+// LoadRemovalRecordPassive never creates the removals directory. Passive
+// inventory reads must not mutate AgentDock state merely by being observed.
+func (s *Store) LoadRemovalRecordPassive(name string) (removalRecord, error) {
+	return s.loadRemovalRecord(name, false)
+}
+
+func (s *Store) loadRemovalRecord(name string, createRoot bool) (removalRecord, error) {
 	name, err := pluginNamePathSegment(name)
 	if err != nil {
 		return removalRecord{}, err
 	}
-	rootPath, err := s.removalRecordRoot()
-	if err != nil {
-		return removalRecord{}, err
+	rootPath := filepath.Join(s.stateRoot, "removals")
+	if createRoot {
+		rootPath, err = s.removalRecordRoot()
+		if err != nil {
+			return removalRecord{}, err
+		}
+	} else if info, statErr := os.Lstat(rootPath); statErr != nil {
+		return removalRecord{}, statErr
+	} else if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return removalRecord{}, errors.New("Plugin removal record root is not a regular directory")
 	}
 	root, err := os.OpenRoot(rootPath)
 	if err != nil {
@@ -147,6 +171,36 @@ func (s *Store) LoadRemovalRecord(name string) (removalRecord, error) {
 		return removalRecord{}, err
 	}
 	return record, nil
+}
+
+// ListRemovalStatuses returns safe, passive lifecycle state. It does not
+// create the removals directory when no Plugin has ever been removed.
+func (s *Store) ListRemovalStatuses() ([]RemovalStatus, error) {
+	rootPath := filepath.Join(s.stateRoot, "removals")
+	entries, err := os.ReadDir(rootPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return []RemovalStatus{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	statuses := make([]RemovalStatus, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".json")
+		if ValidateName(name) != nil {
+			continue
+		}
+		record, err := s.LoadRemovalRecordPassive(name)
+		if err != nil {
+			return nil, err
+		}
+		statuses = append(statuses, RemovalStatus{Name: name, Purging: record.Phase == removalPhasePurging})
+	}
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	return statuses, nil
 }
 
 func (s *Store) DeleteRemovalOwnership(name string) error {

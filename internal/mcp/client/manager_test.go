@@ -1460,6 +1460,76 @@ func TestPluginOwnedAuthorizationReservationInvalidatedByOwnedTransition(t *test
 	}
 }
 
+func TestPluginOwnedGrantPreservedOnDisableButInvalidatedOnIdentityChange(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	const storageKey = "plugin.demo.remote.auth"
+	cfg := ServerConfig{
+		Name: "plugin.demo.remote", DisplayName: "Remote", Description: "Plugin remote MCP",
+		Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true,
+		StorageKey: storageKey, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+	}
+	if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	grantRoot := filepath.Join(home, "data", "mcp")
+	if err := os.MkdirAll(grantRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	grantPath := filepath.Join(grantRoot, "grant-"+storageKey+".json")
+	grantData, err := json.Marshal(oauthclient.Grant{
+		SchemaVersion: 1,
+		Endpoint:      cfg.URL,
+		AccessToken:   "saved-access-token",
+		UpdatedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(grantPath, grantData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.SetOwnedServersPreservingRemovedGrants(nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(grantPath); err != nil {
+		t.Fatalf("disable/remove-keep deleted saved grant: %v", err)
+	}
+
+	if err := m.SetOwnedServersPreservingRemovedGrants([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.URL = "https://example.invalid/changed"
+	if err := m.SetOwnedServersPreservingRemovedGrants([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	// Authorization invalidation retains a v2 epoch tombstone to fence stale
+	// OAuth callbacks; the grant must be cleared rather than unlinking the file.
+	data, err := os.ReadFile(grantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		SchemaVersion int                `json:"schema_version"`
+		Epoch         string             `json:"epoch"`
+		Grant         *oauthclient.Grant `json:"grant"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.SchemaVersion != 2 || envelope.Epoch == "" || envelope.Grant != nil {
+		t.Fatal("endpoint identity change retained stale grant or lost fencing")
+	}
+
+}
+
 func TestAuthorizeReservationInvalidatedByRegistryTransition(t *testing.T) {
 	for _, change := range []string{"endpoint", "remove", "recreate"} {
 		t.Run(change, func(t *testing.T) {
@@ -1536,5 +1606,51 @@ func TestAuthorizeReservationInvalidatedByRegistryTransition(t *testing.T) {
 				t.Fatal("stale grant survived")
 			}
 		})
+	}
+}
+
+func TestDesktopPluginEnvironmentScopePinsCrossManagerRegistryWriter(t *testing.T) {
+	home := t.TempDir()
+	first, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		finished <- first.WithPluginEnvironmentScope("demo", "plugin.demo.one", "plugin.demo.one", func() error { close(entered); <-release; return nil })
+	}()
+	<-entered
+	writer := make(chan error, 1)
+	go func() {
+		_, err := second.Add(ServerConfig{Name: "plugin.demo.one", Description: "Standalone fixture", Transport: TransportStdio, Command: "never-run", Enabled: false})
+		writer <- err
+	}()
+	select {
+	case err := <-writer:
+		close(release)
+		<-finished
+		t.Fatalf("registry writer crossed pinned Plugin env scope: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-writer; err != nil {
+		t.Fatal(err)
+	}
+	invoked := false
+	err = first.WithPluginEnvironmentScope("demo", "plugin.demo.one", "plugin.demo.one", func() error { invoked = true; return nil })
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_COLLISION")
+	if invoked {
+		t.Fatal("standalone alias reached Plugin environment callback")
 	}
 }

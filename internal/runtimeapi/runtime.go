@@ -86,3 +86,10 @@ func (r Request) queryValue(key string) string {
 	}
 	return r.Query.Get(key)
 }
+
+// PluginDesktopRuntime is an optional local Desktop authority, separate from
+// read-only Plugin APIs and model-facing plugin_manage.
+type PluginDesktopRuntime interface {
+	RuntimePluginDesktop(context.Context) (app.Result, error)
+	RuntimePluginDesktopManage(context.Context, map[string]any) (app.Result, error)
+}

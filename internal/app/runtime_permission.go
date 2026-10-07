@@ -572,6 +572,19 @@ func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOper
 		facts.Other = true
 		facts.OneShotEligible = true
 		facts.Reason = "runtime task deletion mutates durable task state"
+	case "runtime_plugin":
+		facts.Management = true
+		facts.MCP = true
+		switch facts.Action {
+		case "desktop_set_enabled", "desktop_remove_keep", "desktop_remove_purge":
+			// Plugin lifecycle can stop/start local-process MCP servers and
+			// remote MCP connections. Conservatively classify both effects.
+			facts.Network = true
+			facts.Commands = true
+		}
+		facts.Other = true
+		facts.OneShotEligible = true
+		facts.Reason = "Desktop Plugin management changes Plugin state or credentials"
 	case "runtime_mcp":
 		facts.Management = true
 		facts.MCP = true

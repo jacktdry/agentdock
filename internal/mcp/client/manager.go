@@ -109,6 +109,17 @@ func (m *Manager) ValidateOwnedServers(configs []ServerConfig) error {
 // SetOwnedServers replaces the in-memory Plugin-owned MCP overlay. Owned
 // servers reuse the normal MCP runtime but are never persisted to servers.json.
 func (m *Manager) SetOwnedServers(configs []ServerConfig) error {
+	return m.setOwnedServers(configs, false)
+}
+
+// SetOwnedServersPreservingRemovedGrants is the Desktop Plugin disable/keep
+// policy: capabilities stop, while saved authorizations remain. Changed endpoint
+// identities still invalidate grants; purge performs explicit owned cleanup.
+func (m *Manager) SetOwnedServersPreservingRemovedGrants(configs []ServerConfig) error {
+	return m.setOwnedServers(configs, true)
+}
+
+func (m *Manager) setOwnedServers(configs []ServerConfig, keepRemovedGrants bool) error {
 	m.registryMu.Lock()
 	defer m.registryMu.Unlock()
 	if err := m.ensureOpenLocked(); err != nil {
@@ -145,7 +156,16 @@ func (m *Manager) SetOwnedServers(configs []ServerConfig) error {
 	if err := closeServerStates(staleStates); err != nil {
 		return err
 	}
-	for _, storageKey := range pluginOAuthInvalidationKeys(previousOwned, owned) {
+	invalidationBasis := previousOwned
+	if keepRemovedGrants {
+		invalidationBasis = make(map[string]ServerConfig)
+		for name, before := range previousOwned {
+			if _, exists := owned[name]; exists {
+				invalidationBasis[name] = before
+			}
+		}
+	}
+	for _, storageKey := range pluginOAuthInvalidationKeys(invalidationBasis, owned) {
 		if err := m.oauth.RemoveGrant(storageKey); err != nil {
 			return fmt.Errorf("invalidate Plugin MCP OAuth authorization: %w", err)
 		}

@@ -66,6 +66,8 @@ type Runtime struct {
 	permissionCtl            *permission.ControlAuthority
 	tracing                  *observability.Tracing
 	lifecycleMu              sync.RWMutex
+	pluginDesktopOpsMu       sync.Mutex
+	pluginDesktopOps         map[string]desktopPluginOperationRecord
 	mcpDesktopOpsMu          sync.Mutex
 	mcpDesktopOps            map[string]desktopMCPOperationRecord
 	mcpDesktopFingerprintKey [32]byte

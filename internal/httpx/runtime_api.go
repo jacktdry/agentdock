@@ -35,6 +35,7 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 	mux.HandleFunc("/internal/runtime/capabilities", h)
 	mux.HandleFunc("/internal/runtime/skills", h)
 	mux.HandleFunc("/internal/runtime/skills/", h)
+	mux.HandleFunc("/internal/runtime/plugin/desktop", h)
 	mux.HandleFunc("/internal/runtime/plugins", h)
 	mux.HandleFunc("/internal/runtime/plugins/", h)
 	mux.HandleFunc("/internal/runtime/tasks", h)
@@ -47,7 +48,7 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 const runtimeMCPDesktopTimeout = 305 * time.Second
 
 func runtimeAPIRequestTimeout(cleanPath string) time.Duration {
-	if cleanPath == "/internal/runtime/mcp/desktop" {
+	if cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" {
 		return runtimeMCPDesktopTimeout
 	}
 	return 8 * time.Second
@@ -67,7 +68,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
 			return
 		}
-		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals" || cleanPath == "/internal/runtime/mcp/desktop") && !isDirectLoopbackRequest(r) {
+		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop") && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}
@@ -101,7 +102,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 
 func runtimeRequestBody(r *http.Request) ([]byte, error) {
 	cleanPath := strings.TrimSuffix(r.URL.Path, "/")
-	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/mcp/desktop" && cleanPath != "/internal/runtime/mcp/oauth/callback" && cleanPath != "/internal/runtime/evolve" && cleanPath != "/internal/runtime/insertions") {
+	if r.Method != http.MethodPost || (cleanPath != "/internal/runtime/mcp" && cleanPath != "/internal/runtime/plugin/desktop" && cleanPath != "/internal/runtime/mcp/desktop" && cleanPath != "/internal/runtime/mcp/oauth/callback" && cleanPath != "/internal/runtime/evolve" && cleanPath != "/internal/runtime/insertions") {
 		return nil, nil
 	}
 	return io.ReadAll(io.LimitReader(r.Body, 64*1024+1))

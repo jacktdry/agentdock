@@ -94,11 +94,19 @@ func (s *Service) reconcileMCPState(state pluginruntime.State) error {
 }
 
 func (s *Service) reconcileMCP(excludedPlugin, activationPlugin string, override *pluginruntime.Installed) error {
+	return s.reconcileMCPWithGrantPolicy(excludedPlugin, activationPlugin, override, false)
+}
+
+func (s *Service) reconcileMCPWithGrantPolicy(excludedPlugin, activationPlugin string, override *pluginruntime.Installed, keepRemovedGrants bool) error {
 	configs, leases, err := s.ownedMCPConfigs(excludedPlugin, activationPlugin, override)
 	if err != nil {
 		return err
 	}
-	if err := s.mcpClients.SetOwnedServers(configs); err != nil {
+	apply := s.mcpClients.SetOwnedServers
+	if keepRemovedGrants {
+		apply = s.mcpClients.SetOwnedServersPreservingRemovedGrants
+	}
+	if err := apply(configs); err != nil {
 		releasePluginLeases(leases)
 		return err
 	}
@@ -132,6 +140,15 @@ func releasePluginLeases(leases map[string]func()) {
 }
 
 func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, error) {
+	release, err := s.manager.Store().AcquireManagement(ctx)
+	if err != nil {
+		return nil, pluginToolError(err)
+	}
+	defer release()
+	return s.manage(ctx, request)
+}
+
+func (s *Service) manage(ctx context.Context, request ManageRequest) (Result, error) {
 	action := strings.ToLower(strings.TrimSpace(request.Action))
 	switch action {
 	case "inspect":

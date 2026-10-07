@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,6 +15,14 @@ import (
 	"sync"
 	"time"
 )
+
+func newPluginGeneration() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate Plugin incarnation: %w", err)
+	}
+	return hex.EncodeToString(raw[:]), nil
+}
 
 type Manager struct {
 	store *Store
@@ -141,7 +151,7 @@ func (m *Manager) EnsureDataDir(name string) (string, error) {
 }
 
 func (m *Manager) removalInProgress(name string) (bool, error) {
-	record, err := m.store.LoadRemovalRecord(strings.TrimSpace(name))
+	record, err := m.store.LoadRemovalRecordPassive(strings.TrimSpace(name))
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -208,9 +218,13 @@ func (m *Manager) installPreparedCandidate(ctx context.Context, stage string, pk
 		return ChangeResult{}, currentErr
 	}
 
+	generation, err := newPluginGeneration()
+	if err != nil {
+		return ChangeResult{}, pluginError("PLUGIN_INSTALL_FAILED", "install.generation", err)
+	}
 	state := State{
 		SchemaVersion: StateSchemaVersion, Name: pkg.Manifest.Name, Version: pkg.Manifest.Version, Description: pkg.Manifest.Description,
-		PackageDigest: pkg.PackageDigest, Provenance: pkg.Manifest.Provenance, Enabled: enabled, InstalledAt: time.Now().UTC(),
+		PackageDigest: pkg.PackageDigest, Generation: generation, Provenance: pkg.Manifest.Provenance, Enabled: enabled, InstalledAt: time.Now().UTC(),
 		Components: stateComponentIndex(pkg.Components), MCPStorageKeys: pluginMCPStorageKeys(pkg.Components.MCP),
 		Format: pkg.Format, Warnings: append([]string(nil), pkg.Warnings...),
 	}
@@ -303,11 +317,16 @@ func (m *Manager) updatePreparedCandidate(ctx context.Context, stage string, pkg
 		}
 	}
 
+	generation, err := newPluginGeneration()
+	if err != nil {
+		return ChangeResult{}, pluginError("PLUGIN_UPDATE_FAILED", "update.generation", err)
+	}
 	ownerID, err := newReaderOwner()
 	if err != nil {
 		return ChangeResult{}, pluginError("PLUGIN_UPDATE_FAILED", "update.owner", err)
 	}
 	candidate := current
+	candidate.Generation = generation
 	candidate.Version = pkg.Manifest.Version
 	candidate.Description = pkg.Manifest.Description
 	candidate.PackageDigest = pkg.PackageDigest
@@ -363,6 +382,12 @@ func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool) (Ch
 // if state persistence fails after runtime switched, it is called again with the
 // previous state before the lease is released.
 func (m *Manager) SetEnabledWithLifecycle(ctx context.Context, name string, enabled bool, reconcile func(State) error) (ChangeResult, error) {
+	return m.SetEnabledWithLifecycleChecked(ctx, name, enabled, reconcile, nil)
+}
+
+// SetEnabledWithLifecycleChecked validates Desktop state under the existing writer lease,
+// before any recovery or runtime side effect.
+func (m *Manager) SetEnabledWithLifecycleChecked(ctx context.Context, name string, enabled bool, reconcile func(State) error, check func() error) (ChangeResult, error) {
 	name = strings.TrimSpace(name)
 	if _, active := m.pendingActivation(name); active {
 		return ChangeResult{}, pluginError("PLUGIN_ACTIVATION_IN_PROGRESS", "enable", fmt.Errorf("Plugin %q is being activated", name))
@@ -372,6 +397,11 @@ func (m *Manager) SetEnabledWithLifecycle(ctx context.Context, name string, enab
 		return ChangeResult{}, err
 	}
 	defer release()
+	if check != nil {
+		if err := check(); err != nil {
+			return ChangeResult{}, err
+		}
+	}
 	if err := m.recoverActivationLocked(name); err != nil {
 		return ChangeResult{}, err
 	}
@@ -437,6 +467,12 @@ func (m *Manager) Remove(ctx context.Context, name, dataPolicy string) (ChangeRe
 // state 的清理放在同一个 Plugin writer lease 中。purge 先持久化 tombstone 再进入
 // 不可逆清理，因此失败后只允许向前重试，不会重新暴露为 installed。
 func (m *Manager) RemoveWithLifecycle(ctx context.Context, name, dataPolicy string, lifecycle RemoveLifecycle) (ChangeResult, error) {
+	return m.RemoveWithLifecycleChecked(ctx, name, dataPolicy, lifecycle, nil)
+}
+
+// RemoveWithLifecycleChecked validates Desktop state under the existing writer lease,
+// before any recovery or runtime side effect.
+func (m *Manager) RemoveWithLifecycleChecked(ctx context.Context, name, dataPolicy string, lifecycle RemoveLifecycle, check func() error) (ChangeResult, error) {
 	name = strings.TrimSpace(name)
 	dataPolicy = strings.ToLower(strings.TrimSpace(dataPolicy))
 	if dataPolicy != "keep" && dataPolicy != "purge" {
@@ -454,6 +490,11 @@ func (m *Manager) RemoveWithLifecycle(ctx context.Context, name, dataPolicy stri
 		return ChangeResult{}, err
 	}
 	defer release()
+	if check != nil {
+		if err := check(); err != nil {
+			return ChangeResult{}, err
+		}
+	}
 	if err := m.recoverActivationLocked(name); err != nil {
 		return ChangeResult{}, err
 	}
