@@ -143,12 +143,44 @@ func (m *Manager) SetOwnedServers(configs []ServerConfig) error {
 	if err := closeServerStates(staleStates); err != nil {
 		return err
 	}
+	for _, storageKey := range pluginOAuthInvalidationKeys(previousOwned, owned) {
+		if err := m.oauth.RemoveGrant(storageKey); err != nil {
+			return fmt.Errorf("invalidate Plugin MCP OAuth authorization: %w", err)
+		}
+	}
 	m.mu.Lock()
 	m.owned = owned
 	m.servers = merged
 	m.states = states
 	m.mu.Unlock()
 	return nil
+}
+
+func pluginOAuthInvalidationKeys(previous, next map[string]ServerConfig) []string {
+	keys := make(map[string]struct{})
+	for name, before := range previous {
+		after, exists := next[name]
+		if exists &&
+			before.Transport == after.Transport &&
+			before.URL == after.URL &&
+			before.StorageKey == after.StorageKey &&
+			before.PluginName == after.PluginName {
+			continue
+		}
+		storageKey := strings.TrimSpace(before.StorageKey)
+		if storageKey == "" {
+			storageKey = before.Name
+		}
+		if storageKey != "" {
+			keys[storageKey] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(keys))
+	for key := range keys {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func buildOwnedRegistry(standalone map[string]ServerConfig, configs []ServerConfig) (map[string]ServerConfig, map[string]ServerConfig, error) {
@@ -536,9 +568,6 @@ func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *
 		if !ok {
 			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, nil, nil)
 		}
-		if cfg.SourceType != "standalone" {
-			return newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, nil, nil)
-		}
 		if cfg.Generation == "" {
 			return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation unavailable", false, nil, nil)
 		}
@@ -551,7 +580,11 @@ func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *
 		if m.authorizeSnapshotHook != nil {
 			m.authorizeSnapshotHook()
 		}
-		reservation, err = m.oauth.ReserveAuthorization(cfg.Name, cfg.Name, cfg.URL, callbackID)
+		storageKey := cfg.StorageKey
+		if storageKey == "" {
+			storageKey = cfg.Name
+		}
+		reservation, err = m.oauth.ReserveAuthorization(cfg.Name, storageKey, cfg.URL, callbackID)
 		if err != nil {
 			return oauthFlowError(cfg.Name, err)
 		}

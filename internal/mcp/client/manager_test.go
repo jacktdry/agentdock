@@ -1337,6 +1337,129 @@ func TestAuthorizeReservationOrdersAcrossIndependentManagers(t *testing.T) {
 	}
 }
 
+func TestPluginOwnedAuthorizePreservesCoreOAuthPath(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		http.Error(w, "not oauth metadata", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	const runtimeName = "plugin.demo.remote"
+	const storageKey = "plugin.demo.remote.auth"
+	cfg := ServerConfig{
+		Name: runtimeName, DisplayName: "Remote", Description: "Plugin remote MCP",
+		Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true,
+		StorageKey: storageKey, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+	}
+	if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.Authorize(context.Background(), runtimeName, oauthclient.CallbackLocal)
+	requireMCPClientErrorCode(t, err, "MCP_AUTH_DISCOVERY_FAILED")
+	if requests.Load() == 0 {
+		t.Fatal("plugin-owned authorization did not reach OAuth discovery")
+	}
+	if _, err := os.Stat(filepath.Join(home, "data", "mcp", "grant-"+storageKey+".json")); err != nil {
+		t.Fatalf("plugin storage-key authorization reservation missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "data", "mcp", "grant-"+runtimeName+".json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime name was incorrectly used as OAuth storage key: %v", err)
+	}
+}
+
+func TestPluginOwnedAuthorizationReservationInvalidatedByOwnedTransition(t *testing.T) {
+	for _, change := range []string{"endpoint", "remove"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer m.Close()
+
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+
+			cfg := ServerConfig{
+				Name: "plugin.demo.remote", DisplayName: "Remote", Description: "Plugin remote MCP",
+				Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true,
+				StorageKey: "plugin.demo.remote.auth", SourceType: "plugin", PluginName: "demo.plugin",
+				PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+			}
+			if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+
+			reserved := make(chan struct{})
+			resume := make(chan struct{})
+			var reservedOnce, resumeOnce sync.Once
+			m.authorizeReservedHook = func() {
+				reservedOnce.Do(func() { close(reserved) })
+				<-resume
+			}
+			release := func() { resumeOnce.Do(func() { close(resume) }) }
+			defer release()
+
+			outcome := make(chan error, 1)
+			go func() {
+				result, err := m.Authorize(context.Background(), cfg.Name, oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					outcome <- errors.New("stale plugin flow created")
+					return
+				}
+				outcome <- err
+			}()
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("plugin authorization reservation did not finish")
+			}
+
+			switch change {
+			case "endpoint":
+				cfg.URL += "/new"
+				if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+					t.Fatal(err)
+				}
+			case "remove":
+				if err := m.SetOwnedServers(nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			release()
+
+			select {
+			case err := <-outcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("plugin authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated plugin reservation performed discovery")
+			}
+		})
+	}
+}
+
 func TestAuthorizeReservationInvalidatedByRegistryTransition(t *testing.T) {
 	for _, change := range []string{"endpoint", "remove", "recreate"} {
 		t.Run(change, func(t *testing.T) {
