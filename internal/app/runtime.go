@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -40,38 +41,39 @@ import (
 type Result = toolcore.Result
 
 type Runtime struct {
-	cfg             config.Config
-	toolNames       []string
-	toolValidators  map[string]*toolcontract.InputValidator
-	ws              *workspace.Workspace
-	skills          *toolskill.Service
-	command         *toolcommand.Service
-	files           *toolfile.Service
-	dynamicMCP      *toolmcp.Service
-	plugins         *toolplugin.Service
-	media           *toolmedia.Service
-	browser         *toolbrowser.Service
-	acpBrowser      *toolbrowser.ACPBridge
-	computer        *toolcomputer.Service
-	acpComputer     *toolcomputer.ACPBridge
-	recall          *toolrecall.Service
-	evolution       *evolution.Service
-	taskTools       *tooltask.Service
-	acp             *toolacp.Service
-	observer        *observability.Recorder
-	execution       *execution.Store
-	permissions     *permission.Store
-	admission       *permission.AdmissionGate
-	permissionCtl   *permission.ControlAuthority
-	tracing         *observability.Tracing
-	lifecycleMu     sync.RWMutex
-	mcpDesktopOpsMu sync.Mutex
-	mcpDesktopOps   map[string]desktopMCPOperationRecord
-	commandCtx      context.Context
-	commandCancel   context.CancelFunc
-	closing         bool
-	closeOnce       sync.Once
-	closeErr        error
+	cfg                      config.Config
+	toolNames                []string
+	toolValidators           map[string]*toolcontract.InputValidator
+	ws                       *workspace.Workspace
+	skills                   *toolskill.Service
+	command                  *toolcommand.Service
+	files                    *toolfile.Service
+	dynamicMCP               *toolmcp.Service
+	plugins                  *toolplugin.Service
+	media                    *toolmedia.Service
+	browser                  *toolbrowser.Service
+	acpBrowser               *toolbrowser.ACPBridge
+	computer                 *toolcomputer.Service
+	acpComputer              *toolcomputer.ACPBridge
+	recall                   *toolrecall.Service
+	evolution                *evolution.Service
+	taskTools                *tooltask.Service
+	acp                      *toolacp.Service
+	observer                 *observability.Recorder
+	execution                *execution.Store
+	permissions              *permission.Store
+	admission                *permission.AdmissionGate
+	permissionCtl            *permission.ControlAuthority
+	tracing                  *observability.Tracing
+	lifecycleMu              sync.RWMutex
+	mcpDesktopOpsMu          sync.Mutex
+	mcpDesktopOps            map[string]desktopMCPOperationRecord
+	mcpDesktopFingerprintKey [32]byte
+	commandCtx               context.Context
+	commandCancel            context.CancelFunc
+	closing                  bool
+	closeOnce                sync.Once
+	closeErr                 error
 }
 
 func NewRuntime(cfg config.Config) (*Runtime, error) {
@@ -122,15 +124,23 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		return nil, err
 	}
 	commandCtx, commandCancel := context.WithCancel(context.Background())
+	var mcpDesktopFingerprintKey [32]byte
+	if _, err := rand.Read(mcpDesktopFingerprintKey[:]); err != nil {
+		_ = mcpClients.Close()
+		commandCancel()
+		return nil, fmt.Errorf("initialize Desktop MCP request binding: %w", err)
+	}
 	runtime := &Runtime{
 		cfg: cfg, ws: ws, skills: skills,
 		toolNames: toolNames, toolValidators: toolValidators,
-		observer:      observability.NewRecorder(observability.DefaultRecentCapacity),
-		execution:     executionStore,
-		permissions:   permissionStore,
-		admission:     admissionGate,
-		permissionCtl: permissionControl,
-		commandCtx:    commandCtx, commandCancel: commandCancel,
+		observer:                 observability.NewRecorder(observability.DefaultRecentCapacity),
+		execution:                executionStore,
+		permissions:              permissionStore,
+		admission:                admissionGate,
+		permissionCtl:            permissionControl,
+		mcpDesktopFingerprintKey: mcpDesktopFingerprintKey,
+		commandCtx:               commandCtx,
+		commandCancel:            commandCancel,
 	}
 	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, func(ctx context.Context, skillRef string) (toolcommand.SkillLease, error) {
 		resolved, release, err := skills.Acquire(ctx, skillRef)

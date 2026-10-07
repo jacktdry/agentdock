@@ -310,12 +310,13 @@ func desktopAdmissionDescriptor(r toolmcp.DesktopManageRequest) map[string]any {
 		d["callback_id"] = r.CallbackID
 	case "desktop_create", "desktop_update":
 		d["transport"], d["protocol_version"], d["enabled"], d["timeout_ms"] = r.Transport, r.ProtocolVersion, r.Enabled, r.TimeoutMS
-		d["command"], d["cwd"] = r.Command, r.CWD
+		d["command_configured"] = strings.TrimSpace(r.Command) != ""
+		d["cwd_configured"] = strings.TrimSpace(r.CWD) != ""
 		d["header_env"], d["env_from_env"] = r.HeaderEnv, r.EnvFromEnv
 		d["args_configured"], d["args_count"] = r.Args != nil, len(r.Args)
 		d["endpoint_configured"] = r.URL != ""
 		if endpoint, err := url.Parse(r.URL); err == nil && endpoint.User == nil && (endpoint.Scheme == "https" || endpoint.Scheme == "http") {
-			d["endpoint_origin"] = endpoint.Scheme + "://" + endpoint.Host
+			d["endpoint_scheme"] = endpoint.Scheme
 		}
 	}
 	return d

@@ -364,11 +364,15 @@ func (r *Runtime) admitHostOperation(ctx context.Context, op permission.HostOper
 	}
 
 	facts := r.hostOperationFacts(ctx, op)
-	fingerprint, err := hostOperationFingerprint(tool, action, op.Payload)
-	if err != nil {
-		callErr := toolError("PERMISSION_STATE_ERROR", "AgentDock could not prepare host capability admission", "permission")
-		finishFailed(callErr)
-		return nil, callErr
+	fingerprint := strings.TrimSpace(op.PreparedFingerprint)
+	if fingerprint == "" {
+		var err error
+		fingerprint, err = hostOperationFingerprint(tool, action, op.Payload)
+		if err != nil {
+			callErr := toolError("PERMISSION_STATE_ERROR", "AgentDock could not prepare host capability admission", "permission")
+			finishFailed(callErr)
+			return nil, callErr
+		}
 	}
 	generations := map[string]string{}
 	if source == "acp_bridge" {
@@ -434,6 +438,17 @@ func (r *Runtime) runRuntimeManagementMutation(
 	payload any,
 	dispatch func() (Result, error),
 ) (Result, error) {
+	return r.runRuntimeManagementMutationBound(ctx, tool, action, payload, "", dispatch)
+}
+
+func (r *Runtime) runRuntimeManagementMutationBound(
+	ctx context.Context,
+	tool string,
+	action string,
+	payload any,
+	preparedFingerprint string,
+	dispatch func() (Result, error),
+) (Result, error) {
 	if dispatch == nil {
 		return nil, toolError("PERMISSION_STATE_ERROR", "runtime management dispatch is unavailable", "permission")
 	}
@@ -441,10 +456,11 @@ func (r *Runtime) runRuntimeManagementMutation(
 		ctx = context.Background()
 	}
 	finish, err := r.admitHostOperation(ctx, permission.HostOperation{
-		Tool:    tool,
-		Action:  action,
-		Source:  "internal",
-		Payload: payload,
+		Tool:                tool,
+		Action:              action,
+		Source:              "internal",
+		Payload:             payload,
+		PreparedFingerprint: strings.TrimSpace(preparedFingerprint),
 	})
 	if err != nil {
 		return nil, err

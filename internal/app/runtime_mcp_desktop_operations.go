@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -58,6 +60,17 @@ func validDesktopMCPRequestID(value string) bool {
 	return true
 }
 
+func (r *Runtime) desktopMCPRequestFingerprint(request toolmcp.DesktopManageRequest) (string, error) {
+	canonical, err := json.Marshal(request)
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, r.mcpDesktopFingerprintKey[:])
+	_, _ = mac.Write([]byte("agentdock-desktop-mcp-request-v1\x00"))
+	_, _ = mac.Write(canonical)
+	return "hmac-sha256:" + hex.EncodeToString(mac.Sum(nil)), nil
+}
+
 func (r *Runtime) runDesktopMCPMutation(ctx context.Context, request toolmcp.DesktopManageRequest, descriptor map[string]any, dispatch func() (Result, error)) (Result, error) {
 	requestID := strings.TrimSpace(request.RequestID)
 	if requestID == "" {
@@ -70,7 +83,7 @@ func (r *Runtime) runDesktopMCPMutation(ctx context.Context, request toolmcp.Des
 	if !validDesktopMCPRequestID(requestID) {
 		return nil, toolError("MCP_OPERATION_ID_INVALID", "Invalid Desktop MCP operation id", "validation")
 	}
-	fingerprint, err := hostOperationFingerprint("runtime_mcp", request.Action, descriptor)
+	fingerprint, err := r.desktopMCPRequestFingerprint(request)
 	if err != nil {
 		return nil, toolError("MCP_OPERATION_UNAVAILABLE", "Desktop MCP operation could not start", "operation")
 	}
@@ -79,7 +92,7 @@ func (r *Runtime) runDesktopMCPMutation(ctx context.Context, request toolmcp.Des
 		return replay, replayErr
 	}
 
-	result, runErr := r.runRuntimeManagementMutation(ctx, "runtime_mcp", request.Action, descriptor, dispatch)
+	result, runErr := r.runRuntimeManagementMutationBound(ctx, "runtime_mcp", request.Action, descriptor, fingerprint, dispatch)
 	outcome := desktopMCPOperationOutcome(result, runErr)
 	recordedResult := cloneDesktopMCPJournalResult(result)
 	if recordedResult == nil {
