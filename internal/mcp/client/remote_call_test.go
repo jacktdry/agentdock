@@ -114,7 +114,7 @@ func TestCallRemoteToolTimeoutCancellationAndSafeErrors(t *testing.T) {
 					}
 					w.Header().Set("Mcp-Session-Id", "one-shot")
 					writeRPCResult(t, w, request.ID, map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{}, "serverInfo": map[string]any{"name": "test", "version": "1"}})
-				case "notifications/initialized":
+				case "notifications/initialized", "notifications/cancelled":
 					w.WriteHeader(http.StatusAccepted)
 				case "tools/call":
 					if mode == "remote-error" {
