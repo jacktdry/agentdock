@@ -219,25 +219,32 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 }
 
 type runtimeMCPRequest struct {
-	Action          string            `json:"action"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description"`
-	Transport       string            `json:"transport"`
-	ProtocolVersion string            `json:"protocol_version"`
-	URL             string            `json:"url"`
-	Command         string            `json:"command"`
-	Args            []string          `json:"args"`
-	Cwd             string            `json:"cwd"`
-	HeaderEnv       map[string]string `json:"header_env"`
-	EnvFromEnv      map[string]string `json:"env_from_env"`
-	Enabled         *bool             `json:"enabled"`
-	TimeoutMS       int               `json:"timeout_ms"`
-	Key             string            `json:"key"`
-	Value           *string           `json:"value"`
-	CallbackID      string            `json:"callback_id"`
+	ExpectedRegistryRevision string            `json:"expected_registry_revision"`
+	ExpectedGeneration       string            `json:"expected_generation"`
+	ExpectedEnvRevision      string            `json:"expected_env_revision"`
+	Action                   string            `json:"action"`
+	Name                     string            `json:"name"`
+	Description              string            `json:"description"`
+	Transport                string            `json:"transport"`
+	ProtocolVersion          string            `json:"protocol_version"`
+	URL                      string            `json:"url"`
+	Command                  string            `json:"command"`
+	Args                     []string          `json:"args"`
+	Cwd                      string            `json:"cwd"`
+	HeaderEnv                map[string]string `json:"header_env"`
+	EnvFromEnv               map[string]string `json:"env_from_env"`
+	Enabled                  *bool             `json:"enabled"`
+	TimeoutMS                int               `json:"timeout_ms"`
+	Key                      string            `json:"key"`
+	Value                    *string           `json:"value"`
+	CallbackID               string            `json:"callback_id"`
 }
 
 var runtimeMCPManageActions = map[string]bool{
+	"desktop_snapshot": true, "desktop_inspect": true, "desktop_create": true, "desktop_update": true,
+	"desktop_remove": true, "desktop_set_enabled": true, "desktop_env_snapshot": true,
+	"desktop_env_set": true, "desktop_env_unset": true, "desktop_env_purge": true,
+	"desktop_reconnect": true, "desktop_auth_status": true, "desktop_authorize": true, "desktop_auth_clear": true,
 	"add": true, "remove": true, "enable": true, "disable": true,
 	"env_set": true, "env_unset": true, "env_list": true, "refresh": true,
 	"authorize": true, "auth_clear": true,
@@ -265,6 +272,15 @@ func decodeRuntimeMCPRequest(body []byte) (map[string]any, error) {
 		return nil, &app.ToolError{Code: "MCP_ACTION_UNSUPPORTED", Message: "dynamic MCP action is not available through the Runtime API", Category: "validation"}
 	}
 	args := map[string]any{"action": action}
+	if request.ExpectedRegistryRevision != "" {
+		args["expected_registry_revision"] = request.ExpectedRegistryRevision
+	}
+	if request.ExpectedGeneration != "" {
+		args["expected_generation"] = request.ExpectedGeneration
+	}
+	if request.ExpectedEnvRevision != "" {
+		args["expected_env_revision"] = request.ExpectedEnvRevision
+	}
 	// Runtime API 与模型工具最终进入同一份公共契约。只转发请求中真正提供的可选字段，
 	// 避免 Go 零值被解释成 schema 中有语义的空 enum 值或未声明允许的 null。
 	if request.Name != "" {

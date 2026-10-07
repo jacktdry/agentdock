@@ -20,8 +20,9 @@ import (
 
 type Manager struct {
 	registryMu            sync.Mutex
-	authorizeSnapshotHook func() // test checkpoint, while shared registry file lock is held
-	authorizeReservedHook func() // test checkpoint, after releasing registryMu
+	authorizeSnapshotHook func()                                     // test checkpoint, while shared registry file lock is held
+	authorizeReservedHook func()                                     // test checkpoint, after releasing registryMu
+	protocolClientHook    func(ServerConfig) (protocolClient, error) // test protocol creation checkpoint
 	closed                atomic.Bool
 	mu                    sync.RWMutex
 	store                 *store
@@ -34,6 +35,7 @@ type Manager struct {
 
 type serverState struct {
 	mu            sync.Mutex
+	generation    string // runtime incarnation, when explicitly reserved by Desktop reconnect
 	client        protocolClient
 	tools         map[string]Tool
 	lastError     string
@@ -524,6 +526,10 @@ func (m *Manager) Authorize(ctx context.Context, name, callbackID string) (oauth
 	if err != nil {
 		return oauthclient.BeginResult{}, err
 	}
+	return m.beginAuthorization(ctx, cfg, reservation)
+}
+
+func (m *Manager) beginAuthorization(ctx context.Context, cfg ServerConfig, reservation *oauthclient.AuthorizationReservation) (oauthclient.BeginResult, error) {
 	if m.authorizeReservedHook != nil {
 		m.authorizeReservedHook()
 	}
@@ -551,6 +557,10 @@ func (m *Manager) Authorize(ctx context.Context, name, callbackID string) (oauth
 // Reserve from authoritative persisted configuration while registry transitions
 // and ownership replacement are excluded. Network work belongs to BeginReserved.
 func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
+	return m.reserveAuthorizationExpected(name, callbackID, "", "")
+}
+
+func (m *Manager) reserveAuthorizationExpected(name, callbackID, revision, generation string) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
 	m.registryMu.Lock()
 	defer m.registryMu.Unlock()
 	if err := m.ensureOpenLocked(); err != nil {
@@ -567,6 +577,12 @@ func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *
 		cfg, ok = authoritative.Servers[strings.TrimSpace(name)]
 		if !ok {
 			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, nil, nil)
+		}
+		if revision != "" && revision != authoritative.Revision {
+			return newError("MCP_REGISTRY_CONFLICT", "MCP registry revision changed", false, nil, nil)
+		}
+		if generation != "" && generation != cfg.Generation {
+			return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation changed", false, nil, nil)
 		}
 		if cfg.Generation == "" {
 			return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation unavailable", false, nil, nil)
@@ -1093,6 +1109,9 @@ func (m *Manager) refreshStateLocked(ctx context.Context, cfg ServerConfig, stat
 }
 
 func (m *Manager) newProtocolClient(cfg ServerConfig) (protocolClient, error) {
+	if m.protocolClientHook != nil {
+		return m.protocolClientHook(cfg)
+	}
 	switch cfg.Transport {
 	case TransportStreamableHTTP:
 		storageKey := cfg.StorageKey

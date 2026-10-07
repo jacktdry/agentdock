@@ -18,7 +18,7 @@ func InputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolManage:
-		props["action"] = map[string]any{"type": "string", "description": "Dynamic MCP server or isolated environment action.", "enum": []string{"list", "inspect", "add", "remove", "enable", "disable", "env_set", "env_unset", "env_list", "refresh", "authorize", "auth_clear"}}
+		props["action"] = map[string]any{"type": "string", "description": "Dynamic MCP server or isolated environment action.", "enum": append([]string{"list", "inspect", "add", "remove", "enable", "disable", "env_set", "env_unset", "env_list", "refresh", "authorize", "auth_clear"}, desktopActions...)}
 		props["name"] = stringProp("Dynamic MCP server name. Use a stable short identifier such as figma or github.")
 		props["description"] = stringProp("Short capability description shown in agentdock_context.")
 		props["transport"] = map[string]any{"type": "string", "description": "MCP transport for action=add.", "enum": []string{"streamable_http", "stdio"}}
@@ -31,9 +31,12 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["env_from_env"] = map[string]any{"type": "object", "description": "Child process environment variable name to host environment variable name for stdio. Secret values are never stored in the MCP registry.", "additionalProperties": map[string]any{"type": "string"}}
 		props["key"] = stringProp("Environment variable name for env_set/env_unset.")
 		props["value"] = stringProp("Environment variable value for env_set. Secret values are never returned.")
-		props["enabled"] = boolProp("Enable the server after registration. Defaults to true.")
+		props["enabled"] = boolProp("Enable the server after registration. Legacy add defaults to true; desktop_create defaults to false.")
 		props["timeout_ms"] = boundedIntProp("Per-request timeout. Defaults to 30000 and is capped at 300000.", 1, 300000)
 		props["callback_id"] = map[string]any{"type": "string", "description": "Callback route for action=authorize when more than one route is available.", "enum": []string{"local", "agentdock", "nexus"}}
+		props["expected_registry_revision"] = stringProp("Authoritative registry revision required for Desktop create/update/remove/set_enabled.")
+		props["expected_generation"] = stringProp("Server generation required for Desktop update/remove/set_enabled; optional identity fence for other mutations.")
+		props["expected_env_revision"] = stringProp("Environment revision required for Desktop env_set/env_unset/env_purge.")
 		required = []string{"action"}
 	case ToolSearch:
 		props["query"] = stringProp("Capability or tool query.")
@@ -64,7 +67,9 @@ func OutputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolManage:
-		props["action"] = stringProp("Completed dynamic MCP management action.")
+		props["action"] = stringProp("Completed dynamic MCP management action. desktop_* results contain only protected config, local observations, binding names and configured-key metadata; no values, raw errors or schemas. Authorization URL is ephemeral explicit-flow output.")
+		props["registry_revision"] = stringProp("Authoritative registry revision.")
+		props["env_revision"] = stringProp("Protected environment revision.")
 		props["servers"] = arrayProp("Registered dynamic MCP server summaries.")
 		props["server"] = objectProp("Dynamic MCP server summary.")
 		props["config"] = objectProp("Dynamic MCP server configuration containing only non-secret values and environment variable names.")

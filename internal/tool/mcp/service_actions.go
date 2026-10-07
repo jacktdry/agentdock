@@ -16,6 +16,9 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	if action == "" {
 		action = "list"
 	}
+	if strings.HasPrefix(action, "desktop_") {
+		return s.desktopManage(ctx, action, request)
+	}
 	switch action {
 	case "list":
 		servers := s.mcpClients.List()
