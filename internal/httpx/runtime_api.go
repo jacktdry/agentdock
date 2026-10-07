@@ -58,7 +58,7 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
 			return
 		}
-		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals") && !isDirectLoopbackRequest(r) {
+		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals" || cleanPath == "/internal/runtime/mcp/desktop") && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}

@@ -73,11 +73,21 @@ func TestRuntimeMCPDesktopHTTPRouteReadsPOSTBody(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/desktop", nil),
 		httptest.NewRequest(http.MethodPost, "/internal/runtime/mcp/desktop", strings.NewReader("{\"action\":\"desktop_snapshot\"}")),
 	} {
+		request.RemoteAddr = "127.0.0.1:12345"
+		request.Host = "127.0.0.1:8765"
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "\"registry_revision\"") {
 			t.Fatalf("%s desktop snapshot status=%d body=%s", request.Method, response.Code, response.Body.String())
 		}
+	}
+
+	remote := httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/desktop", nil)
+	remote.RemoteAddr = "198.51.100.10:4567"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, remote)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "\"code\":\"LOCAL_ACCESS_REQUIRED\"") {
+		t.Fatalf("remote desktop route status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
