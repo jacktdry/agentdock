@@ -81,18 +81,24 @@ func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() {
-		t.Fatalf("args presence omitted=%v explicit=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided())
+	mixedCaseEmpty, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","Args":[],"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() || !mixedCaseEmpty.ArgsProvided() {
+		t.Fatalf("args presence omitted=%v explicit=%v mixed=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided(), mixedCaseEmpty.ArgsProvided())
 	}
 	omittedFingerprint, err := rt.desktopMCPRequestFingerprint(omitted)
 	if err != nil {
 		t.Fatal(err)
 	}
-	explicitFingerprint, err := rt.desktopMCPRequestFingerprint(explicitEmpty)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if omittedFingerprint == explicitFingerprint {
-		t.Fatal("omitted args (preserve) collided with explicit empty args (clear)")
+	for label, request := range map[string]toolmcp.DesktopManageRequest{"lowercase": explicitEmpty, "mixed-case": mixedCaseEmpty} {
+		explicitFingerprint, err := rt.desktopMCPRequestFingerprint(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if omittedFingerprint == explicitFingerprint {
+			t.Fatalf("omitted args (preserve) collided with %s explicit empty args (clear)", label)
+		}
 	}
 }

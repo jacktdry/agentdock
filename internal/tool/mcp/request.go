@@ -108,7 +108,12 @@ func DecodeDesktopRequest(body []byte) (DesktopManageRequest, error) {
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return invalid()
 	}
-	_, request.argsPresent = raw["args"]
+	for key := range raw {
+		if strings.EqualFold(key, "args") {
+			request.argsPresent = true
+			break
+		}
+	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return invalid()
