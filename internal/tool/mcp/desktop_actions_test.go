@@ -49,7 +49,8 @@ func desktopError(t *testing.T, s *Service, r DesktopManageRequest, code string)
 func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *testing.T) {
 	s, m := desktopService(t)
 	initial := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
-	r := DesktopManageRequest{Action: "desktop_create", Name: "local", Description: "Local", Transport: "stdio", Command: "never-run", ProtocolVersion: "2025-11-25", ExpectedRegistryRevision: initial["registry_revision"].(string)}
+	wantEnabled := true
+	r := DesktopManageRequest{Action: "desktop_create", Name: "local", Description: "Local", Transport: "stdio", Command: "never-run", ProtocolVersion: "2025-11-25", Enabled: &wantEnabled, ExpectedRegistryRevision: initial["registry_revision"].(string)}
 	created := desktopManage(t, s, r)
 	server := created["server"].(mcpclient.ProtectedServer)
 	if server.Enabled || server.ProtocolVersion != "2025-11-25" || created["persisted"] != true {
@@ -58,13 +59,14 @@ func TestDesktopRegistryActionsUseAtomicRevisionsAndPreserveProtectedFields(t *t
 	desktopError(t, s, r, "MCP_REGISTRY_CONFLICT")
 	r.Action = "desktop_update"
 	r.Description = "Edited"
+	r.Enabled = &wantEnabled
 	r.ExpectedRegistryRevision = created["registry_revision"].(string)
 	r.ExpectedGeneration = "stale"
 	desktopError(t, s, r, "MCP_SERVER_GENERATION_CONFLICT")
 	r.ExpectedGeneration = server.Generation
 	updated := desktopManage(t, s, r)
 	updatedServer := updated["server"].(mcpclient.ProtectedServer)
-	if updatedServer.Generation == server.Generation || updatedServer.Description != "Edited" {
+	if updatedServer.Generation == server.Generation || updatedServer.Description != "Edited" || updatedServer.Enabled {
 		t.Fatalf("update = %#v", updated)
 	}
 	// The primitive itself prevents rename even when tokens are valid.
@@ -134,6 +136,11 @@ func TestDesktopEnvironmentIsWriteOnlyAndErrorsAreProtected(t *testing.T) {
 	value := canary
 	snapshot := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_snapshot", Name: "local"})
 	set := desktopManage(t, s, DesktopManageRequest{Action: "desktop_env_set", Name: "local", Key: "KEY", Value: &value, ExpectedEnvRevision: snapshot["env_revision"].(string)})
+	inventory := desktopManage(t, s, DesktopManageRequest{Action: "desktop_snapshot"})
+	server := inventory["servers"].([]mcpclient.ProtectedServer)[0]
+	enabled := true
+	desktopError(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ExpectedRegistryRevision: inventory["registry_revision"].(string), ExpectedGeneration: server.Generation}, "MCP_RETAINED_ENV_CONFIRMATION_REQUIRED")
+	desktopManage(t, s, DesktopManageRequest{Action: "desktop_set_enabled", Name: "local", Enabled: &enabled, ReuseConfiguredEnvironment: true, ExpectedRegistryRevision: inventory["registry_revision"].(string), ExpectedGeneration: server.Generation})
 	desktopError(t, s, DesktopManageRequest{Action: "desktop_env_unset", Name: "local", Key: "KEY", ExpectedEnvRevision: snapshot["env_revision"].(string)}, "MCP_ENV_CONFLICT")
 	data, _ := json.Marshal(set)
 	if strings.Contains(string(data), canary) {

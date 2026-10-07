@@ -7,30 +7,35 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/envstore"
 )
 
 // ProtectedServer is a Core bridge projection, never a raw ServerConfig or
 // provider response. Unknown tool counts are distinct from a discovered zero.
 type ProtectedServer struct {
-	Name            string               `json:"name"`
-	DisplayName     string               `json:"display_name"`
-	Description     string               `json:"description"`
-	SourceType      string               `json:"source_type"`
-	PluginName      string               `json:"plugin_name,omitempty"`
-	Transport       string               `json:"transport"`
-	ProtocolVersion string               `json:"protocol_version,omitempty"`
-	URL             string               `json:"url,omitempty"`
-	URLProtected    bool                 `json:"url_protected,omitempty"`
-	Command         string               `json:"command,omitempty"`
-	Cwd             string               `json:"cwd,omitempty"`
-	Args            []string             `json:"args,omitempty"`
-	ArgsProtected   bool                 `json:"args_protected"`
-	Enabled         bool                 `json:"enabled"`
-	TimeoutMS       int                  `json:"timeout_ms"`
-	HeaderEnv       map[string]string    `json:"header_env,omitempty"`
-	EnvFromEnv      map[string]string    `json:"env_from_env,omitempty"`
-	Generation      string               `json:"generation"`
-	Observation     ProtectedObservation `json:"observation"`
+	Name                                  string               `json:"name"`
+	DisplayName                           string               `json:"display_name"`
+	Description                           string               `json:"description"`
+	SourceType                            string               `json:"source_type"`
+	PluginName                            string               `json:"plugin_name,omitempty"`
+	Transport                             string               `json:"transport"`
+	ProtocolVersion                       string               `json:"protocol_version,omitempty"`
+	URL                                   string               `json:"url,omitempty"`
+	URLProtected                          bool                 `json:"url_protected,omitempty"`
+	Command                               string               `json:"command,omitempty"`
+	Cwd                                   string               `json:"cwd,omitempty"`
+	Args                                  []string             `json:"args,omitempty"`
+	ArgsProtected                         bool                 `json:"args_protected"`
+	Enabled                               bool                 `json:"enabled"`
+	TimeoutMS                             int                  `json:"timeout_ms"`
+	HeaderEnv                             map[string]string    `json:"header_env,omitempty"`
+	EnvFromEnv                            map[string]string    `json:"env_from_env,omitempty"`
+	Generation                            string               `json:"generation"`
+	EnvironmentConfigured                 bool                 `json:"environment_configured"`
+	EnableRequiresEnvironmentConfirmation bool                 `json:"enable_requires_environment_confirmation"`
+	BlockedReasons                        []string             `json:"blocked_reasons,omitempty"`
+	Observation                           ProtectedObservation `json:"observation"`
 }
 
 type ProtectedObservation struct {
@@ -76,12 +81,14 @@ func SafeErrorCode(errCode string) string {
 	case "":
 		return ""
 	case "MCP_REGISTRY_CONFLICT", "MCP_SERVER_GENERATION_CONFLICT", "MCP_ENV_CONFLICT",
+		"MCP_RETAINED_ENV_CONFIRMATION_REQUIRED",
 		"MCP_OWNED_BY_PLUGIN", "MCP_NAME_IMMUTABLE", "MCP_CONFIG_INVALID",
 		"MCP_SERVER_EXISTS", "MCP_SERVER_NOT_FOUND", "MCP_SERVER_DISABLED", "MCP_SERVER_COLLISION",
 		"MCP_MANAGER_CLOSED", "MCP_REGISTRY_READ_FAILED", "MCP_REGISTRY_WRITE_FAILED",
 		"MCP_CLIENT_CLOSE_FAILED", "MCP_ENV_ERROR", "MCP_AUTH_REQUIRED", "MCP_AUTH_UNSUPPORTED",
 		"MCP_AUTH_CLEAR_FAILED", "MCP_AUTH_CANCELLED", "MCP_AUTH_FAILED", "MCP_AUTH_CALLBACK_REQUIRED",
 		"MCP_AUTH_CALLBACK_INVALID", "MCP_AUTH_CALLBACK_UNAVAILABLE", "MCP_AUTH_DENIED", "MCP_AUTH_EXPIRED",
+		"MCP_AUTH_FLOW_NOT_FOUND", "MCP_AUTH_FLOW_LIMIT",
 		"MCP_CREDENTIAL_REQUIRED", "MCP_CONNECTION_FAILED", "MCP_START_FAILED",
 		"MCP_TRANSPORT_ERROR", "MCP_TRANSPORT_REJECTED", "MCP_TRANSPORT_UNSUPPORTED",
 		"MCP_PROTOCOL_ERROR", "MCP_INVALID_RESPONSE", "MCP_SCHEMA_INVALID", "MCP_TIMEOUT":
@@ -170,9 +177,31 @@ func (m *Manager) DesktopInspect(name string) (string, ProtectedServer, error) {
 	return r.Revision, m.ProtectedServer(cfg), nil
 }
 
+func (m *Manager) decorateDesktopEnvironmentState(server *ProtectedServer, cfg ServerConfig) {
+	if server == nil || cfg.SourceType == "plugin" {
+		return
+	}
+	snapshot, err := m.envs.Snapshot(envstore.Scope{Kind: envstore.ScopeMCP, Name: cfg.StorageKey})
+	if err != nil {
+		server.BlockedReasons = append(server.BlockedReasons, "environment_status_unavailable")
+		return
+	}
+	for _, entry := range snapshot.Entries {
+		if entry.Configured {
+			server.EnvironmentConfigured = true
+			break
+		}
+	}
+	if server.EnvironmentConfigured && !cfg.Enabled {
+		server.EnableRequiresEnvironmentConfirmation = true
+		server.BlockedReasons = append(server.BlockedReasons, "configured_environment_reuse_confirmation_required")
+	}
+}
+
 // ProtectedServer also projects durable mutation post-state after cleanup failure.
-func (m *Manager) ProtectedServer(cfg ServerConfig) ProtectedServer {
-	p := projectConfig(cfg)
+func (m *Manager) ProtectedServer(cfg ServerConfig) (p ProtectedServer) {
+	p = projectConfig(cfg)
+	defer m.decorateDesktopEnvironmentState(&p, cfg)
 	p.Observation = ProtectedObservation{Connection: "unknown", Status: "unknown", AuthStatus: "unknown", Stale: true}
 	m.mu.RLock()
 	cached, ok := m.servers[cfg.Name]
@@ -226,13 +255,17 @@ type ProtectedCallback struct {
 }
 
 type AuthorizationStatus struct {
+	FlowID          string              `json:"flow_id,omitempty"`
 	Status          string              `json:"status"`
+	ExpiresAt       string              `json:"expires_at,omitempty"`
+	ErrorCode       string              `json:"error_code,omitempty"`
 	CallbackOptions []ProtectedCallback `json:"callback_options,omitempty"`
 }
 
 // AuthorizationURL is the explicit, ephemeral OAuth handoff exception. Saved
 // grants, client secrets and private callback objects never enter this result.
 type ProtectedAuthorization struct {
+	FlowID           string              `json:"flow_id,omitempty"`
 	AuthorizationURL string              `json:"authorization_url,omitempty"`
 	CallbackID       string              `json:"callback_id,omitempty"`
 	ExpiresAt        string              `json:"expires_at,omitempty"`
@@ -264,4 +297,15 @@ func (m *Manager) DesktopAuthorizationStatus(name string) (AuthorizationStatus, 
 		status.CallbackOptions = m.protectedCallbacks()
 	}
 	return status, nil
+}
+
+func (m *Manager) DesktopAuthorizationFlowStatus(flowID string) (AuthorizationStatus, error) {
+	status, ok := m.oauth.FlowStatus(flowID)
+	if !ok {
+		return AuthorizationStatus{}, newError("MCP_AUTH_FLOW_NOT_FOUND", "OAuth authorization flow is unavailable", false, nil, nil)
+	}
+	return AuthorizationStatus{
+		FlowID: status.FlowID, Status: status.Status, ExpiresAt: status.ExpiresAt,
+		ErrorCode: SafeErrorCode(status.ErrorCode),
+	}, nil
 }

@@ -302,9 +302,43 @@ func (m *Manager) SetEnabledChecked(name string, enabled bool, expectedRevision,
 	return m.mutateRegistry("enabled", name, ServerConfig{}, enabled, &registryExpectation{expectedRevision, expectedGeneration})
 }
 
+// DesktopSetEnabledChecked preserves the normal checked enable/disable
+// semantics while preventing a newly recreated server from silently inheriting
+// configured scoped environment values. The acknowledgement is explicit and
+// request-scoped; no secret or credential history is persisted in the registry.
+func (m *Manager) DesktopSetEnabledChecked(name string, enabled, reuseConfiguredEnvironment bool, expectedRevision, expectedGeneration string) (MutationResult, error) {
+	var guard registryMutationGuard
+	if enabled && !reuseConfiguredEnvironment {
+		guard = func(_ RegistrySnapshot, previous ServerConfig) error {
+			storageKey := strings.TrimSpace(previous.StorageKey)
+			if storageKey == "" {
+				storageKey = previous.Name
+			}
+			scope := envstore.Scope{Kind: envstore.ScopeMCP, Name: storageKey}
+			snapshot, err := m.envs.Snapshot(scope)
+			if err != nil {
+				return newError("MCP_ENV_ERROR", "Environment status is unavailable", false, nil, nil)
+			}
+			for _, entry := range snapshot.Entries {
+				if entry.Configured {
+					return newError("MCP_RETAINED_ENV_CONFIRMATION_REQUIRED", "Configured scoped environment requires explicit reuse confirmation", false, nil, nil)
+				}
+			}
+			return nil
+		}
+	}
+	return m.mutateRegistryGuarded("enabled", name, ServerConfig{}, enabled, &registryExpectation{expectedRevision, expectedGeneration}, guard)
+}
+
 type registryExpectation struct{ revision, generation string }
 
 func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabled bool, expected *registryExpectation) (MutationResult, error) {
+	return m.mutateRegistryGuarded(operation, name, cfg, enabled, expected, nil)
+}
+
+type registryMutationGuard func(RegistrySnapshot, ServerConfig) error
+
+func (m *Manager) mutateRegistryGuarded(operation, name string, cfg ServerConfig, enabled bool, expected *registryExpectation, guard registryMutationGuard) (MutationResult, error) {
 	name = strings.TrimSpace(name)
 	if operation == "create" || operation == "update" {
 		cfg = standaloneServerConfigs(map[string]ServerConfig{name: cfg})[name]
@@ -350,6 +384,11 @@ func (m *Manager) mutateRegistry(operation, name string, cfg ServerConfig, enabl
 			}
 			if expected != nil && (expected.generation == "" || expected.generation != previous.Generation) {
 				return newError("MCP_SERVER_GENERATION_CONFLICT", "MCP server generation changed", false, nil, nil)
+			}
+		}
+		if guard != nil {
+			if err := guard(authoritative, previous); err != nil {
+				return err
 			}
 		}
 		if operation == "update" {

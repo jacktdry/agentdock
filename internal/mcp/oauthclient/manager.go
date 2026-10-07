@@ -23,9 +23,11 @@ import (
 )
 
 const (
-	flowTTL     = 10 * time.Minute
-	exchangeTTL = 30 * time.Second
-	httpTimeout = 20 * time.Second
+	flowTTL             = 10 * time.Minute
+	flowStatusRetention = 15 * time.Minute
+	maxFlowStatuses     = 128
+	exchangeTTL         = 30 * time.Second
+	httpTimeout         = 20 * time.Second
 )
 
 type challengeState struct {
@@ -34,6 +36,7 @@ type challengeState struct {
 }
 
 type flow struct {
+	id               string
 	generation       uint64
 	epoch            string
 	state            string
@@ -58,6 +61,13 @@ type flow struct {
 	delivered        bool
 }
 
+type flowObservation struct {
+	status      string
+	expiresAt   time.Time
+	completedAt time.Time
+	errorCode   string
+}
+
 type Manager struct {
 	store      *store
 	httpClient *http.Client
@@ -69,6 +79,7 @@ type Manager struct {
 	flows           map[string]*flow
 	activeByStorage map[string]string
 	beginning       map[string]uint64
+	flowStatuses    map[string]flowObservation
 	// mu serializes generation checks and local grant persistence, never network I/O.
 	generations map[string]uint64
 }
@@ -86,6 +97,7 @@ func New(agentDockHome string) (*Manager, error) {
 		flows:           make(map[string]*flow),
 		activeByStorage: make(map[string]string),
 		beginning:       make(map[string]uint64),
+		flowStatuses:    make(map[string]flowObservation),
 		generations:     make(map[string]uint64),
 	}, nil
 }
@@ -162,6 +174,7 @@ func (m *Manager) ReserveAuthorization(server, storageKey, endpoint, callbackID 
 	if state := m.activeByStorage[storageKey]; state != "" {
 		if existing := m.flows[state]; existing != nil && existing.endpoint == endpoint && m.store.checkEpoch(storageKey, existing.epoch) == nil {
 			result := BeginResult{
+				FlowID:           existing.id,
 				AuthorizationURL: existing.authorizationURL,
 				CallbackID:       existing.callbackID,
 				ExpiresAt:        formatExpiry(existing.expiresAt),
@@ -189,11 +202,16 @@ func (m *Manager) ReserveAuthorization(server, storageKey, endpoint, callbackID 
 	m.mu.Lock()
 	if state := m.activeByStorage[storageKey]; state != "" {
 		if existing := m.flows[state]; existing != nil && existing.endpoint == endpoint && m.store.checkEpoch(storageKey, existing.epoch) == nil {
-			result := BeginResult{AuthorizationURL: existing.authorizationURL, CallbackID: existing.callbackID, ExpiresAt: formatExpiry(existing.expiresAt)}
+			result := BeginResult{FlowID: existing.id, AuthorizationURL: existing.authorizationURL, CallbackID: existing.callbackID, ExpiresAt: formatExpiry(existing.expiresAt)}
 			done := existing.done
 			m.mu.Unlock()
 			return &AuthorizationReservation{manager: m, storageKey: storageKey, epoch: existing.epoch, result: result, done: done}, nil
 		}
+	}
+	m.cleanupFlowStatusesLocked(time.Now().UTC())
+	if len(m.flowStatuses) >= maxFlowStatuses {
+		m.mu.Unlock()
+		return nil, newFlowError("MCP_AUTH_FLOW_LIMIT", "OAuth authorization flow capacity is full", nil)
 	}
 	if _, busy := m.beginning[storageKey]; busy {
 		m.mu.Unlock()
@@ -286,6 +304,10 @@ func (m *Manager) BeginReserved(ctx context.Context, r *AuthorizationReservation
 	if err != nil {
 		return BeginResult{}, nil, newFlowError("MCP_AUTH_FAILED", "generate OAuth state", err)
 	}
+	flowID, err := randomState()
+	if err != nil {
+		return BeginResult{}, nil, newFlowError("MCP_AUTH_FAILED", "generate OAuth flow id", err)
+	}
 	verifier := oauth2.GenerateVerifier()
 	config := oauthConfig(client, discovered.Metadata.TokenEndpoint, selected.RedirectURL, discovered.RequestedScopes)
 	config.Endpoint.AuthURL = discovered.Metadata.AuthorizationEndpoint
@@ -296,7 +318,7 @@ func (m *Manager) BeginReserved(ctx context.Context, r *AuthorizationReservation
 	authorizationURL := config.AuthCodeURL(state, authOptions...)
 	now := time.Now().UTC()
 	f := &flow{
-		state: state, server: server, storageKey: storageKey, endpoint: endpoint, generation: generation, epoch: r.epoch,
+		id: flowID, state: state, server: server, storageKey: storageKey, endpoint: endpoint, generation: generation, epoch: r.epoch,
 		callbackID: selected.ID, redirectURL: selected.RedirectURL,
 		resource: discovered.Resource, issuer: discovered.Issuer,
 		issuerInResponse: discovered.Metadata.AuthorizationResponseIssParameterSupported,
@@ -312,11 +334,29 @@ func (m *Manager) BeginReserved(ctx context.Context, r *AuthorizationReservation
 	}
 	m.flows[state] = f
 	m.activeByStorage[storageKey] = state
+	m.flowStatuses[flowID] = flowObservation{status: "authorizing", expiresAt: f.expiresAt}
+	m.cleanupFlowStatusesLocked(now)
 	delete(m.beginning, storageKey)
 	m.mu.Unlock()
 	flowCreated = true
 	go m.completeFlow(f)
-	return BeginResult{AuthorizationURL: authorizationURL, CallbackID: selected.ID, ExpiresAt: formatExpiry(f.expiresAt)}, f.done, nil
+	return BeginResult{FlowID: flowID, AuthorizationURL: authorizationURL, CallbackID: selected.ID, ExpiresAt: formatExpiry(f.expiresAt)}, f.done, nil
+}
+
+func (m *Manager) FlowStatus(flowID string) (FlowStatus, bool) {
+	flowID = strings.TrimSpace(flowID)
+	if flowID == "" {
+		return FlowStatus{}, false
+	}
+	now := time.Now().UTC()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanupFlowStatusesLocked(now)
+	observation, ok := m.flowStatuses[flowID]
+	if !ok {
+		return FlowStatus{}, false
+	}
+	return FlowStatus{FlowID: flowID, Status: observation.status, ExpiresAt: formatExpiry(observation.expiresAt), ErrorCode: observation.errorCode}, true
 }
 
 func (m *Manager) DeliverCallback(result CallbackResult) error {
@@ -377,6 +417,7 @@ func (m *Manager) completeFlow(f *flow) {
 		err = newFlowError("MCP_AUTH_CANCELLED", "OAuth authorization flow was cancelled", nil)
 	}
 	m.mu.Lock()
+	now := time.Now().UTC()
 	if m.flows[f.state] == f {
 		delete(m.flows, f.state)
 	}
@@ -386,18 +427,76 @@ func (m *Manager) completeFlow(f *flow) {
 	if err == nil && m.generations[f.storageKey] == f.generation {
 		delete(m.challenges, f.storageKey)
 	}
+	status, errorCode := terminalFlowStatus(err)
+	if f.id != "" {
+		observation := m.flowStatuses[f.id]
+		observation.status, observation.errorCode, observation.completedAt = status, errorCode, now
+		if observation.expiresAt.IsZero() {
+			observation.expiresAt = f.expiresAt
+		}
+		m.flowStatuses[f.id] = observation
+		m.cleanupFlowStatusesLocked(now)
+	}
 	m.mu.Unlock()
 	f.done <- err
 	close(f.done)
 }
 
+func terminalFlowStatus(err error) (string, string) {
+	if err == nil {
+		return "authorized", ""
+	}
+	var flowErr *FlowError
+	if !errors.As(err, &flowErr) {
+		return "failed", "MCP_AUTH_FAILED"
+	}
+	switch flowErr.Code {
+	case "MCP_AUTH_DENIED":
+		return "denied", flowErr.Code
+	case "MCP_AUTH_EXPIRED":
+		return "expired", flowErr.Code
+	case "MCP_AUTH_CANCELLED":
+		return "cancelled", flowErr.Code
+	default:
+		return "failed", flowErr.Code
+	}
+}
+
+func (m *Manager) cleanupFlowStatusesLocked(now time.Time) {
+	cutoff := now.Add(-flowStatusRetention)
+	for id, observation := range m.flowStatuses {
+		if !observation.completedAt.IsZero() && observation.completedAt.Before(cutoff) {
+			delete(m.flowStatuses, id)
+		}
+	}
+	if len(m.flowStatuses) <= maxFlowStatuses {
+		return
+	}
+	type completed struct {
+		id string
+		at time.Time
+	}
+	items := make([]completed, 0, len(m.flowStatuses))
+	for id, observation := range m.flowStatuses {
+		if !observation.completedAt.IsZero() {
+			items = append(items, completed{id: id, at: observation.completedAt})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].at.Before(items[j].at) })
+	for _, item := range items {
+		if len(m.flowStatuses) <= maxFlowStatuses {
+			break
+		}
+		delete(m.flowStatuses, item.id)
+	}
+}
+
 func (m *Manager) exchange(f *flow, result CallbackResult) error {
 	if strings.TrimSpace(result.Error) != "" {
-		message := "OAuth authorization was rejected: " + strings.TrimSpace(result.Error)
-		if detail := strings.TrimSpace(result.ErrorDescription); detail != "" {
-			message += ": " + detail
+		if strings.EqualFold(strings.TrimSpace(result.Error), "access_denied") {
+			return newFlowError("MCP_AUTH_DENIED", "OAuth authorization was denied", nil)
 		}
-		return newFlowError("MCP_AUTH_FAILED", message, nil)
+		return newFlowError("MCP_AUTH_FAILED", "OAuth authorization failed", nil)
 	}
 	if strings.TrimSpace(result.Code) == "" {
 		return newFlowError("MCP_AUTH_FAILED", "OAuth callback omitted authorization code", nil)

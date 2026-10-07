@@ -24,10 +24,18 @@ type CallbackOption struct {
 }
 
 type BeginResult struct {
+	FlowID           string           `json:"flow_id,omitempty"`
 	AuthorizationURL string           `json:"authorization_url,omitempty"`
 	CallbackID       string           `json:"callback_id,omitempty"`
 	ExpiresAt        string           `json:"expires_at,omitempty"`
 	CallbackOptions  []CallbackOption `json:"callback_options,omitempty"`
+}
+
+type FlowStatus struct {
+	FlowID    string `json:"flow_id"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type CallbackResult struct {

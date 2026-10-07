@@ -146,7 +146,7 @@ func (m *Manager) DesktopAuthorize(ctx context.Context, name, callbackID, revisi
 	if err != nil {
 		return ProtectedAuthorization{}, err
 	}
-	result := ProtectedAuthorization{AuthorizationURL: auth.AuthorizationURL, CallbackID: auth.CallbackID, ExpiresAt: auth.ExpiresAt}
+	result := ProtectedAuthorization{FlowID: auth.FlowID, AuthorizationURL: auth.AuthorizationURL, CallbackID: auth.CallbackID, ExpiresAt: auth.ExpiresAt}
 	for _, option := range auth.CallbackOptions {
 		result.CallbackOptions = append(result.CallbackOptions, ProtectedCallback{ID: option.ID, Label: protectedText(option.Label)})
 	}

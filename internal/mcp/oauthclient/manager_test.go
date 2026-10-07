@@ -173,8 +173,11 @@ func authorizeFakeService(t *testing.T, manager *Manager, fake *fakeOAuthService
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AuthorizationURL == "" || done == nil {
+	if result.FlowID == "" || result.AuthorizationURL == "" || done == nil {
 		t.Fatalf("authorization result = %#v", result)
+	}
+	if status, ok := manager.FlowStatus(result.FlowID); !ok || status.Status != "authorizing" || status.FlowID != result.FlowID {
+		t.Fatalf("active flow status = %#v ok=%v", status, ok)
 	}
 	authURL, err := url.Parse(result.AuthorizationURL)
 	if err != nil {
@@ -203,6 +206,65 @@ func authorizeFakeService(t *testing.T, manager *Manager, fake *fakeOAuthService
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("authorization flow did not complete")
+	}
+	if status, ok := manager.FlowStatus(result.FlowID); !ok || status.Status != "authorized" || status.ErrorCode != "" {
+		t.Fatalf("completed flow status = %#v ok=%v", status, ok)
+	}
+}
+
+func TestManagerFlowStatusCapacityRejectsBeforeReservation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	now := time.Now().UTC()
+	manager.mu.Lock()
+	for i := 0; i < maxFlowStatuses; i++ {
+		manager.flowStatuses[fmt.Sprintf("flow-%03d", i)] = flowObservation{status: "authorizing", expiresAt: now.Add(flowTTL)}
+	}
+	manager.mu.Unlock()
+	_, err := manager.ReserveAuthorization("cloudflare", "capacity-test", fake.endpoint(), CallbackLocal)
+	var flowErr *FlowError
+	if !errors.As(err, &flowErr) || flowErr.Code != "MCP_AUTH_FLOW_LIMIT" {
+		t.Fatalf("capacity error = %#v", err)
+	}
+	if _, _, grantErr := manager.store.loadGrantWithEpoch("capacity-test"); !errors.Is(grantErr, os.ErrNotExist) {
+		t.Fatalf("capacity rejection created authorization envelope: %v", grantErr)
+	}
+}
+
+func TestManagerFlowStatusDenialIsSafe(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FlowID == "" || result.AuthorizationURL == "" || done == nil {
+		t.Fatalf("authorization result = %#v", result)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const providerSecret = "provider-private-description"
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Error: "access_denied", ErrorDescription: providerSecret}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_DENIED" || strings.Contains(typed.Message, providerSecret) {
+			t.Fatalf("denied flow error = %#v", flowErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("denied flow did not complete")
+	}
+	status, ok := manager.FlowStatus(result.FlowID)
+	if !ok || status.Status != "denied" || status.ErrorCode != "MCP_AUTH_DENIED" {
+		t.Fatalf("denied flow status = %#v ok=%v", status, ok)
+	}
+	data, _ := json.Marshal(status)
+	if strings.Contains(string(data), providerSecret) {
+		t.Fatal("flow status exposed provider description")
 	}
 }
 

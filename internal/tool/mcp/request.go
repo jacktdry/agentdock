@@ -32,25 +32,28 @@ type ManageRequest struct {
 // separate from model-facing mcp_manage so optimistic-concurrency fields and
 // write-only values never become part of the public tool schema.
 type DesktopManageRequest struct {
-	Action                   string            `json:"action"`
-	Name                     string            `json:"name,omitempty"`
-	Description              string            `json:"description,omitempty"`
-	Transport                string            `json:"transport,omitempty"`
-	ProtocolVersion          string            `json:"protocol_version,omitempty"`
-	URL                      string            `json:"url,omitempty"`
-	Command                  string            `json:"command,omitempty"`
-	Args                     []string          `json:"args,omitempty"`
-	CWD                      string            `json:"cwd,omitempty"`
-	HeaderEnv                map[string]string `json:"header_env,omitempty"`
-	EnvFromEnv               map[string]string `json:"env_from_env,omitempty"`
-	Key                      string            `json:"key,omitempty"`
-	Value                    *string           `json:"value,omitempty"`
-	Enabled                  *bool             `json:"enabled,omitempty"`
-	TimeoutMS                *int              `json:"timeout_ms,omitempty"`
-	CallbackID               string            `json:"callback_id,omitempty"`
-	ExpectedRegistryRevision string            `json:"expected_registry_revision,omitempty"`
-	ExpectedGeneration       string            `json:"expected_generation,omitempty"`
-	ExpectedEnvRevision      string            `json:"expected_env_revision,omitempty"`
+	Action                     string            `json:"action"`
+	RequestID                  string            `json:"request_id,omitempty"`
+	Name                       string            `json:"name,omitempty"`
+	Description                string            `json:"description,omitempty"`
+	Transport                  string            `json:"transport,omitempty"`
+	ProtocolVersion            string            `json:"protocol_version,omitempty"`
+	URL                        string            `json:"url,omitempty"`
+	Command                    string            `json:"command,omitempty"`
+	Args                       []string          `json:"args,omitempty"`
+	CWD                        string            `json:"cwd,omitempty"`
+	HeaderEnv                  map[string]string `json:"header_env,omitempty"`
+	EnvFromEnv                 map[string]string `json:"env_from_env,omitempty"`
+	Key                        string            `json:"key,omitempty"`
+	Value                      *string           `json:"value,omitempty"`
+	Enabled                    *bool             `json:"enabled,omitempty"`
+	TimeoutMS                  *int              `json:"timeout_ms,omitempty"`
+	CallbackID                 string            `json:"callback_id,omitempty"`
+	FlowID                     string            `json:"flow_id,omitempty"`
+	ExpectedRegistryRevision   string            `json:"expected_registry_revision,omitempty"`
+	ExpectedGeneration         string            `json:"expected_generation,omitempty"`
+	ExpectedEnvRevision        string            `json:"expected_env_revision,omitempty"`
+	ReuseConfiguredEnvironment bool              `json:"reuse_configured_environment,omitempty"`
 }
 
 type SearchRequest struct {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -229,6 +230,43 @@ func TestDesktopEnvironmentCheckedAndPluginFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertProtected(t, safe)
+}
+
+func TestDesktopEnableRequiresExplicitConfiguredEnvironmentReuse(t *testing.T) {
+	m := desktopFixture(t)
+	if _, err := m.Add(ServerConfig{Name: "local", Description: "Local", Transport: TransportStdio, Command: "never-run", Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	value := desktopCanary
+	env, err := m.DesktopEnvironment("local", "snapshot", "", nil, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.DesktopEnvironment("local", "set", "TOKEN", &value, env.Revision, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := m.DesktopSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := snapshot.Servers[0]
+	if !server.EnvironmentConfigured || !server.EnableRequiresEnvironmentConfirmation ||
+		!slices.Contains(server.BlockedReasons, "configured_environment_reuse_confirmation_required") {
+		t.Fatalf("configured environment state = %#v", server)
+	}
+	_, err = m.DesktopSetEnabledChecked("local", true, false, snapshot.RegistryRevision, server.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_RETAINED_ENV_CONFIRMATION_REQUIRED")
+	afterRejected, _ := m.Registry()
+	if afterRejected.Servers["local"].Enabled {
+		t.Fatal("rejected enable changed persisted state")
+	}
+	result, err := m.DesktopSetEnabledChecked("local", true, true, snapshot.RegistryRevision, server.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Server.Enabled || !result.Persisted || !result.RuntimeApplied {
+		t.Fatalf("explicit reuse enable = %#v", result)
+	}
 }
 
 type desktopProtocol struct{ starts, closes atomic.Int32 }

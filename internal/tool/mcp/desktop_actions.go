@@ -9,7 +9,7 @@ import (
 )
 
 var desktopActions = []string{
-	"desktop_snapshot", "desktop_inspect", "desktop_create", "desktop_update", "desktop_remove",
+	"desktop_snapshot", "desktop_inspect", "desktop_operation_status", "desktop_create", "desktop_update", "desktop_remove",
 	"desktop_set_enabled", "desktop_env_snapshot", "desktop_env_set", "desktop_env_unset", "desktop_env_purge",
 	"desktop_reconnect", "desktop_auth_status", "desktop_authorize", "desktop_auth_clear",
 }
@@ -26,7 +26,8 @@ func protectedMCPError(err error) *ToolError {
 	if strings.Contains(code, "CONFLICT") {
 		category = "conflict"
 	}
-	if strings.Contains(code, "INVALID") || strings.Contains(code, "OWNED") || strings.Contains(code, "IMMUTABLE") {
+	if strings.Contains(code, "INVALID") || strings.Contains(code, "OWNED") || strings.Contains(code, "IMMUTABLE") ||
+		code == "MCP_RETAINED_ENV_CONFIRMATION_REQUIRED" {
 		category = "validation"
 	}
 	return toolErrorDetails(code, "Desktop MCP operation could not complete", category, nil)
@@ -60,6 +61,9 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		cfg := desktopConfig(r)
 		switch action {
 		case "desktop_create":
+			// P5 creation is persistence-only and always starts disabled. Enabling
+			// is a distinct confirmed operation with retained-environment gating.
+			cfg.Enabled = false
 			err = mcpclient.ValidateDesktopConfig(cfg)
 			if err == nil {
 				mutation, err = s.mcpClients.AddChecked(cfg, r.ExpectedRegistryRevision)
@@ -74,9 +78,9 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 				if exists && old.SourceType == "plugin" {
 					err = &mcpclient.Error{Code: "MCP_OWNED_BY_PLUGIN"}
 				} else {
-					if r.Enabled == nil {
-						cfg.Enabled = old.Enabled
-					}
+					// Configuration edits cannot bypass the dedicated Enable/Disable
+					// confirmation path.
+					cfg.Enabled = old.Enabled
 					validationCfg := cfg
 					if cfg.Transport == old.Transport {
 						if r.URL == "" {
@@ -100,7 +104,7 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 			if r.Enabled == nil {
 				err = &mcpclient.Error{Code: "MCP_CONFIG_INVALID"}
 			} else {
-				mutation, err = s.mcpClients.SetEnabledChecked(r.Name, *r.Enabled, r.ExpectedRegistryRevision, r.ExpectedGeneration)
+				mutation, err = s.mcpClients.DesktopSetEnabledChecked(r.Name, *r.Enabled, r.ReuseConfiguredEnvironment, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 			}
 		}
 		if mutation.Persisted {
@@ -125,12 +129,22 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		server, tools, err = s.mcpClients.DesktopReconnect(ctx, r.Name, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 		result["server"], result["tools"], result["tool_count"] = server, tools, len(tools)
 	case "desktop_auth_status":
-		status, statusErr := s.mcpClients.DesktopAuthorizationStatus(r.Name)
+		var status mcpclient.AuthorizationStatus
+		var statusErr error
+		if strings.TrimSpace(r.FlowID) != "" {
+			status, statusErr = s.mcpClients.DesktopAuthorizationFlowStatus(r.FlowID)
+		} else {
+			status, statusErr = s.mcpClients.DesktopAuthorizationStatus(r.Name)
+		}
 		err = statusErr
-		result["status"], result["callback_options"] = status.Status, status.CallbackOptions
+		result["flow_id"], result["status"], result["expires_at"], result["error_code"], result["callback_options"] =
+			status.FlowID, status.Status, status.ExpiresAt, status.ErrorCode, status.CallbackOptions
 	case "desktop_authorize":
 		auth, authErr := s.mcpClients.DesktopAuthorize(ctx, r.Name, r.CallbackID, r.ExpectedRegistryRevision, r.ExpectedGeneration)
 		err = authErr
+		if auth.FlowID != "" {
+			result["flow_id"] = auth.FlowID
+		}
 		if auth.AuthorizationURL != "" {
 			result["authorization_url"], result["callback_id"], result["expires_at"] = auth.AuthorizationURL, auth.CallbackID, auth.ExpiresAt
 		}

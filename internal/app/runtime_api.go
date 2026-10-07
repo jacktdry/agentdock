@@ -273,6 +273,9 @@ func (r *Runtime) RuntimeMCPDesktopManage(ctx context.Context, args map[string]a
 	if err != nil {
 		return nil, err
 	}
+	if request.Action == "desktop_operation_status" {
+		return r.desktopMCPOperationStatus(request.RequestID)
+	}
 	dispatch := func() (Result, error) {
 		result, err := r.dynamicMCP.DesktopManage(ctx, request)
 		if err != nil {
@@ -285,7 +288,8 @@ func (r *Runtime) RuntimeMCPDesktopManage(ctx context.Context, args map[string]a
 	case "desktop_snapshot", "desktop_inspect", "desktop_env_snapshot", "desktop_auth_status":
 		return dispatch()
 	}
-	return r.runRuntimeManagementMutation(ctx, "runtime_mcp", request.Action, desktopAdmissionDescriptor(request), dispatch)
+	descriptor := desktopAdmissionDescriptor(request)
+	return r.runDesktopMCPMutation(ctx, request, descriptor, dispatch)
 }
 
 // Never pass the write-only value, raw args or endpoint query to admission, even
@@ -301,6 +305,7 @@ func desktopAdmissionDescriptor(r toolmcp.DesktopManageRequest) map[string]any {
 		d["value_configured"] = r.Value != nil && *r.Value != ""
 	case "desktop_set_enabled":
 		d["enabled"] = r.Enabled
+		d["reuse_configured_environment"] = r.ReuseConfiguredEnvironment
 	case "desktop_authorize":
 		d["callback_id"] = r.CallbackID
 	case "desktop_create", "desktop_update":

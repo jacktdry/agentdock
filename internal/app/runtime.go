@@ -40,36 +40,38 @@ import (
 type Result = toolcore.Result
 
 type Runtime struct {
-	cfg            config.Config
-	toolNames      []string
-	toolValidators map[string]*toolcontract.InputValidator
-	ws             *workspace.Workspace
-	skills         *toolskill.Service
-	command        *toolcommand.Service
-	files          *toolfile.Service
-	dynamicMCP     *toolmcp.Service
-	plugins        *toolplugin.Service
-	media          *toolmedia.Service
-	browser        *toolbrowser.Service
-	acpBrowser     *toolbrowser.ACPBridge
-	computer       *toolcomputer.Service
-	acpComputer    *toolcomputer.ACPBridge
-	recall         *toolrecall.Service
-	evolution      *evolution.Service
-	taskTools      *tooltask.Service
-	acp            *toolacp.Service
-	observer       *observability.Recorder
-	execution      *execution.Store
-	permissions    *permission.Store
-	admission      *permission.AdmissionGate
-	permissionCtl  *permission.ControlAuthority
-	tracing        *observability.Tracing
-	lifecycleMu    sync.RWMutex
-	commandCtx     context.Context
-	commandCancel  context.CancelFunc
-	closing        bool
-	closeOnce      sync.Once
-	closeErr       error
+	cfg             config.Config
+	toolNames       []string
+	toolValidators  map[string]*toolcontract.InputValidator
+	ws              *workspace.Workspace
+	skills          *toolskill.Service
+	command         *toolcommand.Service
+	files           *toolfile.Service
+	dynamicMCP      *toolmcp.Service
+	plugins         *toolplugin.Service
+	media           *toolmedia.Service
+	browser         *toolbrowser.Service
+	acpBrowser      *toolbrowser.ACPBridge
+	computer        *toolcomputer.Service
+	acpComputer     *toolcomputer.ACPBridge
+	recall          *toolrecall.Service
+	evolution       *evolution.Service
+	taskTools       *tooltask.Service
+	acp             *toolacp.Service
+	observer        *observability.Recorder
+	execution       *execution.Store
+	permissions     *permission.Store
+	admission       *permission.AdmissionGate
+	permissionCtl   *permission.ControlAuthority
+	tracing         *observability.Tracing
+	lifecycleMu     sync.RWMutex
+	mcpDesktopOpsMu sync.Mutex
+	mcpDesktopOps   map[string]desktopMCPOperationRecord
+	commandCtx      context.Context
+	commandCancel   context.CancelFunc
+	closing         bool
+	closeOnce       sync.Once
+	closeErr        error
 }
 
 func NewRuntime(cfg config.Config) (*Runtime, error) {
