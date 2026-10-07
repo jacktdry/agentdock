@@ -557,10 +557,10 @@ func (m *Manager) beginAuthorization(ctx context.Context, cfg ServerConfig, rese
 // Reserve from authoritative persisted configuration while registry transitions
 // and ownership replacement are excluded. Network work belongs to BeginReserved.
 func (m *Manager) reserveAuthorization(name, callbackID string) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
-	return m.reserveAuthorizationExpected(name, callbackID, "", "")
+	return m.reserveAuthorizationExpected(name, callbackID, "", "", false)
 }
 
-func (m *Manager) reserveAuthorizationExpected(name, callbackID, revision, generation string) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
+func (m *Manager) reserveAuthorizationExpected(name, callbackID, revision, generation string, standaloneOnly bool) (ServerConfig, *oauthclient.AuthorizationReservation, error) {
 	m.registryMu.Lock()
 	defer m.registryMu.Unlock()
 	if err := m.ensureOpenLocked(); err != nil {
@@ -577,6 +577,9 @@ func (m *Manager) reserveAuthorizationExpected(name, callbackID, revision, gener
 		cfg, ok = authoritative.Servers[strings.TrimSpace(name)]
 		if !ok {
 			return newError("MCP_SERVER_NOT_FOUND", "dynamic MCP server not found", false, nil, nil)
+		}
+		if standaloneOnly && cfg.SourceType != "standalone" {
+			return newError("MCP_OWNED_BY_PLUGIN", "Plugin-owned MCP lifecycle is managed by plugin_manage", false, nil, nil)
 		}
 		if revision != "" && revision != authoritative.Revision {
 			return newError("MCP_REGISTRY_CONFLICT", "MCP registry revision changed", false, nil, nil)

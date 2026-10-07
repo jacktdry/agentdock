@@ -138,7 +138,7 @@ func (m *Manager) DesktopReconnect(ctx context.Context, name, revision, generati
 }
 
 func (m *Manager) DesktopAuthorize(ctx context.Context, name, callbackID, revision, generation string) (ProtectedAuthorization, error) {
-	cfg, reservation, err := m.reserveAuthorizationExpected(name, callbackID, revision, generation)
+	cfg, reservation, err := m.reserveAuthorizationExpected(name, callbackID, revision, generation, true)
 	if err != nil {
 		return ProtectedAuthorization{}, err
 	}
