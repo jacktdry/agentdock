@@ -17,7 +17,7 @@ import (
 )
 
 func externalRoute(start ResolvedStart) RouteDecision {
-	return RouteDecision{Scope: leaseScope(), Route: browserpolicy.RouteExternal, Start: start}
+	return grantExternalRouteForTest(RouteDecision{Scope: leaseScope(), Route: browserpolicy.RouteExternal, Start: start})
 }
 
 func externalStart() ResolvedStart {
@@ -160,7 +160,7 @@ func TestExternalStartValidation(t *testing.T) {
 			s := externalStart()
 			mutate(&s)
 			b := &externalFakeBackend{}
-			m := NewExternalLeaseManager(b)
+			m := newTestExternalLeaseManager(b)
 			_, _, err := m.Acquire(context.Background(), externalRoute(s), "")
 			assertBrowserCode(t, err, ErrPolicyConflict)
 			if b.starts != 0 {
@@ -263,7 +263,7 @@ func TestExternalPageProof(t *testing.T) {
 
 func TestExternalLeaseOperationsAndRelease(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	a, ab := acquireExternal(t, m)
 	c, cb := acquireExternal(t, m)
 	if a.WorkerID == c.WorkerID || a.PageID == c.PageID || a.BrowserLeaseID == c.BrowserLeaseID || a.BrowserSessionID == c.BrowserSessionID {
@@ -368,7 +368,7 @@ func TestExternalAcquireFailureCleanup(t *testing.T) {
 				b.stopErr = errors.New("stop failed")
 				proven = true
 			}
-			m := NewExternalLeaseManager(b)
+			m := newTestExternalLeaseManager(b)
 			_, _, err := m.Acquire(ctx, externalRoute(externalStart()), "")
 			if err == nil {
 				t.Fatal("failure published lease")
@@ -399,7 +399,7 @@ func TestExternalReleaseFailure(t *testing.T) {
 	for _, name := range []string{"close", "stop", "both", "canceled"} {
 		t.Run(name, func(t *testing.T) {
 			b := &externalFakeBackend{}
-			m := NewExternalLeaseManager(b)
+			m := newTestExternalLeaseManager(b)
 			meta, _ := acquireExternal(t, m)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -437,7 +437,7 @@ func TestExternalLeaseStaleWorker(t *testing.T) {
 	for _, name := range []string{"stopped", "restarted", "cross worker"} {
 		t.Run(name, func(t *testing.T) {
 			b := &externalFakeBackend{}
-			m := NewExternalLeaseManager(b)
+			m := newTestExternalLeaseManager(b)
 			meta, _ := acquireExternal(t, m)
 			b.mu.Lock()
 			w := b.workers[meta.WorkerID]
@@ -468,7 +468,7 @@ func TestExternalLeaseStaleWorker(t *testing.T) {
 
 func TestExternalLeaseRaceSerialization(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	meta, _ := acquireExternal(t, m)
 	b.entered = make(chan struct{}, 1)
 	b.gate = make(chan struct{})
@@ -510,7 +510,7 @@ func TestExternalLeaseRaceSerialization(t *testing.T) {
 
 func TestExternalConcurrentAcquisition(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	var wg sync.WaitGroup
 	results := make(chan LeaseMetadata, 16)
 	errs := make(chan error, 16)
@@ -570,7 +570,7 @@ func TestExternalResolvedRouteValidation(t *testing.T) {
 
 func TestExternalActionFailureKeepsReleaseTarget(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	meta, _ := acquireExternal(t, m)
 	b.mu.Lock()
 	b.actionErr = context.DeadlineExceeded
@@ -594,7 +594,7 @@ func TestExternalPageIdentityLoss(t *testing.T) {
 	for _, name := range []string{"missing", "isolated", "duplicate", "reconnected", "malformed"} {
 		t.Run(name, func(t *testing.T) {
 			b := &externalFakeBackend{}
-			m := NewExternalLeaseManager(b)
+			m := newTestExternalLeaseManager(b)
 			meta, _ := acquireExternal(t, m)
 			pages := externalPageResult(externalPageEntry(1, false), externalPageEntry(100, true))
 			s := pages["structuredContent"].(map[string]any)
@@ -656,7 +656,7 @@ func TestExternalProofIgnoresSelection(t *testing.T) {
 
 func TestExternalOperationSanitizesAndRecoversFromToolError(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	meta, _ := acquireExternal(t, m)
 	b.mu.Lock()
 	b.actionResult = externalPageResult(externalPageEntry(100, true))
@@ -684,10 +684,10 @@ func TestExternalAcquireTrustedResolvedChrome(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
-	meta, _, err := m.Acquire(context.Background(), d, "")
+	m := newTestExternalLeaseManager(b)
+	meta, _, err := m.Acquire(context.Background(), grantExternalRouteForTest(d), "")
 	if err != nil {
-		t.Fatal("generic required authenticated Chrome rejected", err)
+		t.Fatal("synthetic required authenticated Chrome rejected", err)
 	}
 	if _, err := m.Release(context.Background(), d.Scope, meta.BrowserLeaseID); err != nil {
 		t.Fatal(err)
@@ -726,6 +726,7 @@ func TestExternalIdleTTLSweepStopsOnlyOwnedConnectorAndPage(t *testing.T) {
 	policy := defaultExternalLeasePolicy()
 	policy.IdleTTL = time.Minute
 	m := newExternalLeaseManager(b, policy)
+	m.verifier = testAcceptExternalPeer
 	meta, _ := acquireExternal(t, m)
 	if !meta.ExpiresAt.Equal(meta.LastActiveAt.Add(policy.IdleTTL)) {
 		t.Fatalf("expires_at=%s last_active=%s", meta.ExpiresAt, meta.LastActiveAt)
@@ -757,7 +758,7 @@ func TestExternalIdleTTLSweepStopsOnlyOwnedConnectorAndPage(t *testing.T) {
 
 func TestExternalFailedCleanupRecoveryRetriesConnectorOnly(t *testing.T) {
 	b := &externalFakeBackend{}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	meta, _ := acquireExternal(t, m)
 	b.mu.Lock()
 	b.stopErr = errors.New("stop failed")
@@ -792,7 +793,7 @@ func TestExternalFailedCleanupRecoveryRetriesConnectorOnly(t *testing.T) {
 
 func TestExternalAcquireOrphanConnectorRecovery(t *testing.T) {
 	b := &externalFakeBackend{baselineErr: errors.New("baseline failed"), stopErr: errors.New("stop failed")}
-	m := NewExternalLeaseManager(b)
+	m := newTestExternalLeaseManager(b)
 	if _, _, err := m.Acquire(context.Background(), externalRoute(externalStart()), ""); err == nil {
 		t.Fatal("acquire unexpectedly succeeded")
 	}

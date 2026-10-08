@@ -332,6 +332,19 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > handoff remain separate until the ACP contract is stable.
 > See [Phase C2b-A checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-a-trust-source-qualification-gate-source-checkpoint-2026-10-08).
 
+> P8 C2b-B1 offline attach/admission checkpoint (2026-10-08, base `7b90f16a`):
+> qualified planner success now hands off a private, non-serializable, short-lived,
+> one-shot grant binding the exact canonical scope, route, full resolved start and
+> source/incarnation. Pure resolver/forged/changed/expired/replayed decisions cannot
+> start a connector via ExternalLeaseManager. An independent source verifier must
+> match the immutable started worker's live peer before baseline and again before
+> new_page; missing/error/timeout/revocation fail closed, with connector cleanup.
+> Only TEST ONLY synthetic fixtures exercise success. Production provider and
+> manager verifier remain **nil**, Edge remains **UNQUALIFIED**. Real attestation,
+> atomic peer fencing and consent-based native UAT remain pending; C2b/P8/M9 stay
+> open and Nexus remains deferred. No runtime, adapter or AGY handoff change.
+> See [C2b-B1 checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b1-offline-attachadmission-checkpoint-2026-10-08).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

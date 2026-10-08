@@ -14,8 +14,10 @@ type ExternalWorkerOptions struct {
 	Route RouteDecision
 }
 
-// The caller supplies a trusted RoutePlanner/ResolveRoute decision; company
-// browser policy is resolved upstream, never inferred here.
+// This validates external transport shape, not route admission or live peer
+// identity. ResolveRoute alone cannot authorize attachment: the trusted caller
+// must pass through ExternalLeaseManager.Acquire for one-shot grant consumption
+// and attach-time verification. Company routing is resolved upstream.
 func validateExternalStart(d RouteDecision) error {
 	s := d.Start
 	if (d.Route != browserpolicy.RouteExternal && d.Route != browserpolicy.RouteRequiredExternal) ||

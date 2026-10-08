@@ -43,11 +43,13 @@ type externalOrphanWorker struct {
 }
 
 type ExternalLeaseManager struct {
-	mu      sync.Mutex
-	leases  map[string]*externalLease
-	orphans map[string]*externalOrphanWorker
-	backend ExternalLeaseBackend
-	policy  externalLeasePolicy
+	mu                   sync.Mutex
+	leases               map[string]*externalLease
+	orphans              map[string]*externalOrphanWorker
+	backend              ExternalLeaseBackend
+	policy               externalLeasePolicy
+	verifier             externalPeerVerifier
+	verificationInFlight chan struct{}
 }
 
 func NewExternalLeaseManager(backend ExternalLeaseBackend) *ExternalLeaseManager {
@@ -55,7 +57,7 @@ func NewExternalLeaseManager(backend ExternalLeaseBackend) *ExternalLeaseManager
 }
 
 func newExternalLeaseManager(backend ExternalLeaseBackend, policy externalLeasePolicy) *ExternalLeaseManager {
-	return &ExternalLeaseManager{backend: backend, leases: make(map[string]*externalLease), orphans: make(map[string]*externalOrphanWorker), policy: policy}
+	return &ExternalLeaseManager{backend: backend, leases: make(map[string]*externalLease), orphans: make(map[string]*externalOrphanWorker), policy: policy, verificationInFlight: make(chan struct{}, 1)}
 }
 
 func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision, url string) (LeaseMetadata, EngineBinding, error) {
@@ -65,6 +67,9 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	}
 	if err := validateExternalStart(route); err != nil {
 		return LeaseMetadata{}, EngineBinding{}, err
+	}
+	if ctx.Err() != nil || !consumeExternalRouteGrant(route) {
+		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrRequiredRouteUnavailable, "", "external route admission unavailable", nil)
 	}
 	worker, err := m.backend.StartExternal(ctx, ExternalWorkerOptions{Cwd: scope.CanonicalWorkspaceRoot, Route: route})
 	var pageID float64
@@ -94,6 +99,9 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if worker.WorkerID == "" || worker.State != WorkerReady {
 		return fail(externalLeaseError(ErrLeaseTargetMismatch, "", "ready worker identity missing", nil))
 	}
+	if err := m.verifyPeer(ctx, route.grant, worker); err != nil {
+		return fail(err)
+	}
 	baselineResult, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
 	if err != nil {
 		return fail(err)
@@ -107,6 +115,9 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	}
 	if url == "" {
 		url = "about:blank"
+	}
+	if err := m.verifyPeer(ctx, route.grant, worker); err != nil {
+		return fail(err)
 	}
 	result, createErr := m.backend.CallExternal(ctx, worker, "new_page", map[string]any{"url": url, "background": true})
 	var pageString string

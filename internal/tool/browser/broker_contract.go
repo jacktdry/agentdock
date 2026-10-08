@@ -136,6 +136,8 @@ type RouteDecision struct {
 	Scope RequestScope
 	Route browserpolicy.RouteKind
 	Start ResolvedStart
+	// Core-only admission authority. Serialization cannot transfer this grant.
+	grant *externalRouteGrant
 }
 type PIDObservation struct {
 	PID           int

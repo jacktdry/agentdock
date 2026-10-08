@@ -251,5 +251,12 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector qualification unavailable")
 	}
 	request.Connectors = []ConnectorMetadata{{ID: plan.ConnectorID, Browser: plan.Browser, ProfileID: plan.ProfileID, ProfileClass: plan.ProfileClass, Endpoint: plan.Endpoint, Registered: true, Healthy: status.Healthy, Verified: status.Verified, Authenticated: status.Authenticated, Engine: status.Engine, EngineVersion: status.EngineVersion, Transport: status.Transport, Capabilities: status.Capabilities, Ownership: plan.Ownership}}
-	return ResolveRoute(request)
+	decision, err := ResolveRoute(request)
+	if err != nil {
+		return RouteDecision{}, err
+	}
+	// Only qualified planner success mints admission; the pure resolver cannot.
+	decision.grant = &externalRouteGrant{scope: decision.Scope, route: decision.Route, start: decision.Start,
+		peer: externalPeerIdentity{source: status.source, incarnation: status.incarnation}, expiresAt: status.ExpiresAt}
+	return decision, nil
 }

@@ -235,7 +235,9 @@ func TestExternalLeaseManagerKeepsBrowserAliveAndClosesOnlyOwnedPage(t *testing.
 	}
 	registry := NewWorkerRegistry(WorkerDependencies{})
 	defer func() { _ = registry.Shutdown(context.Background()) }()
-	leases := NewExternalLeaseManager(registry)
+	// TEST ONLY: synthetic admission, not live peer attestation.
+	route = grantExternalRouteForTest(route)
+	leases := newTestExternalLeaseManager(registry)
 	meta, _, err := leases.Acquire(context.Background(), route, server.URL)
 	if err != nil {
 		t.Fatal(err)

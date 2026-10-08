@@ -368,3 +368,99 @@ planners and loss of authority after serialization. Existing cancellation, provi
 panic, non-cooperative slot isolation and managed-provider-free regressions pass.
 These results establish source contracts only. Codebase-memory refresh was blocked
 by another active index operation; no rebuild or overwrite was attempted.
+
+## Phase C2b-B1 offline attach/admission checkpoint (2026-10-08)
+
+Bounded Next-only source change on `feature/m8-permission-approval`, base
+`7b90f16a`. This extends C2b-A's planning boundary into lease admission; it
+**does not complete C2b or qualify a real Edge peer**. Production runtime still
+passes nil to NewRoutePlanner and the production ExternalLeaseManager constructor
+still has no peer verifier. Edge remains CompatibilityUnqualified.
+
+Only successful qualified external RoutePlanner.Resolve mints a package-private
+externalRouteGrant. It binds the exact canonical RequestScope (workspace/root, all
+owner IDs and provenance), route kind, every ResolvedStart field (including
+profile/connector/endpoint, browser/engine/version, profile path/class, ownership
+and lifecycle/focus flags), and the original distinct qualification source and
+runtime incarnation. Expiry inherits the qualified observation's remaining TTL,
+at most five seconds; admission never renews it. An atomic single-use flag is
+shared by all decision copies and managers, and is consumed before StartExternal,
+even if startup or verification subsequently fails. Grant fields are immutable
+after minting except that flag. Missing, changed, expired and replayed grants fail
+closed before connector start. Pure ResolveRoute remains a pure contract helper
+and cannot mint admission. The historical C2b-A statement that evidence is absent
+from route decisions is superseded only by this private Core handoff field.
+
+The independent, source-based externalPeerVerifier contract receives the exact
+opaque expected source/incarnation and a value copy of the immutable started
+WorkerInfo. A future reviewed source must independently observe that worker's
+actual peer and return its observed source/incarnation, including revocation and
+turnover. Echoing expected identities, trusting planner booleans, connector
+readiness, or checking WS/CDP reachability is not a production implementation.
+WorkerRegistry does not implement attestation. No production verifier or enabling
+wiring is added, including for a future status provider alone.
+
+Acquire verifies immediately before list_pages, then freshly verifies again
+after baseline and immediately before new_page. Unavailable verifier, error,
+panic, identity mismatch, timeout, caller cancellation or expired grant rejects
+admission with fixed safe errors, without returning verifier errors/panic values.
+Each verification waits at most two seconds with a cancellable context. One
+manager slot remains held until a noncooperative verifier actually exits, so
+timeout cannot spawn unbounded verifier goroutines. Go cannot forcibly terminate
+such a verifier; a real source still needs cancellation-safe lifecycle/recovery.
+After a verification rejection no page close occurs: only the owned connector
+Stop is attempted using existing cancellation-independent cleanup, with orphan
+recovery retained on Stop failure. The production registry's Stop has its
+existing 35-second bound; arbitrary backend implementations must honor cleanup
+contracts. Existing owned-page proof/release behavior remains unchanged after
+success, and no user-owned page is substituted or closed.
+
+The grant and evidence identities have no exported/serialized fields. JSON
+round-trip loses the grant and cannot admit a route. No renderer DTO, Snapshot,
+UI, auth token, URL or PID projection is added. Existing internal resolved starts
+and WorkerInfo remain Core data. Managed admission is unchanged; company Edge
+failures never fall back to managed Chrome. All adapter sources, runtime.go,
+AGY-ACP and AGY handoff documents are untouched.
+
+TEST ONLY helpers in _test.go synthesize private grants and fake verifiers to
+preserve offline external page/lease coverage. The planner-to-manager success
+fixture checks the fake source's independently held identities and the same
+WorkerInfo at both checks. These tests establish handoff and rejection behavior,
+not process/profile/authentication evidence. The opt-in browser_integration
+fixture uses explicitly synthetic authority too; it is not live attestation and
+is not run in this task.
+
+Remaining gates: a reviewed live process/profile/auth/capability attestor, source
+revocation/turnover lifecycle, and consent-based Next native UAT for authenticated
+Edge, no focus/window mutation, exact target ownership and safe release. Two fresh
+checks reduce plan-to-attach/mid-acquire exposure but cannot atomically fence peer
+turnover between the final check and the connector operation; that requires a real
+source/transport fencing contract. Post-acquisition call/release re-attestation is
+not introduced here. Package browser remains the trusted boundary; private
+in-memory grants are not cryptographic protection against code inside it. No
+live browser launch, Edge/Chrome/CDP network, installed Next GUI, Nexus, broad
+build, push, deployment or commit is performed. Orchestrator owns review,
+integration and acceptance; C2b/P8/M9 remain open.
+
+Offline validation completed 2026-10-09 on go1.27.1 darwin/arm64 with
+GOCACHE=/private/tmp/agentdock-c2bb1-gocache and TMPDIR=/private/tmp:
+
+- go test ./internal/tool/browser ./internal/browserpolicy: PASS.
+- go test -race ./internal/tool/browser ./internal/browserpolicy: PASS.
+- go vet ./internal/tool/browser ./internal/browserpolicy: PASS.
+- go test -tags browser_integration -run '^$' ./internal/tool/browser:
+  compile-only PASS; no integration test ran or browser launched.
+- git diff --check: PASS.
+
+Initial sandbox test/race attempts failed because httptest could not bind a
+loopback listener (operation not permitted). The same focused packages passed
+after the execution environment allowed local fixture listeners; no real browser
+or CDP peer was used. Coverage includes pure/serialized/forged admission, full
+scope/start mismatch, expired grants, concurrent copied-nonce replay, missing or
+failed/mismatched/panicking verifier, bounded timeout/noncooperative slot
+isolation, cancellation before start and after baseline, revocation/expiry after
+baseline, failed Stop recovery, synthetic qualified planner handoff with both
+checks, existing external lease lifecycle, managed regressions and company Edge
+no-fallback through ACPBridge. No full suite, broad build, native UAT or live
+attestation is claimed. Codebase-memory refresh was blocked by another active
+index operation; no rebuild/overwrite was attempted.
