@@ -46,3 +46,23 @@
 | 原版 AgentDock | 既有生產流程 | **不做任何改動** |
 
 下一個 Next Session 工作前請先讀此文件與 ACP repo FORK_NOTES.md；在 ACP commit 及跨系統整合 UAT 前，上述功能都不能列為已完成或併入 Pre-M9 closeout。
+
+## ACP 交付 checkpoint（2026-10-08）
+
+ACP 工作樹：/Users/wei/sideProject/antigravity-acp-next-integration
+Branch：feature/next-integration-optin
+Commit：4714f65（1.2.0-agentdock.9，未推送、未部署）
+已驗證：293/293 Bun tests、typecheck、lint（僅既有非阻擋警告）、macOS arm64 build。
+
+**實際新增的 ACP opt-in 變數及注意事項：**
+
+| 變數 | 預設（Legacy） | Next opt-in |
+| --- | --- | --- |
+| AGY_ACP_STATE_DIR | 使用既有 HOME/.agy-acp | 指定 Next-owned **實體絕對路徑**，ACP 用它存 sessions.json 與 models.json；拒絕不安全路徑/權限/連結 |
+| AGY_ACP_CHILD_ISOLATION | 維持 .8 舊行為 | 僅接受 required，強制所有 AGY 子程序使用白名單私有 HOME，Broker 有無均一致 |
+| AGY_ACP_AUTO_APPROVE | 維持原本 --dangerously-skip-permissions 行為 | 僅接受 0：**所有非互動 AGY Prompt 目前都會 fail closed**，含 /usage；尚無 native tool approval hook，所以不能讓一般 Next 任務立即啟用！ |
+| AGY_CONVERSATIONS_DIR | 維持原本對話路徑 | 可另指定，與 AGY_ACP_STATE_DIR 分開；使用前須驗證實體目錄存在、讀寫及 Poller 一致 |
+
+**給 Next Session 的下一步：** 可先在 Next-only 試驗整合前兩個變數與 State 初始化／migration，但請勿直接啟用 AGY_ACP_AUTO_APPROVE=0 作正式 Coding Profile：該模式刻意拒絕全部 Prompt，不提供 M8 native tool approval。應先完成 Core Permission / native tool 安全邊界或 OS sandbox 的技術合約。stream-json 目前只有 ACP docs/research/stream-json-poc.md 設計文件，未改動 Adapter，也不可在 Next 宣稱可用。
+
+原版 AgentDock、Next 目前已安裝的 ACP 執行檔仍是 1.2.0-agentdock.8；不動、不部署。上述 ACP commit 是供 Next Session 程式整合與 code review 的來源，不代表 native GUI/Core UAT 已完成。
