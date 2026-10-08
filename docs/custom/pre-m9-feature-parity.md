@@ -1,5 +1,7 @@
 # Pre-M9 Feature Parity and Connection Readiness
 
+> **最新 checkpoint（2026-10-09 約 03:12）**：P8 B2c 原始碼 `a1d364e5` 已提交但尚未部署或放行 Edge；P6/P7 native GUI 待補；ACP 獨立候選版 `.14`（456 tests pass）等待 Next 整合，stable/Next 已安裝版仍為 `.8`（依 ACP 交接）。Next 8767 HTTP 200、完整 Browser/Policy Go 測試重跑 PASS；loopback 曾異常但未找出根因。見 [最新總覽](pre-m9-progress-2026-10-09.md)。
+
 > 狀態：**P1/P2 deployed + live readiness validated；P3 stable/Next side-by-side validation 已完成（2026-10-06）；P4 ACP Manager full parity 已完成、review 並部署至 Next；P5 MCP Management 已於 2026-10-07 完成 final independent review、Next-only deployment / live UAT 並 closeout。P6 Plugin Management Phase E Desktop/Core live UAT 已通過、native GUI 驗收待補；M9 仍須等待其餘必要 parity + hardening integration review**
 >
 > 前置：M8 Permission / Approval 已 closeout。此文件定義進入 M9 Release Migration 前的功能補齊順序；不是新的大型 Milestone，也不改變 M9 的 release scope。

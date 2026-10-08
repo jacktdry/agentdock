@@ -23,6 +23,7 @@
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
 - [m8-permission-approval.md](m8-permission-approval.md)：M8 Core-owned Permission / Approval authority、binding、retry、history 與 implementation checkpoint。
+- [pre-m9-progress-2026-10-09.md](pre-m9-progress-2026-10-09.md)：**最新 Pre-M9／P4–P8 進度、AGY-ACP .14 待 Next 整合、8767 loopback 已恢復、後續順序及邊界。**
 - [pre-m9-feature-parity.md](pre-m9-feature-parity.md)：M8 closeout 後的 feature parity audit、Next Connection/Auth/Tunnel readiness、已完成的 P3 stable/Next side-by-side closeout、Wave 3 與 M9 前工作順序。
 - [pre-m9-wave0-contract.md](pre-m9-wave0-contract.md)：Wave 0 roundtable 收斂後凍結的 P1/P2 UX、secret、port ownership、Tunnel state/mutation 與 Wave 1 backend integration contract。
 - [pre-m9-acp-manager-roundtable.md](pre-m9-acp-manager-roundtable.md)：Wave 3 P4 ACP Manager 的 UX/IA、設定 authority、revisioned save、Antigravity preset、安全 update contract 與 closeout。
