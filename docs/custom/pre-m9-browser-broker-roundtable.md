@@ -611,3 +611,13 @@ unchanged; Edge is still **UNQUALIFIED**. No user-owned Edge tab was
 touched, no Browser/Computer or Nexus live UAT was performed.
 The wrapper's failure-injection rollback is still offline-fixture only.
 See `docs/custom/agentdock-next-isolation.md` for full steps.
+
+## Phase C2b-B2c macOS read-only Edge process evidence (2026-10-09)
+
+A Next-only, package-private OS preflight now exists in `internal/tool/browser/external_process_preflight*.go`. This is **process evidence, NOT an authenticated ConnectorStatusProvider, peer attestor, browser transport, or route grant**. Production `NewRoutePlanner(..., nil)` and Edge `CompatibilityUnqualified` are unchanged.
+
+The two-second read-only macOS `lsof`/`ps` source accepts only an exact canonical numeric-loopback browser websocket endpoint, explicitly configured absolute `--user-data-dir`, one listener PID, matching Edge executable command line and port, same-user process start fingerprint, and the **first OS-mapped executable image**. Listener ownership, process incarnation, mapped image and args must all match again at completion. Ambiguous, wildcard/nonloopback, multiple-PID, missing, stale, recycled or canceled evidence fails closed. Other platforms explicitly reject; no raw command arguments, profile data or PID enter renderer/snapshots. Unit tests use fixtures only: no live Edge, tab, CDP or login access occurred.
+
+Deliberate limitations: currently recognizes only system `/Applications/Microsoft Edge.app` launched with explicit matching `--user-data-dir`; a default profile without that option remains unqualified. OS command lines and mapped-image paths do **not** prove genuine code signing, authenticated profile, cookie state, background/no-focus, safe release, or atomic CDP transport. No qualification or `externalRouteGrant` is minted. Genuine attestation, browser permission and consent-based native UAT are still required.
+
+Validation: focused fixtures, Browser/Policy Go tests with five unrelated network-test cases excluded, targeted Race Detector, `go vet`, and Linux/Windows cross-build all **PASS**. **Unfiltered Browser suite is not green**: five existing `cdp_discovery_test.go` local HTTP/WebSocket `httptest` cases consistently timed out at their 0.5–1 second limits on this macOS host, even isolated with `-parallel=1`. Investigate that separate loopback test environment; no security or timeout checks were relaxed to disguise it. P8/C2b/M9 remain open, stable AgentDock and AGY-ACP implementation untouched.

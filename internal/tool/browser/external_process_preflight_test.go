@@ -1,0 +1,254 @@
+package browser
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+const testEdgeExecutable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+
+type fakeEdgeProcessProbe struct {
+	listenerCalls int
+	commandCalls  int
+	startCalls    int
+	imageCalls    int
+	listenersRaw  []string
+	commandsRaw   []string
+	startsRaw     []string
+	imagesRaw     []string
+	err           error
+	cancel        context.CancelFunc
+}
+
+func (f *fakeEdgeProcessProbe) listeners(ctx context.Context, _ int) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	i := f.listenerCalls
+	f.listenerCalls++
+	if i >= len(f.listenersRaw) {
+		return "", errors.New("missing fake listener fixture")
+	}
+	if f.cancel != nil && i == 0 {
+		f.cancel()
+	}
+	return f.listenersRaw[i], nil
+}
+func (f *fakeEdgeProcessProbe) command(ctx context.Context, _ int) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	i := f.commandCalls
+	f.commandCalls++
+	if i >= len(f.commandsRaw) {
+		return "", errors.New("missing fake process fixture")
+	}
+	return f.commandsRaw[i], nil
+}
+func (f *fakeEdgeProcessProbe) startToken(ctx context.Context, _ int) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	i := f.startCalls
+	f.startCalls++
+	if i >= len(f.startsRaw) {
+		return "", errors.New("missing fake start fixture")
+	}
+	return f.startsRaw[i], nil
+}
+
+func (f *fakeEdgeProcessProbe) image(ctx context.Context, _ int) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	i := f.imageCalls
+	f.imageCalls++
+	if i >= len(f.imagesRaw) {
+		return "", errors.New("missing image fixture")
+	}
+	return f.imagesRaw[i], nil
+}
+
+func edgeFixture() *fakeEdgeProcessProbe {
+	cmd := testEdgeExecutable + " --remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture"
+	raw := "p1245\nf7\nn127.0.0.1:9222\n"
+	return &fakeEdgeProcessProbe{
+		listenersRaw: []string{raw, raw},
+		commandsRaw:  []string{cmd, cmd},
+		startsRaw:    []string{"501:Fri Oct 9 2026", "501:Fri Oct 9 2026"},
+		imagesRaw:    []string{"p1245\nftxt\nn" + testEdgeExecutable + "\n", "p1245\nftxt\nn" + testEdgeExecutable + "\n"},
+	}
+}
+
+func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
+	f := edgeFixture()
+	p, err := readEdgeProcessPreflight(context.Background(),
+		"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.pid != 1245 || p.userDataDir != "/tmp/edge-fixture" || p.startToken != f.startsRaw[0] ||
+		p.endpoint != "ws://127.0.0.1:9222/devtools/browser/candidate" ||
+		p.executable != testEdgeExecutable || time.Since(p.observedAt) > time.Second {
+		t.Fatal("read-only process preflight lost source identity")
+	}
+	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 {
+		t.Fatal("did not recheck process evidence after observation")
+	}
+}
+
+func TestEdgeProcessPreflightRejectsAllAmbiguousEvidence(t *testing.T) {
+	cases := map[string]func(*fakeEdgeProcessProbe){
+		"unrelated executable": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = strings.Replace(f.commandsRaw[0], testEdgeExecutable, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", 1)
+		},
+		"unsigned positional lookalike": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = "/tmp/Microsoft Edge --remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture"
+		},
+		"wrong declared port": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = strings.Replace(f.commandsRaw[0], "9222", "9223", 1)
+		},
+		"duplicated port flags": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] += " --remote-debugging-port=9222"
+		},
+		"missing remote flag": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = testEdgeExecutable + " --user-data-dir=/tmp/edge-fixture"
+		},
+		"other data dir": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = strings.Replace(f.commandsRaw[0], "/tmp/edge-fixture", "/tmp/other", 1)
+		},
+		"no explicit profile path": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[0] = testEdgeExecutable + " --remote-debugging-port=9222"
+		},
+		"process start rollover": func(f *fakeEdgeProcessProbe) {
+			f.startsRaw[1] = "501:Fri Oct 9 2027"
+		},
+		"command changed": func(f *fakeEdgeProcessProbe) {
+			f.commandsRaw[1] += " --renderer-type=test"
+		},
+		"wrong mapped executable": func(f *fakeEdgeProcessProbe) {
+			f.imagesRaw[0] = "p1245\nftxt\nn/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n"
+		},
+		"mapped image changed":   func(f *fakeEdgeProcessProbe) { f.imagesRaw[1] = "p1245\nftxt\nn/tmp/Microsoft Edge\n" },
+		"mapped image wrong PID": func(f *fakeEdgeProcessProbe) { f.imagesRaw[0] = "p1320\nftxt\nn" + testEdgeExecutable + "\n" },
+		"listener PID replaced": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[1] = "p1320\nf7\nn127.0.0.1:9222\n"
+		},
+		"listener rebound": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[1] = "p1245\nf7\nn[::1]:9222\n"
+		},
+		"wildcard listener": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] = "p1245\nf7\nn*:9222\n"
+		},
+		"nonloopback": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] = "p1245\nf7\nn0.0.0.0:9222\n"
+		},
+		"two owners": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] += "p1320\nf7\nn127.0.0.1:9222\n"
+		},
+		"dual bind ambiguity": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] += "p1245\nf8\nn[::1]:9222\n"
+		},
+		"no listener": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] = ""
+		},
+		"bad lsof row": func(f *fakeEdgeProcessProbe) {
+			f.listenersRaw[0] = "n127.0.0.1:9222\n"
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := edgeFixture()
+			mutate(f)
+			evidence, err := readEdgeProcessPreflight(context.Background(),
+				"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+			if !errors.Is(err, errEdgeProcessUnqualified) || evidence != (edgeProcessPreflight{}) {
+				t.Fatalf("untrusted process was accepted: %+v %v", evidence, err)
+			}
+		})
+	}
+}
+
+func TestEdgeProcessPreflightRejectsUnsafeInputsAndCancellation(t *testing.T) {
+	for _, endpoint := range []string{
+		"ws://localhost:9222/devtools/browser/candidate",
+		"ws://192.168.1.100:9222/devtools/browser/candidate",
+		"ws://127.0.0.1:9222/devtools/page/candidate",
+		"ws://127.0.0.1:9222/devtools/browser/candidate?token=sensitive",
+		"ws://127.0.0.1:9222/devtools/browser/candidate#secret",
+	} {
+		_, err := readEdgeProcessPreflight(context.Background(), endpoint, "/tmp/edge-fixture", edgeFixture())
+		if !errors.Is(err, errEdgeProcessUnqualified) {
+			t.Fatal("noncanonical/broad endpoint unexpectedly trusted", endpoint, err)
+		}
+	}
+	for _, directory := range []string{"", "../edge", "/tmp/../tmp/edge-fixture"} {
+		_, err := readEdgeProcessPreflight(context.Background(), "ws://127.0.0.1:9222/devtools/browser/candidate", directory, edgeFixture())
+		if !errors.Is(err, errEdgeProcessUnqualified) {
+			t.Fatal("unsafe profile dir", directory)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	f := edgeFixture()
+	_, err := readEdgeProcessPreflight(ctx, "ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+	if !errors.Is(err, errEdgeProcessUnqualified) || f.listenerCalls != 0 {
+		t.Fatal("canceled evidence probe continued")
+	}
+	f2 := edgeFixture()
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	f2.cancel = cancel2
+	defer cancel2()
+	_, err = readEdgeProcessPreflight(ctx2, "ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f2)
+	if !errors.Is(err, errEdgeProcessUnqualified) {
+		t.Fatal("post-observation cancel failed closed")
+	}
+}
+
+func TestEdgeProcessPreflightExposesNoAuthOrRouteGrant(t *testing.T) {
+	f := edgeFixture()
+	e, err := readEdgeProcessPreflight(context.Background(), "ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serialized, marshalErr := json.Marshal(e)
+	if marshalErr != nil || string(serialized) != "{}" {
+		t.Fatal("private OS process evidence escaped through JSON")
+	}
+	status := unqualifiedRuntimeStatus()
+	planner, scope := plannerFixture(t, testConnectorStatus(func(context.Context, string) (ConnectorRuntimeStatus, error) {
+		return status, nil
+	}))
+	d, err := planner.Resolve(context.Background(), scope, nil)
+	assertRouteCode(t, err, ErrRequiredRouteUnavailable)
+	if d != (RouteDecision{}) {
+		t.Fatal("process preflight qualified Edge or minted a route grant")
+	}
+}
+
+func TestUniqueEdgeListenerParser(t *testing.T) {
+	for _, port := range []int{1, 9222, 65535} {
+		raw := "p500\nf7\nn127.0.0.1:" + strconv.Itoa(port) + "\n"
+		got, ok := parseUniqueEdgeListener(raw, port)
+		if !ok || got.pid != 500 {
+			t.Fatal("valid loopback owner rejected", port)
+		}
+	}
+}

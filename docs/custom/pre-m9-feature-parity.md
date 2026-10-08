@@ -393,6 +393,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > accessibility/visual tests and real Edge Connector qualification remain
 > open. See [Next isolation deployment checkpoint](agentdock-next-isolation.md).
 
+> **P8 C2b-B2c macOS preflight (2026-10-09):** Next-only package-private OS evidence checks a canonical loopback Edge endpoint against listener PID, same-user start fingerprint, Edge executable text mapping, remote-debugging port and explicit user-data-dir; repeated to reject turnover. This is NOT auth/login/no-focus proof, no production provider is enabled and Edge stays UNQUALIFIED. Focused/race/vet/cross-build passed; full Browser suite blocked by five reproducible existing local httptest timeouts. See [B2c checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2c-macos-read-only-edge-process-evidence-2026-10-09).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：
