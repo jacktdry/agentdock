@@ -247,7 +247,7 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P7 — Nexus / Startup / Platform Essentials
 
-2026-10-08 已完成 P7 能力盤點、UX / Security / Cross-platform 契約與 A1 配對傳輸安全；A2.1 Next-only 唯讀 Snapshot 已提交。A2.2 的 Core peer PID/UID + active identity generation、CLI/Desktop 配對鎖、generation fencing、原子寫入與 truthful restart outcome 已進入 **本機測試全綠的 backend checkpoint**，但獨立安全複審尚無有效結論、沒有 Wails UI binding，也未部署。詳見 [P7 Desktop authority、進度與風險](pre-m9-platform-essentials-roundtable.md#10-implementation-checkpoint--phase-a22-nexus-pairing-backend)。NexusDock 仍在 Connection 獨立子畫面；通過 A2.2 安全審查／Next 實機驗收後才開始 UI。P6 native GUI UAT 仍是獨立待完成 gate。
+2026-10-08 已完成 P7 能力盤點、UX / Security / Cross-platform 契約與 A1 配對傳輸安全；A2.1 Next-only 唯讀 Snapshot 已提交。A2.2 的 Core peer PID/UID、active identity generation、CLI/Desktop 共用交易鎖、generation fencing、原子寫入與 truthful restart outcome 已於 `209c776e` 修復，兩項獨立審查 HIGH 定點複審均已 CLOSED，後端離線驗證 PASS。**Phase B Shared UI 已進入原始碼離線整合**：Wails typed NexusService、Connection → ChatGPT access / NexusDock 子畫面、配對／重新配對確認、safe status、三語系與離線測試已建立；獨立 Phase B 唯讀安全複審 PASS（0 verified BLOCKER/HIGH），但 Next 原生 GUI 與實機 pairing UAT 尚未結案。詳見 [P7 Phase B source checkpoint](pre-m9-platform-essentials-roundtable.md#12-phase-b-offline-shared-ui-source-checkpoint-2026-10-08)。A1 企業 Proxy:nil、P6 native GUI、P7 Phase C 與 M9 仍受 gate 約束。
 
 補齊日常 parity：
 

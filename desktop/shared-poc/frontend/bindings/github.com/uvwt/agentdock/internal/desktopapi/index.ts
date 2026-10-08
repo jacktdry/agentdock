@@ -7,6 +7,7 @@ import * as ConnectionService from "./connectionservice.js";
 import * as ContractService from "./contractservice.js";
 import * as DiagnosticsService from "./diagnosticsservice.js";
 import * as MCPService from "./mcpservice.js";
+import * as NexusService from "./nexusservice.js";
 import * as PermissionService from "./permissionservice.js";
 import * as PluginService from "./pluginservice.js";
 import * as RuntimeService from "./runtimeservice.js";
@@ -18,6 +19,7 @@ export {
     ContractService,
     DiagnosticsService,
     MCPService,
+    NexusService,
     PermissionService,
     PluginService,
     RuntimeService,
@@ -86,6 +88,10 @@ export type {
     Manifest,
     NegotiationRequest,
     NegotiationResult,
+    NexusCapabilities,
+    NexusMutationResult,
+    NexusPairRequest,
+    NexusSnapshotResult,
     OAuthPasswordRevealResult,
     OperationCapability,
     PermissionResult,

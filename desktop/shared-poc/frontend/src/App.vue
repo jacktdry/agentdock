@@ -9,7 +9,7 @@ import ContractStatusPanel from './components/contract/ContractStatusPanel.vue'
 import RuntimeStatusPanel from './components/runtime/RuntimeStatusPanel.vue'
 import { shallowRef } from 'vue'
 import BasicSettingsPanel from './components/settings/BasicSettingsPanel.vue'
-import ConnectionPanel from './components/connection/ConnectionPanel.vue'
+import ConnectionWorkspace from './components/connection/ConnectionWorkspace.vue'
 import OverviewPanel from './components/overview/OverviewPanel.vue'
 import UpdateCard from './components/system/UpdateCard.vue'
 import DiagnosticsCard from './components/system/DiagnosticsCard.vue'
@@ -69,7 +69,7 @@ function openPlugin(name: string) {
         <OverviewPanel v-if="section === 'overview'" @navigate="navigate" />
         <RuntimeStatusPanel v-else-if="section === 'runtime'" />
         <ExecutionCenterPanel v-else-if="section === 'execution'" />
-        <ConnectionPanel v-else-if="section === 'connection'" />
+        <ConnectionWorkspace v-else-if="section === 'connection'" />
         <ACPPanel v-else-if="section === 'acp'" />
         <MCPPanel v-else-if="section === 'mcp'" @manage-plugin="openPlugin" />
         <PluginPanel v-else-if="section === 'plugin'" :focus-name="pluginTarget" @open-mcp="navigate('mcp')" />

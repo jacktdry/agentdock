@@ -1687,6 +1687,150 @@
   <data name="nav.system" xml:space="preserve">
     <value>System</value>
   </data>
+  <data name="nexus.advanced" xml:space="preserve">
+    <value>Advanced</value>
+  </data>
+  <data name="nexus.applied" xml:space="preserve">
+    <value>Operation applied. Connection status is shown separately.</value>
+  </data>
+  <data name="nexus.before" xml:space="preserve">
+    <value>Current origin</value>
+  </data>
+  <data name="nexus.busy" xml:space="preserve">
+    <value>Another operation is in progress. Refresh before another explicit action.</value>
+  </data>
+  <data name="nexus.chatgpt_access" xml:space="preserve">
+    <value>ChatGPT access</value>
+  </data>
+  <data name="nexus.checking" xml:space="preserve">
+    <value>Checking</value>
+  </data>
+  <data name="nexus.code" xml:space="preserve">
+    <value>One-time pairing code</value>
+  </data>
+  <data name="nexus.code_help" xml:space="preserve">
+    <value>Obtain a fresh code from NexusDock. Codes are cleared after submission, cancellation, leaving the window, or 30 seconds. They are never saved.</value>
+  </data>
+  <data name="nexus.confirm_recovery" xml:space="preserve">
+    <value>Restart Next Core for the saved Nexus pairing?</value>
+  </data>
+  <data name="nexus.confirm_replace" xml:space="preserve">
+    <value>Replace this device’s Nexus pairing?</value>
+  </data>
+  <data name="nexus.conflict" xml:space="preserve">
+    <value>The identity changed. Status was refreshed; obtain a fresh code and submit explicitly. Nothing was retried.</value>
+  </data>
+  <data name="nexus.connected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="nexus.connection_state" xml:space="preserve">
+    <value>Core connection</value>
+  </data>
+  <data name="nexus.denied" xml:space="preserve">
+    <value>Pairing was rejected. Obtain a fresh code before trying again.</value>
+  </data>
+  <data name="nexus.disconnected" xml:space="preserve">
+    <value>Disconnected</value>
+  </data>
+  <data name="nexus.durability" xml:space="preserve">
+    <value>Identity was written, but crash durability is unverified. Do not reuse the code; refresh and use trusted recovery.</value>
+  </data>
+  <data name="nexus.endpoint" xml:space="preserve">
+    <value>NexusDock server URL</value>
+  </data>
+  <data name="nexus.endpoint_invalid" xml:space="preserve">
+    <value>Use a permitted HTTPS server URL, or a loopback HTTP development endpoint, without credentials, query or fragment.</value>
+  </data>
+  <data name="nexus.help" xml:space="preserve">
+    <value>NexusDock links this Next device to Nexus. Pairing is separate from ChatGPT MCP, tunnel and OAuth access. Paired does not mean connected.</value>
+  </data>
+  <data name="nexus.identity_saved" xml:space="preserve">
+    <value>Identity saved; this alone does not prove a connection.</value>
+  </data>
+  <data name="nexus.invalid" xml:space="preserve">
+    <value>Identity invalid; pairing is unavailable.</value>
+  </data>
+  <data name="nexus.name" xml:space="preserve">
+    <value>Friendly name (optional)</value>
+  </data>
+  <data name="nexus.navigation" xml:space="preserve">
+    <value>Connection views</value>
+  </data>
+  <data name="nexus.node" xml:space="preserve">
+    <value>Node ID:</value>
+  </data>
+  <data name="nexus.not_paired" xml:space="preserve">
+    <value>Not paired</value>
+  </data>
+  <data name="nexus.not_saved" xml:space="preserve">
+    <value>Not saved</value>
+  </data>
+  <data name="nexus.observed" xml:space="preserve">
+    <value>Last observed:</value>
+  </data>
+  <data name="nexus.origin" xml:space="preserve">
+    <value>Server origin</value>
+  </data>
+  <data name="nexus.outcome_unknown" xml:space="preserve">
+    <value>The operation outcome is unknown. Do not reuse the code. Refresh to observe the saved identity before another explicit action.</value>
+  </data>
+  <data name="nexus.pair" xml:space="preserve">
+    <value>Pair device</value>
+  </data>
+  <data name="nexus.paired" xml:space="preserve">
+    <value>Paired</value>
+  </data>
+  <data name="nexus.pairing_state" xml:space="preserve">
+    <value>Pairing</value>
+  </data>
+  <data name="nexus.reconcile" xml:space="preserve">
+    <value>Restart Next Core for saved pairing</value>
+  </data>
+  <data name="nexus.recovery" xml:space="preserve">
+    <value>Trusted recovery</value>
+  </data>
+  <data name="nexus.recovery_help" xml:space="preserve">
+    <value>Explicitly restart Next Core to load the saved pairing. This does not consume a pairing code.</value>
+  </data>
+  <data name="nexus.replace" xml:space="preserve">
+    <value>Replace pairing</value>
+  </data>
+  <data name="nexus.replace_required" xml:space="preserve">
+    <value>Review and confirm replacement before pairing.</value>
+  </data>
+  <data name="nexus.replace_warning" xml:space="preserve">
+    <value>The existing link is replaced only after a successful exchange. Enter a fresh code after confirming.</value>
+  </data>
+  <data name="nexus.restart_required" xml:space="preserve">
+    <value>The saved identity still requires a verified Next Core restart. Use trusted recovery; connection is not proven.</value>
+  </data>
+  <data name="nexus.restart_warning" xml:space="preserve">
+    <value>Next Core will restart to apply the saved identity. Active work may be briefly interrupted.</value>
+  </data>
+  <data name="nexus.review_replace" xml:space="preserve">
+    <value>Review replacement</value>
+  </data>
+  <data name="nexus.saved" xml:space="preserve">
+    <value>Saved</value>
+  </data>
+  <data name="nexus.target" xml:space="preserve">
+    <value>Target origin</value>
+  </data>
+  <data name="nexus.title" xml:space="preserve">
+    <value>NexusDock</value>
+  </data>
+  <data name="nexus.token" xml:space="preserve">
+    <value>Device token</value>
+  </data>
+  <data name="nexus.unavailable" xml:space="preserve">
+    <value>Service unavailable</value>
+  </data>
+  <data name="nexus.unavailable_help" xml:space="preserve">
+    <value>Next identity or native observation is unavailable. Refresh; this action requires a verified Next backend.</value>
+  </data>
+  <data name="nexus.unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
   <data name="overview.open_connection" xml:space="preserve">
     <value>Manage connection</value>
   </data>

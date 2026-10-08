@@ -1687,6 +1687,150 @@
   <data name="nav.system" xml:space="preserve">
     <value>系統</value>
   </data>
+  <data name="nexus.advanced" xml:space="preserve">
+    <value>進階</value>
+  </data>
+  <data name="nexus.applied" xml:space="preserve">
+    <value>操作已套用，連線狀態另行顯示。</value>
+  </data>
+  <data name="nexus.before" xml:space="preserve">
+    <value>目前來源</value>
+  </data>
+  <data name="nexus.busy" xml:space="preserve">
+    <value>另一項操作正在進行。再次明確操作前請先刷新。</value>
+  </data>
+  <data name="nexus.chatgpt_access" xml:space="preserve">
+    <value>ChatGPT 存取</value>
+  </data>
+  <data name="nexus.checking" xml:space="preserve">
+    <value>檢查中</value>
+  </data>
+  <data name="nexus.code" xml:space="preserve">
+    <value>一次性配對碼</value>
+  </data>
+  <data name="nexus.code_help" xml:space="preserve">
+    <value>請從 NexusDock 取得新的配對碼。送出、取消、離開視窗或經過 30 秒後即清除，不會儲存。</value>
+  </data>
+  <data name="nexus.confirm_recovery" xml:space="preserve">
+    <value>要重新啟動 Next Core 以套用已儲存的 Nexus 配對嗎？</value>
+  </data>
+  <data name="nexus.confirm_replace" xml:space="preserve">
+    <value>要取代此裝置的 Nexus 配對嗎？</value>
+  </data>
+  <data name="nexus.conflict" xml:space="preserve">
+    <value>身分資料已變更。已刷新狀態；請取得新的配對碼並明確送出，操作未自動重試。</value>
+  </data>
+  <data name="nexus.connected" xml:space="preserve">
+    <value>已連線</value>
+  </data>
+  <data name="nexus.connection_state" xml:space="preserve">
+    <value>Core 連線</value>
+  </data>
+  <data name="nexus.denied" xml:space="preserve">
+    <value>配對遭拒，請取得新的配對碼後再試。</value>
+  </data>
+  <data name="nexus.disconnected" xml:space="preserve">
+    <value>已中斷連線</value>
+  </data>
+  <data name="nexus.durability" xml:space="preserve">
+    <value>身分資料已寫入，但尚未確認故障後的持久性。請勿重用配對碼；刷新後使用復原操作。</value>
+  </data>
+  <data name="nexus.endpoint" xml:space="preserve">
+    <value>NexusDock 伺服器網址</value>
+  </data>
+  <data name="nexus.endpoint_invalid" xml:space="preserve">
+    <value>請使用允許的 HTTPS 伺服器網址或本機回環 HTTP 開發端點，勿含帳密、查詢參數或片段。</value>
+  </data>
+  <data name="nexus.help" xml:space="preserve">
+    <value>NexusDock 將此 Next 裝置連結至 Nexus。配對與 ChatGPT MCP、通道及 OAuth 存取分開；已配對不代表已連線。</value>
+  </data>
+  <data name="nexus.identity_saved" xml:space="preserve">
+    <value>身分資料已儲存，這本身不代表已連線。</value>
+  </data>
+  <data name="nexus.invalid" xml:space="preserve">
+    <value>身分資料無效，無法配對。</value>
+  </data>
+  <data name="nexus.name" xml:space="preserve">
+    <value>易辨識名稱（選填）</value>
+  </data>
+  <data name="nexus.navigation" xml:space="preserve">
+    <value>連線檢視</value>
+  </data>
+  <data name="nexus.node" xml:space="preserve">
+    <value>節點 ID：</value>
+  </data>
+  <data name="nexus.not_paired" xml:space="preserve">
+    <value>尚未配對</value>
+  </data>
+  <data name="nexus.not_saved" xml:space="preserve">
+    <value>未儲存</value>
+  </data>
+  <data name="nexus.observed" xml:space="preserve">
+    <value>上次觀察時間：</value>
+  </data>
+  <data name="nexus.origin" xml:space="preserve">
+    <value>伺服器來源</value>
+  </data>
+  <data name="nexus.outcome_unknown" xml:space="preserve">
+    <value>操作結果未知，請勿重用配對碼。再次明確操作前，請刷新以觀察已儲存的身分資料。</value>
+  </data>
+  <data name="nexus.pair" xml:space="preserve">
+    <value>配對裝置</value>
+  </data>
+  <data name="nexus.paired" xml:space="preserve">
+    <value>已配對</value>
+  </data>
+  <data name="nexus.pairing_state" xml:space="preserve">
+    <value>配對</value>
+  </data>
+  <data name="nexus.reconcile" xml:space="preserve">
+    <value>重新啟動 Next Core 以套用配對</value>
+  </data>
+  <data name="nexus.recovery" xml:space="preserve">
+    <value>受信任的復原操作</value>
+  </data>
+  <data name="nexus.recovery_help" xml:space="preserve">
+    <value>明確重新啟動 Next Core 以載入已儲存的配對，不會消耗配對碼。</value>
+  </data>
+  <data name="nexus.replace" xml:space="preserve">
+    <value>取代配對</value>
+  </data>
+  <data name="nexus.replace_required" xml:space="preserve">
+    <value>請先確認取代配對，再進行配對。</value>
+  </data>
+  <data name="nexus.replace_warning" xml:space="preserve">
+    <value>交換成功後才會取代現有連結。確認後請輸入新的配對碼。</value>
+  </data>
+  <data name="nexus.restart_required" xml:space="preserve">
+    <value>已儲存的身分資料仍需經驗證的 Next Core 重新啟動。請使用復原操作，目前尚未證明已連線。</value>
+  </data>
+  <data name="nexus.restart_warning" xml:space="preserve">
+    <value>Next Core 將重新啟動以套用儲存的身分資料，進行中的工作可能暫時中斷。</value>
+  </data>
+  <data name="nexus.review_replace" xml:space="preserve">
+    <value>確認取代配對</value>
+  </data>
+  <data name="nexus.saved" xml:space="preserve">
+    <value>已儲存</value>
+  </data>
+  <data name="nexus.target" xml:space="preserve">
+    <value>目標來源</value>
+  </data>
+  <data name="nexus.title" xml:space="preserve">
+    <value>NexusDock</value>
+  </data>
+  <data name="nexus.token" xml:space="preserve">
+    <value>裝置權杖</value>
+  </data>
+  <data name="nexus.unavailable" xml:space="preserve">
+    <value>服務無法使用</value>
+  </data>
+  <data name="nexus.unavailable_help" xml:space="preserve">
+    <value>Next 身分資料或原生觀察無法使用。請刷新；此操作需要經驗證的 Next 後端。</value>
+  </data>
+  <data name="nexus.unknown" xml:space="preserve">
+    <value>未知</value>
+  </data>
   <data name="overview.open_connection" xml:space="preserve">
     <value>管理連線</value>
   </data>

@@ -1,4 +1,5 @@
 import * as ConnectionService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/connectionservice'
+import * as NexusService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/nexusservice'
 import * as BasicSettingsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/basicsettingsservice'
 import * as UpdateService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/updateservice'
 import * as DiagnosticsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/diagnosticsservice'
@@ -24,6 +25,10 @@ import {
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type {
   APIError,
+  NexusCapabilities,
+  NexusSnapshotResult,
+  NexusPairRequest,
+  NexusMutationResult,
   BasicSettings,
   ConnectionActionResult,
   ConnectionAutostartRequest,
@@ -107,6 +112,10 @@ export {
   PortState,
 }
 export type {
+  NexusCapabilities,
+  NexusSnapshotResult,
+  NexusPairRequest,
+  NexusMutationResult,
   ActivityBatch,
   ActivityEnvelope,
   ActivityProbeStatus,
@@ -305,7 +314,40 @@ function openExecutionStream(
   }
 }
 
+// Transport failures are ambiguous. Never render exceptions or retry mutations.
+async function nexusCall<T>(call: () => Promise<T> & { cancel?: () => void }, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const pending = call()
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('nexus_outcome_unknown'))
+          pending.cancel?.()
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function nexusMutation(call: () => Promise<NexusMutationResult> & { cancel?: () => void }): Promise<NexusMutationResult> {
+  try {
+    return await nexusCall(call, 60_000)
+  } catch {
+    return {
+      operationId: '', completed: false, identitySaved: false, restartRequired: false,
+      error: { code: 'nexus_outcome_unknown', message: '', category: ErrorCategory.ErrorCategoryUnavailable, retryable: false },
+    }
+  }
+}
+
 export const desktopApi = {
+  nexusSnapshot: () => nexusCall(() => NexusService.Snapshot(), 10_000),
+  nexusPair: (request: NexusPairRequest) => nexusMutation(() => NexusService.Pair(request)),
+  nexusReconcile: (generation: string) => nexusMutation(() => NexusService.Reconcile(generation)),
   connectionStatus: () => ConnectionService.Status(),
   connectionSnapshot: () => ConnectionService.Snapshot(),
   connectionPreflightPort: (candidatePort: number) => ConnectionService.PreflightPort(candidatePort),

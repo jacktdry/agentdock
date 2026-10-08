@@ -545,6 +545,43 @@ export interface NegotiationResult {
     "error"?: APIError | null;
 }
 
+export interface NexusCapabilities {
+    "canPair": boolean;
+    "canReconcile": boolean;
+    "pairDisabledReason": string;
+    "reconcileDisabledReason": string;
+}
+
+export interface NexusMutationResult {
+    "operationId": string;
+    "completed": boolean;
+    "identitySaved": boolean;
+    "restartRequired": boolean;
+    "observedGeneration"?: string;
+    "error"?: APIError | null;
+}
+
+export interface NexusPairRequest {
+    "endpoint": string;
+    "code": string;
+    "name"?: string;
+    "expectedGeneration": string;
+    "confirmReplace": boolean;
+}
+
+export interface NexusSnapshotResult {
+    "pairingState": string;
+    "connectionState": string;
+    "generation": string;
+    "safeOrigin"?: string;
+    "nodeId"?: string;
+    "deviceTokenStored": boolean;
+    "restartRequired": boolean;
+    "observedAt": string;
+    "capabilities": NexusCapabilities;
+    "error"?: APIError | null;
+}
+
 /**
  * This type deliberately cannot be embedded in the ordinary snapshot.
  */

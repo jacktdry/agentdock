@@ -84,6 +84,7 @@ func main() {
 			application.NewService(contractService),
 			application.NewService(runtimeService),
 			application.NewService(desktopapi.NewConnectionService(*runtimeRootFlag)),
+			application.NewService(desktopapi.NewNexusService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewBasicSettingsService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewUpdateService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
