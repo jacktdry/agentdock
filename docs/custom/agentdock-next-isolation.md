@@ -187,3 +187,57 @@ Next connector 不再等待所有 Shared UI parity 完成，目前已建立。�
 - New offline `scripts/test/test-next-shared-deploy.py` validates **10/10** Next-only orchestration/negative cases, including unrecoverable rollback reporting; existing `scripts/test/test-next-shared-package.py` **8/8** passes against the built `.app`. Repo-local Go compilation cache was moved to `dist/next-go-build-cache` (private, symlink/owner checked). Go cache is content-addressed; each build still has a fresh TMPDIR, compiles the current source, signs anew, and retains no stable/shared-service mutable state. Cache is primed from the initial cold build, but repeated-build speed improvement is **not yet benchmarked**.
 
 Next P8's `RoutePlanner` still has **nil** production `ConnectorStatusProvider`, the external lease verifier is still nil, and authenticated Edge remains `UNQUALIFIED`; this deployment smoke does not qualify Browser Connectors or close P8/C2b. The installed GUI **process** was verified, but macOS native WebView visual/keyboard/accessibility UAT has **not** been performed; P6/P7/P8 GUI acceptance is still open. No live Nexus pairing or real Edge tabs/CDP calls occurred. Mac-Dev host Go tests for Browser/Policy/Desktop API/Desktop Runtime and `go vet` passed. The signed updater/rollback, Windows/WSL/Linux native, and M9 release gates are unchanged.
+
+## 2026-10-09 Next-only deployment wrapper native UAT and PID binding
+
+From commit `32abf101`, hardened `packaging/macos/deploy-next-shared.py`
+to treat a generic 8767 HTTP 200 as insufficient evidence. The wrapper
+now checks that the exact `dev.dropabit.agentdock.next.core` launchd PID
+has (1) its executable open as
+`~/Applications/AgentDock Next.app/Contents/Helpers/agentdock`, (2) the
+`127.0.0.1:8767` listener in that same PID, and (3) `/healthz` HTTP 200;
+this is verified before any bundle replacement and again after the Next
+Registrar re-registration, with bounded read-only `lsof` checks. It is an
+**Next process and port owner gate, not proof of browser authentication or
+the user's Edge identity**.
+
+**Offline verification:** `python3 scripts/test/test-next-shared-deploy.py -v`
+**12/12 PASS** (including wrong Next executable, a mismatched listener PID,
+and pre-install rejection); `python3 scripts/test/test-next-shared-package.py
+'dist/next-shared-arm64.3gUf43/package/AgentDock Next.app'` **8/8 PASS**.
+`python3 -m py_compile`, `zsh -n packaging/macos/build-next-shared.sh`
+and `git diff --check` passed.
+
+**Live Next-only acceptance (stable `mac-dev` control):**
+- Source was the already verified, ad-hoc-signed Next arm64 app under
+  `dist/next-shared-arm64.3gUf43/package/AgentDock Next.app`; the
+  wrapper `python3 packaging/macos/deploy-next-shared.py
+  'dist/next-shared-arm64.3gUf43/package/AgentDock Next.app'` exited
+  **0** with `NEXT_ONLY_DEPLOYED` and explicit rollback path.
+- The bundled Next Core and Tunnel Registrar completed; new Core
+  PID `75320`, Tunnel PID `75385`; fresh Next Core had exact signed
+  helper executable and port-owner binding, HTTP 200
+  `{"ok":true,"version":"0.9.1"}`. Installed Core SHA-256 matched the
+  previously built source (`f6924e4437152cad20edb5aa03bdb1f3f19730754bf13c99091ae93dc35c2d4e`).
+- Next GUI was gracefully quit and relaunched only in the background
+  using its exact Bundle ID `dev.dropabit.agentdock.next`, new
+  PID `75792`, with no foreground activation. The updated
+  rollback Contents remain at
+  `~/Applications/.agentdock-next-replacement-5gla__hu/AgentDock Next.app/Contents`.
+  Older Next-only rollback Contents also remain; do not delete backups
+  until cleanup/release policy is separately reviewed.
+- The wrapper's **success path was natively exercised**, including
+  service registration and health. Its **automatic rollback on real
+  injected failure remains offline-fixture verified only**; the earlier
+  manual Next-only old-Contents swap and Registrar recovery were exercised
+  separately. No Developer ID/notarized release, GUI visual/accessibility
+  check, live Nexus, browser CDP/Edge profile operation or real Browser
+  Connector qualification occurred.
+- The original AgentDock control plane and stable services were not
+  modified/restarted; no AGY-ACP source mutation occurred in this task.
+
+Remaining deployment hardening: consider a structured installer transaction
+receipt rather than parsing stdout, guard crash/installer timeout after
+atomic swap, and add native failure-injection rollback acceptance using
+Next-only fixtures/explicit recovery. A successful Core health check is not
+a substitute for GUI WebView acceptance or C2b real Edge attestation.

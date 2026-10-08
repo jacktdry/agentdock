@@ -383,6 +383,16 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > native visual GUI or authenticated Edge UAT**: P6/P7/P8 and M9 gates stay
 > open. Live Nexus remains deferred.
 
+> 2026-10-09 Next-only deployment wrapper native acceptance:
+> `packaging/macos/deploy-next-shared.py` successfully swapped Next
+> Contents and refreshed only Next Core/Tunnel registrations. New
+> Next Core PID `75320` is independently bound to its bundled helper
+> executable and port 8767, HTTP 200; Tunnel PID `75385`, GUI PID
+> `75792`, rollback Contents retained. Offline wrapper tests 12/12,
+> bundle validation 8/8. Real failure-injection rollback, native GUI
+> accessibility/visual tests and real Edge Connector qualification remain
+> open. See [Next isolation deployment checkpoint](agentdock-next-isolation.md).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

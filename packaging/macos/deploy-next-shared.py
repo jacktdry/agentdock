@@ -85,11 +85,41 @@ def healthy_next_core() -> bool:
         return False
 
 
-def wait_for_core(previous_pid: int | None, *, max_seconds: float = 24) -> bool:
+def trusted_next_core_pid(pid: int, destination: Path) -> bool:
+    """Bind Next launchd PID, its signed bundle executable and listener.
+
+    A generic HTTP 200 on loopback does NOT establish service ownership.
+    These are read-only OS observations; no stable process is inspected.
+    """
+    if pid <= 0:
+        return False
+    expected_executable = str(destination / "Contents/Helpers/agentdock")
+    try:
+        txt = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-p", str(pid), "-d", "txt", "-Fn"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        listener = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-p", str(pid),
+             "-iTCP:8767", "-sTCP:LISTEN", "-Fp"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return (txt.returncode == 0 and listener.returncode == 0
+            and txt.stdout.splitlines().count("n" + expected_executable) == 1
+            and ("p" + str(pid)) in txt.stdout.splitlines()
+            and ("p" + str(pid)) in listener.stdout.splitlines())
+
+
+def wait_for_core(previous_pid: int | None, *, destination: Path, max_seconds: float = 24) -> bool:
     deadline = time.monotonic() + max_seconds
     while time.monotonic() < deadline:
         current = jobs().get(f"{LABEL_BASE}.core")
-        if current is not None and current != previous_pid and healthy_next_core():
+        if (current is not None and current != previous_pid
+                and trusted_next_core_pid(current, destination)
+                and healthy_next_core()
+                and trusted_next_core_pid(current, destination)):
             return True
         time.sleep(0.5)
     return False
@@ -123,7 +153,9 @@ def main() -> None:
     validate_bundle(destination, shared=True)
     loaded = jobs()
     previous_core = loaded.get(f"{LABEL_BASE}.core")
-    require(previous_core is not None and healthy_next_core(), "Existing Next Core must be running and healthy")
+    require(previous_core is not None and trusted_next_core_pid(previous_core, destination)
+            and healthy_next_core() and trusted_next_core_pid(previous_core, destination),
+            "Existing Next Core PID, binary, listener and health must match")
     previous_tunnel = loaded.get(f"{LABEL_BASE}.tunnel")
     tunnel_enabled = previous_tunnel is not None
 
@@ -135,7 +167,7 @@ def main() -> None:
         validate_bundle(destination, shared=True)
         verify_same_payload(source, destination)
         registrar(destination, "core")
-        require(wait_for_core(previous_core), "Updated Next Core failed its PID/health gate")
+        require(wait_for_core(previous_core, destination=destination), "Updated Next Core failed its PID/binary/listener/health gate")
         if tunnel_enabled:
             registrar(destination, "tunnel")
             updated_tunnel = jobs().get(f"{LABEL_BASE}.tunnel")
@@ -157,7 +189,7 @@ def main() -> None:
             NEXT_INSTALLER.rename_swap(backup, destination / "Contents")
             validate_bundle(destination, shared=True)
             registrar(destination, "core")
-            require(wait_for_core(None), "Rolled-back Next Core health not recovered")
+            require(wait_for_core(None, destination=destination), "Rolled-back Next Core identity/health not recovered")
             if tunnel_enabled:
                 registrar(destination, "tunnel")
             print("NEXT_ONLY_ROLLBACK_RESTORED", file=sys.stderr)

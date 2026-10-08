@@ -586,3 +586,28 @@ operation or visual WebView inspection was performed, and native keyboard
 UAT remains pending. Original AgentDock and AGY-ACP were unaffected;
 Nexus live UAT remains deferred and M9 release signed/update gates remain
 open.
+
+## P8 Next deployment wrapper native checkpoint (2026-10-09)
+
+The Next-only deployment wrapper `packaging/macos/deploy-next-shared.py`
+now independently binds the live Core's **launchd PID + exact Next helper
+binary + 8767 listening socket + /healthz**, before and after its bundled
+Core Registrar re-registration. Fake PID/port failures reject before
+install; no stable services are queried for mutation. Deployment
+negative/identity tests **12/12** and existing signed Next bundle tests
+**8/8** pass. The **wrapper success path** was executed in native Next:
+new Next Core PID `75320`, Tunnel PID `75385`, GUI relaunched in
+background as PID `75792`, Core HTTP 200 and installed source SHA-256
+equal to verified arm64 package. Old Next-only Contents backup retained at
+`~/Applications/.agentdock-next-replacement-5gla__hu/AgentDock Next.app/Contents`.
+Stable Mac-Dev continued throughout.
+
+This proves the Next **application process identity and service
+deployment** only. It does **not** provide trusted Edge runtime/profile
+incarnation, authenticated session, background/no-focus/safe-release
+capability qualification or atomic fenced browser operations. Production
+`RoutePlanner(..., nil)` and missing external peer verifier remain
+unchanged; Edge is still **UNQUALIFIED**. No user-owned Edge tab was
+touched, no Browser/Computer or Nexus live UAT was performed.
+The wrapper's failure-injection rollback is still offline-fixture only.
+See `docs/custom/agentdock-next-isolation.md` for full steps.

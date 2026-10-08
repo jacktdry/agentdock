@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "packaging/macos"))
 SPEC = importlib.util.spec_from_file_location("next_deploy", ROOT / "packaging/macos/deploy-next-shared.py")
 deploy = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(deploy)
+REAL_TRUSTED_NEXT_PID = deploy.trusted_next_core_pid
 
 
 class NextDeployTests(unittest.TestCase):
@@ -39,6 +40,7 @@ class NextDeployTests(unittest.TestCase):
             mock.patch.object(deploy.sys, "argv", ["deploy-next-shared.py", str(self.source)]),
             mock.patch.object(deploy, "validate_bundle", return_value=self.dest),
             mock.patch.object(deploy, "healthy_next_core", return_value=True),
+            mock.patch.object(deploy, "trusted_next_core_pid", return_value=True),
             mock.patch.object(deploy, "verify_same_payload"),
             mock.patch.object(deploy, "wait_for_core", return_value=True),
             mock.patch.object(deploy, "run_checked", return_value=self.install_output),
@@ -98,11 +100,40 @@ class NextDeployTests(unittest.TestCase):
             self.assertEqual(registrar.call_args_list,
                              [mock.call(self.dest, "core"), mock.call(self.dest, "tunnel")])
 
+    def test_listener_belongs_to_next_core_and_not_an_unrelated_pid(self):
+        expected = self.dest / "Contents/Helpers/agentdock"
+        matching = [
+            SimpleNamespace(returncode=0, stdout=f"p123\nftxt\nn{expected}\n"),
+            SimpleNamespace(returncode=0, stdout="p123\nf7\n"),
+        ]
+        with mock.patch.object(deploy.subprocess, "run", side_effect=matching) as proc:
+            self.assertTrue(REAL_TRUSTED_NEXT_PID(123, self.dest))
+            self.assertEqual(proc.call_count, 2)
+        wrong_binary = [
+            SimpleNamespace(returncode=0, stdout="p123\nftxt\nn/Applications/AgentDock.app/Contents/Helpers/agentdock\n"),
+            SimpleNamespace(returncode=0, stdout="p123\nf7\n"),
+        ]
+        with mock.patch.object(deploy.subprocess, "run", side_effect=wrong_binary):
+            self.assertFalse(REAL_TRUSTED_NEXT_PID(123, self.dest))
+        wrong_listener = [
+            SimpleNamespace(returncode=0, stdout=f"p123\nftxt\nn{expected}\n"),
+            SimpleNamespace(returncode=0, stdout="p999\nf7\n"),
+        ]
+        with mock.patch.object(deploy.subprocess, "run", side_effect=wrong_listener):
+            self.assertFalse(REAL_TRUSTED_NEXT_PID(123, self.dest))
+
+    def test_wrong_live_core_executable_rejects_before_swap(self):
+        with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
+             mock.patch.object(deploy, "trusted_next_core_pid", return_value=False):
+            with self.assertRaisesRegex(ValueError, "PID, binary, listener"):
+                deploy.main()
+            deploy.run_checked.assert_not_called()
+
     def test_unhealthy_core_rejects_before_install(self):
         with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
              mock.patch.object(deploy, "healthy_next_core", return_value=False), \
              mock.patch.object(deploy, "registrar") as registrar:
-            with self.assertRaisesRegex(ValueError, "running and healthy"):
+            with self.assertRaisesRegex(ValueError, "PID, binary, listener"):
                 deploy.main()
             deploy.run_checked.assert_not_called()
             registrar.assert_not_called()
