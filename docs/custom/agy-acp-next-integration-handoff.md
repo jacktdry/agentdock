@@ -47,6 +47,19 @@
 
 下一個 Next Session 工作前請先讀此文件與 ACP repo FORK_NOTES.md；在 ACP commit 及跨系統整合 UAT 前，上述功能都不能列為已完成或併入 Pre-M9 closeout。
 
+## ACP .10 新 checkpoint 與 Next-only 相容性 UAT（2026-10-09）
+
+此節優先於下方舊版 .9 checkpoint；舊段落保留供交接追溯。
+
+- ACP 工作樹：/Users/wei/sideProject/antigravity-acp-next-integration；分支 feature/next-integration-optin。
+- 最新 Commit：5e720cd（依序整合 376a77d stream PoC、bbcf356 native Hook policy PoC）。**1.2.0-agentdock.10 僅源碼候選版，未推送，未正式部署**。
+- 全套 Bun 測試 **385 pass / 0 fail**、TypeScript typecheck PASS、lint exit 0（原有 1 warning/4 infos）、macOS arm64 native build PASS。
+- stream parser 位於 src/agy/stream-json-poc.ts，採用 AGY 官方 init / step_update / result NDJSON 事件格式；1MiB 單事件／32 queue 限制，支援多輪累計、UTF-8 chunks、紅線錯誤遮罩；將 1MiB-per-event 配置改為小緩衝區擴容/重用。**完全沒有接入 ACP runtime：現行依然由 SQLite Poller 處理 prompt/replay/圖片/取消**。完整設計見 docs/research/stream-json-poc.md。
+- 權限研究找到上游官方 PreToolUse Hooks: https://www.agy.dev/docs/hooks/；src/agy/native-permission-policy.ts 僅實作可信 Session/Turn/operation digest、provider mock、Core allow/deny/timeout/cancel、未知工具拒絕的離線 PoC；docs/research/native-permission-policy.md 列完整 M8 Core 合約與限制。**Hook 尚未注入私有 AGY HOME、沒有 Next Core 授權端點；AGY_ACP_AUTO_APPROVE=0 持續拒絕所有 prompt，不可啟用為一般 Next Coding Profile**。
+- **Next-only 實機相容 smoke 已通過**：先確認 Next Antigravity ACP 無執行中任務，臨時備份並原子替換 Next 專用 ACP 檔案為 .10；透過 Next Core ACP info 回報 1.2.0-agentdock.10、protocol 1，成功 new Session (ready、model options 可讀)、close Session (closed)。完成後**將 Next 專用檔案恢復 .8**、重新載入並由 Next ACP info 確認回報 .8；原版 stable 全程維持 .8、沒有動過。
+- 此 smoke **不是新環境變數的 End-to-End UAT**：目前 Next Core 尚未設定 AGY_ACP_STATE_DIR、AGY_ACP_CHILD_ISOLATION=required，也未實作 M8 native PreToolUse 授權橋與 stream-json runtime 切換。下一個 Next Session 先完成 Next-only profile/state 路徑 owner/遷移與必要 env 注入、API/權限合約，才能執行這三項的完整跨程序 UAT；不要把 smoke 當成正式功能完成。
+- 其他 Session 正在編修 Next Browser Broker 與 Route Planner 檔案，本 ACP Session **未觸碰任何 Next Core/UI source 或該工作樹的其他未提交變更**。
+
 ## ACP 交付 checkpoint（2026-10-08）
 
 ACP 工作樹：/Users/wei/sideProject/antigravity-acp-next-integration
