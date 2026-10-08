@@ -569,7 +569,7 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
    - MCP settings；
    - i18n/a11y/responsive。
 4. ✅ **D — Independent security review + hardening**
-5. **E — Next-only package/live UAT ← NEXT**
+5. **E — Next-only package/live UAT：Desktop bridge PASS；native GUI UAT 待補**
 
 在 D 得到 0 BLOCKER / 0 HIGH 前，不 package/reinstall Next 做 P6 live UAT。
 
@@ -665,6 +665,28 @@ Hardening commit：07a1a935 fix(plugin): preserve candidate redaction boundaries
 附帶 reviewer orchestration note：第一輪 reviewer 雖被要求 read-only，仍建立兩個未追蹤 scratch Go 檔做局部實驗；已立即清除，未進 commit、未影響產品狀態。這是 reviewer/tool discipline 問題，不是 P6 product finding。
 
 Phase E 仍由 stable mac-dev 作唯一 mutation control plane；macbook-air-m3 只作部署後 Next read-only validation。
+
+### 17.4 Phase E Next-only live UAT checkpoint — 2026-10-08
+
+**狀態：installed Next / Desktop bridge live UAT PASS；可見視窗的 native GUI / accessibility UAT 尚未完成。P6 尚未正式 closeout。**
+
+- 部署前確認 Next 已安裝 commit `89e34852`，build date `2026-10-08T10:39:17+08:00`，因此本次**未重複打包或安裝**，直接使用現有 Next Core 做 live UAT。
+- stable Core 維持 PID `44832` / `127.0.0.1:8765`；Next Core 為 PID `44682` / `127.0.0.1:8767`，Next Tunnel / GUI 同時存在。本次不重啟 stable 或 Next。
+- Next public protected-resource metadata 使用正確路徑 `/.well-known/oauth-protected-resource/mcp` 回應 HTTP `200`；未授權 `/mcp` 回應預期 `401`。
+- Next connector `macbook-air-m3` 只作 read-only 驗證：Plugin `[]`；standalone MCP 仍只有既有 `memory`。
+- 透過**真正 Next runtime 的 native Desktop bridge**、不是 model-facing `plugin_manage`，使用獨立 disposable `p6-live-uat` 本機 folder/ZIP fixture 完成：
+  - authoritative registry snapshot、opaque candidate native picker preview / discard；
+  - 安裝版本 `1.0.0`，確認預設 `Enabled=false`；
+  - stale generation mutation 正確拒絕；operation journal status 可對帳；
+  - 無 MCP 的安全 fixture 完成 enable → disable；
+  - local ZIP update `1.0.0 → 2.0.0`，review current/candidate 分離，generation 變更並保留 Disabled；
+  - Plugin-owned `remote` MCP env snapshot / TOKEN set / configured-only readback / unset，Desktop result 不回傳寫入的測試值；該 remote MCP 始終 Disabled，未啟動對外連線；
+  - remove keep 回報 `data_preserved=true`，重新從 ZIP 安裝成功且 Disabled；
+  - remove purge 完成，最終 authoritative registry `0 plugins / 0 recovery items`。
+- Next private storage 另外保有兩筆 `grant-plugin.p6-live-uat*` JSON，僅含 `schema_version` / 隨機 `epoch`，**沒有 `grant`、access/refresh token**。這是既有 OAuth revocation epoch tombstone，防止 stale OAuth writer 復活舊授權；不是 credential residue，不應手動刪除。
+- native GUI process 正常，但 Orca read-only `list-windows` 回傳空列表；在避免強制前景操作的使用習慣下，**本次未做實際視窗的 keyboard/focus/320px visual/native picker walkthrough**。Frontend typecheck / 110 Vitest / production build / i18n 已有 Phase C 自動化證據，但不能替代 native GUI UAT。
+
+**Remaining P6 gate：**取得可見 Next GUI 視窗後，驗證 Plugin summary/empty state、folder/ZIP picker、install/update review、enable/disable、write-only env、keep/purge confirmations、P5 MCP → P6 deep link、鍵盤焦點與窄視窗；完成才可正式 P6 closeout。後續 P7 Nexus / Platform Essentials 可先進 read-only inventory，不得據此提前放行 M9。
 
 ## 18. Roundtable decision
 
