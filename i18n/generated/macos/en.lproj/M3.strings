@@ -211,8 +211,16 @@
 "browser.browser_enabled" = "Browser enabled";
 "browser.capability_unavailable" = "Snapshot capability negotiation unavailable or rejected.";
 "browser.company_required_edge_policies" = "Configured company-required Edge routes";
+"browser.configuration_hint" = "Loaded configuration describes intent only, including policies for all workspace classes.";
+"browser.configured_authenticated_edge_profiles" = "Configured authenticated external Edge profiles";
+"browser.configured_connectors" = "Configured connector definitions";
+"browser.configured_required_external_policies" = "Configured required-external workspace policies (all classes)";
+"browser.connector_health" = "Connector live health";
+"browser.connector_health_hint" = "No live health probe exists. Configuration, retained leases and worker states do not verify reachability or authentication. Company-required external Edge fails closed; managed Chrome is never a fallback.";
+"browser.connector_health_not_observed" = "NOT CHECKED";
 "browser.core_unavailable" = "Core unavailable; no confirmed snapshot or counters.";
 "browser.expired_leases" = "Expired leases";
+"browser.explicit_external_leases" = "Explicit external route leases";
 "browser.external_orphans" = "External orphans";
 "browser.failed_leases" = "Failed leases";
 "browser.failed_workers" = "Failed workers";
@@ -221,6 +229,7 @@
 "browser.leases_present" = "Retained leases present";
 "browser.lifecycle_error" = "Recorded lifecycle error";
 "browser.loading" = "Observing broker…";
+"browser.managed_leases" = "Managed isolated route leases";
 "browser.managed_orphans" = "Managed orphans";
 "browser.max_concurrency" = "Maximum concurrency";
 "browser.observation_hint" = "Observed at is the UTC time of this diagnostic observation. Stale means retained broker anomalies, not elapsed snapshot age or connector health. Counts are observed separately, not atomically.";
@@ -233,8 +242,12 @@
 "browser.queued_operations" = "Queued operations";
 "browser.ready_workers" = "Ready workers";
 "browser.releasing_leases" = "Releasing leases";
+"browser.required_external_leases" = "Required external route leases";
 "browser.retained" = "Retained records";
 "browser.retained_hint" = "Owners, leases and workers are retained records, not all running. Active leases are pending-cleanup, owned and unexpired; ready workers are retained states, not process probes.";
+"browser.retained_routes" = "Retained leases by route";
+"browser.retained_routes_hint" = "Retained records include expired, releasing and failed leases; these counts do not confirm live connections.";
+"browser.route_observations" = "Route and connector observations";
 "browser.routes" = "Default route: managed isolated Chrome. Company route: strictly requires configured authenticated Edge.";
 "browser.scope" = "Read-only broker diagnostics. Available means the bridge exists, not live connector health.";
 "browser.snapshot_unavailable" = "Snapshot transport unavailable; broker idle cannot be confirmed.";

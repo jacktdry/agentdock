@@ -8,6 +8,8 @@ import { useBrowserStore } from './browser'
 const idle = (): Snapshot => ({
   observedAt: '2026-10-08T00:00:00Z', availability: 'available', state: 'idle', stale: false,
   browserEnabled: true, acpEnabled: true, companyRequiredEdgePolicies: 1,
+  configuredConnectors: 2, configuredAuthenticatedEdgeProfiles: 1, configuredRequiredExternalPolicies: 2,
+  connectorHealth: 'not_observed', managedLeases: 0, requiredExternalLeases: 0, explicitExternalLeases: 0,
   owners: 0, leases: 0, workers: 0, activeLeases: 0, expiredLeases: 0, releasingLeases: 0,
   failedLeases: 0, unownedLeases: 0, readyWorkers: 0, failedWorkers: 0, activeOperations: 0,
   queuedOperations: 0, maxConcurrency: 4, queueCapacity: 8, managedOrphans: 0, externalOrphans: 0, lifecycleError: false,
@@ -57,6 +59,9 @@ describe('read-only browser observations', () => {
     expect(store.availabilityKey).toBe('browser.' + availability)
     expect(store.stateKey).toBe('browser.unavailable')
     expect(store.error).toBeNull()
+    expect(store.snapshot?.configuredConnectors).toBe(2)
+    expect(store.snapshot?.configuredRequiredExternalPolicies).toBe(2)
+    expect(store.snapshot?.connectorHealth).toBe('not_observed')
   })
   it('does not interpret observation age as stale or retained leases as running', async () => {
     const store = useBrowserStore()

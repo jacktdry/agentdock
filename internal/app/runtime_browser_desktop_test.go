@@ -37,10 +37,10 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 	d := toolbrowser.BrokerDiagnostics{
 		Owners: []toolbrowser.BrokerOwnerDiagnostic{{ACPSessionID: "PRIVATE_CANARY", CanonicalWorkspaceRoot: "/PRIVATE_CANARY"}},
 		Leases: []toolbrowser.BrokerLeaseDiagnostic{
-			{ACPSessionID: "PRIVATE_CANARY", PageID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now.Add(time.Minute)},
-			{ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now},
-			{CleanupState: toolbrowser.CleanupFailed, CleanupError: "PRIVATE_CANARY", ConnectorPID: 99123},
-			{ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupReleasing},
+			{Route: browserpolicy.RouteManaged, ACPSessionID: "PRIVATE_CANARY", PageID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now.Add(time.Minute)},
+			{Route: browserpolicy.RouteRequiredExternal, ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now},
+			{Route: browserpolicy.RouteExternal, CleanupState: toolbrowser.CleanupFailed, CleanupError: "PRIVATE_CANARY", ConnectorPID: 99123},
+			{Route: browserpolicy.RouteRequiredExternal, ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupReleasing},
 		},
 		Workers:            []toolbrowser.BrokerWorkerDiagnostic{{State: toolbrowser.WorkerReady, PID: 99123}, {State: toolbrowser.WorkerFailed, Error: "PRIVATE_CANARY"}},
 		Queue:              toolbrowser.BrokerQueueDiagnostic{Active: 2, Queued: 3, MaxConcurrency: 4, QueueCapacity: 5, ManagedOrphans: 1, ExternalOrphans: 2},
@@ -53,7 +53,7 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 	data, _ := json.Marshal(s)
 	var keys map[string]any
 	_ = json.Unmarshal(data, &keys)
-	allowed := strings.Fields("observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
+	allowed := strings.Fields("configuredConnectors configuredAuthenticatedEdgeProfiles configuredRequiredExternalPolicies connectorHealth managedLeases requiredExternalLeases explicitExternalLeases observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
 	if len(keys) != len(allowed) {
 		t.Fatalf("DTO keys changed: %s", data)
 	}
@@ -62,7 +62,7 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 			t.Fatalf("missing allowlisted key %s", key)
 		}
 	}
-	for _, forbidden := range []string{"PRIVATE_CANARY", "99123", "pid", "page_id", "lease_id", "workspace", "connector", "token", "cleanup", "endpoint", "url", "payload", "error\""} {
+	for _, forbidden := range []string{"PRIVATE_CANARY", "99123", "pid", "page_id", "lease_id", "workspace_id", "connector_id", "token", "cleanup", "endpoint", "url", "payload", "error\""} {
 		if strings.Contains(string(data), forbidden) {
 			t.Fatalf("unsafe %s", data)
 		}
@@ -126,7 +126,7 @@ func TestRuntimeBrowserDesktopGenuineBrokerReadDoesNotOperateWorker(t *testing.T
 	}
 	before, calls := bridge.Diagnostics(), session.calls
 	s := r.RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot)
-	if s.ActiveLeases != 1 || s.Owners != 1 || s.ReadyWorkers != 1 || s.State != "leases_present" || s.Stale {
+	if s.ManagedLeases != 1 || s.RequiredExternalLeases != 0 || s.ExplicitExternalLeases != 0 || s.ConnectorHealth != "not_observed" || s.ActiveLeases != 1 || s.Owners != 1 || s.ReadyWorkers != 1 || s.State != "leases_present" || s.Stale {
 		t.Fatalf("snapshot %#v", s)
 	}
 	if !reflect.DeepEqual(before, bridge.Diagnostics()) || calls != session.calls {
@@ -143,5 +143,68 @@ func TestRuntimeBrowserDesktopCompanyEdgeIsOnlyIntent(t *testing.T) {
 	data, _ := json.Marshal(s)
 	if strings.Contains(string(data), "PRIVATE_CANARY") {
 		t.Fatal("route identifiers leaked")
+	}
+}
+
+// Definitions (including unused profiles) and all policy classes describe intent,
+// independent of bridge availability; retained state never becomes live health.
+func TestRuntimeBrowserDesktopConfiguredAndRetainedRoutes(t *testing.T) {
+	cfg := config.Config{BrowserEnabled: true, ACPEnabled: true,
+		BrowserCatalog: browserpolicy.CatalogDefinition{
+			Profiles: []browserpolicy.ProfileDefinition{
+				{ID: "private-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal},
+				{ID: "private-unused", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal},
+				{ID: "private-persistent", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileExternalPersistent},
+				{ID: "private-chrome", Browser: browserpolicy.BrowserChrome, Class: browserpolicy.ProfileAuthenticatedExternal},
+			},
+			Connectors: []browserpolicy.ConnectorDefinition{{ID: "private-connector", ProfileID: "private-edge", Driver: browserpolicy.DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}},
+		},
+		BrowserWorkspacePolicies: []browserpolicy.WorkspaceRootPolicy{
+			{Root: "/private/company", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
+			{Root: "/private/default", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
+			{Root: "/private/managed", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}},
+		},
+	}
+	// Pure catalog/policy validation, deliberately no root canonicalization on read.
+	catalog, err := browserpolicy.NewCatalog(cfg.BrowserCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := browserpolicy.ValidateWorkspacePolicies(cfg.BrowserWorkspacePolicies, catalog); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][2]bool{{true, true}, {false, true}, {true, false}, {false, false}} {
+		cfg.BrowserEnabled, cfg.ACPEnabled = flags[0], flags[1]
+		s := (&Runtime{cfg: cfg}).RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot)
+		if s.ConfiguredConnectors != 1 || s.ConfiguredAuthenticatedEdgeProfiles != 2 || s.ConfiguredRequiredExternalPolicies != 2 || s.CompanyRequiredEdgePolicies != 1 || s.ConnectorHealth != "not_observed" || s.Leases != 0 || s.ManagedLeases != 0 || s.RequiredExternalLeases != 0 || s.ExplicitExternalLeases != 0 {
+			t.Fatal(s)
+		}
+		data, _ := json.Marshal(s)
+		if strings.Contains(string(data), "private-") || strings.Contains(string(data), "/private/") || strings.Contains(string(data), "127.0.0.1") {
+			t.Fatal(string(data))
+		}
+		s.Availability = "available"
+		s = aggregateBrowserDiagnostics(s, toolbrowser.BrokerDiagnostics{Leases: []toolbrowser.BrokerLeaseDiagnostic{
+			{Route: browserpolicy.RouteManaged, CleanupState: toolbrowser.CleanupFailed},
+			{Route: browserpolicy.RouteRequiredExternal, CleanupState: toolbrowser.CleanupReleasing},
+			{Route: browserpolicy.RouteRequiredExternal, ExpiresAt: time.Now().Add(-time.Hour)},
+			{Route: browserpolicy.RouteExternal},
+		}}, time.Now())
+		if s.ManagedLeases != 1 || s.RequiredExternalLeases != 2 || s.ExplicitExternalLeases != 1 || s.Leases != 4 || s.ConnectorHealth != "not_observed" || s.ConfiguredRequiredExternalPolicies != 2 {
+			t.Fatal(s)
+		}
+	}
+}
+
+func TestRuntimeBrowserDesktopInvalidDiagnosticsHideAllRetainedCounts(t *testing.T) {
+	for _, d := range []toolbrowser.BrokerDiagnostics{
+		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteManaged}, {Route: "PRIVATE_CANARY"}}},
+		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: ""}}},
+		{Queue: toolbrowser.BrokerQueueDiagnostic{Active: -1}},
+	} {
+		s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available", ConfiguredConnectors: 2}, d, time.Now())
+		if s.Availability != "broker_unavailable" || s.State != "unavailable" || s.Leases != 0 || s.ManagedLeases != 0 || s.ConfiguredConnectors != 2 || s.ConnectorHealth != "not_observed" {
+			t.Fatal(s)
+		}
 	}
 }

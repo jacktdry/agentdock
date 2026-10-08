@@ -139,3 +139,85 @@ and live browser connector checks are **not done**. P6/P7 native GUI remains
 pending, live Nexus remains deferred, and M9 gates remain unchanged. Stable
 AgentDock, Core 8765 and stable state were untouched. No Next restart,
 installation, deployment, network or live Nexus/browser/CDP call occurred.
+
+## Phase C1 offline Connector/Workspace route source checkpoint (2026-10-08)
+
+Bounded source development from `f45be4a8` on `feature/m8-permission-approval`
+extends the existing passive Snapshot and Browser panel, with no new endpoint,
+service, capability, mutation, polling or direct connector call.
+
+| Added field | Meaning |
+| --- | --- |
+| `configuredConnectors` | Number of loaded connector definitions, including unused definitions. |
+| `configuredAuthenticatedEdgeProfiles` | Number of configured Edge profiles with authenticated-external class, including profiles without a connector; never a verified login count. |
+| `configuredRequiredExternalPolicies` | Required-external policies across **all** workspace classes, including default and company. Existing `companyRequiredEdgePolicies` remains the company subset. |
+| `connectorHealth` | Fixed `not_observed`; the UI says **NOT CHECKED**. No live health probe occurs. |
+| `managedLeases`, `requiredExternalLeases`, `explicitExternalLeases` | Retained lease records by diagnostic route, including expired/releasing/failed records. Their sum equals `leases` when available; no reachability or successful attachment claim. |
+
+Counts use only trusted loaded Core configuration and existing Broker.Diagnostics.
+Configuration roots/endpoints are not re-read or canonicalized on snapshot. A
+verified Core snapshot can show configuration intent when Browser/ACP is disabled
+or the broker is unavailable. Retained counts are zero and hidden in those states;
+missing/unverified Core clears observations entirely. Unknown/empty lease routes
+or negative diagnostic queue counts hide the entire broker projection as
+`broker_unavailable`, preserving configuration intent without misclassifying an
+external route as managed. Desktop rejects negative counts, unknown health values,
+route-count mismatches (including overflow), inconsistent retained state/counts,
+and any unavailable snapshot carrying retained counters. Anomaly categories may
+still overlap. Older Core snapshots missing the required health/route aggregates
+fail closed as an invalid response; source validation does not update installed Core. Errors remain fixed and sanitized.
+
+`BrowserRouteObservations.vue` receives the typed Snapshot as a read-only prop.
+The existing Pinia store remains the only fetch authority (mount/manual refresh
+and negotiated snapshot capability). Flat en/zh-Hant/zh-Hans YAML labels separate
+configuration intent, retained records and absent live health. Exact JSON-key
+allowlist and canary tests exclude workspace paths, connector/profile/owner IDs,
+PIDs, URLs/endpoints, credentials, raw errors and browsing/personal information.
+
+Production `internal/app/runtime.go` still passes **nil** to NewRoutePlanner's
+status provider. `RoutePlanner.Resolve` therefore rejects required external Edge
+when runtime verification is absent; there is **no company fallback to managed
+Chrome**. Configuration, retained leases and ready workers cannot substitute for
+verified reachability/authentication.
+
+### Remaining C2 secure live provider and native acceptance gates
+
+C2 must establish a reviewed secure implementation of the existing
+ConnectorStatusProvider contract before exposing live health: bind observations
+to the trusted catalog connector/profile and verified runtime identity, define
+bounded freshness/timeouts and sanitized errors, and verify authentication,
+engine/transport compatibility and required background/no-focus/lease-target/safe-
+release capabilities. Missing, stale, mismatched or unverifiable observations
+must fail closed with no required-route downgrade. A future renderer projection
+requires a separate reviewed allowlist; no identities/endpoints/credentials or
+raw connector errors may cross it. C1 adds no provider or health probe.
+
+Native keyboard/accessibility/responsive GUI checks and installed signed Next
+Core peer verification UAT remain open. Live managed browser and user-owned
+external Edge behavior, authentication and ownership-safe release require later
+explicitly scoped acceptance. No native GUI or live browser acceptance is claimed;
+Nexus work remains deferred. Stable App/ports/services/installers/deployment,
+routing policy and user external Edge remain untouched. This offline source
+checkpoint does not close P8 or M9; the orchestrator owns review/integration.
+
+Offline validation: focused `go test` for app/desktopapi/desktopruntime/httpx
+Browser snapshots and browserpolicy/tool/browser route/catalog/policy/diagnostics
+passed; browserdesktop has no standalone tests (its projection is exercised by
+app/Desktop tests). Affected app/desktopapi/desktopruntime/browserdesktop `go vet`
+passed. Exact JSON-key privacy/canary, configured and retained-route, unknown-route,
+negative/overflow/inconsistent count and health-enum tests passed. Focused Vitest
+store/component/i18n tests passed **22/22** (3 files), including three-locale SSR
+presentation and unavailable-broker counter hiding; these are not native GUI tests.
+Wails beta.27 regenerated typed bindings (**75 methods / 116 models**, no warnings)
+and `go run ./tools/i18n generate` generated 11 deterministic artifacts. Final
+`npm run typecheck` passed; an earlier attempt used bindings before generation
+completed and failed on missing fields, then passed after regeneration.
+`npm run build` passed (190 modules); Vite reported a non-blocking >500 kB
+minified chunk warning. npm also warned about the existing minimum-release-age
+configuration, and Node warned that localStorage was unavailable in the test runtime.
+
+Global `go run ./tools/i18n check` still fails on pre-existing hardcoded
+Permission/ACP/Plugin/Connection text; no Browser source/test appears in findings.
+Generated freshness validation passed before that scan. No unrelated text was
+changed, no whole-repository suite or native/live UAT was run, and no commit,
+installation, deployment, push or runtime service/browser operation occurred.

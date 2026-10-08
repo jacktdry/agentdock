@@ -637,11 +637,35 @@
   <data name="browser.company_required_edge_policies" xml:space="preserve">
     <value>已配置的公司必需 Edge 路由数</value>
   </data>
+  <data name="browser.configuration_hint" xml:space="preserve">
+    <value>已加载的配置仅代表意图，包含所有工作区类别的策略。</value>
+  </data>
+  <data name="browser.configured_authenticated_edge_profiles" xml:space="preserve">
+    <value>已配置的需认证外部 Edge 配置文件</value>
+  </data>
+  <data name="browser.configured_connectors" xml:space="preserve">
+    <value>已配置的连接器定义</value>
+  </data>
+  <data name="browser.configured_required_external_policies" xml:space="preserve">
+    <value>已配置的必要外部路由工作区策略（所有类别）</value>
+  </data>
+  <data name="browser.connector_health" xml:space="preserve">
+    <value>连接器实时健康状态</value>
+  </data>
+  <data name="browser.connector_health_hint" xml:space="preserve">
+    <value>目前没有实时健康探测。配置、保留的 lease 与 worker 状态无法验证可连接性或登录状态。公司必要外部 Edge 路由在无法验证时拒绝使用，不会回退到 managed Chrome。</value>
+  </data>
+  <data name="browser.connector_health_not_observed" xml:space="preserve">
+    <value>未检查</value>
+  </data>
   <data name="browser.core_unavailable" xml:space="preserve">
     <value>Core 不可用；没有已确认的快照或计数。</value>
   </data>
   <data name="browser.expired_leases" xml:space="preserve">
     <value>已过期租约</value>
+  </data>
+  <data name="browser.explicit_external_leases" xml:space="preserve">
+    <value>明确指定外部路由 lease</value>
   </data>
   <data name="browser.external_orphans" xml:space="preserve">
     <value>外部孤立记录</value>
@@ -666,6 +690,9 @@
   </data>
   <data name="browser.loading" xml:space="preserve">
     <value>正在观察 Broker…</value>
+  </data>
+  <data name="browser.managed_leases" xml:space="preserve">
+    <value>Managed 隔离路由 lease</value>
   </data>
   <data name="browser.managed_orphans" xml:space="preserve">
     <value>受管理孤立记录</value>
@@ -703,11 +730,23 @@
   <data name="browser.releasing_leases" xml:space="preserve">
     <value>释放中租约</value>
   </data>
+  <data name="browser.required_external_leases" xml:space="preserve">
+    <value>必要外部路由 lease</value>
+  </data>
   <data name="browser.retained" xml:space="preserve">
     <value>保留记录</value>
   </data>
   <data name="browser.retained_hint" xml:space="preserve">
     <value>所有者、租约与工作进程是保留记录，不代表全部正在运行。有效租约为待清理、有所有者且未过期；就绪工作进程是保留状态，并非进程探测。</value>
+  </data>
+  <data name="browser.retained_routes" xml:space="preserve">
+    <value>按路由分类的保留 lease</value>
+  </data>
+  <data name="browser.retained_routes_hint" xml:space="preserve">
+    <value>保留记录包含已过期、释放中与失败的 lease；计数不代表实时连接已确认。</value>
+  </data>
+  <data name="browser.route_observations" xml:space="preserve">
+    <value>路由与连接器观测</value>
   </data>
   <data name="browser.routes" xml:space="preserve">
     <value>默认路由：受管理的隔离 Chrome。公司路由：严格要求已配置的认证 Edge。</value>

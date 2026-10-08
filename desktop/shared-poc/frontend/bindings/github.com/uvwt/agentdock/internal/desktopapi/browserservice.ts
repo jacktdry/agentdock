@@ -9,6 +9,11 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+/**
+ * Snapshot never connects to an arbitrary TCP port or reads a Core bearer.
+ * The verified macOS Unix socket peer must be the selected signed Next Core
+ * process; other platforms and untrusted roots fail closed.
+ */
 export function Snapshot(): $CancellablePromise<$models.BrowserSnapshotResult> {
     return $Call.ByID(3567077787);
 }

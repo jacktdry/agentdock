@@ -31,7 +31,7 @@ func NewBrowserService(root string) *BrowserService {
 
 func browserFailure(code string, category ErrorCategory, retry bool) BrowserSnapshotResult {
 	return BrowserSnapshotResult{
-		Snapshot: browserdesktop.Snapshot{Availability: "core_unavailable", State: "unavailable"},
+		Snapshot: browserdesktop.Snapshot{Availability: "core_unavailable", State: "unavailable", ConnectorHealth: browserdesktop.ConnectorHealthNotObserved},
 		Error:    NewError(code, "Browser snapshot unavailable", category, retry, nil),
 	}
 }
@@ -65,6 +65,9 @@ func (s *BrowserService) Snapshot(ctx context.Context) BrowserSnapshotResult {
 // Only allowlisted typed fields are returned; raw errors, identifiers and
 // browsing data are never accepted by this API.
 func validBrowserSnapshot(s browserdesktop.Snapshot) bool {
+	if s.ConnectorHealth != browserdesktop.ConnectorHealthNotObserved {
+		return false
+	}
 	if _, err := time.Parse(time.RFC3339Nano, s.ObservedAt); err != nil {
 		return false
 	}
@@ -79,6 +82,8 @@ func validBrowserSnapshot(s browserdesktop.Snapshot) bool {
 		return false
 	}
 	for _, n := range []int{
+		s.ConfiguredConnectors, s.ConfiguredAuthenticatedEdgeProfiles, s.ConfiguredRequiredExternalPolicies,
+		s.ManagedLeases, s.RequiredExternalLeases, s.ExplicitExternalLeases,
 		s.CompanyRequiredEdgePolicies, s.Owners, s.Leases, s.ActiveLeases,
 		s.ExpiredLeases, s.ReleasingLeases, s.FailedLeases, s.UnownedLeases,
 		s.Workers, s.ReadyWorkers, s.FailedWorkers, s.ActiveOperations,
@@ -89,5 +94,41 @@ func validBrowserSnapshot(s browserdesktop.Snapshot) bool {
 			return false
 		}
 	}
-	return true
+	if s.CompanyRequiredEdgePolicies > s.ConfiguredRequiredExternalPolicies {
+		return false
+	}
+	if s.Availability != "available" {
+		// Unavailable observations must never carry retained broker counters.
+		return s.State == "unavailable" && !s.Stale && !s.LifecycleError &&
+			s.Owners == 0 && s.Leases == 0 && s.ManagedLeases == 0 && s.RequiredExternalLeases == 0 && s.ExplicitExternalLeases == 0 &&
+			s.ActiveLeases == 0 && s.ExpiredLeases == 0 && s.ReleasingLeases == 0 && s.FailedLeases == 0 && s.UnownedLeases == 0 &&
+			s.Workers == 0 && s.ReadyWorkers == 0 && s.FailedWorkers == 0 && s.ActiveOperations == 0 && s.QueuedOperations == 0 &&
+			s.MaxConcurrency == 0 && s.QueueCapacity == 0 && s.ManagedOrphans == 0 && s.ExternalOrphans == 0
+	}
+	// Subtract bounded counts to avoid accepting an overflowing route-count sum.
+	remaining := s.Leases
+	for _, n := range []int{s.ManagedLeases, s.RequiredExternalLeases, s.ExplicitExternalLeases} {
+		if n > remaining {
+			return false
+		}
+		remaining -= n
+	}
+	if remaining != 0 {
+		return false
+	}
+	for _, n := range []int{s.ActiveLeases, s.ExpiredLeases, s.ReleasingLeases, s.FailedLeases, s.UnownedLeases} {
+		if n > s.Leases {
+			return false
+		}
+	}
+	if s.ActiveLeases > s.Leases-s.ReleasingLeases || s.FailedLeases > s.Leases-s.ReleasingLeases-s.ActiveLeases {
+		return false
+	}
+	stale := s.ExpiredLeases > 0 || s.FailedLeases > 0 || s.UnownedLeases > 0 || s.FailedWorkers > 0 || s.ManagedOrphans > 0 || s.ExternalOrphans > 0 || s.LifecycleError
+	if s.Stale != stale || (s.State == "stale") != stale ||
+		(!stale && ((s.State == "idle") != (s.Leases == 0))) {
+		return false
+	}
+	return s.ReadyWorkers <= s.Workers && s.FailedWorkers <= s.Workers &&
+		s.ReadyWorkers <= s.Workers-s.FailedWorkers && s.State != "unavailable"
 }

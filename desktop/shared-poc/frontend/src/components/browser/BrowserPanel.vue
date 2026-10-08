@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useBrowserStore } from '../../stores/browser'
 import { useI18n } from '../../i18n'
+import BrowserRouteObservations from './BrowserRouteObservations.vue'
 import BrowserSnapshotDetails from './BrowserSnapshotDetails.vue'
 const store = useBrowserStore()
 const { t } = useI18n()
@@ -25,8 +26,8 @@ onMounted(() => { void store.refresh() })
         <div><dt>{{ t('browser.browser_enabled') }}</dt><dd>{{ t(store.snapshot.browserEnabled ? 'common.yes' : 'common.no') }}</dd></div>
         <div><dt>{{ t('browser.acp_enabled') }}</dt><dd>{{ t(store.snapshot.acpEnabled ? 'common.yes' : 'common.no') }}</dd></div>
         <div><dt>{{ t('browser.observed_at') }}</dt><dd><time :datetime="store.snapshot.observedAt">{{ new Date(store.snapshot.observedAt).toISOString() }}</time></dd></div>
-        <div><dt>{{ t('browser.company_required_edge_policies') }}</dt><dd>{{ store.snapshot.companyRequiredEdgePolicies }}</dd></div>
       </dl>
+      <BrowserRouteObservations :snapshot="store.snapshot" />
       <BrowserSnapshotDetails v-if="store.snapshot.availability === 'available'" :snapshot="store.snapshot" />
     </div>
     <p class="hint">{{ t('browser.routes') }}</p>

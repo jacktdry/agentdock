@@ -637,11 +637,35 @@
   <data name="browser.company_required_edge_policies" xml:space="preserve">
     <value>Configured company-required Edge routes</value>
   </data>
+  <data name="browser.configuration_hint" xml:space="preserve">
+    <value>Loaded configuration describes intent only, including policies for all workspace classes.</value>
+  </data>
+  <data name="browser.configured_authenticated_edge_profiles" xml:space="preserve">
+    <value>Configured authenticated external Edge profiles</value>
+  </data>
+  <data name="browser.configured_connectors" xml:space="preserve">
+    <value>Configured connector definitions</value>
+  </data>
+  <data name="browser.configured_required_external_policies" xml:space="preserve">
+    <value>Configured required-external workspace policies (all classes)</value>
+  </data>
+  <data name="browser.connector_health" xml:space="preserve">
+    <value>Connector live health</value>
+  </data>
+  <data name="browser.connector_health_hint" xml:space="preserve">
+    <value>No live health probe exists. Configuration, retained leases and worker states do not verify reachability or authentication. Company-required external Edge fails closed; managed Chrome is never a fallback.</value>
+  </data>
+  <data name="browser.connector_health_not_observed" xml:space="preserve">
+    <value>NOT CHECKED</value>
+  </data>
   <data name="browser.core_unavailable" xml:space="preserve">
     <value>Core unavailable; no confirmed snapshot or counters.</value>
   </data>
   <data name="browser.expired_leases" xml:space="preserve">
     <value>Expired leases</value>
+  </data>
+  <data name="browser.explicit_external_leases" xml:space="preserve">
+    <value>Explicit external route leases</value>
   </data>
   <data name="browser.external_orphans" xml:space="preserve">
     <value>External orphans</value>
@@ -666,6 +690,9 @@
   </data>
   <data name="browser.loading" xml:space="preserve">
     <value>Observing broker…</value>
+  </data>
+  <data name="browser.managed_leases" xml:space="preserve">
+    <value>Managed isolated route leases</value>
   </data>
   <data name="browser.managed_orphans" xml:space="preserve">
     <value>Managed orphans</value>
@@ -703,11 +730,23 @@
   <data name="browser.releasing_leases" xml:space="preserve">
     <value>Releasing leases</value>
   </data>
+  <data name="browser.required_external_leases" xml:space="preserve">
+    <value>Required external route leases</value>
+  </data>
   <data name="browser.retained" xml:space="preserve">
     <value>Retained records</value>
   </data>
   <data name="browser.retained_hint" xml:space="preserve">
     <value>Owners, leases and workers are retained records, not all running. Active leases are pending-cleanup, owned and unexpired; ready workers are retained states, not process probes.</value>
+  </data>
+  <data name="browser.retained_routes" xml:space="preserve">
+    <value>Retained leases by route</value>
+  </data>
+  <data name="browser.retained_routes_hint" xml:space="preserve">
+    <value>Retained records include expired, releasing and failed leases; these counts do not confirm live connections.</value>
+  </data>
+  <data name="browser.route_observations" xml:space="preserve">
+    <value>Route and connector observations</value>
   </data>
   <data name="browser.routes" xml:space="preserve">
     <value>Default route: managed isolated Chrome. Company route: strictly requires configured authenticated Edge.</value>

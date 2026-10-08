@@ -281,6 +281,20 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > See [Phase B source checkpoint](pre-m9-browser-broker-roundtable.md#phase-b-offline-shared-ui-source-checkpoint-2026-10-08).
 
 
+> P8 Phase C1 source checkpoint (2026-10-08, from `f45be4a8`): passive
+> configured connector / authenticated external Edge profile / all-class required
+> workspace policy aggregates and retained lease route counts are implemented in
+> the existing Snapshot and typed Browser child. Health is fixed `not_observed`
+> (**NOT CHECKED**); config intent remains visible with a verified Core snapshot
+> and unavailable broker, while retained counts are hidden. Production planner
+> status provider remains nil: company-required external Edge fails closed with
+> no managed Chrome fallback. C2 secure live provider contract, Native GUI /
+> installed Next and live browser UAT remain open; Nexus remains deferred.
+> Offline focused Go tests/vet, JSON privacy validation, Vitest **22/22**, final
+> typecheck and production build passed; Wails bindings/i18n were regenerated.
+> Global i18n check retains pre-existing unrelated hardcoded-text failures.
+> See [Phase C1 source checkpoint](pre-m9-browser-broker-roundtable.md#phase-c1-offline-connectorworkspace-route-source-checkpoint-2026-10-08).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

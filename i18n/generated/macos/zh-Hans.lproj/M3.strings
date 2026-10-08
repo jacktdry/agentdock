@@ -211,8 +211,16 @@
 "browser.browser_enabled" = "浏览器功能已启用";
 "browser.capability_unavailable" = "快照能力协商不可用或被拒绝。";
 "browser.company_required_edge_policies" = "已配置的公司必需 Edge 路由数";
+"browser.configuration_hint" = "已加载的配置仅代表意图，包含所有工作区类别的策略。";
+"browser.configured_authenticated_edge_profiles" = "已配置的需认证外部 Edge 配置文件";
+"browser.configured_connectors" = "已配置的连接器定义";
+"browser.configured_required_external_policies" = "已配置的必要外部路由工作区策略（所有类别）";
+"browser.connector_health" = "连接器实时健康状态";
+"browser.connector_health_hint" = "目前没有实时健康探测。配置、保留的 lease 与 worker 状态无法验证可连接性或登录状态。公司必要外部 Edge 路由在无法验证时拒绝使用，不会回退到 managed Chrome。";
+"browser.connector_health_not_observed" = "未检查";
 "browser.core_unavailable" = "Core 不可用；没有已确认的快照或计数。";
 "browser.expired_leases" = "已过期租约";
+"browser.explicit_external_leases" = "明确指定外部路由 lease";
 "browser.external_orphans" = "外部孤立记录";
 "browser.failed_leases" = "失败租约";
 "browser.failed_workers" = "失败工作进程";
@@ -221,6 +229,7 @@
 "browser.leases_present" = "存在保留租约";
 "browser.lifecycle_error" = "已记录生命周期错误";
 "browser.loading" = "正在观察 Broker…";
+"browser.managed_leases" = "Managed 隔离路由 lease";
 "browser.managed_orphans" = "受管理孤立记录";
 "browser.max_concurrency" = "最大并发数";
 "browser.observation_hint" = "观察时间是本次诊断观察的 UTC 时间。stale 表示保留的 Broker 异常，不代表快照经过多久或连接器健康。各计数分别观察，并非原子快照。";
@@ -233,8 +242,12 @@
 "browser.queued_operations" = "排队操作";
 "browser.ready_workers" = "就绪工作进程";
 "browser.releasing_leases" = "释放中租约";
+"browser.required_external_leases" = "必要外部路由 lease";
 "browser.retained" = "保留记录";
 "browser.retained_hint" = "所有者、租约与工作进程是保留记录，不代表全部正在运行。有效租约为待清理、有所有者且未过期；就绪工作进程是保留状态，并非进程探测。";
+"browser.retained_routes" = "按路由分类的保留 lease";
+"browser.retained_routes_hint" = "保留记录包含已过期、释放中与失败的 lease；计数不代表实时连接已确认。";
+"browser.route_observations" = "路由与连接器观测";
 "browser.routes" = "默认路由：受管理的隔离 Chrome。公司路由：严格要求已配置的认证 Edge。";
 "browser.scope" = "只读 Broker 诊断。可用仅代表桥接存在，不代表实时连接器健康。";
 "browser.snapshot_unavailable" = "快照传输不可用；无法确认 Broker 空闲。";
