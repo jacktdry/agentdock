@@ -204,6 +204,35 @@ func TestDesktopCandidateTargetGenerationAndExpiryFailClosed(t *testing.T) {
 	}
 }
 
+func TestSafeCandidateReviewRedactsAbsolutePaths(t *testing.T) {
+	review := pluginruntime.Review{
+		Valid: true, Name: "safe-demo", Version: "1.0.0",
+		Description:   "Unix /Users/alice/private and Windows C:\\Users\\alice\\secret and UNC \\\\server\\share",
+		PackageDigest: "sha256:" + strings.Repeat("a", 64), Format: "portable",
+		Provenance: &pluginruntime.Provenance{
+			Origin: "https://example.invalid/repo",
+			Ref:    "/Users/alice/private-ref", Revision: "C:\\private\\revision", Subdir: "packages/demo",
+		},
+		Skills:      []pluginruntime.SkillComponent{{Name: "safe", Description: "See /opt/private/readme"}},
+		Warnings:    []string{"warning at /tmp/private/file"},
+		Issues:      []string{"issue at C:\\tmp\\private\\file"},
+		Executables: []string{"bin/tool"},
+	}
+	projected := safeCandidateReview(review, "", "/Users/alice/.agentdock")
+	data, _ := json.Marshal(projected)
+	for _, forbidden := range []string{"/Users/alice", "/opt/private", "/tmp/private", "C:\\", "\\\\server\\share"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("absolute path leaked %q: %s", forbidden, data)
+		}
+	}
+	if projected.Provenance == nil || projected.Provenance.Ref != "" || projected.Provenance.Revision != "" || projected.Provenance.Subdir != "packages/demo" {
+		t.Fatalf("unexpected provenance projection %#v", projected.Provenance)
+	}
+	if !strings.Contains(projected.Description, "[redacted-path]") || !strings.Contains(projected.Warnings[0], "[redacted-path]") {
+		t.Fatalf("path redaction missing %#v", projected)
+	}
+}
+
 func TestDecodeDesktopCandidateRequestStrict(t *testing.T) {
 	generation := strings.Repeat("a", 64)
 	candidateID := strings.Repeat("b", 64)

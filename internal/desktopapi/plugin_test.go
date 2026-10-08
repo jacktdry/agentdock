@@ -66,6 +66,9 @@ func TestPluginServiceCandidatePickerKeepsNativePathPrivate(t *testing.T) {
 	candidateID := strings.Repeat("a", 64)
 	service := &PluginService{
 		core: testMCPService(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == pluginDesktopCandidatePath && r.Header.Get("Authorization") != "Bearer desktop-control-secret" {
+				t.Fatal("candidate route did not use Desktop control credential")
+			}
 			body, _ := io.ReadAll(r.Body)
 			switch r.URL.Path {
 			case pluginDesktopCandidatePath:
@@ -91,6 +94,7 @@ func TestPluginServiceCandidatePickerKeepsNativePathPrivate(t *testing.T) {
 			}
 			return privatePath, nil
 		},
+		bootstrap: func(context.Context, string) (string, error) { return "desktop-control-secret", nil },
 	}
 	chosen := service.ChooseCandidate(context.Background(), PluginCandidatePickerInput{Kind: "install", SourceType: "zip"})
 	if chosen.Error != nil || chosen.Cancelled || chosen.Candidate == nil || chosen.Candidate.CandidateID != candidateID || chosen.SourceLabel != "secret-plugin.zip" {
@@ -115,5 +119,23 @@ func TestPluginServiceCandidatePickerCancelIsNotError(t *testing.T) {
 	result := service.ChooseCandidate(context.Background(), PluginCandidatePickerInput{Kind: "install", SourceType: "folder"})
 	if !result.Cancelled || result.Error != nil || result.Candidate != nil {
 		t.Fatalf("cancel result %#v", result)
+	}
+}
+
+func TestPluginServiceCandidateRequiresNativeBootstrap(t *testing.T) {
+	service := &PluginService{
+		core: testMCPService(t, func(http.ResponseWriter, *http.Request) {
+			t.Fatal("Core HTTP called without native Desktop credential")
+		}),
+		picker: func(string) (string, error) {
+			return "/private/plugin.zip", nil
+		},
+		bootstrap: func(context.Context, string) (string, error) {
+			return "", errors.New("native bootstrap unavailable")
+		},
+	}
+	result := service.ChooseCandidate(context.Background(), PluginCandidatePickerInput{Kind: "install", SourceType: "zip"})
+	if result.Error == nil || result.Error.Code != "DESKTOP_CONTROL_UNAUTHORIZED" || result.Error.Category != ErrorCategoryAuthentication {
+		t.Fatalf("bootstrap failure %#v", result)
 	}
 }

@@ -151,16 +151,17 @@ type PluginOperationResult struct {
 type PluginSourcePicker func(sourceType string) (string, error)
 
 type PluginService struct {
-	core   *MCPService
-	picker PluginSourcePicker
+	core      *MCPService
+	picker    PluginSourcePicker
+	bootstrap func(context.Context, string) (string, error)
 }
 
 func NewPluginService(root string) *PluginService {
-	return &PluginService{core: NewMCPService(root)}
+	return &PluginService{core: NewMCPService(root), bootstrap: bootstrapPermissionCredential}
 }
 
 func NewPluginServiceWithPicker(root string, picker PluginSourcePicker) *PluginService {
-	return &PluginService{core: NewMCPService(root), picker: picker}
+	return &PluginService{core: NewMCPService(root), picker: picker, bootstrap: bootstrapPermissionCredential}
 }
 
 func (s *PluginService) ChooseCandidate(ctx context.Context, input PluginCandidatePickerInput) PluginCandidateResult {
@@ -288,6 +289,8 @@ func safePluginError(code string, retryable bool, details map[string]string) *AP
 	switch code {
 	case "APPROVAL_REQUIRED":
 		category = ErrorCategoryPermission
+	case "DESKTOP_CONTROL_UNAUTHORIZED":
+		category = ErrorCategoryAuthentication
 	case "INVALID_PLUGIN_REQUEST", "PLUGIN_OPERATION_ID_INVALID", "PLUGIN_ENV_OWNERSHIP_INVALID", "PLUGIN_CREDENTIAL_REQUIRED", "PLUGIN_CANDIDATE_INVALID":
 		category = ErrorCategoryValidation
 	case "PLUGIN_REGISTRY_CONFLICT", "PLUGIN_GENERATION_CONFLICT", "PLUGIN_ENV_CONFLICT", "PLUGIN_RECOVERY_REQUIRED", "PLUGIN_OPERATION_ID_CONFLICT", "PLUGIN_OPERATION_IN_PROGRESS", "PLUGIN_CANDIDATE_TARGET_MISMATCH", "PLUGIN_ALREADY_INSTALLED":
@@ -396,9 +399,15 @@ func (s *PluginService) candidateRequest(ctx context.Context, payload pluginCand
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
-	if access.Token != "" {
-		request.Header.Set("Authorization", "Bearer "+access.Token)
+	bootstrap := s.bootstrap
+	if bootstrap == nil {
+		bootstrap = bootstrapPermissionCredential
 	}
+	credential, err := bootstrap(ctx, s.core.runtimeRoot)
+	if err != nil || strings.TrimSpace(credential) == "" {
+		return safePluginError("DESKTOP_CONTROL_UNAUTHORIZED", true, nil)
+	}
+	request.Header.Set("Authorization", "Bearer "+credential)
 	response, err := s.core.client.Do(request)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {

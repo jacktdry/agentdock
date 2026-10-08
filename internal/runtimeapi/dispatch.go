@@ -21,9 +21,6 @@ import (
 func MethodAllowed(method, path string) bool {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	cleanPath := strings.TrimSuffix(strings.TrimSpace(path), "/")
-	if cleanPath == "/internal/runtime/plugin/desktop/candidate" {
-		return method == http.MethodPost
-	}
 	if method == http.MethodGet {
 		return true
 	}
@@ -31,7 +28,7 @@ func MethodAllowed(method, path string) bool {
 		_, ok := runtimeTaskID(cleanPath)
 		return ok
 	}
-	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/plugin/desktop/candidate" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
+	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
 }
 
 func AllowHeader(path string) string {
@@ -41,9 +38,6 @@ func AllowHeader(path string) string {
 	}
 	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" {
 		return "GET, POST"
-	}
-	if cleanPath == "/internal/runtime/plugin/desktop/candidate" {
-		return "POST"
 	}
 	if cleanPath == "/internal/runtime/insertions" {
 		return "GET, POST"
@@ -178,20 +172,6 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		var args map[string]any
 		_ = json.Unmarshal(body, &args)
 		result, err := desktop.RuntimePluginDesktopManage(ctx, args)
-		return map[string]any(result), err
-	case path == "/internal/runtime/plugin/desktop/candidate" && method == http.MethodPost:
-		desktop, ok := runtime.(PluginDesktopCandidateRuntime)
-		if !ok {
-			return nil, toolplugin.DesktopError("PLUGIN_CORE_UNAVAILABLE", "unavailable")
-		}
-		typed, err := toolplugin.DecodeDesktopCandidateRequest(request.Body)
-		if err != nil {
-			return nil, err
-		}
-		body, _ := json.Marshal(typed)
-		var args map[string]any
-		_ = json.Unmarshal(body, &args)
-		result, err := desktop.RuntimePluginDesktopCandidate(ctx, args)
 		return map[string]any(result), err
 	case path == "/internal/runtime/plugins":
 		result, err := runtime.RuntimePlugins(ctx)

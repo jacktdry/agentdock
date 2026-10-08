@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	pluginruntime "github.com/uvwt/agentdock/internal/plugin"
 )
@@ -104,10 +105,38 @@ func safeCandidateText(value string, max int, replacements ...string) string {
 		}
 		return r
 	}, value)
+	value = redactAbsolutePathTokens(value)
 	if len(value) > max {
 		value = value[:max]
 	}
 	return value
+}
+
+func redactAbsolutePathTokens(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return unicode.IsSpace(r) })
+	if len(parts) == 0 {
+		return value
+	}
+	for index, part := range parts {
+		trimmed := strings.Trim(part, "()[]{}<>,;:'\"")
+		windowsAbs := len(trimmed) >= 3 && ((trimmed[0] >= 'A' && trimmed[0] <= 'Z') || (trimmed[0] >= 'a' && trimmed[0] <= 'z')) &&
+			trimmed[1] == ':' && (trimmed[2] == '\\' || trimmed[2] == '/')
+		uncAbs := strings.HasPrefix(trimmed, `\\`)
+		unixAbs := strings.HasPrefix(trimmed, "/") && !strings.HasPrefix(trimmed, "//")
+		if windowsAbs || uncAbs || unixAbs {
+			parts[index] = "[redacted-path]"
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func safeCandidateOpaqueLabel(value, source, home string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.Contains(value, "://") || strings.HasPrefix(value, "/") || strings.HasPrefix(value, `\\`) ||
+		(len(value) >= 3 && value[1] == ':' && (value[2] == '\\' || value[2] == '/')) {
+		return ""
+	}
+	return safeCandidateText(value, 256, source, home)
 }
 
 func safeCandidateOrigin(raw string) string {
@@ -145,8 +174,8 @@ func safeCandidateReview(review pluginruntime.Review, source, home string) Deskt
 	if review.Provenance != nil {
 		out.Provenance = &DesktopCandidateProvenance{
 			Origin:   safeCandidateOrigin(review.Provenance.Origin),
-			Ref:      safeCandidateText(review.Provenance.Ref, 256, source, home),
-			Revision: safeCandidateText(review.Provenance.Revision, 256, source, home),
+			Ref:      safeCandidateOpaqueLabel(review.Provenance.Ref, source, home),
+			Revision: safeCandidateOpaqueLabel(review.Provenance.Revision, source, home),
 			Subdir:   safeCandidateRelativePath(review.Provenance.Subdir),
 		}
 	}

@@ -51,13 +51,17 @@ func TestRuntimePluginDesktopCandidateRouteIsLoopbackOnlyAndSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = runtime.Close() })
-	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+	handler := desktopPluginCandidateHandler(runtime)
 
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "plugin.json"), []byte(`{"name":"http-candidate","version":"1.0.0","description":"HTTP candidate"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"action":"prepare","source":"` + source + `","kind":"install"}`
+	credential := runtime.DesktopPermissionControlCredential()
+	if credential == "" {
+		t.Fatal("missing Desktop control credential")
+	}
 
 	remote := httptest.NewRequest(http.MethodPost, "/internal/runtime/plugin/desktop/candidate", strings.NewReader(body))
 	remote.RemoteAddr = "203.0.113.9:4321"
@@ -71,9 +75,31 @@ func TestRuntimePluginDesktopCandidateRouteIsLoopbackOnlyAndSafe(t *testing.T) {
 		t.Fatal("remote candidate path leaked")
 	}
 
+	generic := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+	bypass := httptest.NewRequest(http.MethodPost, "/internal/runtime/plugin/desktop/candidate", strings.NewReader(body))
+	bypass.RemoteAddr = "127.0.0.1:4321"
+	bypass.Host = "127.0.0.1"
+	bypass.Header.Set("Authorization", "Bearer "+credential)
+	bypassResponse := httptest.NewRecorder()
+	generic.ServeHTTP(bypassResponse, bypass)
+	if bypassResponse.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("generic handler accepted candidate route status=%d body=%s", bypassResponse.Code, bypassResponse.Body.String())
+	}
+
+	ordinary := httptest.NewRequest(http.MethodPost, "/internal/runtime/plugin/desktop/candidate", strings.NewReader(body))
+	ordinary.RemoteAddr = "127.0.0.1:4321"
+	ordinary.Host = "127.0.0.1"
+	ordinary.Header.Set("Authorization", "Bearer ordinary-core-token")
+	ordinaryResponse := httptest.NewRecorder()
+	handler.ServeHTTP(ordinaryResponse, ordinary)
+	if ordinaryResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("ordinary bearer candidate status=%d body=%s", ordinaryResponse.Code, ordinaryResponse.Body.String())
+	}
+
 	local := httptest.NewRequest(http.MethodPost, "/internal/runtime/plugin/desktop/candidate", strings.NewReader(body))
 	local.RemoteAddr = "127.0.0.1:4321"
 	local.Host = "127.0.0.1"
+	local.Header.Set("Authorization", "Bearer "+credential)
 	localResponse := httptest.NewRecorder()
 	handler.ServeHTTP(localResponse, local)
 	if localResponse.Code != http.StatusOK {
@@ -88,6 +114,7 @@ func TestRuntimePluginDesktopCandidateRouteIsLoopbackOnlyAndSafe(t *testing.T) {
 	get := httptest.NewRequest(http.MethodGet, "/internal/runtime/plugin/desktop/candidate", nil)
 	get.RemoteAddr = "127.0.0.1:4321"
 	get.Host = "127.0.0.1"
+	get.Header.Set("Authorization", "Bearer "+credential)
 	getResponse := httptest.NewRecorder()
 	handler.ServeHTTP(getResponse, get)
 	if getResponse.Code != http.StatusMethodNotAllowed {
