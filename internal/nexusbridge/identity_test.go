@@ -343,6 +343,25 @@ func TestPairCheckedRevalidatesBeforeCommit(t *testing.T) {
 	}
 }
 
+func TestPairCheckedRejectsNodeIDDesktopCannotRead(t *testing.T) {
+	for _, invalid := range []string{"node/path", "node\nvalue", strings.Repeat("n", 129)} {
+		t.Run(fmt.Sprintf("len-%d", len(invalid)), func(t *testing.T) {
+			home := t.TempDir()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusCreated)
+				_, _ = fmt.Fprintf(w, `{"node":{"id":%q},"device_token":"private-secret"}`, invalid)
+			}))
+			defer server.Close()
+			if _, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "one-time"}, AbsentGeneration(), false); err == nil {
+				t.Fatal("stored a server node ID that Desktop would reject")
+			}
+			if _, paired, err := CurrentGeneration(home); err != nil || paired {
+				t.Fatalf("unsafe node identity persisted: paired=%v err=%v", paired, err)
+			}
+		})
+	}
+}
+
 func TestPairSerializesAcrossCallers(t *testing.T) {
 	home := t.TempDir()
 	entered := make(chan int, 2)

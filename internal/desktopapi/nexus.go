@@ -73,7 +73,7 @@ func NewNexusService(runtimeRoot string) *NexusService {
 		readIdentity: desktopruntime.ReadNextNexusIdentity,
 		observe:      desktopruntime.ReadVerifiedNextNexusRuntimeStatus,
 		resolveHome:  desktopruntime.ResolveNextAgentDockHome,
-		pair:         nexusbridge.PairChecked,
+		pair:         nexusbridge.PairCheckedLocked,
 		restart:      desktopruntime.RunServiceActionLocked,
 	}}
 }
@@ -208,6 +208,14 @@ func (s *NexusService) Pair(ctx context.Context, request NexusPairRequest) Nexus
 		result.Error = nexusMutationError("next_identity_unavailable", "Next Nexus identity is unavailable", ErrorCategoryUnavailable, false)
 		return result
 	}
+	// Serialize Desktop pairing/restart with CLI re-pair across the entire
+	// transaction, not merely the device.json write.
+	releaseIdentity, err := nexusbridge.AcquirePairLock(operationCtx, lockedHome)
+	if err != nil {
+		result.Error = nexusMutationError("nexus_mutation_busy", "Nexus pairing is unavailable or in progress", ErrorCategoryConflict, true)
+		return result
+	}
+	defer releaseIdentity()
 	data, readErr := s.deps.readIdentity(operationCtx, s.runtimeRoot)
 	missing := errors.Is(readErr, os.ErrNotExist)
 	if readErr != nil && !missing {
@@ -234,6 +242,11 @@ func (s *NexusService) Pair(ctx context.Context, request NexusPairRequest) Nexus
 	}, request.ExpectedGeneration, request.ConfirmReplace)
 	if err != nil {
 		switch {
+		case errors.Is(err, nexusbridge.ErrIdentityCommitUncertain):
+			result.IdentitySaved = true
+			result.RestartRequired = true
+			result.ObservedGeneration = nexusbridge.Generation(identity)
+			result.Error = nexusMutationError("nexus_identity_durability_unverified", "Nexus identity was written but durability could not be verified", ErrorCategoryUnavailable, false)
 		case errors.Is(err, nexusbridge.ErrGenerationConflict):
 			result.Error = nexusMutationError("nexus_generation_conflict", "Nexus state changed; obtain a new pairing code and refresh", ErrorCategoryConflict, false)
 		case errors.Is(err, nexusbridge.ErrReplaceConfirmationNeeded):
@@ -284,6 +297,12 @@ func (s *NexusService) Reconcile(ctx context.Context, expectedGeneration string)
 		result.Error = nexusMutationError("next_identity_unavailable", "Next Nexus identity is unavailable", ErrorCategoryUnavailable, false)
 		return result
 	}
+	releaseIdentity, err := nexusbridge.AcquirePairLock(operationCtx, lockedHome)
+	if err != nil {
+		result.Error = nexusMutationError("nexus_mutation_busy", "Nexus pairing is unavailable or in progress", ErrorCategoryConflict, true)
+		return result
+	}
+	defer releaseIdentity()
 	data, readErr := s.deps.readIdentity(operationCtx, s.runtimeRoot)
 	if readErr != nil {
 		if errors.Is(readErr, os.ErrNotExist) {
@@ -332,15 +351,7 @@ func newNexusOperationID() string {
 }
 
 func safeNexusNodeID(value string) bool {
-	if len(value) == 0 || len(value) > 128 {
-		return false
-	}
-	for _, c := range value {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
-			return false
-		}
-	}
-	return true
+	return nexusbridge.ValidNodeID(value)
 }
 
 func safeNexusOrigin(value string) string {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/desktopruntime"
 	"github.com/uvwt/agentdock/internal/nexusbridge"
@@ -250,6 +251,105 @@ func TestNexusPairRestartFailureIsTruthfulAndRedacted(t *testing.T) {
 	for _, secret := range []string{"SAVED_SECRET", "ONE_TIME_SECRET", "/private/path", "stderr"} {
 		if strings.Contains(string(encoded), secret) {
 			t.Fatalf("leaked %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestNexusDesktopMutationsRetainCLIPairLockThroughRestart(t *testing.T) {
+	for _, action := range []string{"pair", "reconcile"} {
+		t.Run(action, func(t *testing.T) {
+			root, home := t.TempDir(), t.TempDir()
+			identity := nexusFixtureIdentity("LOCKED_SECRET")
+			data, readErr := []byte(nil), error(os.ErrNotExist)
+			if action == "reconcile" {
+				data, readErr = nexusFixture("LOCKED_SECRET"), nil
+			}
+			enteredRestart, resumeRestart := make(chan struct{}), make(chan struct{})
+			s := NewNexusService(root)
+			s.deps = nexusDependencies{
+				readIdentity: func(context.Context, string) ([]byte, error) { return data, readErr },
+				resolveHome:  func(context.Context, string) (string, error) { return home, nil },
+				pair: func(context.Context, string, nexusbridge.PairOptions, string, bool) (nexusbridge.Identity, error) {
+					data, readErr = nexusFixture("LOCKED_SECRET"), nil
+					return identity, nil
+				},
+				restart: func(context.Context, string, string) error {
+					close(enteredRestart)
+					<-resumeRestart
+					return nil
+				},
+				observe: func(context.Context, string) (desktopruntime.ServiceStatus, error) {
+					return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusIdentityGeneration: nexusbridge.Generation(identity)}, nil
+				},
+			}
+			resultCh := make(chan NexusMutationResult, 1)
+			go func() {
+				if action == "pair" {
+					resultCh <- s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "ONE_TIME", ExpectedGeneration: nexusbridge.AbsentGeneration()})
+				} else {
+					resultCh <- s.Reconcile(context.Background(), nexusbridge.Generation(identity))
+				}
+			}()
+			select {
+			case <-enteredRestart:
+			case result := <-resultCh:
+				t.Fatalf("mutation exited before restart: %+v", result)
+			case <-time.After(5 * time.Second):
+				t.Fatal("mutation did not reach restart")
+			}
+			waitCtx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+			release, err := nexusbridge.AcquirePairLock(waitCtx, home)
+			cancel()
+			if err == nil {
+				release()
+				close(resumeRestart)
+				t.Fatal("CLI pair lock became available while Desktop restart was in progress")
+			}
+			close(resumeRestart)
+			select {
+			case result := <-resultCh:
+				if !result.Completed || result.Error != nil {
+					t.Fatalf("mutation failed after protected restart: %+v", result)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("mutation never released identity lock")
+			}
+			release, err = nexusbridge.AcquirePairLock(context.Background(), home)
+			if err != nil {
+				t.Fatalf("identity lock still held after completion: %v", err)
+			}
+			release()
+		})
+	}
+}
+
+func TestNexusPairPostRenameFailureCannotClaimUnsaved(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	identity := nexusFixtureIdentity("POST_RENAME_SECRET")
+	data := []byte(nil)
+	readErr := error(os.ErrNotExist)
+	restarts := 0
+	s := NewNexusService(root)
+	s.deps = nexusDependencies{
+		readIdentity: func(context.Context, string) ([]byte, error) { return data, readErr },
+		resolveHome:  func(context.Context, string) (string, error) { return home, nil },
+		pair: func(context.Context, string, nexusbridge.PairOptions, string, bool) (nexusbridge.Identity, error) {
+			data, readErr = nexusFixture("POST_RENAME_SECRET"), nil
+			return identity, nexusbridge.ErrIdentityCommitUncertain
+		},
+		restart: func(context.Context, string, string) error {
+			restarts++
+			return nil
+		},
+	}
+	result := s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "ONE_TIME_SECRET", ExpectedGeneration: nexusbridge.AbsentGeneration()})
+	if result.Completed || !result.IdentitySaved || !result.RestartRequired || result.ObservedGeneration != nexusbridge.Generation(identity) || result.Error == nil || result.Error.Code != "nexus_identity_durability_unverified" || restarts != 0 {
+		t.Fatalf("post-commit durability failure misreported: %+v restarts=%d", result, restarts)
+	}
+	encoded, _ := json.Marshal(result)
+	for _, secret := range []string{"POST_RENAME_SECRET", "ONE_TIME_SECRET", home} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("post-commit failure leaked %q: %s", secret, encoded)
 		}
 	}
 }

@@ -52,6 +52,9 @@ type PairOptions struct {
 var (
 	ErrGenerationConflict        = errors.New("nexus generation conflict")
 	ErrReplaceConfirmationNeeded = errors.New("nexus replace confirmation required")
+	// ErrIdentityCommitUncertain means rename succeeded, but the parent directory
+	// could not be synced. The identity is visible now; crash durability is unknown.
+	ErrIdentityCommitUncertain = errors.New("nexus identity saved but durability unverified")
 )
 
 type pairResponse struct {
@@ -59,6 +62,20 @@ type pairResponse struct {
 		ID string `json:"id"`
 	} `json:"node"`
 	DeviceToken string `json:"device_token"`
+}
+
+// ValidNodeID is shared by pairing and the Next Desktop snapshot. Reject a
+// server-supplied node identity that the UI could not later read or replace.
+func ValidNodeID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for _, ch := range value {
+		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func Pair(ctx context.Context, agentDockHome string, options PairOptions) (Identity, error) {
@@ -89,6 +106,9 @@ func pairWithNetwork(ctx context.Context, agentDockHome string, options PairOpti
 		return Identity{}, err
 	}
 	if err := Save(agentDockHome, identity); err != nil {
+		if errors.Is(err, ErrIdentityCommitUncertain) {
+			return identity, err
+		}
 		return Identity{}, err
 	}
 	return identity, nil
@@ -102,20 +122,46 @@ func PairChecked(ctx context.Context, agentDockHome string, options PairOptions,
 	return pairCheckedWithNetwork(ctx, agentDockHome, options, expectedGeneration, confirmReplace, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second}).DialContext)
 }
 
+// AcquirePairLock is the shared CLI/Desktop transaction lock. Desktop must
+// hold it through Core restart and active-generation observation, not merely
+// while writing device.json. Acquire Desktop's runtime lock first.
+func AcquirePairLock(ctx context.Context, agentDockHome string) (func(), error) {
+	if err := preparePairHome(agentDockHome); err != nil {
+		return nil, err
+	}
+	release, err := acquirePairLock(ctx, agentDockHome)
+	if err != nil {
+		return nil, err
+	}
+	if err := preparePairHome(agentDockHome); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
+}
+
+// PairCheckedLocked requires the caller to hold AcquirePairLock for this home.
+// It intentionally does not acquire the lock again; Desktop retains ownership
+// through restart/observation, while the CLI uses PairChecked instead.
+func PairCheckedLocked(ctx context.Context, agentDockHome string, options PairOptions, expectedGeneration string, confirmReplace bool) (Identity, error) {
+	return pairCheckedLockedWithNetwork(ctx, agentDockHome, options, expectedGeneration, confirmReplace, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second}).DialContext)
+}
+
 func pairCheckedWithNetwork(ctx context.Context, agentDockHome string, options PairOptions, expectedGeneration string, confirmReplace bool, lookup pairLookup, dial pairDial) (Identity, error) {
 	if strings.TrimSpace(expectedGeneration) == "" {
 		return Identity{}, ErrGenerationConflict
 	}
-	if err := preparePairHome(agentDockHome); err != nil {
-		return Identity{}, err
-	}
-	release, err := acquirePairLock(ctx, agentDockHome)
+	release, err := AcquirePairLock(ctx, agentDockHome)
 	if err != nil {
 		return Identity{}, err
 	}
 	defer release()
-	if err := preparePairHome(agentDockHome); err != nil {
-		return Identity{}, err
+	return pairCheckedLockedWithNetwork(ctx, agentDockHome, options, expectedGeneration, confirmReplace, lookup, dial)
+}
+
+func pairCheckedLockedWithNetwork(ctx context.Context, agentDockHome string, options PairOptions, expectedGeneration string, confirmReplace bool, lookup pairLookup, dial pairDial) (Identity, error) {
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return Identity{}, ErrGenerationConflict
 	}
 	currentGeneration, paired, err := CurrentGeneration(agentDockHome)
 	if err != nil {
@@ -139,6 +185,9 @@ func pairCheckedWithNetwork(ctx context.Context, agentDockHome string, options P
 		return Identity{}, ErrGenerationConflict
 	}
 	if err := Save(agentDockHome, identity); err != nil {
+		if errors.Is(err, ErrIdentityCommitUncertain) {
+			return identity, err
+		}
 		return Identity{}, err
 	}
 	return identity, nil
@@ -207,7 +256,7 @@ func exchangeWithNetwork(ctx context.Context, options PairOptions, lookup pairLo
 	if err := json.Unmarshal(data, &paired); err != nil {
 		return Identity{}, errors.New("NexusDock 配对响应无效")
 	}
-	if paired.Node.ID == "" || paired.DeviceToken == "" {
+	if !ValidNodeID(paired.Node.ID) || paired.DeviceToken == "" {
 		return Identity{}, errors.New("NexusDock 配对响应缺少节点身份")
 	}
 	return Identity{Version: identityVersion, Endpoint: endpoint, NodeID: paired.Node.ID, DeviceID: deviceID, DeviceToken: paired.DeviceToken}, nil

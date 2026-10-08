@@ -95,6 +95,12 @@ func readIdentityData(agentDockHome string) ([]byte, error) {
 }
 
 func writeIdentityData(agentDockHome string, data []byte) error {
+	return writeIdentityDataWithSync(agentDockHome, data, unix.Fsync)
+}
+
+// writeIdentityDataWithSync permits an isolated failure-injection test for the
+// durability boundary after rename, without overriding process-global state.
+func writeIdentityDataWithSync(agentDockHome string, data []byte, syncDirectory func(int) error) error {
 	if len(data) > maxIdentityFileBytes {
 		return errors.New("NexusDock identity file is too large")
 	}
@@ -146,8 +152,8 @@ func writeIdentityData(agentDockHome string, data []byte) error {
 		return errors.New("commit NexusDock identity transaction")
 	}
 	committed = true
-	if err := unix.Fsync(nexusFD); err != nil {
-		return errors.New("sync NexusDock identity directory")
+	if err := syncDirectory(nexusFD); err != nil {
+		return ErrIdentityCommitUncertain
 	}
 	return nil
 }
