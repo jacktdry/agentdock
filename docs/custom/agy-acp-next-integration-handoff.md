@@ -47,6 +47,17 @@
 
 下一個 Next Session 工作前請先讀此文件與 ACP repo FORK_NOTES.md；在 ACP commit 及跨系統整合 UAT 前，上述功能都不能列為已完成或併入 Pre-M9 closeout。
 
+## ACP .11 P1/P2 source checkpoint（2026-10-09，Next Session 請先讀）
+
+**重要：只完成 ACP-side source-only 實驗功能，Next Core 的真實權限授權與正式串流仍未整合。原版 AgentDock 與 Next 目前均維持已安裝 .8。**
+
+- ACP 候選版：`1.2.0-agentdock.11`，worktree `/Users/wei/sideProject/antigravity-acp-next-integration`，branch `feature/next-integration-optin`，HEAD **`3956dec`**；包含 `079384d` Hook subprocess fixture 與 `9f7fd01` stream-json shadow，未 push、未部署。
+- 完整驗收：`bun test` **416 pass / 0 fail（40 files）**；`bun run typecheck` PASS；`bun run lint` exit 0（只有既存 warning/infos）；`bun run build:mac-arm64` PASS，編譯檔 `--version` 回報 `1.2.0-agentdock.11`。本次完全未執行會觸發 OAuth 的真實 `agy -p`。
+- **P1 Hook fixture：** `src/agy/native-hook-runtime.ts` 提供新的 `--agentdock-native-hook` runner 與 `installNativeHookFixture`，在私人 HOME 產生 Hook config，透過可信獨立子程序 mock provider 驗證 allow/deny/ask-deny、payload/binding/digest、timeout/cancel、provider 失效與符號連結/權限拒絕。測試 `tests/agy/native-hook-runtime.test.ts` 7 pass。這只是 fixture，**未接到 AGY 正式 child HOME，也未接到 Next Core M8 Policy**；`AGY_ACP_AUTO_APPROVE=0` 仍拒絕全部真實 Headless Prompt。Hook 自身不具 OS 防繞過保證；請勿把此當正式授權模式。合約與限制：ACP `docs/research/native-hook-runtime.md`、`docs/research/native-permission-policy.md`。
+- **P2 Shadow：** `AGY_ACP_STREAM_JSON` 預設 disabled，僅認得 `disabled` 或明確 `shadow`。設定 shadow 後才在**單次** AGY CLI 輸出加上 `--output-format stream-json`；`src/agy/stream-json-runtime.ts` 負責 bounded stdout/事件捕獲、與 SQLite DB 的觀察比對及固定錯誤碼 fallback。SQLite Poller 始終是 ACP 更新、取消、圖片及 replay 的唯一來源；**尚未支援 stream-json 直接輸出 ACP Update，也沒有長駐 input-format stream-json**。ACP `tests/agy/stream-json-runtime.test.ts` 和 `tests/acp/stream-json-shadow.test.ts` 24 pass。合約：ACP `docs/research/stream-json-runtime.md`。
+- **Next Core 分工／Gate：** Next Session 可先在自己專用的 Profile/State/臨時測試環境驗證 `AGY_ACP_STATE_DIR` 與 `AGY_ACP_CHILD_ISOLATION=required`，再在明確測試用的 Next Profile 開啟 `AGY_ACP_STREAM_JSON=shadow`。須先處理原有 Sessions/state 轉移及環境注入，不能誤改 stable。真正 native PreToolUse M8 Bridge 需 Next Core 決策端、可信 IPC/auth/binding/lease/取消 API，且實測 AGY Hook 在失敗/繞過時是否 fail closed；在這些 UAT 前不要 enable auto-approval=0 成一般 Coding Profile。
+- **尚待整合 UAT：** AUTH/Keychain 不重新跳登入、AGY tool Hook 是否真的觸發、allow/ask/deny 與斷線、模型/usage/Session、Broker enabled/disabled、stream stdout/DB event identity、取消/圖片/replay、reconnect/rollback。上述不可由這次 mock/純協定 smoke 取代；Another Next Session 持續獨立開發，本 Session 沒有變更 Next Core/UI 或其其他未提交檔案。
+
 ## ACP .10 新 checkpoint 與 Next-only 相容性 UAT（2026-10-09）
 
 此節優先於下方舊版 .9 checkpoint；舊段落保留供交接追溯。
