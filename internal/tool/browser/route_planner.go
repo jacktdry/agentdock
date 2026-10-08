@@ -2,6 +2,8 @@ package browser
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
@@ -27,9 +29,15 @@ type ProfilePlan struct {
 	RequiredCapabilities []ConnectorCapability
 }
 
-// ConnectorRuntimeStatus contains observations only, never configured identity
-// or ownership. No production status provider is implemented in this step.
+// ConnectorRuntimeStatus contains provider-observed identity and assertions,
+// never ownership. Identity consistency and freshness are not authentication or
+// profile attestation. No production status provider is implemented in this step.
 type ConnectorRuntimeStatus struct {
+	ConnectorID   string
+	ProfileID     string
+	Endpoint      string    // Exact canonical catalog endpoint; never renderer data.
+	ObservedAt    time.Time // UTC observation time.
+	ExpiresAt     time.Time // UTC expiration, at most five seconds after observation.
 	Healthy       bool
 	Verified      bool
 	Authenticated bool
@@ -40,13 +48,22 @@ type ConnectorRuntimeStatus struct {
 }
 
 type ConnectorStatusProvider interface {
+	// Returned slices must not be mutated concurrently with return or the
+	// planner's immediate copy. That provider contract cannot be enforced here.
 	ConnectorStatus(context.Context, string) (ConnectorRuntimeStatus, error)
+}
+
+func copyConnectorRuntimeStatus(status ConnectorRuntimeStatus) ConnectorRuntimeStatus {
+	status.Capabilities = append([]ConnectorCapability(nil), status.Capabilities...)
+	return status
 }
 
 type RoutePlanner struct {
 	policies []browserpolicy.WorkspaceRootPolicy
 	catalog  browserpolicy.Catalog
 	status   ConnectorStatusProvider
+	// Held until the provider actually returns, even after the caller times out.
+	statusInFlight chan struct{}
 }
 
 func NewRoutePlanner(policies []browserpolicy.WorkspaceRootPolicy, catalog browserpolicy.Catalog, status ConnectorStatusProvider) (*RoutePlanner, error) {
@@ -57,7 +74,7 @@ func NewRoutePlanner(policies []browserpolicy.WorkspaceRootPolicy, catalog brows
 	if err := browserpolicy.ValidateWorkspacePolicies(normalized, catalog); err != nil {
 		return nil, err
 	}
-	return &RoutePlanner{policies: normalized, catalog: catalog, status: status}, nil
+	return &RoutePlanner{policies: normalized, catalog: catalog, status: status, statusInFlight: make(chan struct{}, 1)}, nil
 }
 
 func requiredRouteCapabilities() []ConnectorCapability {
@@ -115,12 +132,73 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	if plan.Route == browserpolicy.RouteManaged {
 		return ResolveRoute(request)
 	}
+	if ctx.Err() != nil {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled")
+	}
 	if p.status == nil {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification unavailable")
 	}
-	status, err := p.status.ConnectorStatus(ctx, plan.ConnectorID)
-	if err != nil {
+	// Bound the caller's wait independently of provider cooperation. A stuck
+	// provider retains this planner's only slot; never spawn another behind it.
+	statusCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	select {
+	case p.statusInFlight <- struct{}{}:
+	case <-statusCtx.Done():
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
+	}
+	if ctx.Err() != nil || statusCtx.Err() != nil {
+		<-p.statusInFlight
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
+	}
+	type statusResult struct {
+		status ConnectorRuntimeStatus
+		err    error
+	}
+	results := make(chan statusResult, 1)
+	go func() {
+		defer func() { <-p.statusInFlight }()
+		completed := false
+		var result statusResult
+		defer func() {
+			if !completed {
+				// Completion flag also handles panic(nil) with legacy panicnil.
+				// Never retain or expose the panic value or stack.
+				_ = recover()
+				result = statusResult{err: errors.New("runtime connector verification unavailable")}
+			}
+			// Buffered so a timed-out consumer cannot prevent slot release.
+			results <- result
+		}()
+		status, err := p.status.ConnectorStatus(statusCtx, plan.ConnectorID)
+		status = copyConnectorRuntimeStatus(status)
+		result = statusResult{status: status, err: err}
+		completed = true
+	}()
+	var result statusResult
+	select {
+	case result = <-results:
+	case <-statusCtx.Done():
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
+	}
+	if ctx.Err() != nil || statusCtx.Err() != nil {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
+	}
+	if result.err != nil {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector verification unavailable")
+	}
+	status := result.status
+	if status.ConnectorID != plan.ConnectorID || status.ProfileID != plan.ProfileID || status.Endpoint != plan.Endpoint {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector identity mismatch")
+	}
+	now := time.Now().UTC()
+	_, observedOffset := status.ObservedAt.Zone()
+	_, expiresOffset := status.ExpiresAt.Zone()
+	if status.ObservedAt.IsZero() || status.ExpiresAt.IsZero() || observedOffset != 0 || expiresOffset != 0 ||
+		status.ObservedAt.After(now) || now.Sub(status.ObservedAt) > 5*time.Second ||
+		!status.ExpiresAt.After(now) || !status.ExpiresAt.After(status.ObservedAt) ||
+		status.ExpiresAt.Sub(status.ObservedAt) > 5*time.Second {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector observation stale or invalid")
 	}
 	request.Connectors = []ConnectorMetadata{{ID: plan.ConnectorID, Browser: plan.Browser, ProfileID: plan.ProfileID, ProfileClass: plan.ProfileClass, Endpoint: plan.Endpoint, Registered: true, Healthy: status.Healthy, Verified: status.Verified, Authenticated: status.Authenticated, Engine: status.Engine, EngineVersion: status.EngineVersion, Transport: status.Transport, Capabilities: status.Capabilities, Ownership: plan.Ownership}}
 	return ResolveRoute(request)

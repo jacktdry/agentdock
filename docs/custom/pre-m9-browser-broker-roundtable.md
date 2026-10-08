@@ -180,9 +180,9 @@ when runtime verification is absent; there is **no company fallback to managed
 Chrome**. Configuration, retained leases and ready workers cannot substitute for
 verified reachability/authentication.
 
-### Remaining C2 secure live provider and native acceptance gates
+### Remaining C2b secure live provider and native acceptance gates
 
-C2 must establish a reviewed secure implementation of the existing
+C2b must establish a reviewed secure implementation of the existing
 ConnectorStatusProvider contract before exposing live health: bind observations
 to the trusted catalog connector/profile and verified runtime identity, define
 bounded freshness/timeouts and sanitized errors, and verify authentication,
@@ -221,3 +221,80 @@ Permission/ACP/Plugin/Connection text; no Browser source/test appears in finding
 Generated freshness validation passed before that scan. No unrelated text was
 changed, no whole-repository suite or native/live UAT was run, and no commit,
 installation, deployment, push or runtime service/browser operation occurred.
+
+## Phase C2a offline runtime evidence envelope source checkpoint (2026-10-08)
+
+Bounded source changes from `3d741d82` on `feature/m8-permission-approval`
+extend ConnectorRuntimeStatus with provider-observed connector ID, profile ID,
+exact canonical endpoint, UTC observation and UTC expiration timestamps.
+Resolve requires exact agreement with the selected catalog connector/profile/
+endpoint (including port), a nonzero observation no later than now and at most
+five seconds old, and expiration strictly after now and observation with a TTL
+at most five seconds. Missing, stale, future, expired or inconsistent evidence
+returns sanitized routeUnavailable errors and no route decision. Existing health,
+verification, authentication, engine/version/transport and capability gates remain.
+
+Resolve uses a two-second derived context (or the earlier caller deadline) to
+bound slot acquisition and result waiting independently of provider cooperation.
+Each planner has one in-flight provider slot. A provider goroutine holds it until
+the provider actually returns, and sends into a one-item buffered result channel
+so an abandoned consumer cannot block cleanup. A timed-out caller fails closed;
+later callers wait only until their deadlines and cannot spawn another provider
+while that slot remains occupied. Caller/derived cancellation is rechecked after
+acquiring the slot and after receiving a result, before evidence validation.
+
+Provider goroutines recover panics, including nil-valued panics, publish a fixed
+unavailable failure without panic values/stacks/endpoints, and release the slot.
+Capabilities are copied immediately after provider return before publication;
+producer and consumer do not share that mutable slice. The provider must not
+mutate its backing array concurrently with return/copy: such a race cannot be
+prevented or verified by this boundary and remains a C2b source requirement.
+
+This hard-bounded caller response does not cancel an underlying network operation:
+a stuck provider can retain one goroutine and prevent further external verification
+on that planner indefinitely. The trusted internal planner is created once per
+runtime; the bound is per planner, not global across arbitrarily created planners.
+C2b needs a cancellation-safe authentic source and reviewed recovery lifecycle.
+Plan adds no provider/browser/network IO;
+the direct ResolveRoute offline fixture contract and managed routing are unchanged.
+Company required Edge cannot downgrade to managed Chrome. BrowserDesktop DTO,
+renderer allowlists, UI and compatibility records are unchanged.
+
+Production `internal/app/runtime.go` still passes **nil** as status provider.
+There is no live implementation, genuine authentication/profile/no-focus proof,
+Edge CDP probe or installed Next GUI UAT. Edge remains **UNQUALIFIED** for the
+authenticated default-profile/no-focus/per-lease-target workflow. Passing offline
+mocks prove source checks only: matching identity, freshness, websocket reachability
+and trusted configuration do not provide cryptographic or profile authentication
+attestation. No browser launch, Nexus call, restart, install or deployment occurred.
+
+C2b remains pending: review an authentic observation source and its trust boundary,
+bind evidence to the actual connector/profile/runtime incarnation, establish genuine
+login/profile and capability proof, and define revocation, replay resistance,
+ownership-safe lifecycle and cancellation behavior. Any secure proof requiring an
+external browser/profile lifecycle needs separately scoped implementation and UAT;
+it must not be replaced by configured booleans or an always-healthy provider.
+Renderer health exposure and native acceptance remain separately reviewed gates.
+
+Offline validation passed using `go1.27.1 darwin/arm64` (module declares Go
+1.26.5), with `GOCACHE=/private/tmp/agentdock-c2a-gocache` and `TMPDIR=/private/tmp`:
+
+- `go test ./internal/tool/browser ./internal/browserpolicy -run 'Test(Planner|ResolveRoute|Catalog|BrokerErrorContract|CompatibilityBaseline)' -count=1 -timeout=30s`
+- `go test -race ./internal/tool/browser -run 'TestPlanner' -count=1 -timeout=30s`
+- `GODEBUG=panicnil=1 go test ./internal/tool/browser -run '^TestPlannerProviderPanicRecovery$' -count=1 -timeout=30s`
+- `go vet ./internal/tool/browser ./internal/browserpolicy`
+- `git diff --check`
+
+Tests cover matching fresh offline Edge/explicit Chrome, identity/endpoint/port
+mismatches, noncanonical endpoint, missing/non-UTC/stale/future/expired/ill-ordered
+timestamps, excessive TTL, health/authentication/engine/version/transport/capability
+rejection, sanitized provider errors, cancellation before/after provider call,
+and healthy results returned after a short caller deadline. A non-cooperative
+blocked provider test verifies prompt failure, no second provider call while
+occupied, and slot recovery after actual return, with test blockers released.
+Panic/error-canary and nil-panic tests verify fail-closed recovery and subsequent
+fresh success; deterministic snapshot-copy tests verify capability slice isolation.
+No whole-repository suite or GUI/browser/network acceptance ran. Codebase-memory refresh was
+blocked by another active index operation; no store rebuild/overwrite occurred.
+Orchestrator review/integration remains pending; this checkpoint does not close
+P8/M9 or claim runtime qualification.

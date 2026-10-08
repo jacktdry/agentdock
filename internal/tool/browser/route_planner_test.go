@@ -3,9 +3,13 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
@@ -83,7 +87,8 @@ func TestPlannerCompanyIntentAndCanonicalScope(t *testing.T) {
 }
 
 func validRuntimeStatus() ConnectorRuntimeStatus {
-	return ConnectorRuntimeStatus{Healthy: true, Verified: true, Authenticated: true, Engine: EngineChromeDevToolsMCP, EngineVersion: PreferredEngineVersion, Transport: "websocket", Capabilities: requiredRouteCapabilities()}
+	now := time.Now().UTC()
+	return ConnectorRuntimeStatus{ConnectorID: "edge-ws", ProfileID: "user-edge", Endpoint: "ws://127.0.0.1:9222/devtools/browser", ObservedAt: now.Add(-time.Second), ExpiresAt: now.Add(3 * time.Second), Healthy: true, Verified: true, Authenticated: true, Engine: EngineChromeDevToolsMCP, EngineVersion: PreferredEngineVersion, Transport: "websocket", Capabilities: requiredRouteCapabilities()}
 }
 
 func TestPlannerRuntimeFailClosed(t *testing.T) {
@@ -94,6 +99,24 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 	}{
 		{name: "valid"},
 		{name: "missing status", mutate: func(s *ConnectorRuntimeStatus) { *s = ConnectorRuntimeStatus{} }},
+		{name: "wrong connector", mutate: func(s *ConnectorRuntimeStatus) { s.ConnectorID = "other" }},
+		{name: "missing connector", mutate: func(s *ConnectorRuntimeStatus) { s.ConnectorID = "" }},
+		{name: "wrong profile", mutate: func(s *ConnectorRuntimeStatus) { s.ProfileID = "other" }},
+		{name: "missing profile", mutate: func(s *ConnectorRuntimeStatus) { s.ProfileID = "" }},
+		{name: "wrong endpoint", mutate: func(s *ConnectorRuntimeStatus) { s.Endpoint += "/other" }},
+		{name: "wrong port", mutate: func(s *ConnectorRuntimeStatus) { s.Endpoint = "ws://127.0.0.1:9333/devtools/browser" }},
+		{name: "noncanonical endpoint", mutate: func(s *ConnectorRuntimeStatus) { s.Endpoint = "ws://127.0.0.1:09222/devtools/browser" }},
+		{name: "missing endpoint", mutate: func(s *ConnectorRuntimeStatus) { s.Endpoint = "" }},
+		{name: "zero observation", mutate: func(s *ConnectorRuntimeStatus) { s.ObservedAt = time.Time{} }},
+		{name: "zero expiration", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = time.Time{} }},
+		{name: "stale", mutate: func(s *ConnectorRuntimeStatus) { s.ObservedAt = time.Now().UTC().Add(-6 * time.Second) }},
+		{name: "future", mutate: func(s *ConnectorRuntimeStatus) { s.ObservedAt = time.Now().UTC().Add(time.Second) }},
+		{name: "expired", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = time.Now().UTC().Add(-time.Millisecond) }},
+		{name: "long TTL", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = s.ObservedAt.Add(5*time.Second + time.Nanosecond) }},
+		{name: "reversed times", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = s.ObservedAt.Add(-time.Second) }},
+		{name: "equal times", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = s.ObservedAt }},
+		{name: "non UTC observation", mutate: func(s *ConnectorRuntimeStatus) { s.ObservedAt = s.ObservedAt.In(time.FixedZone("offset", 3600)) }},
+		{name: "non UTC expiration", mutate: func(s *ConnectorRuntimeStatus) { s.ExpiresAt = s.ExpiresAt.In(time.FixedZone("offset", 3600)) }},
 		{name: "unhealthy", mutate: func(s *ConnectorRuntimeStatus) { s.Healthy = false }},
 		{name: "unverified", mutate: func(s *ConnectorRuntimeStatus) { s.Verified = false }},
 		{name: "unauthenticated", mutate: func(s *ConnectorRuntimeStatus) { s.Authenticated = false }},
@@ -103,7 +126,7 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 		{name: "missing version", mutate: func(s *ConnectorRuntimeStatus) { s.EngineVersion = "" }},
 		{name: "wrong transport", mutate: func(s *ConnectorRuntimeStatus) { s.Transport = "stdio" }},
 		{name: "missing transport", mutate: func(s *ConnectorRuntimeStatus) { s.Transport = "" }},
-		{name: "provider failure", providerErr: errors.New("unavailable")},
+		{name: "provider failure", providerErr: errors.New("ws://secret-canary:9222/devtools/browser?token=error-canary")},
 	}
 	for _, capability := range requiredRouteCapabilities() {
 		want := capability
@@ -146,6 +169,11 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 				assertRouteCode(t, err, ErrRequiredRouteUnavailable)
 				if decision != (RouteDecision{}) {
 					t.Fatalf("fail-open decision=%+v", decision)
+				}
+				var be *Error
+				errors.As(err, &be)
+				if be.Cause != nil || strings.Contains(fmt.Sprintf("%+v %+v", err, be.Details), "ws://") || strings.Contains(fmt.Sprintf("%+v %+v", err, be.Details), "error-canary") {
+					t.Fatalf("unsanitized error: %+v %+v", err, be.Details)
 				}
 				return
 			}
@@ -209,6 +237,175 @@ func TestPlannerRejectsInvalidPolicyCatalog(t *testing.T) {
 	}
 }
 
+func TestPlannerRuntimeCancellation(t *testing.T) {
+	for _, mode := range []string{"before", "deadline before", "during", "derived deadline"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if mode == "before" {
+				cancel()
+			}
+			if mode == "deadline before" {
+				var stop context.CancelFunc
+				ctx, stop = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				defer stop()
+			}
+			var calls atomic.Int32
+			returned := make(chan struct{}, 1)
+			provider := testConnectorStatus(func(providerCtx context.Context, _ string) (ConnectorRuntimeStatus, error) {
+				defer func() { returned <- struct{}{} }()
+				calls.Add(1)
+				deadline, ok := providerCtx.Deadline()
+				if !ok || time.Until(deadline) > 2*time.Second {
+					t.Fatal("provider context must have a bounded deadline")
+				}
+				if mode == "derived deadline" {
+					// Deliberately return healthy data after the caller deadline.
+					<-providerCtx.Done()
+				} else {
+					cancel()
+				}
+				return validRuntimeStatus(), nil
+			})
+			planner, scope := plannerFixture(t, provider)
+			if mode == "derived deadline" {
+				var stop context.CancelFunc
+				ctx, stop = context.WithTimeout(ctx, 30*time.Millisecond)
+				defer stop()
+			}
+			decision, err := planner.Resolve(ctx, scope, nil)
+			assertRouteCode(t, err, ErrRequiredRouteUnavailable)
+			wantCalls := 1
+			if mode == "before" || mode == "deadline before" {
+				wantCalls = 0
+			}
+			if wantCalls == 1 {
+				select {
+				case <-returned:
+				case <-time.After(time.Second):
+					t.Fatal("provider did not finish after cancellation")
+				}
+			}
+			if calls.Load() != int32(wantCalls) || decision != (RouteDecision{}) {
+				t.Fatalf("calls=%d decision=%+v", calls.Load(), decision)
+			}
+		})
+	}
+}
+
+func TestPlannerNonCooperativeProviderIsolation(t *testing.T) {
+	block := make(chan struct{})
+	released := false
+	returned := make(chan struct{})
+	var calls atomic.Int32
+	provider := testConnectorStatus(func(context.Context, string) (ConnectorRuntimeStatus, error) {
+		if calls.Add(1) == 1 {
+			<-block // Malicious source ignores cancellation.
+			defer close(returned)
+		}
+		return validRuntimeStatus(), nil
+	})
+	planner, scope := plannerFixture(t, provider)
+	defer func() {
+		if !released {
+			close(block)
+		}
+		if calls.Load() > 0 {
+			select {
+			case <-returned:
+			case <-time.After(time.Second):
+				t.Error("blocked provider did not finish during cleanup")
+			}
+		}
+	}()
+	for attempt := 0; attempt < 2; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		type outcome struct {
+			decision RouteDecision
+			err      error
+		}
+		done := make(chan outcome, 1)
+		go func() {
+			d, err := planner.Resolve(ctx, scope, nil)
+			done <- outcome{d, err}
+		}()
+		select {
+		case result := <-done:
+			cancel()
+			assertRouteCode(t, result.err, ErrRequiredRouteUnavailable)
+			if result.decision != (RouteDecision{}) || calls.Load() != 1 {
+				t.Fatalf("attempt=%d decision=%+v calls=%d", attempt, result.decision, calls.Load())
+			}
+		case <-time.After(time.Second):
+			cancel()
+			t.Fatal("Resolve blocked behind non-cooperative provider")
+		}
+		select {
+		case <-returned:
+			t.Fatal("provider unexpectedly returned before release")
+		default:
+		}
+	}
+	close(block)
+	released = true
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	decision, err := planner.Resolve(ctx, scope, nil)
+	if err != nil || calls.Load() != 2 || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge {
+		t.Fatalf("slot not recovered: decision=%+v calls=%d err=%v", decision, calls.Load(), err)
+	}
+}
+
+func TestPlannerProviderPanicRecovery(t *testing.T) {
+	for _, panicValue := range []any{errors.New("panic-canary ws://secret-endpoint user-canary"), nil} {
+		t.Run(fmt.Sprintf("nil=%t", panicValue == nil), func(t *testing.T) {
+			var calls atomic.Int32
+			provider := testConnectorStatus(func(context.Context, string) (ConnectorRuntimeStatus, error) {
+				if calls.Add(1) == 1 {
+					panic(panicValue)
+				}
+				return validRuntimeStatus(), nil
+			})
+			planner, scope := plannerFixture(t, provider)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			decision, err := planner.Resolve(ctx, scope, nil)
+			assertRouteCode(t, err, ErrRequiredRouteUnavailable)
+			var be *Error
+			errors.As(err, &be)
+			if decision != (RouteDecision{}) || be.Cause != nil || be.Details.Reason != "runtime connector verification unavailable" {
+				t.Fatalf("panic failed open or escaped: decision=%+v err=%+v", decision, be)
+			}
+			exposed := fmt.Sprintf("%+v %+v", err, be.Details)
+			for _, canary := range []string{"panic-canary", "ws://", "secret-endpoint", "user-canary", "goroutine"} {
+				if strings.Contains(exposed, canary) {
+					t.Fatalf("panic information escaped: %s", exposed)
+				}
+			}
+			decision, err = planner.Resolve(ctx, scope, nil)
+			if err != nil || calls.Load() != 2 || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge {
+				t.Fatalf("panic stranded slot: decision=%+v calls=%d err=%v", decision, calls.Load(), err)
+			}
+		})
+	}
+}
+
+func TestPlannerRuntimeStatusCopyOwnsCapabilities(t *testing.T) {
+	providerStatus := validRuntimeStatus()
+	snapshot := copyConnectorRuntimeStatus(providerStatus)
+	providerStatus.Capabilities[0] = "provider-mutation"
+	if snapshot.Capabilities[0] != CapabilityBackgroundPage {
+		t.Fatal("provider mutation changed planner snapshot")
+	}
+	snapshot.Capabilities[1] = "consumer-mutation"
+	if providerStatus.Capabilities[1] != CapabilityNoFocus {
+		t.Fatal("planner mutation changed provider storage")
+	}
+	if snapshot.ConnectorID != providerStatus.ConnectorID || snapshot.ObservedAt != providerStatus.ObservedAt {
+		t.Fatal("copy lost evidence envelope")
+	}
+}
+
 func TestPlannerExplicitExternalPersistentDoesNotRequireAuthentication(t *testing.T) {
 	root := t.TempDir()
 	catalog, err := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{
@@ -223,6 +420,7 @@ func TestPlannerExplicitExternalPersistentDoesNotRequireAuthentication(t *testin
 		t.Fatal(err)
 	}
 	status := validRuntimeStatus()
+	status.ConnectorID, status.ProfileID, status.Endpoint = "chrome-ws", "user-chrome", "ws://127.0.0.1:9333/devtools/browser"
 	status.Authenticated = false
 	provider := testConnectorStatus(func(_ context.Context, id string) (ConnectorRuntimeStatus, error) {
 		if id != "chrome-ws" {

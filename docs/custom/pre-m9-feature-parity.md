@@ -295,6 +295,30 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > Global i18n check retains pre-existing unrelated hardcoded-text failures.
 > See [Phase C1 source checkpoint](pre-m9-browser-broker-roundtable.md#phase-c1-offline-connectorworkspace-route-source-checkpoint-2026-10-08).
 
+> P8 Phase C2a source checkpoint (2026-10-08, from `3d741d82`): runtime
+> status now requires provider-observed connector/profile/exact canonical endpoint
+> identity and UTC timestamps with a five-second freshness/TTL limit. Cancellation
+> and a two-second derived deadline bound caller response with sanitized errors;
+> one provider slot per runtime planner remains held until actual provider return.
+> A stuck provider retains at most one provider goroutine per planner and blocks
+> later external verification without spawning another call. Underlying network
+> cancellation is not guaranteed; C2b requires a cancellation-safe authentic source.
+> Provider panics fail closed without exposing values/stacks and release the slot.
+> Capability snapshots own their copied slice; providers must avoid concurrent
+> mutation during return/copy, which this boundary cannot verify or prevent.
+> company-required Edge has no managed Chrome fallback. Offline matching Edge and
+> explicit Chrome mocks are source evidence only. Production planner provider
+> remains **nil**; BrowserDesktop DTO/UI and direct ResolveRoute fixtures are unchanged.
+> Consistency/freshness, websocket reachability and configuration are not genuine
+> authentication/profile/no-focus proof. Edge remains **UNQUALIFIED**; no Edge CDP
+> probe or installed Next GUI UAT occurred. C2b authentic observation source,
+> runtime identity/login/profile/capability proof and any required external lifecycle
+> remain pending, as do native acceptance/P8/M9; Nexus remains deferred.
+> Focused planner/route/catalog/contract/compatibility Go tests and browser/
+> browserpolicy vet and focused planner race tests passed; `git diff --check`
+> passed. Review/integration pending.
+> See [Phase C2a source checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2a-offline-runtime-evidence-envelope-source-checkpoint-2026-10-08).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：
@@ -539,4 +563,3 @@ Worker 成功不等於 Pre-M9 step 完成。
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
 除非 repo 文件已被後續 commit 明確 supersede，這個順序是 Pre-M9 的 source of truth。
-
