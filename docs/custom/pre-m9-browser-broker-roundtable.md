@@ -298,3 +298,73 @@ No whole-repository suite or GUI/browser/network acceptance ran. Codebase-memory
 blocked by another active index operation; no store rebuild/overwrite occurred.
 Orchestrator review/integration remains pending; this checkpoint does not close
 P8/M9 or claim runtime qualification.
+
+
+## Phase C2b-A trust-source qualification gate source checkpoint (2026-10-08)
+
+Source checkpoint on `feature/m8-permission-approval`, based on
+`00114b93` (C2a `8589ae10`). This is the negative qualification boundary only;
+**C2b is not complete**. Production `internal/app/runtime.go` still passes **nil**.
+Edge stays **CompatibilityUnqualified**. No production attestor, positive qualified
+provider, CLI/SSO login claim, admin bypass or environment toggle is implemented.
+
+`RoutePlanner.Resolve` requires a package-private opaque qualification before
+forwarding provider assertions to the pure trusted-metadata `ResolveRoute` helper.
+The seal binds a detached observation to connector/profile/exact canonical endpoint,
+health/verification/authentication, engine/version/transport and capabilities. It
+also binds distinct nonnil opaque qualification-source and runtime-incarnation
+identities. Raw booleans, fresh matching configuration IDs, HTTP/CDP/WebSocket
+reachability and serialized status cannot create this authority. Proof observation
+and raw timestamps must agree; both independently pass UTC five-second freshness/TTL checks
+prevent renewing expired proof by editing raw timestamps. Unsupported proof format,
+missing/cross-identity proof and assertion upgrades fail closed with a fixed sanitized
+error and zero decision, with no managed Chrome fallback.
+
+The qualification pointer is a single-use nonce, atomically consumed before
+forwarding; copies share consumption across planners. This prevents replay of the
+same in-memory authority, not a cryptographic attestation of a browser. Its fields
+and detached capability slice are immutable after minting except the atomic used
+flag. The trusted package is the authority boundary, not a sandbox against malicious
+code inside package browser. No production code constructs these private identities
+or qualifications. `qualifyRuntimeStatusForTest` exists solely in `_test.go`, clearly
+marked **TEST ONLY**, and fabricates observations for offline source contracts.
+Such fixtures cannot establish authenticated Edge profile or process ownership.
+
+Evidence remains private in Core; it is absent from Desktop/BrowserSnapshot and
+route decisions. No auth URL, cookie or PID field is added. Snapshot/UI, pure
+`ResolveRoute` contract fixtures, external worker lifecycle and managed Chrome's
+provider-free path remain unchanged. AGY handoff is untouched; a separate session
+owns AGY-ACP, with Next integration deferred until that ACP contract is stable.
+
+### Remaining C2b-B and acceptance gates
+
+A separately reviewed real attestor must independently verify actual process and
+runtime incarnation, user profile/authentication and background/no-focus/per-lease-
+target/safe-release capabilities, then mint immutable bounded evidence from that
+source. Config/status/reachability or canned production fixtures must never mint it.
+Source revocation, incarnation turnover, cancellation-safe observation/recovery and
+**attach-time revalidation** must be designed and tested before enabling any provider;
+a single-use planning nonce does not close the plan-to-attach TOCTOU gap.
+Consent-based native Next UAT must prove authenticated Edge, no focus or window
+mutation, target ownership and safe release while preserving user-owned resources.
+Renderer health projection requires separate allowlist review. No live browser,
+network/process probe, GUI UAT, broad build or deployment occurred during C2b-A source validation.
+P8/M9 remain open and live Nexus stays deferred; orchestrator owns final acceptance.
+
+
+Offline validation passed on `go1.27.1 darwin/arm64`, with
+`GOCACHE=/private/tmp/agentdock-c2b-a-gocache` and `TMPDIR=/private/tmp`:
+
+- `go test ./internal/tool/browser ./internal/browserpolicy -run 'Test(Planner|ResolveRoute|Catalog|BrokerErrorContract|CompatibilityBaseline)' -count=1 -timeout=30s`
+- `go test -race ./internal/tool/browser -run 'TestPlanner' -count=1 -timeout=30s`
+- `GODEBUG=panicnil=1 go test ./internal/tool/browser -run '^TestPlannerProviderPanicRecovery$' -count=1 -timeout=30s`
+- `go vet ./internal/tool/browser ./internal/browserpolicy`
+- `git diff --check`
+
+Tests cover raw perfect Edge/explicit Chrome rejection, qualified synthetic offline
+routes, missing/unsupported/cross-identity/source/incarnation proof, assertion upgrades,
+expired/future/non-UTC proof, stale/future raw observations, copied-nonce replay across
+planners and loss of authority after serialization. Existing cancellation, provider
+panic, non-cooperative slot isolation and managed-provider-free regressions pass.
+These results establish source contracts only. Codebase-memory refresh was blocked
+by another active index operation; no rebuild or overwrite was attempted.

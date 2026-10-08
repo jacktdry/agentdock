@@ -86,9 +86,23 @@ func TestPlannerCompanyIntentAndCanonicalScope(t *testing.T) {
 	assertRouteCode(t, err, ErrScopeRequired)
 }
 
-func validRuntimeStatus() ConnectorRuntimeStatus {
+func unqualifiedRuntimeStatus() ConnectorRuntimeStatus {
 	now := time.Now().UTC()
 	return ConnectorRuntimeStatus{ConnectorID: "edge-ws", ProfileID: "user-edge", Endpoint: "ws://127.0.0.1:9222/devtools/browser", ObservedAt: now.Add(-time.Second), ExpiresAt: now.Add(3 * time.Second), Healthy: true, Verified: true, Authenticated: true, Engine: EngineChromeDevToolsMCP, EngineVersion: PreferredEngineVersion, Transport: "websocket", Capabilities: requiredRouteCapabilities()}
+}
+
+// TEST ONLY: synthetic authority for offline routing contracts, never a login,
+// process/profile attestation or production-compatible qualification source.
+func qualifyRuntimeStatusForTest(status ConnectorRuntimeStatus) ConnectorRuntimeStatus {
+	status.source = &connectorEvidenceIdentity{}
+	status.incarnation = &connectorEvidenceIdentity{}
+	status.qualification = nil
+	status.qualification = &connectorQualification{format: 1, observation: copyConnectorRuntimeStatus(status)}
+	return status
+}
+
+func validRuntimeStatus() ConnectorRuntimeStatus {
+	return qualifyRuntimeStatusForTest(unqualifiedRuntimeStatus())
 }
 
 func TestPlannerRuntimeFailClosed(t *testing.T) {
@@ -145,10 +159,13 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			status := validRuntimeStatus()
+			status := unqualifiedRuntimeStatus()
 			if tc.mutate != nil {
 				tc.mutate(&status)
 			}
+			// Qualify the mutated observation so C2a/ResolveRoute gates are
+			// exercised rather than masked by a qualification mismatch.
+			status = qualifyRuntimeStatusForTest(status)
 			calls := 0
 			provider := testConnectorStatus(func(ctx context.Context, id string) (ConnectorRuntimeStatus, error) {
 				calls++
@@ -172,6 +189,24 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 				}
 				var be *Error
 				errors.As(err, &be)
+				if be.Details.Reason == "runtime connector qualification unavailable" {
+					t.Fatal("qualification gate masked runtime/policy regression")
+				}
+				wantReason := ""
+				switch tc.name {
+				case "unauthenticated":
+					wantReason = "authenticated external profile unavailable"
+				case "native engine", "unknown engine", "wrong version", "missing version", "wrong transport", "missing transport":
+					wantReason = "connector identity incomplete"
+				}
+				for _, capability := range requiredRouteCapabilities() {
+					if tc.name == "missing "+string(capability) {
+						wantReason = "required capability unavailable"
+					}
+				}
+				if wantReason != "" && be.Details.Reason != wantReason {
+					t.Fatalf("reason=%q, want %q", be.Details.Reason, wantReason)
+				}
 				if be.Cause != nil || strings.Contains(fmt.Sprintf("%+v %+v", err, be.Details), "ws://") || strings.Contains(fmt.Sprintf("%+v %+v", err, be.Details), "error-canary") {
 					t.Fatalf("unsanitized error: %+v %+v", err, be.Details)
 				}
@@ -422,6 +457,7 @@ func TestPlannerExplicitExternalPersistentDoesNotRequireAuthentication(t *testin
 	status := validRuntimeStatus()
 	status.ConnectorID, status.ProfileID, status.Endpoint = "chrome-ws", "user-chrome", "ws://127.0.0.1:9333/devtools/browser"
 	status.Authenticated = false
+	status = qualifyRuntimeStatusForTest(status)
 	provider := testConnectorStatus(func(_ context.Context, id string) (ConnectorRuntimeStatus, error) {
 		if id != "chrome-ws" {
 			t.Fatalf("connector=%q", id)
@@ -441,7 +477,18 @@ func TestPlannerExplicitExternalPersistentDoesNotRequireAuthentication(t *testin
 	}
 	scope := RequestScope{WorkspaceID: "personal", CanonicalWorkspaceRoot: root, OwnerTaskID: "task", Provenance: ScopeUpstream}
 	override := &RouteOverride{Route: browserpolicy.RouteExternal, ConnectorID: "chrome-ws", Browser: BrowserChrome, ExplicitUserInstruction: true}
+	// Perfect raw assertions still cannot authorize explicit external Chrome.
+	qualified := status.qualification
+	status.qualification = nil
+	status.Authenticated = true
 	decision, err := planner.Resolve(context.Background(), scope, override)
+	assertRouteCode(t, err, ErrRequiredRouteUnavailable)
+	if decision != (RouteDecision{}) {
+		t.Fatal("unqualified Chrome fell back")
+	}
+	status.qualification = qualified
+	status.Authenticated = false
+	decision, err = planner.Resolve(context.Background(), scope, override)
 	if err != nil {
 		t.Fatal(err)
 	}

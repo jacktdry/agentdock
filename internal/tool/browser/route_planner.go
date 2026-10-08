@@ -3,6 +3,8 @@ package browser
 import (
 	"context"
 	"errors"
+	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
@@ -30,8 +32,9 @@ type ProfilePlan struct {
 }
 
 // ConnectorRuntimeStatus contains provider-observed identity and assertions,
-// never ownership. Identity consistency and freshness are not authentication or
-// profile attestation. No production status provider is implemented in this step.
+// never ownership. Raw assertions cannot qualify a route. Only a package-private
+// qualification from an independently verified source may authorize forwarding.
+// There is no production attestor or qualification minting path in C2b-A.
 type ConnectorRuntimeStatus struct {
 	ConnectorID   string
 	ProfileID     string
@@ -45,6 +48,52 @@ type ConnectorRuntimeStatus struct {
 	EngineVersion string
 	Transport     string
 	Capabilities  []ConnectorCapability
+
+	// Core-only opaque identities; never serialized or projected to Desktop.
+	source        *connectorEvidenceIdentity
+	incarnation   *connectorEvidenceIdentity
+	qualification *connectorQualification
+}
+
+// Nonzero-sized identities have distinct pointer identity. A future reviewed
+// attestor must derive these from its own source and verified runtime incarnation,
+// never configuration, raw status, reachability or a caller-supplied identifier.
+type connectorEvidenceIdentity struct{ marker byte }
+
+// Immutable after minting, except used. The pointer itself is a single-use nonce:
+// status copies share consumption, including across planners. No production code
+// constructs this authority; only offline _test.go fixtures currently mint it.
+type connectorQualification struct {
+	format      uint8
+	observation ConnectorRuntimeStatus // Detached snapshot, qualification nil.
+	used        atomic.Bool
+}
+
+func connectorObservationFresh(status ConnectorRuntimeStatus, now time.Time) bool {
+	_, observedOffset := status.ObservedAt.Zone()
+	_, expiresOffset := status.ExpiresAt.Zone()
+	return !status.ObservedAt.IsZero() && !status.ExpiresAt.IsZero() && observedOffset == 0 && expiresOffset == 0 &&
+		!status.ObservedAt.After(now) && now.Sub(status.ObservedAt) <= 5*time.Second &&
+		status.ExpiresAt.After(now) && status.ExpiresAt.After(status.ObservedAt) &&
+		status.ExpiresAt.Sub(status.ObservedAt) <= 5*time.Second
+}
+
+func consumeConnectorQualification(status ConnectorRuntimeStatus, now time.Time) bool {
+	q := status.qualification
+	if q == nil || q.format != 1 {
+		return false
+	}
+	e := q.observation
+	if !connectorObservationFresh(e, now) || e.source == nil || e.incarnation == nil || e.source == e.incarnation ||
+		status.source != e.source || status.incarnation != e.incarnation ||
+		status.ConnectorID != e.ConnectorID || status.ProfileID != e.ProfileID || status.Endpoint != e.Endpoint ||
+		!status.ObservedAt.Equal(e.ObservedAt) || !status.ExpiresAt.Equal(e.ExpiresAt) ||
+		status.Healthy != e.Healthy || status.Verified != e.Verified || status.Authenticated != e.Authenticated ||
+		status.Engine != e.Engine || status.EngineVersion != e.EngineVersion || status.Transport != e.Transport ||
+		!slices.Equal(status.Capabilities, e.Capabilities) {
+		return false
+	}
+	return q.used.CompareAndSwap(false, true)
 }
 
 type ConnectorStatusProvider interface {
@@ -192,13 +241,14 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector identity mismatch")
 	}
 	now := time.Now().UTC()
-	_, observedOffset := status.ObservedAt.Zone()
-	_, expiresOffset := status.ExpiresAt.Zone()
-	if status.ObservedAt.IsZero() || status.ExpiresAt.IsZero() || observedOffset != 0 || expiresOffset != 0 ||
-		status.ObservedAt.After(now) || now.Sub(status.ObservedAt) > 5*time.Second ||
-		!status.ExpiresAt.After(now) || !status.ExpiresAt.After(status.ObservedAt) ||
-		status.ExpiresAt.Sub(status.ObservedAt) > 5*time.Second {
+	if !connectorObservationFresh(status, now) {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector observation stale or invalid")
+	}
+	// Identity/time consistency is necessary but cannot attest profile/auth or
+	// no-focus/lease/release capabilities. Check the sealed observation before
+	// forwarding any provider assertions to the trusted pure resolver.
+	if !consumeConnectorQualification(status, now) {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector qualification unavailable")
 	}
 	request.Connectors = []ConnectorMetadata{{ID: plan.ConnectorID, Browser: plan.Browser, ProfileID: plan.ProfileID, ProfileClass: plan.ProfileClass, Endpoint: plan.Endpoint, Registered: true, Healthy: status.Healthy, Verified: status.Verified, Authenticated: status.Authenticated, Engine: status.Engine, EngineVersion: status.EngineVersion, Transport: status.Transport, Capabilities: status.Capabilities, Ownership: plan.Ownership}}
 	return ResolveRoute(request)

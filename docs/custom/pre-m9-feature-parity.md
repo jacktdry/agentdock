@@ -319,6 +319,19 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > passed. Review/integration pending.
 > See [Phase C2a source checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2a-offline-runtime-evidence-envelope-source-checkpoint-2026-10-08).
 
+> P8 Phase C2b-A source checkpoint (2026-10-08, base `00114b93`):
+> planner now defaults to rejecting raw provider booleans even with matching fresh
+> IDs/endpoints. A private qualification binds an immutable observation, distinct
+> source/runtime incarnation and single-use nonce; mismatches, stale evidence,
+> unsupported proof and replay fail closed without fallback. Only TEST ONLY offline
+> fixtures mint synthetic authority; no production minting path exists and runtime
+> provider remains **nil**. Desktop/Snapshot/UI and pure ResolveRoute stay unchanged.
+> Edge is **UNQUALIFIED**. C2b-B real process/profile/auth/capability attestor,
+> revocation/cancellation and attach-time revalidation plus consent-based native UAT
+> remain open; C2b/P8/M9 are not closed and live Nexus remains deferred. AGY-ACP and
+> handoff remain separate until the ACP contract is stable.
+> See [Phase C2b-A checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-a-trust-source-qualification-gate-source-checkpoint-2026-10-08).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：
