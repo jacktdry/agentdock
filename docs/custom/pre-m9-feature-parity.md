@@ -420,6 +420,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+上游 v1.0.1 新版發行驗證與 source/identity 的非阻塞選擇性採用方案見 [`upstream-v101-adoption-plan.md`](upstream-v101-adoption-plan.md)；此文件為 proposed，不能替代本節正式 release-native gates。
+
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
 
 ### P11 — Release-native UAT

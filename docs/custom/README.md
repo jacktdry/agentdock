@@ -16,6 +16,8 @@
 - [agentdock-next-isolation.md](agentdock-next-isolation.md)：AgentDock Next side-by-side 隔離、namespace、rollout 與驗收契約。
 - [branching-strategy.md](branching-strategy.md)：`main`、`custom/main`、feature、Workbench port 與 upstream PR 的 Git 規則。
 - [upstream-tracking.md](upstream-tracking.md)：AgentDock / Workbench 更新的追蹤與採用流程。
+- [upstream-v101-adoption-plan.md](upstream-v101-adoption-plan.md)：上游 v0.9.1→v1.0.1 的 Next 選擇性採用、M9 release source / recovery gates 與元件化延後策略。
+- [upstream-ports/cloudflared-component-manager.md](upstream-ports/cloudflared-component-manager.md)：cloudflared Component Manager 的來源分析、Next 簽章／隔離衝突與 staged migration acceptance gates。
 - [workbench-adoption.md](workbench-adoption.md)：Workbench 功能採用、延後與排除清單。
 - [desktop-ui.md](desktop-ui.md)：macOS / Windows 共用 Desktop UI 的技術方向與 POC 驗收條件。
 - [i18n.md](i18n.md)：跨平台多國語系、志願翻譯與 CI 架構。

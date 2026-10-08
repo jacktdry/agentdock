@@ -442,6 +442,8 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 建立從 `custom/main` 的正式 cross-platform release pipeline。
 
+上游 `v0.9.1 → v1.0.1` 唯讀採用提案與 M9 source/recovery gates：[`upstream-v101-adoption-plan.md`](upstream-v101-adoption-plan.md)。Component Manager 的外部執行元件遷移**不納入此 M9 阻塞範圍**，另依該文件的 staged migration gate 評估。
+
 前置工作：
 
 - 通過 M7.5，Next 完整開發 / 測試並能獨立連上 ChatGPT；stable retirement 必須另行規劃與授權。
