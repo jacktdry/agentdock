@@ -30,7 +30,7 @@ type edgeProcessPreflight struct {
 }
 
 // edgeProcessProbe is OS evidence only. Its concrete macOS implementation
-// executes bounded read-only ps/lsof. Unit tests inject only fixed strings.
+// executes bounded read-only ps/lsof and signing checks. Tests inject fixtures.
 type edgeProcessProbe interface {
 	listeners(context.Context, int) (string, error)
 	command(context.Context, int) (string, error)
@@ -39,6 +39,9 @@ type edgeProcessProbe interface {
 	// signature verifies the fixed Edge app and executable ON DISK only.
 	// It cannot attest the currently running executable or CDP peer.
 	signature(context.Context) error
+	// liveSignature independently checks dynamic code for the observed PID.
+	// It is not authentication or a transport-bound peer attestation.
+	liveSignature(context.Context, int) error
 }
 
 type edgeListener struct {
@@ -101,6 +104,9 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	// Verify before the second OS observation, so evidence changes during
 	// codesign cannot silently complete this preflight. Never mint route grants.
 	if probe.signature(probeCtx) != nil || probeCtx.Err() != nil {
+		return fail()
+	}
+	if probe.liveSignature(probeCtx, first.pid) != nil || probeCtx.Err() != nil {
 		return fail()
 	}
 	// Re-observe the OS listener and process incarnation after collecting

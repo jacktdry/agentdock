@@ -80,7 +80,7 @@ func TestEdgeCommandMatchesRejectsSpoofedOrAmbiguousArguments(t *testing.T) {
 			f.commandsRaw[0] = testEdgeExecutable + " " + args
 			e, err := readEdgeProcessPreflight(context.Background(),
 				"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
-			if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) || f.imageCalls != 0 || f.signatureCalls != 0 {
+			if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) || f.imageCalls != 0 || f.signatureCalls != 0 || f.liveSignatureCalls != 0 {
 				t.Fatal("ambiguous argv advanced preflight or exposed evidence")
 			}
 		})
@@ -103,19 +103,22 @@ func TestEdgeCommandMatchesRejectsSpoofedOrAmbiguousArguments(t *testing.T) {
 }
 
 type fakeEdgeProcessProbe struct {
-	listenerCalls  int
-	commandCalls   int
-	startCalls     int
-	imageCalls     int
-	signatureCalls int
-	signatureErr   error
-	cancelOnSign   bool
-	listenersRaw   []string
-	commandsRaw    []string
-	startsRaw      []string
-	imagesRaw      []string
-	err            error
-	cancel         context.CancelFunc
+	listenerCalls      int
+	commandCalls       int
+	startCalls         int
+	imageCalls         int
+	liveSignatureCalls int
+	liveSignatureErr   error
+	onLiveSignature    func(context.Context, int)
+	signatureCalls     int
+	signatureErr       error
+	cancelOnSign       bool
+	listenersRaw       []string
+	commandsRaw        []string
+	startsRaw          []string
+	imagesRaw          []string
+	err                error
+	cancel             context.CancelFunc
 }
 
 func (f *fakeEdgeProcessProbe) listeners(ctx context.Context, _ int) (string, error) {
@@ -130,7 +133,7 @@ func (f *fakeEdgeProcessProbe) listeners(ctx context.Context, _ int) (string, er
 	if i >= len(f.listenersRaw) {
 		return "", errors.New("missing fake listener fixture")
 	}
-	if f.cancel != nil && i == 0 {
+	if f.cancel != nil && !f.cancelOnSign && f.onLiveSignature == nil && i == 0 {
 		f.cancel()
 	}
 	return f.listenersRaw[i], nil
@@ -190,6 +193,15 @@ func (f *fakeEdgeProcessProbe) signature(ctx context.Context) error {
 	return f.signatureErr
 }
 
+func (f *fakeEdgeProcessProbe) liveSignature(ctx context.Context, pid int) error {
+	f.liveSignatureCalls++
+	if f.onLiveSignature != nil {
+		f.onLiveSignature(ctx, pid)
+	}
+	// Deliberately allow success after cancellation to exercise caller fencing.
+	return f.liveSignatureErr
+}
+
 func edgeFixture() *fakeEdgeProcessProbe {
 	cmd := testEdgeExecutable + " --remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture"
 	raw := "p1245\nf7\nn127.0.0.1:9222\n"
@@ -213,7 +225,7 @@ func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
 		p.executable != testEdgeExecutable || time.Since(p.observedAt) > time.Second {
 		t.Fatal("read-only process preflight lost source identity")
 	}
-	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 || f.signatureCalls != 1 {
+	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 || f.signatureCalls != 1 || f.liveSignatureCalls != 1 {
 		t.Fatal("did not recheck process evidence after observation")
 	}
 }
@@ -326,7 +338,7 @@ func TestEdgeProcessPreflightRejectsUnsignedAndChangedDuringSigning(t *testing.T
 		f := edgeFixture()
 		_, _ = readEdgeProcessPreflight(context.Background(),
 			"ws://localhost:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
-		if f.signatureCalls != 0 {
+		if f.signatureCalls != 0 || f.liveSignatureCalls != 0 {
 			t.Fatal("invalid endpoint caused on-disk signature work")
 		}
 	})
@@ -396,5 +408,47 @@ func TestUniqueEdgeListenerParser(t *testing.T) {
 		if !ok || got.pid != 500 {
 			t.Fatal("valid loopback owner rejected", port)
 		}
+	}
+}
+
+func TestEdgeProcessPreflightLiveSignatureFence(t *testing.T) {
+	for _, scenario := range []string{"accepted", "negative", "listener", "start", "argv", "image", "canceled"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := edgeFixture()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f.onLiveSignature = func(liveCtx context.Context, pid int) {
+				deadline, ok := liveCtx.Deadline()
+				if pid != 1245 || !ok || time.Until(deadline) > 2*time.Second ||
+					f.listenerCalls != 1 || f.startCalls != 1 || f.commandCalls != 1 || f.imageCalls != 1 || f.signatureCalls != 1 {
+					t.Fatal("live signature is outside shared deadline or OS observation fence")
+				}
+				switch scenario {
+				case "negative":
+					f.liveSignatureErr = errors.New("sensitive native status")
+				case "listener":
+					f.listenersRaw[1] = "p9999\nn127.0.0.1:9222\n"
+				case "start":
+					f.startsRaw[1] += "changed"
+				case "argv":
+					f.commandsRaw[1] += " --changed"
+				case "image":
+					f.imagesRaw[1] = "p1245\nftxt\nn/tmp/other\n"
+				case "canceled":
+					cancel()
+				}
+			}
+			e, err := readEdgeProcessPreflight(ctx, "ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+			if scenario == "accepted" {
+				if err != nil || e.pid != 1245 || f.liveSignatureCalls != 1 {
+					t.Fatal("independent live signature fixture rejected")
+				}
+			} else if err != errEdgeProcessUnqualified || e != (edgeProcessPreflight{}) || f.liveSignatureCalls != 1 {
+				t.Fatal("live signature failure/change/cancellation exposed evidence or native details")
+			}
+			if (scenario == "negative" || scenario == "canceled") && f.listenerCalls != 1 {
+				t.Fatal("failed live signature continued OS rechecks")
+			}
+		})
 	}
 }

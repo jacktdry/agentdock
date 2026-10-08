@@ -674,3 +674,29 @@ running-code proof, user profile consent, no-focus guarantee, safe release, or
 atomic CDP transport. Production `ConnectorStatusProvider` and
 `externalPeerVerifier` are still `nil`; Edge remains `UNQUALIFIED`, no route
 grant is minted, and no live browser/CDP or installed GUI UAT was performed.
+
+
+## Phase C2b-B2f macOS running-code signer prerequisite (2026-10-09)
+
+Based on clean source HEAD `5b436f3d`, private process preflight now independently
+requires Security.framework dynamic code validity for the first observed PID,
+after on-disk signing and before all listener/PID/start/argv/mapped-image rechecks.
+The `darwin && cgo` implementation uses `SecCodeCopyGuestWithAttributes(NULL,
+{kSecGuestAttributePid: CFNumber(pid)}, ...)`, `SecRequirementCreateWithString`,
+and `SecCodeCheckValidity` with the same Apple generic anchor, Microsoft Team ID
+`UBF8T346G9` and identifier `com.microsoft.edgemac` requirement. It links Security
+and CoreFoundation; `darwin && !cgo` rejects. Linux/Windows retain their rejecting
+native preflight. Invalid PID, unavailable verifier, API failure, cancellation
+and deadline expiry yield only opaque unqualified error and zero evidence.
+
+All checks share the existing two-second context. Since native C calls cannot
+be canceled, a process-wide one-slot verifier bounds outstanding native work:
+the caller returns on its deadline, the slot stays occupied until C returns,
+and further calls reject immediately. Each completed call releases its CF/C
+allocations; a permanently stuck native call retains at most one worker and
+its in-flight resources. Dynamic validity is a prerequisite, not an atomic
+future process fence, CDP peer binding, profile/login proof, no-focus or safe
+release guarantee. Runtime provider/peer verifier remain nil, Edge remains
+**UNQUALIFIED**, and no grants are minted. No Edge discovery, CDP, tabs, profile,
+service, install or deployment action occurred. Native negative fixtures query
+only this Go test process, never the user's Edge. P8/C2b/M9 remain open.

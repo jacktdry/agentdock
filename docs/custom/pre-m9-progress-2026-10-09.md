@@ -49,3 +49,10 @@
 - 接續 `eecb41d8`：將 Edge macOS `ps` 命令列驗證改為嚴格邊界解析，限定固定 Edge executable、唯一 `--remote-debugging-port` 和 `--user-data-dir`，接受明確的空白／引號格式，拒絕重複、混淆、控制字元、過長或非 canonical 路徑。只改私人 Edge OS preflight，不變更通用 CDP discovery。
 - 新增正常與惡意 fixture，特別驗證拒絕發生在 image/signature 查驗之前。未修改 stable、AGY-ACP、Next runtime，未部署、未呼叫 Edge/CDP；`NewRoutePlanner(..., nil)` 與 `UNQUALIFIED` gate 持續有效。
 - 本機偶有高負載與短時 localhost 測試逾時，對照實際測試紀錄評估，不將負載猜測當成已證實原因；避免多個 Go test/vet 並行編譯。
+
+
+## 2026-10-09 B2f 執行中程序動態簽章前置檢查（Next source-only）
+
+- 基於 `5b436f3d`，在磁碟簽章後、第二次 listener/PID/start/argv/mapped-image 複驗前，新增獨立 Security.framework PID dynamic code validity 檢查；同樣限定 Apple generic anchor、Microsoft Team ID 與 Edge identifier。`darwin && !cgo` 拒絕，Linux/Windows 原生預檢維持拒絕。
+- 共用 2 秒 context；C 呼叫不能取消，因此全程序只允許一個 outstanding native verification。caller 逾時即拒絕，slot 保留至 C 返回，後續呼叫直接拒絕，避免重複呼叫累積 goroutine。任何失敗或取消只回 opaque unqualified error 與零 evidence。
+- 未查詢使用者 Edge、tabs/CDP/profile，未修改服務、安裝或部署。native negative fixture 只檢查本次 Go test process。正式 provider/peer verifier 仍 nil，Edge `UNQUALIFIED`；Profile/登入/no-focus/safe-release、原子 CDP 綁定與 native GUI UAT 尚未完成。
