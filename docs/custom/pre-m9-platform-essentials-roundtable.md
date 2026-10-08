@@ -119,3 +119,14 @@ Platform capability matrix is runtime-authoritative: macOS native adapter, Windo
 - Determine exact Next manifest → `AgentDockHome` resolver and Windows/WSL native file opener ownership; platform support must be verified, not inferred.
 - Determine atomic generation/journal format and how a restart outcome is observed without claiming a connection prematurely.
 - Audit actual Wails Next tray/menu support. Update/apply remains M9-gated regardless of P7 scope.
+- **Proxy compatibility:** Phase A1 deliberately bypasses environment/system HTTP(S) proxies for pairing. Enterprises that require outbound proxy egress cannot use this transport as-is. Re-enable proxy support only with an explicit trusted-egress/destination-verification design; do not silently inherit `HTTPS_PROXY` in order to satisfy SSRF policy.
+
+## 8. Implementation checkpoint — Phase A1 transport (2026-10-08)
+
+Following the design freeze, the first bounded implementation slice changed only `internal/nexusbridge/identity.go` and `identity_test.go`. It introduces an explicit no-redirect pairing HTTP client; dial-time resolved-IP validation with the validated IP passed as a literal destination; strict public HTTPS peer filtering with explicit local HTTP loopback development exception; no environment-proxy bypass; original HTTPS hostname TLS validation; sanitized pairing errors and bounded request/response parameters.
+
+New offline tests cover 301/302/303/307/308 rejection without forwarding, mixed public/private DNS answers, DNS rebind before dial, public/IPv6/special IP classification, proxy disabled, localhost-only HTTP, TLS hostname verification, redacted HTTP errors and failure preserving existing identity. On macOS arm64 with Go 1.27.1, independently run `go test ./internal/nexusbridge`, `go test -race ./internal/nexusbridge`, `go test ./cmd/agentdock`, `go vet ./internal/nexusbridge`, Windows/Linux amd64 `go test -c` cross-compiles, and `git diff --check` all passed.
+
+Independent Gemini 3.1 Pro / High read-only code review reported **PASS for tested security vectors**, with **one HIGH functional-compatibility finding**: `Proxy: nil` blocks pairing on networks that require an outbound proxy. For this initial security slice the no-proxy behavior is intentional to avoid bypassing validated destinations, but it remains a visible product limitation and a required design/acceptance decision before P7 closeout; **do not label this review 0 HIGH**. No proxy fallback is introduced.
+
+**A1 is not all of Phase A:** neither the Next-only Desktop authority, pairing generation/mutation lock, transactional re-pair/restart outcome, nor Next native folder opener / Shared UI exists yet. No installed Next or stable services were restarted. Phase A2 and release-native verification remain separate acceptance gates.
