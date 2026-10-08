@@ -27,7 +27,7 @@ func TestDispatchControlRequestIncludesNexusConnection(t *testing.T) {
 	result, err := DispatchControlRequest(
 		context.Background(),
 		desktopcontrol.Request{ID: "test", Method: "service.status", Params: params},
-		ControlRuntimeStatus{NexusConnected: true},
+		ControlRuntimeStatus{NexusConnected: true, NexusIdentityGeneration: "generation-1"},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestDispatchControlRequestIncludesNexusConnection(t *testing.T) {
 	if !ok {
 		t.Fatalf("service.status returned %T, want ServiceStatus", result)
 	}
-	if !status.NexusConnected {
-		t.Fatal("service.status did not include live Nexus connection state")
+	if !status.NexusConnected || status.NexusIdentityGeneration != "generation-1" {
+		t.Fatalf("service.status Nexus evidence = %+v", status)
 	}
 }

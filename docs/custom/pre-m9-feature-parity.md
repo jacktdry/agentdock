@@ -247,7 +247,7 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P7 — Nexus / Startup / Platform Essentials
 
-2026-10-08 已完成唯讀能力盤點、P7 UX / Security / Cross-platform 設計收斂，以及 A1 配對傳輸安全與 A2.1 Next-only 唯讀 Snapshot / 身分目錄隔離；詳見 [P7 Desktop authority、進度與風險](pre-m9-platform-essentials-roundtable.md)。NexusDock 作為 Connection 的獨立子畫面；**A2.1 未連到 Wails，未通過 Core identity generation attestation，connected 必須保守為 unknown**。下一步為 A2.2 generation fencing、配對寫入、truthful restart / Core peer 觀測後才開始 UI。P6 的 native GUI UAT 仍是獨立待完成 gate。
+2026-10-08 已完成 P7 能力盤點、UX / Security / Cross-platform 契約與 A1 配對傳輸安全；A2.1 Next-only 唯讀 Snapshot 已提交。A2.2 的 Core peer PID/UID + active identity generation、CLI/Desktop 配對鎖、generation fencing、原子寫入與 truthful restart outcome 已進入 **本機測試全綠的 backend checkpoint**，但獨立安全複審尚無有效結論、沒有 Wails UI binding，也未部署。詳見 [P7 Desktop authority、進度與風險](pre-m9-platform-essentials-roundtable.md#10-implementation-checkpoint--phase-a22-nexus-pairing-backend)。NexusDock 仍在 Connection 獨立子畫面；通過 A2.2 安全審查／Next 實機驗收後才開始 UI。P6 native GUI UAT 仍是獨立待完成 gate。
 
 補齊日常 parity：
 

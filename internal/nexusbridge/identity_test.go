@@ -286,3 +286,221 @@ func TestPublicEndpointRequiresHTTPS(t *testing.T) {
 		t.Fatalf("loopback endpoint=%q err=%v", endpoint, err)
 	}
 }
+
+func TestPairCheckedGenerationAndReplaceConfirmation(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"node":{"id":"node_checked"},"device_token":"token_checked"}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	absent := AbsentGeneration()
+	identity, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "first-code", Name: "Next"}, absent, false)
+	if err != nil || identity.NodeID != "node_checked" || requests.Load() != 1 {
+		t.Fatalf("first pair identity=%+v err=%v requests=%d", identity, err, requests.Load())
+	}
+	if _, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "stale-code"}, absent, true); !errors.Is(err, ErrGenerationConflict) || requests.Load() != 1 {
+		t.Fatalf("stale generation err=%v requests=%d", err, requests.Load())
+	}
+	current, paired, err := CurrentGeneration(home)
+	if err != nil || !paired || current != Generation(identity) {
+		t.Fatalf("current=%q paired=%v err=%v", current, paired, err)
+	}
+	if _, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "replace-code"}, current, false); !errors.Is(err, ErrReplaceConfirmationNeeded) || requests.Load() != 1 {
+		t.Fatalf("missing replace confirmation err=%v requests=%d", err, requests.Load())
+	}
+	if _, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "replace-code"}, current, true); err != nil || requests.Load() != 2 {
+		t.Fatalf("confirmed replace err=%v requests=%d", err, requests.Load())
+	}
+}
+
+func TestPairCheckedRevalidatesBeforeCommit(t *testing.T) {
+	home := t.TempDir()
+	previous := Identity{Version: 1, Endpoint: "https://example.com", NodeID: "old", DeviceID: "old-device", DeviceToken: "old-secret"}
+	if err := Save(home, previous); err != nil {
+		t.Fatal(err)
+	}
+	expected := Generation(previous)
+	external := Identity{Version: 1, Endpoint: "https://example.net", NodeID: "external", DeviceID: "external-device", DeviceToken: "external-secret"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := Save(home, external); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"node":{"id":"new"},"device_token":"new-secret"}`))
+	}))
+	defer server.Close()
+	_, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "one-time"}, expected, true)
+	if !errors.Is(err, ErrGenerationConflict) {
+		t.Fatalf("err=%v", err)
+	}
+	loaded, err := Load(home)
+	if err != nil || loaded != external {
+		t.Fatalf("external identity overwritten: %+v err=%v", loaded, err)
+	}
+}
+
+func TestPairSerializesAcrossCallers(t *testing.T) {
+	home := t.TempDir()
+	entered := make(chan int, 2)
+	releaseFirst := make(chan struct{})
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := int(requests.Add(1))
+		entered <- n
+		if n == 1 {
+			<-releaseFirst
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"node":{"id":"node_%d"},"device_token":"token_%d"}`, n, n)))
+	}))
+	defer server.Close()
+
+	results := make(chan error, 2)
+	go func() {
+		_, err := Pair(context.Background(), home, PairOptions{Endpoint: server.URL, Code: "one"})
+		results <- err
+	}()
+	select {
+	case n := <-entered:
+		if n != 1 {
+			t.Fatalf("first request=%d", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first pairing never reached server")
+	}
+	go func() {
+		_, err := Pair(context.Background(), home, PairOptions{Endpoint: server.URL, Code: "two"})
+		results <- err
+	}()
+	select {
+	case n := <-entered:
+		t.Fatalf("second pairing bypassed lock, request=%d", n)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(releaseFirst)
+	select {
+	case n := <-entered:
+		if n != 2 {
+			t.Fatalf("second request=%d", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second pairing did not resume")
+	}
+	for i := 0; i < 2; i++ {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPairRejectsSymlinkedStateBeforeNetworkOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix no-follow storage test")
+	}
+	parent := t.TempDir()
+	stable := filepath.Join(parent, "stable")
+	if err := os.Mkdir(stable, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := Identity{Version: 1, Endpoint: "https://stable.example", NodeID: "stable", DeviceID: "stable-device", DeviceToken: "stable-secret"}
+	if err := Save(stable, original); err != nil {
+		t.Fatal(err)
+	}
+
+	requests := atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"node":{"id":"attacker"},"device_token":"attacker-secret"}`))
+	}))
+	defer server.Close()
+
+	t.Run("home symlink", func(t *testing.T) {
+		link := filepath.Join(parent, "next-home-link")
+		if err := os.Symlink(stable, link); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Pair(t.Context(), link, PairOptions{Endpoint: server.URL, Code: "one-time"}); err == nil {
+			t.Fatal("Pair accepted symlinked AgentDockHome")
+		}
+	})
+
+	t.Run("nexus directory symlink", func(t *testing.T) {
+		home := filepath.Join(parent, "next-home")
+		if err := os.Mkdir(home, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(stable, "nexus"), filepath.Join(home, "nexus")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "one-time"}, AbsentGeneration(), false); err == nil {
+			t.Fatal("PairChecked accepted symlinked nexus directory")
+		}
+	})
+	if requests.Load() != 0 {
+		t.Fatalf("one-time code reached network despite unsafe state: requests=%d", requests.Load())
+	}
+	loaded, err := Load(stable)
+	if err != nil || loaded != original {
+		t.Fatalf("stable identity changed: %+v err=%v", loaded, err)
+	}
+}
+
+func TestPairCheckedInitializesMissingHomeBeforeConsumingCode(t *testing.T) {
+	parent := t.TempDir()
+	home := filepath.Join(parent, "fresh-next-state")
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"node":{"id":"fresh-node"},"device_token":"fresh-token"}`))
+	}))
+	defer server.Close()
+	identity, err := PairChecked(t.Context(), home, PairOptions{Endpoint: server.URL, Code: "fresh-code"}, AbsentGeneration(), false)
+	if err != nil || identity.NodeID != "fresh-node" || requests.Load() != 1 {
+		t.Fatalf("fresh pairing failed before persisting: identity=%+v err=%v requests=%d", identity, err, requests.Load())
+	}
+	if info, err := os.Lstat(home); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("fresh home missing or unsafe: %v %v", info, err)
+	}
+	loaded, err := Load(home)
+	if err != nil || loaded != identity {
+		t.Fatalf("new identity not persisted: loaded=%+v err=%v", loaded, err)
+	}
+}
+
+func TestPairCheckedMissingHomeRejectsSymlinkParentBeforeNetworkOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix no-follow parent check")
+	}
+	parent := t.TempDir()
+	stable := filepath.Join(parent, "stable")
+	if err := os.Mkdir(stable, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(parent, "swapped-parent")
+	if err := os.Symlink(stable, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"node":{"id":"unexpected"},"device_token":"unexpected"}`))
+	}))
+	defer server.Close()
+	_, err := PairChecked(t.Context(), filepath.Join(link, "fresh-next"), PairOptions{Endpoint: server.URL, Code: "one-time-code"}, AbsentGeneration(), false)
+	if err == nil || requests.Load() != 0 {
+		t.Fatalf("unsafe parent consumed code: err=%v requests=%d", err, requests.Load())
+	}
+	if _, err := os.Stat(filepath.Join(stable, "fresh-next")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stable directory unexpectedly created: %v", err)
+	}
+	if entries, err := os.ReadDir(stable); err != nil || len(entries) != 0 {
+		t.Fatalf("unsafe pairing created lock or state inside stable: entries=%v err=%v", entries, err)
+	}
+}

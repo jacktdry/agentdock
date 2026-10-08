@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uvwt/agentdock/internal/fs/atomicfile"
+	"github.com/uvwt/agentdock/internal/fs/filelock"
 )
 
 const identityVersion = 1
@@ -47,6 +49,11 @@ type PairOptions struct {
 	Name     string
 }
 
+var (
+	ErrGenerationConflict        = errors.New("nexus generation conflict")
+	ErrReplaceConfirmationNeeded = errors.New("nexus replace confirmation required")
+)
+
 type pairResponse struct {
 	Node struct {
 		ID string `json:"id"`
@@ -60,6 +67,84 @@ func Pair(ctx context.Context, agentDockHome string, options PairOptions) (Ident
 
 // Dependencies are per-call so offline tests never replace process-wide networking.
 func pairWithNetwork(ctx context.Context, agentDockHome string, options PairOptions, lookup pairLookup, dial pairDial) (Identity, error) {
+	if err := preparePairHome(agentDockHome); err != nil {
+		return Identity{}, err
+	}
+	release, err := acquirePairLock(ctx, agentDockHome)
+	if err != nil {
+		return Identity{}, err
+	}
+	defer release()
+	if err := preparePairHome(agentDockHome); err != nil {
+		return Identity{}, err
+	}
+	// Validate the state boundary before consuming a one-time code. On Unix,
+	// CurrentGeneration uses descriptor-relative no-follow storage and rejects a
+	// symlinked AgentDockHome or nexus directory before any remote request.
+	if _, _, err := CurrentGeneration(agentDockHome); err != nil {
+		return Identity{}, err
+	}
+	identity, err := exchangeWithNetwork(ctx, options, lookup, dial)
+	if err != nil {
+		return Identity{}, err
+	}
+	if err := Save(agentDockHome, identity); err != nil {
+		return Identity{}, err
+	}
+	return identity, nil
+}
+
+// PairChecked serializes CLI/Desktop pairing through the same state-root lock,
+// fences the identity generation before the remote exchange and again before
+// commit, and requires explicit replacement confirmation for an existing
+// identity. The one-time code is never persisted by this function.
+func PairChecked(ctx context.Context, agentDockHome string, options PairOptions, expectedGeneration string, confirmReplace bool) (Identity, error) {
+	return pairCheckedWithNetwork(ctx, agentDockHome, options, expectedGeneration, confirmReplace, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second}).DialContext)
+}
+
+func pairCheckedWithNetwork(ctx context.Context, agentDockHome string, options PairOptions, expectedGeneration string, confirmReplace bool, lookup pairLookup, dial pairDial) (Identity, error) {
+	if strings.TrimSpace(expectedGeneration) == "" {
+		return Identity{}, ErrGenerationConflict
+	}
+	if err := preparePairHome(agentDockHome); err != nil {
+		return Identity{}, err
+	}
+	release, err := acquirePairLock(ctx, agentDockHome)
+	if err != nil {
+		return Identity{}, err
+	}
+	defer release()
+	if err := preparePairHome(agentDockHome); err != nil {
+		return Identity{}, err
+	}
+	currentGeneration, paired, err := CurrentGeneration(agentDockHome)
+	if err != nil {
+		return Identity{}, err
+	}
+	if currentGeneration != expectedGeneration {
+		return Identity{}, ErrGenerationConflict
+	}
+	if paired && !confirmReplace {
+		return Identity{}, ErrReplaceConfirmationNeeded
+	}
+	identity, err := exchangeWithNetwork(ctx, options, lookup, dial)
+	if err != nil {
+		return Identity{}, err
+	}
+	currentGeneration, _, err = CurrentGeneration(agentDockHome)
+	if err != nil {
+		return Identity{}, err
+	}
+	if currentGeneration != expectedGeneration {
+		return Identity{}, ErrGenerationConflict
+	}
+	if err := Save(agentDockHome, identity); err != nil {
+		return Identity{}, err
+	}
+	return identity, nil
+}
+
+func exchangeWithNetwork(ctx context.Context, options PairOptions, lookup pairLookup, dial pairDial) (Identity, error) {
 	if len(options.Code) > 256 || len(options.Name) > 256 {
 		return Identity{}, errors.New("NexusDock 配对输入过长")
 	}
@@ -125,15 +210,57 @@ func pairWithNetwork(ctx context.Context, agentDockHome string, options PairOpti
 	if paired.Node.ID == "" || paired.DeviceToken == "" {
 		return Identity{}, errors.New("NexusDock 配对响应缺少节点身份")
 	}
-	identity := Identity{Version: identityVersion, Endpoint: endpoint, NodeID: paired.Node.ID, DeviceID: deviceID, DeviceToken: paired.DeviceToken}
-	if err := Save(agentDockHome, identity); err != nil {
-		return Identity{}, err
+	return Identity{Version: identityVersion, Endpoint: endpoint, NodeID: paired.Node.ID, DeviceID: deviceID, DeviceToken: paired.DeviceToken}, nil
+}
+
+func acquirePairLock(ctx context.Context, agentDockHome string) (func(), error) {
+	home := filepath.Clean(strings.TrimSpace(agentDockHome))
+	if home == "" || !filepath.IsAbs(home) {
+		return nil, errors.New("AgentDock home is invalid")
 	}
-	return identity, nil
+	parent, err := os.Lstat(filepath.Dir(home))
+	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("AgentDock pair lock parent is unsafe")
+	}
+	// Keep the lock beside AgentDockHome rather than inside it. If the state
+	// directory is replaced with a symlink, lock acquisition must not create
+	// files in the symlink target (for example stable ~/.agentdock).
+	digest := sha256.Sum256([]byte("agentdock-nexus-pair-lock-v1\x00" + home))
+	name := ".agentdock-nexus-pair-" + hex.EncodeToString(digest[:8]) + ".lock"
+	return filelock.Acquire(ctx, filepath.Join(filepath.Dir(home), name))
+}
+
+// Generation is an opaque semantic identity revision. It includes the secret
+// token in the hash input so token-only replacements are fenced, but never
+// returns the token or serialized identity bytes.
+func Generation(identity Identity) string {
+	h := sha256.New()
+	h.Write([]byte("agentdock-nexus-identity-v1\x00"))
+	for _, value := range []string{identity.Endpoint, identity.NodeID, identity.DeviceID, identity.DeviceToken} {
+		h.Write([]byte(value))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func AbsentGeneration() string {
+	sum := sha256.Sum256([]byte("agentdock-nexus-identity-v1\x00absent"))
+	return hex.EncodeToString(sum[:])
+}
+
+func CurrentGeneration(agentDockHome string) (string, bool, error) {
+	identity, err := Load(agentDockHome)
+	if errors.Is(err, os.ErrNotExist) {
+		return AbsentGeneration(), false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return Generation(identity), true, nil
 }
 
 func Load(agentDockHome string) (Identity, error) {
-	data, err := os.ReadFile(identityPath(agentDockHome))
+	data, err := readIdentityData(agentDockHome)
 	if errors.Is(err, os.ErrNotExist) {
 		return Identity{}, os.ErrNotExist
 	}
@@ -173,7 +300,7 @@ func Save(agentDockHome string, identity Identity) error {
 		return fmt.Errorf("编码 NexusDock 设备身份: %w", err)
 	}
 	data = append(data, '\n')
-	if err := atomicfile.Write(identityPath(agentDockHome), data, 0o600); err != nil {
+	if err := writeIdentityData(agentDockHome, data); err != nil {
 		return fmt.Errorf("保存 NexusDock 设备身份: %w", err)
 	}
 	return nil

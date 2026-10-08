@@ -31,11 +31,12 @@ func runNexusPairCommand(ctx context.Context, args []string, stdout, stderr io.W
 	endpoint := flags.String("endpoint", "", "NexusDock public base URL")
 	code := flags.String("code", "", "one-time pairing code")
 	name := flags.String("name", "", "device display name (defaults to hostname)")
+	replace := flags.Bool("replace", false, "replace an existing NexusDock identity")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("用法：agentdock nexus pair --endpoint <URL> --code <配对码> [--name <名称>]")
+		return errors.New("用法：agentdock nexus pair --endpoint <URL> --code <配对码> [--name <名称>] [--replace]")
 	}
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -44,7 +45,14 @@ func runNexusPairCommand(ctx context.Context, args []string, stdout, stderr io.W
 	if err := cfg.Normalize(); err != nil {
 		return err
 	}
-	identity, err := nexusbridge.Pair(ctx, cfg.AgentDockHome, nexusbridge.PairOptions{Endpoint: *endpoint, Code: *code, Name: *name})
+	generation, paired, err := nexusbridge.CurrentGeneration(cfg.AgentDockHome)
+	if err != nil {
+		return err
+	}
+	if paired && !*replace {
+		return errors.New("AgentDock 已存在 NexusDock 配对；如要替换，请明确加入 --replace")
+	}
+	identity, err := nexusbridge.PairChecked(ctx, cfg.AgentDockHome, nexusbridge.PairOptions{Endpoint: *endpoint, Code: *code, Name: *name}, generation, *replace)
 	if err != nil {
 		return err
 	}
@@ -83,5 +91,5 @@ func runNexusStatusCommand(args []string, stdout, stderr io.Writer) error {
 	return err
 }
 func nexusCommandUsageError() error {
-	return errors.New("用法：agentdock nexus <pair --endpoint <URL> --code <配对码> [--name <名称>] | status [--json]>")
+	return errors.New("用法：agentdock nexus <pair --endpoint <URL> --code <配对码> [--name <名称>] [--replace] | status [--json]>")
 }

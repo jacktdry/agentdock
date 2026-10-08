@@ -15,10 +15,11 @@ import (
 // ServiceStatus 是桌面端和 CLI 共享的结构化运行状态。
 // 生命周期操作统一返回 JSON，避免桌面端继续解析 PowerShell 文本。
 type ServiceStatus struct {
-	Running        bool `json:"running"`
-	Healthy        bool `json:"healthy"`
-	StartupEnabled bool `json:"startup_enabled"`
-	NexusConnected bool `json:"nexus_connected"`
+	Running                 bool   `json:"running"`
+	Healthy                 bool   `json:"healthy"`
+	StartupEnabled          bool   `json:"startup_enabled"`
+	NexusConnected          bool   `json:"nexus_connected"`
+	NexusIdentityGeneration string `json:"nexus_identity_generation,omitempty"`
 }
 
 type serviceCommandResult struct {

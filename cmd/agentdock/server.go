@@ -123,6 +123,10 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 		return serveStdio(ctx, server)
 	}
 	nexusStatus := &nexusbridge.ConnectionState{}
+	nexusIdentityGeneration := ""
+	if identityErr == nil {
+		nexusIdentityGeneration = nexusbridge.Generation(identity)
+	}
 	serviceCtx, cancelServices := context.WithCancel(ctx)
 	var bridgeWG sync.WaitGroup
 	defer func() {
@@ -155,7 +159,10 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,
-				desktopruntime.ControlRuntimeStatus{NexusConnected: nexusStatus.Connected()},
+				desktopruntime.ControlRuntimeStatus{
+					NexusConnected:          nexusStatus.Connected(),
+					NexusIdentityGeneration: nexusIdentityGeneration,
+				},
 			)
 		})
 	}()

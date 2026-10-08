@@ -9,13 +9,24 @@ import (
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/desktopruntime"
+	"github.com/uvwt/agentdock/internal/nexusbridge"
 )
 
+func nexusFixtureIdentity(token string) nexusbridge.Identity {
+	return nexusbridge.Identity{Version: 1, Endpoint: "https://nexus.example/hidden-path", NodeID: "node_1", DeviceID: "device_1", DeviceToken: token}
+}
+
 func nexusFixture(token string) []byte {
-	return []byte(`{"version":1,"endpoint":"https://nexus.example/hidden-path","node_id":"node_1","device_id":"device_1","device_token":"` + token + `"}`)
+	data, _ := json.Marshal(nexusFixtureIdentity(token))
+	return data
+}
+
+func nexusFixtureGeneration(token string) string {
+	return nexusbridge.Generation(nexusFixtureIdentity(token))
 }
 
 func TestNexusSnapshotStatesAndRedaction(t *testing.T) {
+	gen := nexusFixtureGeneration("SECRET")
 	for _, tc := range []struct {
 		name                string
 		data                []byte
@@ -23,30 +34,41 @@ func TestNexusSnapshotStatesAndRedaction(t *testing.T) {
 		status              desktopruntime.ServiceStatus
 		observationErr      error
 		pairing, connection string
+		restart             bool
 	}{
-		{"unpaired", nil, os.ErrNotExist, desktopruntime.ServiceStatus{Running: true, Healthy: true}, nil, "not_paired", "disconnected"},
-		{"offline", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, Healthy: true}, nil, "paired", "disconnected"},
-		{"Core connected but identity generation unverified", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true}, nil, "paired", "unknown"},
-		{"observed stopped", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: false, Healthy: false}, nil, "paired", "disconnected"},
-		{"unhealthy", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, NexusConnected: true}, nil, "paired", "unknown"},
-		{"unavailable observation", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{}, errors.New("SECRET /private/path stderr"), "paired", "unknown"},
-		{"malformed", []byte(`SECRET /private/path`), nil, desktopruntime.ServiceStatus{}, nil, "invalid", "unknown"},
-		{"unreadable", nil, errors.New("SECRET /private/path"), desktopruntime.ServiceStatus{}, nil, "invalid", "unavailable"},
-		{"foreign", nil, desktopruntime.ErrNextIdentityUnavailable, desktopruntime.ServiceStatus{}, nil, "unknown", "unavailable"},
+		{"unpaired", nil, os.ErrNotExist, desktopruntime.ServiceStatus{Running: true, Healthy: true}, nil, "not_paired", "disconnected", false},
+		{"offline", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusIdentityGeneration: gen}, nil, "paired", "disconnected", false},
+		{"connected with attested generation", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true, NexusIdentityGeneration: gen}, nil, "paired", "connected", false},
+		{"active identity generation mismatch", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true, NexusIdentityGeneration: nexusFixtureGeneration("OLD")}, nil, "paired", "unknown", true},
+		{"observed stopped", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: false, Healthy: false}, nil, "paired", "disconnected", false},
+		{"unhealthy", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{Running: true, NexusConnected: true, NexusIdentityGeneration: gen}, nil, "paired", "unknown", false},
+		{"unavailable observation", nexusFixture("SECRET"), nil, desktopruntime.ServiceStatus{}, errors.New("SECRET /private/path stderr"), "paired", "unknown", false},
+		{"malformed", []byte(`SECRET /private/path`), nil, desktopruntime.ServiceStatus{}, nil, "invalid", "unknown", false},
+		{"unreadable", nil, errors.New("SECRET /private/path"), desktopruntime.ServiceStatus{}, nil, "invalid", "unavailable", false},
+		{"foreign", nil, desktopruntime.ErrNextIdentityUnavailable, desktopruntime.ServiceStatus{}, nil, "unknown", "unavailable", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			observations := 0
 			s := NewNexusService("/private/path")
-			s.deps = nexusDependencies{readIdentity: func(context.Context, string) ([]byte, error) { return tc.data, tc.readErr }, observe: func(context.Context, string) (desktopruntime.ServiceStatus, error) {
+			s.deps.readIdentity = func(context.Context, string) ([]byte, error) { return tc.data, tc.readErr }
+			s.deps.observe = func(context.Context, string) (desktopruntime.ServiceStatus, error) {
 				observations++
 				return tc.status, tc.observationErr
-			}}
+			}
 			r := s.Snapshot(context.Background())
-			if r.PairingState != tc.pairing || r.ConnectionState != tc.connection {
+			if r.PairingState != tc.pairing || r.ConnectionState != tc.connection || r.RestartRequired != tc.restart {
 				t.Fatalf("%+v", r)
 			}
-			if r.Capabilities.CanPair || r.Capabilities.CanReconcile || r.Capabilities.PairDisabledReason == "" || r.ObservedAt.IsZero() {
-				t.Fatalf("invalid capabilities: %+v", r)
+			if r.ObservedAt.IsZero() {
+				t.Fatal("missing observed time")
+			}
+			if r.PairingState == "paired" || r.PairingState == "not_paired" {
+				if !r.Capabilities.CanPair || r.Capabilities.PairDisabledReason != "" {
+					t.Fatalf("pair capability: %+v", r.Capabilities)
+				}
+			}
+			if r.PairingState == "paired" && !r.Capabilities.CanReconcile {
+				t.Fatalf("reconcile capability: %+v", r.Capabilities)
 			}
 			if r.PairingState == "invalid" || r.PairingState == "unknown" {
 				if observations != 0 {
@@ -67,17 +89,17 @@ func TestNexusSnapshotStatesAndRedaction(t *testing.T) {
 }
 
 func TestNexusGenerationTracksSecretRevisionAndRejectsStaleObservation(t *testing.T) {
-	if nexusGeneration(nexusFixture("a"), false) == nexusGeneration(nexusFixture("b"), false) {
+	if nexusFixtureGeneration("a") == nexusFixtureGeneration("b") {
 		t.Fatal("token revision not fenced")
 	}
-	if nexusGeneration(nil, true) != nexusGeneration(nil, true) || nexusGeneration(nil, true) == nexusGeneration(nil, false) {
+	if nexusbridge.AbsentGeneration() == "" || nexusbridge.AbsentGeneration() == nexusFixtureGeneration("a") {
 		t.Fatal("absent generation")
 	}
 	s := NewNexusService("fixture")
 	data := nexusFixture("a")
 	s.deps.readIdentity = func(context.Context, string) ([]byte, error) { return data, nil }
 	s.deps.observe = func(context.Context, string) (desktopruntime.ServiceStatus, error) {
-		return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true}, nil
+		return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true, NexusIdentityGeneration: nexusFixtureGeneration("a")}, nil
 	}
 	a, b := s.Snapshot(context.Background()), s.Snapshot(context.Background())
 	if a.Generation != b.Generation || a.Generation == "" {
@@ -85,7 +107,7 @@ func TestNexusGenerationTracksSecretRevisionAndRejectsStaleObservation(t *testin
 	}
 	s.deps.observe = func(context.Context, string) (desktopruntime.ServiceStatus, error) {
 		data = nexusFixture("b")
-		return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true}, nil
+		return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusConnected: true, NexusIdentityGeneration: nexusFixtureGeneration("a")}, nil
 	}
 	r := s.Snapshot(context.Background())
 	if r.PairingState != "unknown" || r.ConnectionState != "unknown" || r.Generation != "" || r.SafeOrigin != "" || r.DeviceTokenStored {
@@ -144,5 +166,122 @@ func TestNexusDefaultObservationDoesNotDialUnverifiedCore(t *testing.T) {
 		if strings.Contains(string(data), secret) {
 			t.Fatalf("unverified Core status leaked %q", secret)
 		}
+	}
+}
+
+func TestNexusPairGenerationConfirmationAndRestartOutcome(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	data := []byte(nil)
+	readErr := error(os.ErrNotExist)
+	pairCalls := 0
+	restartCalls := 0
+	observeGeneration := ""
+	s := NewNexusService(root)
+	s.deps = nexusDependencies{
+		readIdentity: func(context.Context, string) ([]byte, error) { return data, readErr },
+		resolveHome:  func(context.Context, string) (string, error) { return home, nil },
+		pair: func(_ context.Context, gotHome string, _ nexusbridge.PairOptions, expected string, confirm bool) (nexusbridge.Identity, error) {
+			pairCalls++
+			if gotHome != home || expected != nexusbridge.AbsentGeneration() || confirm {
+				t.Fatalf("pair args home=%q expected=%q confirm=%v", gotHome, expected, confirm)
+			}
+			identity := nexusFixtureIdentity("NEW_SECRET")
+			data = nexusFixture("NEW_SECRET")
+			readErr = nil
+			observeGeneration = nexusbridge.Generation(identity)
+			return identity, nil
+		},
+		restart: func(context.Context, string, string) error {
+			restartCalls++
+			return nil
+		},
+		observe: func(context.Context, string) (desktopruntime.ServiceStatus, error) {
+			return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusIdentityGeneration: observeGeneration}, nil
+		},
+	}
+
+	stale := s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "SUPERSECRET", ExpectedGeneration: "stale"})
+	if stale.Error == nil || stale.Error.Code != "nexus_generation_conflict" || pairCalls != 0 || restartCalls != 0 {
+		t.Fatalf("stale result=%+v pair=%d restart=%d", stale, pairCalls, restartCalls)
+	}
+	result := s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "SUPERSECRET", ExpectedGeneration: nexusbridge.AbsentGeneration()})
+	if result.Error != nil || !result.Completed || !result.IdentitySaved || result.RestartRequired || result.ObservedGeneration != observeGeneration || pairCalls != 1 || restartCalls != 1 {
+		t.Fatalf("result=%+v pair=%d restart=%d", result, pairCalls, restartCalls)
+	}
+	encoded, _ := json.Marshal(result)
+	if strings.Contains(string(encoded), "SUPERSECRET") || strings.Contains(string(encoded), "NEW_SECRET") || strings.Contains(string(encoded), home) {
+		t.Fatalf("mutation result leaked secret/path: %s", encoded)
+	}
+
+	current := nexusFixtureGeneration("NEW_SECRET")
+	pairCalls = 0
+	denied := s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "NEWCODE", ExpectedGeneration: current, ConfirmReplace: false})
+	if denied.Error == nil || denied.Error.Code != "nexus_replace_confirmation_required" || pairCalls != 0 {
+		t.Fatalf("replace confirmation result=%+v pair=%d", denied, pairCalls)
+	}
+}
+
+func TestNexusPairRestartFailureIsTruthfulAndRedacted(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	data := []byte(nil)
+	readErr := error(os.ErrNotExist)
+	s := NewNexusService(root)
+	s.deps = nexusDependencies{
+		readIdentity: func(context.Context, string) ([]byte, error) { return data, readErr },
+		resolveHome:  func(context.Context, string) (string, error) { return home, nil },
+		pair: func(context.Context, string, nexusbridge.PairOptions, string, bool) (nexusbridge.Identity, error) {
+			identity := nexusFixtureIdentity("SAVED_SECRET")
+			data, readErr = nexusFixture("SAVED_SECRET"), nil
+			return identity, nil
+		},
+		restart: func(context.Context, string, string) error { return errors.New("SAVED_SECRET /private/path stderr") },
+		observe: func(context.Context, string) (desktopruntime.ServiceStatus, error) {
+			t.Fatal("observe called after failed restart")
+			return desktopruntime.ServiceStatus{}, nil
+		},
+	}
+	result := s.Pair(context.Background(), NexusPairRequest{Endpoint: "https://nexus.example", Code: "ONE_TIME_SECRET", ExpectedGeneration: nexusbridge.AbsentGeneration()})
+	if result.Completed || !result.IdentitySaved || !result.RestartRequired || result.Error == nil || result.Error.Code != "nexus_restart_required" {
+		t.Fatalf("result=%+v", result)
+	}
+	encoded, _ := json.Marshal(result)
+	for _, secret := range []string{"SAVED_SECRET", "ONE_TIME_SECRET", "/private/path", "stderr"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("leaked %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestNexusReconcileRequiresMatchingGenerationAndAttestsCore(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	data := nexusFixture("SECRET")
+	generation := nexusFixtureGeneration("SECRET")
+	restarts := 0
+	s := NewNexusService(root)
+	s.deps = nexusDependencies{
+		readIdentity: func(context.Context, string) ([]byte, error) { return data, nil },
+		resolveHome:  func(context.Context, string) (string, error) { return home, nil },
+		restart: func(context.Context, string, string) error {
+			restarts++
+			return nil
+		},
+		observe: func(context.Context, string) (desktopruntime.ServiceStatus, error) {
+			return desktopruntime.ServiceStatus{Running: true, Healthy: true, NexusIdentityGeneration: generation}, nil
+		},
+		pair: func(context.Context, string, nexusbridge.PairOptions, string, bool) (nexusbridge.Identity, error) {
+			t.Fatal("pair called during reconcile")
+			return nexusbridge.Identity{}, nil
+		},
+	}
+	conflict := s.Reconcile(context.Background(), "stale")
+	if conflict.Error == nil || conflict.Error.Code != "nexus_generation_conflict" || restarts != 0 {
+		t.Fatalf("conflict=%+v restarts=%d", conflict, restarts)
+	}
+	result := s.Reconcile(context.Background(), generation)
+	if result.Error != nil || !result.Completed || !result.IdentitySaved || result.RestartRequired || result.ObservedGeneration != generation || restarts != 1 {
+		t.Fatalf("result=%+v restarts=%d", result, restarts)
 	}
 }
