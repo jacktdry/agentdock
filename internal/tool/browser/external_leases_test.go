@@ -355,16 +355,17 @@ func TestExternalAcquireFailureCleanup(t *testing.T) {
 				b.newErr = errors.New("lost response")
 			case "proven canceled":
 				b.afterCreate = cancel
-				proven = true
+				// Cancellation invalidates post-create peer proof; do not
+				// close a possibly replaced browser's page.
 			case "proven error":
 				b.newErr = errors.New("error with proof")
 				proven = true
 			case "cleanup close failure":
-				b.afterCreate = cancel
+				b.newErr = errors.New("post-create tool failure")
 				b.closeErr = errors.New("close failed")
 				proven = true
 			case "cleanup stop failure":
-				b.afterCreate = cancel
+				b.newErr = errors.New("post-create tool failure")
 				b.stopErr = errors.New("stop failed")
 				proven = true
 			}

@@ -509,3 +509,50 @@ check. No actual Edge/CDP/network/browser operation or installed GUI UAT was run
 C2b/P8/M9 remain open. Orchestrator owns integration and release acceptance.
 
 Host-level offline validation on macOS/go1.27.1: `go test ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=100s`, targeted `go test -race ./internal/tool/browser -run 'Test(ExternalLeasePeer|ExternalLeaseReleaseAndSweep|ExternalAdmission|ExternalLeaseOperations|ExternalAcquire|Planner)' -count=1 -timeout=100s`, `go vet ./internal/tool/browser ./internal/browserpolicy`, and `git diff --check` all **PASS**. These tests use synthetic peer fixtures; no real external browser was accessed.
+
+
+## Phase C2b-B2b post-operation peer consistency checkpoint (2026-10-09)
+
+Next-only source change on `feature/m8-permission-approval`, based on
+`943e546c`. C2b-B2a revalidates before each lease action or release.
+B2b now independently revalidates **after** a browser action has completed,
+**before** handing any response or operation error to the caller or renewing
+the lease's idle TTL. If verification fails (changed source/incarnation,
+revoked/unavailable verifier, panic, timeout, or cancellation), it returns
+**nil response** plus a sanitized denial, permanently latches `peerLost`,
+and does not refresh activity/expiry. Even a previously successful page
+tool result containing sensitive fields is quarantined; a subsequent matching
+peer cannot restore the compromised lease. Operations themselves may have
+taken effect already, so this is **response quarantine, not rollback**.
+
+External `Acquire` now performs a third independent peer check **after**
+`new_page` and before publishing the lease. If the peer changed or the
+verification context is canceled, it discards the provisional page identity,
+**does not call `close_page`**, and stops only its own connector (with the
+existing connector-only orphan recovery path). The same conservative rule
+applies when the page had appeared to be uniquely agent-created: a changed
+remote browser incarnation invalidates authority to close that page.
+A healthy peer and a proven page retain prior success and safe cleanup
+behavior for actual tool errors. Existing synthetic test fixtures have been
+updated for the added check and canceled post-create cleanup.
+
+Offline tests `external_peer_completion_test.go` cover source/incarnation
+turnover, revocation, verifier failure, cancellation and combined tool error
+during actions, denying stale successful responses and preserving the lease
+latch. Post-`new_page` turnover prevents publishing leases or closing tabs;
+connector Stop failure recovers using Stop only. These use **test-only fake
+backends/peer observations**, not a real Edge session or CDP.
+
+**Remaining security gate:** rechecking after operations does not establish
+an atomic, transport-bound guarantee that the *actual side effect* occurred
+only in the intended peer. Implementing a credible process/profile/auth and
+capability attestor, source generation revocation, a fenced transport/operation
+contract, and explicit-consent native Next UAT remain mandatory. No production
+status provider/peer verifier has been enabled: `runtime.go` still supplies
+`nil`, and Edge remains `CompatibilityUnqualified`. Managed isolated Chrome
+and policy fallback rules are unchanged. Stable AgentDock and the separate
+AGY-ACP repository were not touched; Nexus live UAT remains deferred.
+No Edge/browser/CDP operation, installed App build, deployment or restart was
+performed. C2b/P8/M9 remain open.
+
+Mac-Dev host validation (Go on macOS): `go test ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=120s`, focused `go test -race ./internal/tool/browser -run 'Test(ExternalAdmission|ExternalCallQuarantines|ExternalLeasePeer|ExternalLeaseOperations|ExternalAcquire|Planner)' -count=1 -timeout=120s`, `go vet ./internal/tool/browser ./internal/browserpolicy`, and `git diff --check` all **PASS**. `go test -tags browser_integration -run '^$' ./internal/tool/browser` **compiled**, with zero real browser integration tests executed. These are offline mock/contract tests, not a real authenticated Edge, foreground-focus, process identity or transport-fencing UAT.

@@ -128,10 +128,18 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 		return fail(externalLeaseError(ErrLeaseTargetMismatch, "", "ambiguous external target cleanup: no page closed; connector stopped only", errors.Join(createErr, err)))
 	}
 	proven = true
+	// The peer can change while new_page is executing. A page ID from the
+	// old peer is not authority to close a page in the new peer. Quarantine
+	// this result and stop only our connector on any identity uncertainty.
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
+		proven = false
+		return fail(err)
+	}
 	if createErr != nil {
 		return fail(createErr)
 	}
 	if err := ctx.Err(); err != nil {
+		proven = false
 		return fail(err)
 	}
 	now := time.Now().UTC()
@@ -252,6 +260,12 @@ func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id,
 	}
 	targetArgs["pageId"] = l.pageID
 	result, err := m.backend.CallExternal(ctx, l.worker, tool, targetArgs)
+	// Recheck after the operation before releasing any data. The action may
+	// already have taken effect; this is a response quarantine, not atomic
+	// peer fencing or rollback. Never return a stale peer's raw results.
+	if peerErr := m.verifyLeasePeer(ctx, l); peerErr != nil {
+		return nil, peerErr
+	}
 	if err == nil {
 		err = leaseCallResultError(result)
 	}

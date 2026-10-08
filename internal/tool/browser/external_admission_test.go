@@ -218,7 +218,7 @@ func TestExternalAdmissionPlannerHandoffAndIndependentVerification(t *testing.T)
 		return observed, nil
 	})
 	meta, _, err := m.Acquire(context.Background(), d, "")
-	if err != nil || checks != 2 {
+	if err != nil || checks != 3 {
 		t.Fatalf("verified synthetic handoff: checks=%d err=%v", checks, err)
 	}
 	if _, err := m.Release(context.Background(), d.Scope, meta.BrowserLeaseID); err != nil {

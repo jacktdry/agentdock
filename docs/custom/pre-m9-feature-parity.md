@@ -358,6 +358,19 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > C2b/P8/M9 remain open. No live Edge/CDP, GUI, policy, runtime or AGY handoff change.
 > See [C2b-B2a checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2a-offline-lease-peer-lifecycle-checkpoint-2026-10-09).
 
+> P8 C2b-B2b offline post-operation peer checkpoint (2026-10-09, base
+> `943e546c`): `ExternalLeaseManager.Call` now verifies peer identity after
+> the actual browser action before returning any result or refreshing lease TTL.
+> Identity loss returns nil result with sanitized denial and permanently latches
+> the lease. After external `new_page`, a third identity check before publishing
+> the lease prevents cleanup from closing a page whose browser incarnation
+> could have changed; only AgentDock's connector is stopped and retried.
+> Offline synthetic fixtures cover turnover, revocation, cancellation and
+> action-error combinations. **Not atomic transport fencing or real Edge auth**:
+> provider and verifier remain nil, Edge UNQUALIFIED, consent-based native UAT
+> remains open. Stable AgentDock, runtime, and AGY-ACP are untouched.
+> See [C2b-B2b checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2b-post-operation-peer-consistency-checkpoint-2026-10-09).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

@@ -55,7 +55,7 @@ func TestExternalLeasePeerRevalidationOutlivesAdmission(t *testing.T) {
 		}
 	}
 	cleaned, err := m.Release(context.Background(), d.Scope, meta.BrowserLeaseID)
-	if err != nil || cleaned.CleanupReason != "owned external page closed and connector stopped" || v.count() != 6 {
+	if err != nil || cleaned.CleanupReason != "owned external page closed and connector stopped" || v.count() != 10 {
 		t.Fatalf("missing repeated peer checks: checks=%d cleanup=%+v err=%v", v.count(), cleaned, err)
 	}
 	if externalCallCount(b, "list_pages") != 5 || externalCallCount(b, "close_page") != 1 || externalCallCount(b, "stop") != 1 {
@@ -207,7 +207,7 @@ func TestExternalLeasePeerOwnershipFirstAndConcurrentLoss(t *testing.T) {
 	assertBrowserCode(t, err, ErrLeaseOwnerMismatch)
 	_, err = m.Release(context.Background(), wrongScope, meta.BrowserLeaseID)
 	assertBrowserCode(t, err, ErrLeaseOwnerMismatch)
-	if v.count() != 2 {
+	if v.count() != 3 {
 		t.Fatal("wrong owner reached verifier")
 	}
 	var wg sync.WaitGroup
@@ -223,7 +223,7 @@ func TestExternalLeasePeerOwnershipFirstAndConcurrentLoss(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if v.count() != 3 || externalCallCount(b, "list_pages") != 1 || externalCallCount(b, "click") != 0 {
+	if v.count() != 4 || externalCallCount(b, "list_pages") != 1 || externalCallCount(b, "click") != 0 {
 		t.Fatal("concurrent copies bypassed latch")
 	}
 	if _, err := m.Release(context.Background(), d.Scope, meta.BrowserLeaseID); err != nil {
