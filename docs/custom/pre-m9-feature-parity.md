@@ -247,6 +247,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P7 — Nexus / Startup / Platform Essentials
 
+2026-10-08 已完成唯讀能力盤點，尚未凍結 UX/authority contract，亦未開始 P7 實作；詳見 [P7 read-only inventory](pre-m9-platform-essentials-inventory.md)。P6 的 native GUI UAT 仍是獨立待完成 gate。
+
 補齊日常 parity：
 
 - Nexus endpoint / pairing / device status；
