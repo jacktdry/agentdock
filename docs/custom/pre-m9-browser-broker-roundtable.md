@@ -625,3 +625,30 @@ Validation: focused fixtures, Browser/Policy Go tests with five unrelated networ
 **Additional macOS loopback diagnostic (read-only, same checkpoint):** subsequent host checks showed TCP connect to Next `127.0.0.1:8767` timing out even though the dedicated Next PID (`75320`) still owned the LISTEN socket; the original stable `127.0.0.1:8765` remained reachable. An independent temporary Python loopback HTTP listener also timed out on local connection. `lo0` was UP and macOS Application Firewall reported disabled; prior Next logs contained successful `/healthz` HTTP 200 entries up through 02:03 local. Therefore this checkpoint does **not** claim current Next HTTP readiness, and the five Go `httptest` failures cannot yet be attributed to either preflight code or the Next Core. Investigate the host's network extension/PF/loopback policy separately using the stable `mac-dev` control plane; do not disable system security or restart stable services as a workaround.
 
 **2026-10-09 約 03:12 後續確認（不刪原始異常紀錄）：** stable `mac-dev` 重測 Next `127.0.0.1:8767/healthz` 已回 HTTP 200（`0.9.1`），完整 `go test ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=120s` **PASS**，之前五項 `httptest` 逾時不再重現。根因仍未釐清；不可當作已永久修復。P8 的真實 Edge attestor、atomic CDP fencing、native GUI UAT 仍待完成。
+
+## Phase C2b-B2d macOS Edge on-disk signer prerequisite (2026-10-09)
+
+Read-only `readEdgeProcessPreflight` now adds a **mandatory but insufficient**
+Microsoft signer gate between its first and second OS process/listener identity
+observations. On macOS the bounded `/usr/bin/codesign --verify --strict`
+checks the fixed `/Applications/Microsoft Edge.app` bundle and separately its
+executable with a certificate-bound requirement: Apple generic anchor, Microsoft
+Team ID `UBF8T346G9`, bundle identifier `com.microsoft.edgemac`. The same
+2-second parent context covers all OS observations and signer checks. We do not
+use `--deep` in this hot path: nested-framework traversal took ~4 seconds on
+the installed Edge version, while strict app + executable checks each took
+~0.2 seconds; this does not certify nested helpers/frameworks. Failures,
+timeouts, cancellation or intervening listener/PID/epoch/argv/mapped-image changes
+return the same opaque unqualified result; no signer output or raw profile/process
+evidence is exposed. The user-owned Edge profile, login state, tabs, CDP socket,
+and stable AgentDock are not accessed or modified.
+
+**Not live browser authentication or authorization:** on-disk code signatures
+cannot authenticate the executable pages already running in memory, the exact
+CDP peer, the selected user profile/login/cookies, no-focus lifecycle, or safe
+release, and cannot defeat a post-check port swap. Production status provider
+and lease verifier remain `nil`; `UNQUALIFIED` stays in force and no connector
+qualification or route grant is minted. Actual authenticated runtime identity,
+profile consent, atomic CDP transport binding and native GUI/live UAT remain
+P8 release gates. The signed Edge build on this macOS host passed a separate
+read-only signature check, but that is not live connector qualification.

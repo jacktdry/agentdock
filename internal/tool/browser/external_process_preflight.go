@@ -34,6 +34,9 @@ type edgeProcessProbe interface {
 	command(context.Context, int) (string, error)
 	startToken(context.Context, int) (string, error)
 	image(context.Context, int) (string, error)
+	// signature verifies the fixed Edge app and executable ON DISK only.
+	// It cannot attest the currently running executable or CDP peer.
+	signature(context.Context) error
 }
 
 type edgeListener struct {
@@ -90,6 +93,12 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	}
 	mapped, err := probe.image(probeCtx, first.pid)
 	if err != nil || !mappedExecutableIsEdge(mapped, first.pid) || probeCtx.Err() != nil {
+		return fail()
+	}
+	// On-disk Microsoft signature is a required but insufficient source check.
+	// Verify before the second OS observation, so evidence changes during
+	// codesign cannot silently complete this preflight. Never mint route grants.
+	if probe.signature(probeCtx) != nil || probeCtx.Err() != nil {
 		return fail()
 	}
 	// Re-observe the OS listener and process incarnation after collecting

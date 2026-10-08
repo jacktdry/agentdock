@@ -13,16 +13,19 @@ import (
 const testEdgeExecutable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
 
 type fakeEdgeProcessProbe struct {
-	listenerCalls int
-	commandCalls  int
-	startCalls    int
-	imageCalls    int
-	listenersRaw  []string
-	commandsRaw   []string
-	startsRaw     []string
-	imagesRaw     []string
-	err           error
-	cancel        context.CancelFunc
+	listenerCalls  int
+	commandCalls   int
+	startCalls     int
+	imageCalls     int
+	signatureCalls int
+	signatureErr   error
+	cancelOnSign   bool
+	listenersRaw   []string
+	commandsRaw    []string
+	startsRaw      []string
+	imagesRaw      []string
+	err            error
+	cancel         context.CancelFunc
 }
 
 func (f *fakeEdgeProcessProbe) listeners(ctx context.Context, _ int) (string, error) {
@@ -86,6 +89,17 @@ func (f *fakeEdgeProcessProbe) image(ctx context.Context, _ int) (string, error)
 	return f.imagesRaw[i], nil
 }
 
+func (f *fakeEdgeProcessProbe) signature(ctx context.Context) error {
+	f.signatureCalls++
+	if f.cancelOnSign && f.cancel != nil {
+		f.cancel()
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return f.signatureErr
+}
+
 func edgeFixture() *fakeEdgeProcessProbe {
 	cmd := testEdgeExecutable + " --remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture"
 	raw := "p1245\nf7\nn127.0.0.1:9222\n"
@@ -109,7 +123,7 @@ func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
 		p.executable != testEdgeExecutable || time.Since(p.observedAt) > time.Second {
 		t.Fatal("read-only process preflight lost source identity")
 	}
-	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 {
+	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 || f.signatureCalls != 1 {
 		t.Fatal("did not recheck process evidence after observation")
 	}
 }
@@ -184,6 +198,48 @@ func TestEdgeProcessPreflightRejectsAllAmbiguousEvidence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEdgeProcessPreflightRejectsUnsignedAndChangedDuringSigning(t *testing.T) {
+	t.Run("missing or invalid Microsoft signature", func(t *testing.T) {
+		f := edgeFixture()
+		f.signatureErr = errors.New("codesign failed: sensitive detail must not escape")
+		e, err := readEdgeProcessPreflight(context.Background(),
+			"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+		if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) ||
+			strings.Contains(err.Error(), "sensitive") || f.signatureCalls != 1 {
+			t.Fatal("unsigned or wrong-team Edge was accepted, or error leaked details")
+		}
+	})
+	t.Run("listener changed across signature", func(t *testing.T) {
+		f := edgeFixture()
+		f.listenersRaw[1] = "p4321\nf7\nn127.0.0.1:9222\n"
+		e, err := readEdgeProcessPreflight(context.Background(),
+			"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+		if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) || f.signatureCalls != 1 {
+			t.Fatal("process turnover during signature was accepted")
+		}
+	})
+	t.Run("signature canceled", func(t *testing.T) {
+		f := edgeFixture()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f.cancel = cancel
+		f.cancelOnSign = true
+		e, err := readEdgeProcessPreflight(ctx,
+			"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+		if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) || f.listenerCalls != 1 {
+			t.Fatal("signature cancellation was accepted or continued to OS recheck")
+		}
+	})
+	t.Run("invalid endpoint never verifies signer", func(t *testing.T) {
+		f := edgeFixture()
+		_, _ = readEdgeProcessPreflight(context.Background(),
+			"ws://localhost:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+		if f.signatureCalls != 0 {
+			t.Fatal("invalid endpoint caused on-disk signature work")
+		}
+	})
 }
 
 func TestEdgeProcessPreflightRejectsUnsafeInputsAndCancellation(t *testing.T) {
