@@ -568,8 +568,8 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
    - enable/disable/remove；
    - MCP settings；
    - i18n/a11y/responsive。
-4. **D — Independent security review + hardening ← NEXT**
-5. **E — Next-only package/live UAT**
+4. ✅ **D — Independent security review + hardening**
+5. **E — Next-only package/live UAT ← NEXT**
 
 在 D 得到 0 BLOCKER / 0 HIGH 前，不 package/reinstall Next 做 P6 live UAT。
 
@@ -639,7 +639,32 @@ Validation：
 - i18n generator + catalog tests + coverage：PASS，三個 stable locale 均 **742/742 (100%)**；
 - repo-wide hard-coded Shared UI scanner 仍會對既有 Permission/ACP literals 回報非零；本次輸出沒有新增 P6 Plugin violation，列為既有 i18n debt，不誤宣稱整體 `i18n-check` 已全綠。
 
-下一步：**Phase D independent security review + hardening**。在 reviewer 給出 **0 BLOCKER / 0 HIGH** 前，仍禁止 package/reinstall Next。
+下一步：**Phase E Next-only package/live UAT**。
+
+### 17.3 Phase D independent review closeout — 2026-10-08
+
+單一 Antigravity / Gemini 3.1 Pro reviewer 對 P6 Phase A–C 實作做 independent security + architecture review。
+
+第一輪結果：**0 BLOCKER / 1 HIGH**。
+
+HIGH 根因：candidate safe projection 先刪除 newline/tab/control characters，可能把 prose 與 absolute path 黏成同一 token，繞過 prefix-based absolute-path redaction；同一根因也會讓多行 description 黏字。
+
+Hardening commit：07a1a935 fix(plugin): preserve candidate redaction boundaries
+
+- control characters 改為正規化成空白，不再直接移除；
+- Unix / Windows drive / UNC absolute path 保持獨立 token，再由既有 redaction 規則攔截；
+- 新增 newline/tab + Unix/Windows/UNC regression test；
+- 多行描述同時恢復可讀空白。
+
+修正後 targeted、race、repo-wide regression 與 git diff check 全部 PASS。
+
+同一 reviewer re-review：
+
+**SECURITY VERDICT: PASS — 0 BLOCKER / 0 HIGH**
+
+附帶 reviewer orchestration note：第一輪 reviewer 雖被要求 read-only，仍建立兩個未追蹤 scratch Go 檔做局部實驗；已立即清除，未進 commit、未影響產品狀態。這是 reviewer/tool discipline 問題，不是 P6 product finding。
+
+Phase E 仍由 stable mac-dev 作唯一 mutation control plane；macbook-air-m3 只作部署後 Next read-only validation。
 
 ## 18. Roundtable decision
 

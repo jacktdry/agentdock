@@ -227,7 +227,7 @@ Core/Desktop authority與 Shared UI 已完成，包含 atomic update、revision/
 
 ### P6 — Plugin Management Shared UI
 
-**狀態：Phase A Core/Desktop authority + Phase B opaque native candidate staging + Phase C Shared UI 已完成；Phase D independent review NEXT（2026-10-08）。**
+**狀態：Phase A/B/C + Phase D independent review（0 BLOCKER / 0 HIGH）已完成；Phase E Next-only package/live UAT NEXT（2026-10-08）。**
 
 Checkpoint：
 
@@ -348,7 +348,7 @@ P4 ACP Manager full parity ✅
   ↓
 P5 MCP Management ✅
   ↓
-P6 Plugin Management ← **Phase A/B/C ✅；Phase D independent review NEXT**
+P6 Plugin Management ← **Phase A/B/C/D ✅；Phase E Next-only live UAT NEXT**
   ↓
 P7 Nexus / startup / platform essentials
   ↓
@@ -498,7 +498,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**Phase A Core/Desktop authority + Phase B opaque candidate staging + Phase C Shared UI 已完成，現在進 Phase D independent security review / hardening**；之後才做 Next-only live UAT，再依序為 Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**Phase A/B/C 與 Phase D independent review（0 BLOCKER / 0 HIGH）已完成，現在進 Phase E Next-only package/live UAT**；完成後再依序為 Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
