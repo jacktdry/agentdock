@@ -101,7 +101,7 @@ func safeCandidateText(value string, max int, replacements ...string) string {
 	}
 	value = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
-			return -1
+			return ' '
 		}
 		return r
 	}, value)

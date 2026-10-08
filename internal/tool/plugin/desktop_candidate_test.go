@@ -233,6 +233,32 @@ func TestSafeCandidateReviewRedactsAbsolutePaths(t *testing.T) {
 	}
 }
 
+func TestSafeCandidateReviewControlCharactersPreservePathBoundaries(t *testing.T) {
+	review := pluginruntime.Review{
+		Valid: true, Name: "safe-demo", Version: "1.0.0",
+		Description:   "Error at\n/alpha/beta\tthen C:\\alpha\\beta\nand \\\\server\\share",
+		PackageDigest: "sha256:" + strings.Repeat("a", 64), Format: "portable",
+		Skills: []pluginruntime.SkillComponent{{
+			Name: "safe", Description: "First line.\nSecond line at /opt/demo/readme",
+		}},
+		Warnings: []string{"path:\n/tmp/demo/file"},
+		Issues:   []string{"path:\tC:\\tmp\\demo\\file"},
+	}
+	projected := safeCandidateReview(review, "", "")
+	data, _ := json.Marshal(projected)
+	for _, forbidden := range []string{"/alpha/beta", "/opt/demo", "/tmp/demo", "C:\\", "\\\\server\\share"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("absolute path leaked through control-character boundary %q: %s", forbidden, data)
+		}
+	}
+	if !strings.Contains(projected.Description, "Error at [redacted-path]") {
+		t.Fatalf("newline did not preserve path token boundary: %#v", projected.Description)
+	}
+	if !strings.Contains(projected.Skills[0].Description, "First line. Second line at [redacted-path]") {
+		t.Fatalf("multiline text was not normalized readably: %#v", projected.Skills[0].Description)
+	}
+}
+
 func TestDecodeDesktopCandidateRequestStrict(t *testing.T) {
 	generation := strings.Repeat("a", 64)
 	candidateID := strings.Repeat("b", 64)
