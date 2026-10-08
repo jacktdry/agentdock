@@ -1036,11 +1036,29 @@
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>架构</value>
   </data>
+  <data name="diagnostics.configuration_warning" xml:space="preserve">
+    <value>配置文件夹可能包含机密信息，分享文件前请仔细确认。</value>
+  </data>
+  <data name="diagnostics.directory_unavailable" xml:space="preserve">
+    <value>目前无法访问 Next 文件夹，请刷新以再次检查。</value>
+  </data>
   <data name="diagnostics.manifest_available" xml:space="preserve">
     <value>运行环境清单可用</value>
   </data>
+  <data name="diagnostics.open_configuration" xml:space="preserve">
+    <value>打开配置文件夹</value>
+  </data>
+  <data name="diagnostics.open_failed" xml:space="preserve">
+    <value>无法安全打开文件夹，请刷新可用状态后重试。</value>
+  </data>
+  <data name="diagnostics.open_logs" xml:space="preserve">
+    <value>打开日志文件夹</value>
+  </data>
   <data name="diagnostics.platform" xml:space="preserve">
     <value>平台</value>
+  </data>
+  <data name="diagnostics.requires_native" xml:space="preserve">
+    <value>此平台需要经过验证的原生目录接口。</value>
   </data>
   <data name="diagnostics.runtime_available" xml:space="preserve">
     <value>运行环境目录可用</value>

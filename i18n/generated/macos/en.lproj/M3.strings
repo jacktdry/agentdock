@@ -344,8 +344,14 @@
 "developer.activity_experimental" = "Activity is experimental. This synthetic probe is for developer diagnostics.";
 "developer.scope" = "Secondary architecture diagnostics and experimental surfaces that are not part of the main management pages.";
 "diagnostics.architecture" = "Architecture";
+"diagnostics.configuration_warning" = "The configuration folder may contain secrets. Share its files carefully.";
+"diagnostics.directory_unavailable" = "Next directory access is unavailable. Refresh to check again.";
 "diagnostics.manifest_available" = "Runtime manifest available";
+"diagnostics.open_configuration" = "Open Configuration";
+"diagnostics.open_failed" = "Could not open the directory safely. Refresh availability, then try again.";
+"diagnostics.open_logs" = "Open Logs";
 "diagnostics.platform" = "Platform";
+"diagnostics.requires_native" = "This platform requires a verified native directory adapter.";
 "diagnostics.runtime_available" = "Runtime directory available";
 "diagnostics.scope" = "Read-only platform metadata. No file contents, logs or environment values are exposed.";
 "diagnostics.title" = "Diagnostics";

@@ -239,7 +239,15 @@ func DefaultManifest() Manifest {
 				Reason: "Core-owned Plugin inventory and revisioned lifecycle management; package selection uses a native picker and opaque immutable candidate review",
 			},
 			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
-			availableCapability(DomainDiagnostics, "Local file availability only; logs, content and environment are omitted", "snapshot"),
+			{
+				Domain: DomainDiagnostics, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "snapshot", Access: AccessRead},
+					{Name: "directories", Access: AccessRead},
+					{Name: "openNextDirectory", Access: AccessMutating},
+				}, Streams: []StreamCapability{},
+				Reason: "Metadata and fixed Next directory intents only; Directories reports native availability without mutation",
+			},
 		},
 	}
 }

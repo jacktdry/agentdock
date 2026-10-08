@@ -31,6 +31,7 @@ export {
     Availability,
     Domain,
     ErrorCategory,
+    NextDirectoryKind,
     RuntimeAction
 } from "./models.js";
 
@@ -65,8 +66,11 @@ export type {
     ConnectionStatus,
     ConnectionStatusResult,
     ConnectionTunnelRequest,
+    DiagnosticsDirectories,
+    DiagnosticsDirectoryResult,
     DiagnosticsResult,
     DiagnosticsSnapshot,
+    DirectoryCapability,
     DomainCapability,
     MCPActionResult,
     MCPAuthCallback,

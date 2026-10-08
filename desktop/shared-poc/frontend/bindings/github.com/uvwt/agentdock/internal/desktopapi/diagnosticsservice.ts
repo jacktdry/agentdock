@@ -9,6 +9,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function Directories(): $CancellablePromise<$models.DiagnosticsDirectories> {
+    return $Call.ByID(755701094);
+}
+
+export function OpenNextDirectory(kind: $models.NextDirectoryKind): $CancellablePromise<$models.DiagnosticsDirectoryResult> {
+    return $Call.ByID(3959424865, kind);
+}
+
 export function Snapshot(): $CancellablePromise<$models.DiagnosticsResult> {
     return $Call.ByID(2313463903);
 }

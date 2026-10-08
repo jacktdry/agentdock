@@ -1036,11 +1036,29 @@
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>Architecture</value>
   </data>
+  <data name="diagnostics.configuration_warning" xml:space="preserve">
+    <value>The configuration folder may contain secrets. Share its files carefully.</value>
+  </data>
+  <data name="diagnostics.directory_unavailable" xml:space="preserve">
+    <value>Next directory access is unavailable. Refresh to check again.</value>
+  </data>
   <data name="diagnostics.manifest_available" xml:space="preserve">
     <value>Runtime manifest available</value>
   </data>
+  <data name="diagnostics.open_configuration" xml:space="preserve">
+    <value>Open Configuration</value>
+  </data>
+  <data name="diagnostics.open_failed" xml:space="preserve">
+    <value>Could not open the directory safely. Refresh availability, then try again.</value>
+  </data>
+  <data name="diagnostics.open_logs" xml:space="preserve">
+    <value>Open Logs</value>
+  </data>
   <data name="diagnostics.platform" xml:space="preserve">
     <value>Platform</value>
+  </data>
+  <data name="diagnostics.requires_native" xml:space="preserve">
+    <value>This platform requires a verified native directory adapter.</value>
   </data>
   <data name="diagnostics.runtime_available" xml:space="preserve">
     <value>Runtime directory available</value>

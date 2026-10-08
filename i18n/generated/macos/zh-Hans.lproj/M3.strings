@@ -344,8 +344,14 @@
 "developer.activity_experimental" = "Activity 为实验功能，合成事件测试仅供开发者诊断。";
 "developer.scope" = "次要架构诊断与尚未纳入主要管理页面的实验性界面。";
 "diagnostics.architecture" = "架构";
+"diagnostics.configuration_warning" = "配置文件夹可能包含机密信息，分享文件前请仔细确认。";
+"diagnostics.directory_unavailable" = "目前无法访问 Next 文件夹，请刷新以再次检查。";
 "diagnostics.manifest_available" = "运行环境清单可用";
+"diagnostics.open_configuration" = "打开配置文件夹";
+"diagnostics.open_failed" = "无法安全打开文件夹，请刷新可用状态后重试。";
+"diagnostics.open_logs" = "打开日志文件夹";
 "diagnostics.platform" = "平台";
+"diagnostics.requires_native" = "此平台需要经过验证的原生目录接口。";
 "diagnostics.runtime_available" = "运行环境目录可用";
 "diagnostics.scope" = "只读平台元数据，不提供文件内容、日志或环境变量值。";
 "diagnostics.title" = "诊断";

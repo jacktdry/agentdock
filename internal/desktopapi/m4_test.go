@@ -16,7 +16,7 @@ import (
 )
 
 func TestM4Manifest(t *testing.T) {
-	expected := map[Domain][]string{DomainConnection: {"snapshot", "preflightPort", "revealOAuthPassword", "testPublicEndpoint", "updatePort", "configureTunnel", "setTunnelAutostart", "start", "stop", "restart", "regenerate"}, DomainSettings: {"read", "save"}, DomainUpdate: {"check"}, DomainDiagnostics: {"snapshot"}}
+	expected := map[Domain][]string{DomainConnection: {"snapshot", "preflightPort", "revealOAuthPassword", "testPublicEndpoint", "updatePort", "configureTunnel", "setTunnelAutostart", "start", "stop", "restart", "regenerate"}, DomainSettings: {"read", "save"}, DomainUpdate: {"check"}, DomainDiagnostics: {"snapshot", "directories", "openNextDirectory"}}
 	for _, cap := range DefaultManifest().Capabilities {
 		names, ok := expected[cap.Domain]
 		if !ok {
@@ -26,12 +26,12 @@ func TestM4Manifest(t *testing.T) {
 			t.Fatalf("capability: %#v", cap)
 		}
 		for i, op := range cap.Operations {
-			mutating := op.Name == "save" || (cap.Domain == DomainConnection && i >= 4)
+			mutating := op.Name == "save" || op.Name == "openNextDirectory" || (cap.Domain == DomainConnection && i >= 4)
 			want := AccessRead
 			if mutating {
 				want = AccessMutating
 			}
-			if op.Name != names[i] || op.Access != want || op.RequiresConfirmation != (mutating && op.Name != "start" && op.Name != "setTunnelAutostart") {
+			if op.Name != names[i] || op.Access != want || op.RequiresConfirmation != (mutating && op.Name != "start" && op.Name != "setTunnelAutostart" && op.Name != "openNextDirectory") {
 				t.Fatalf("operation: %#v", op)
 			}
 		}

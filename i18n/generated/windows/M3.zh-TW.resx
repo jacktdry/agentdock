@@ -1036,11 +1036,29 @@
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>架構</value>
   </data>
+  <data name="diagnostics.configuration_warning" xml:space="preserve">
+    <value>設定資料夾可能包含機密資訊，分享檔案前請仔細確認。</value>
+  </data>
+  <data name="diagnostics.directory_unavailable" xml:space="preserve">
+    <value>目前無法存取 Next 資料夾，請重新整理以再次確認。</value>
+  </data>
   <data name="diagnostics.manifest_available" xml:space="preserve">
     <value>執行環境清單可用</value>
   </data>
+  <data name="diagnostics.open_configuration" xml:space="preserve">
+    <value>開啟設定資料夾</value>
+  </data>
+  <data name="diagnostics.open_failed" xml:space="preserve">
+    <value>無法安全開啟資料夾，請重新整理可用狀態後再試。</value>
+  </data>
+  <data name="diagnostics.open_logs" xml:space="preserve">
+    <value>開啟記錄資料夾</value>
+  </data>
   <data name="diagnostics.platform" xml:space="preserve">
     <value>平台</value>
+  </data>
+  <data name="diagnostics.requires_native" xml:space="preserve">
+    <value>此平台需要經驗證的原生目錄介面。</value>
   </data>
   <data name="diagnostics.runtime_available" xml:space="preserve">
     <value>執行環境目錄可用</value>

@@ -791,3 +791,10 @@ nexus.busy: "Another operation is in progress. Refresh before another explicit a
 nexus.unavailable_help: "Next identity or native observation is unavailable. Refresh; this action requires a verified Next backend."
 nexus.applied: "Operation applied. Connection status is shown separately."
 nexus.identity_saved: "Identity saved; this alone does not prove a connection."
+
+diagnostics.open_logs: "Open Logs"
+diagnostics.open_configuration: "Open Configuration"
+diagnostics.configuration_warning: "The configuration folder may contain secrets. Share its files carefully."
+diagnostics.requires_native: "This platform requires a verified native directory adapter."
+diagnostics.directory_unavailable: "Next directory access is unavailable. Refresh to check again."
+diagnostics.open_failed: "Could not open the directory safely. Refresh availability, then try again."

@@ -294,6 +294,16 @@ export interface ConnectionTunnelRequest {
     "configRevision": string;
 }
 
+export interface DiagnosticsDirectories {
+    "logs": DirectoryCapability;
+    "configuration": DirectoryCapability;
+}
+
+export interface DiagnosticsDirectoryResult {
+    "ok": boolean;
+    "error"?: APIError | null;
+}
+
 export interface DiagnosticsResult {
     "snapshot": DiagnosticsSnapshot;
     "error"?: APIError | null;
@@ -305,6 +315,11 @@ export interface DiagnosticsSnapshot {
     "runtimeRoot": string;
     "runtimeDirectoryAvailable": boolean;
     "manifestAvailable": boolean;
+}
+
+export interface DirectoryCapability {
+    "enabled": boolean;
+    "reason": string;
 }
 
 export enum Domain {
@@ -544,6 +559,19 @@ export interface NegotiationResult {
     "capabilities": DomainCapability[] | null;
     "error"?: APIError | null;
 }
+
+/**
+ * Directory actions accept semantic intent only; Snapshot remains compatible.
+ */
+export enum NextDirectoryKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    NextDirectoryLogs = "logs",
+    NextDirectoryConfiguration = "configuration",
+};
 
 export interface NexusCapabilities {
     "canPair": boolean;

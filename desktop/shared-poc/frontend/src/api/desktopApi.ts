@@ -22,6 +22,7 @@ import {
   Domain,
   ErrorCategory,
   RuntimeAction,
+  NextDirectoryKind,
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type {
   APIError,
@@ -39,6 +40,7 @@ import type {
   ConnectionStatus,
   ConnectionTunnelRequest,
   DiagnosticsSnapshot,
+  DiagnosticsDirectories,
   OAuthPasswordRevealResult,
   OperationCapability,
   PublicEndpointResult,
@@ -137,6 +139,7 @@ export type {
   ConnectionStatus,
   ConnectionTunnelRequest,
   DiagnosticsSnapshot,
+  DiagnosticsDirectories,
   OAuthPasswordRevealResult,
   OperationCapability,
   PortObservation,
@@ -361,6 +364,8 @@ export const desktopApi = {
   saveBasicSettings: (settings: BasicSettings) => BasicSettingsService.Save(settings),
   checkUpdate: () => UpdateService.Check(),
   diagnostics: () => DiagnosticsService.Snapshot(),
+  diagnosticsDirectories: () => DiagnosticsService.Directories(),
+  openNextDirectory: (kind: 'logs' | 'configuration') => DiagnosticsService.OpenNextDirectory(kind as NextDirectoryKind),
   mcpSnapshot: () => MCPService.Snapshot(),
   mcpInspect: (name: string) => MCPService.Inspect(name),
   mcpCreate: (requestID: string, expectedRevision: string, input: MCPConfigInput) =>
