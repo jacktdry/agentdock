@@ -44,12 +44,34 @@ func consumeExternalRouteGrant(d RouteDecision) bool {
 
 const externalPeerVerificationTimeout = 2 * time.Second
 
-func (m *ExternalLeaseManager) verifyPeer(ctx context.Context, g *externalRouteGrant, worker WorkerInfo) error {
-	reject := func() error {
-		// Never expose provider errors/panics, proof identities, URLs or PIDs.
-		return externalLeaseError(ErrRequiredRouteUnavailable, "", "external peer verification unavailable or mismatched", nil)
+func (m *ExternalLeaseManager) verifyAdmissionPeer(ctx context.Context, g *externalRouteGrant, worker WorkerInfo) error {
+	if !g.fresh() {
+		return externalPeerVerificationError()
 	}
-	if m.verifier == nil || ctx.Err() != nil || !g.fresh() {
+	if err := m.verifyPeer(ctx, g.peer, worker); err != nil {
+		return err
+	}
+	if !g.fresh() {
+		return externalPeerVerificationError()
+	}
+	return nil
+}
+
+func externalPeerVerificationError() error {
+	// Never expose provider errors/panics, proof identities, URLs or PIDs.
+	return externalLeaseError(ErrRequiredRouteUnavailable, "", "external peer verification unavailable or mismatched", nil)
+}
+
+// Active leases verify the saved identity, without renewing or requiring the
+// short-lived planning grant used only for admission.
+func (m *ExternalLeaseManager) verifyPeer(ctx context.Context, expected externalPeerIdentity, worker WorkerInfo) error {
+	reject := func() error {
+		return externalPeerVerificationError()
+	}
+	m.mu.Lock()
+	verifier := m.verifier
+	m.mu.Unlock()
+	if verifier == nil || ctx.Err() != nil || expected.source == nil || expected.incarnation == nil || expected.source == expected.incarnation {
 		return reject()
 	}
 	verifyCtx, cancel := context.WithTimeout(ctx, externalPeerVerificationTimeout)
@@ -77,12 +99,12 @@ func (m *ExternalLeaseManager) verifyPeer(ctx context.Context, g *externalRouteG
 			_ = recover()
 			results <- result
 		}()
-		peer, err := m.verifier.VerifyExternalPeer(verifyCtx, g.peer, worker)
+		peer, err := verifier.VerifyExternalPeer(verifyCtx, expected, worker)
 		result = verificationResult{peer: peer, ok: err == nil}
 	}()
 	select {
 	case result := <-results:
-		if !result.ok || result.peer != g.peer || verifyCtx.Err() != nil || !g.fresh() {
+		if !result.ok || result.peer != expected || verifyCtx.Err() != nil {
 			return reject()
 		}
 		return nil

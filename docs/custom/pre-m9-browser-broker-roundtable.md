@@ -464,3 +464,48 @@ checks, existing external lease lifecycle, managed regressions and company Edge
 no-fallback through ACPBridge. No full suite, broad build, native UAT or live
 attestation is claimed. Codebase-memory refresh was blocked by another active
 index operation; no rebuild/overwrite was attempted.
+
+## Phase C2b-B2a offline lease peer lifecycle checkpoint (2026-10-09)
+
+Next-only source change on `feature/m8-permission-approval`, base `a1f4e1fc`.
+Successful external acquisition now saves the consumed grant's opaque expected
+source/incarnation in private Core lease fields. It does not export or serialize
+these identities. B1 admission still consumes a single-use grant with at most
+five seconds of validity and checks freshness before/after each admission peer
+verification. Active leases use the saved identity without requiring or renewing
+that admission grant, so verified leases can live for minutes.
+
+After existing owner/scope and operation validation, each active Call holds the
+lease mutex and independently verifies the peer before verifyTarget's list_pages
+and the action. Release (including SweepExpired) verifies before list_pages or
+close_page. The shared verifier retains the two-second cancellation bound and
+single manager slot until even a noncooperative verifier exits. Missing verifier,
+changed source/incarnation, revocation, provider error/panic, timeout or canceled
+verification fails closed with sanitized errors and permanently latches peerLost.
+Matching observations later cannot resume the lease. A latched lease skips both
+the verifier and all page operations during subsequent calls/cleanup.
+
+Release under suspect identity stops only the AgentDock-owned connector. Successful
+Stop marks CleanupComplete with explicit `owned page close unconfirmed`; no browser
+page is closed. Failed Stop retains CleanupFailed and existing bounded recovery,
+which retries only Stop and preserves the unconfirmed-page reason on recovery.
+Successful verification and target proof still close only the owned page. Managed
+leases, browser policies, runtime wiring, installed GUI, stable AgentDock,
+antigravity-acp and AGY handoff are unchanged.
+
+Offline fixtures cover repeated valid checks through Call/Release, admission
+expiry after acquisition, changed source/incarnation, persistent rejection after
+matching observations return, revocation/unavailability/missing verifier,
+cancellation before/during verification, panic/timeout, ownership rejection before
+verification, concurrent callers sharing the latch, safe Release/SweepExpired and
+connector-only Stop recovery. Synthetic authority exists only in `_test.go`.
+
+Production status provider and peer verifier remain **nil**; Edge is
+**UNQUALIFIED**. A reviewed real process/profile/auth/capability attestor with safe
+revocation/cancellation, atomic transport fencing between verification and each
+operation, and consent-based Next native UAT remain required. This checkpoint
+adds lifecycle revalidation, not atomic protection against turnover after the
+check. No actual Edge/CDP/network/browser operation or installed GUI UAT was run;
+C2b/P8/M9 remain open. Orchestrator owns integration and release acceptance.
+
+Host-level offline validation on macOS/go1.27.1: `go test ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=100s`, targeted `go test -race ./internal/tool/browser -run 'Test(ExternalLeasePeer|ExternalLeaseReleaseAndSweep|ExternalAdmission|ExternalLeaseOperations|ExternalAcquire|Planner)' -count=1 -timeout=100s`, `go vet ./internal/tool/browser ./internal/browserpolicy`, and `git diff --check` all **PASS**. These tests use synthetic peer fixtures; no real external browser was accessed.

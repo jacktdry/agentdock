@@ -345,6 +345,19 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > open and Nexus remains deferred. No runtime, adapter or AGY handoff change.
 > See [C2b-B1 checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b1-offline-attachadmission-checkpoint-2026-10-08).
 
+> P8 C2b-B2a offline lease lifecycle checkpoint (2026-10-09, base `a1f4e1fc`):
+> external leases privately retain expected peer identity and revalidate it under
+> the lease mutex before each active Call and Release/SweepExpired page operation.
+> Admission grant expiry is separate from active lease validity. Peer loss latches
+> permanently; missing/error/revoked/mismatched/canceled verification cannot resume
+> after matching observations return. Suspect cleanup stops only the owned
+> connector and records page close unconfirmed; failed Stop recovery retries only
+> Stop. Managed behavior is unchanged. Offline fake fixtures only; production
+> provider/verifier remain **nil**, Edge remains **UNQUALIFIED**. Real attestor,
+> atomic transport fencing and consent-based Next native UAT remain pending;
+> C2b/P8/M9 remain open. No live Edge/CDP, GUI, policy, runtime or AGY handoff change.
+> See [C2b-B2a checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2a-offline-lease-peer-lifecycle-checkpoint-2026-10-09).
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

@@ -34,6 +34,8 @@ func defaultExternalLeasePolicy() externalLeasePolicy {
 type externalLease struct {
 	managedLease
 	worker     WorkerInfo
+	peer       externalPeerIdentity
+	peerLost   bool
 	targetLost bool
 }
 type externalOrphanWorker struct {
@@ -99,7 +101,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if worker.WorkerID == "" || worker.State != WorkerReady {
 		return fail(externalLeaseError(ErrLeaseTargetMismatch, "", "ready worker identity missing", nil))
 	}
-	if err := m.verifyPeer(ctx, route.grant, worker); err != nil {
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
 		return fail(err)
 	}
 	baselineResult, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
@@ -116,7 +118,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if url == "" {
 		url = "about:blank"
 	}
-	if err := m.verifyPeer(ctx, route.grant, worker); err != nil {
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
 		return fail(err)
 	}
 	result, createErr := m.backend.CallExternal(ctx, worker, "new_page", map[string]any{"url": url, "background": true})
@@ -140,7 +142,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 		ConnectorPID: PIDObservation{PID: worker.Session.PID, ObservedAt: now}}
 	binding := EngineBinding{BrowserLeaseID: id, BrowserSessionID: session, WorkerID: worker.WorkerID, PageID: pageString, ConnectorID: start.ConnectorID, Engine: EngineChromeDevToolsMCP}
 	m.mu.Lock()
-	m.leases[id] = &externalLease{managedLease: managedLease{metadata: meta, binding: binding, pageID: pageID, idleTTL: m.policy.IdleTTL}, worker: worker}
+	m.leases[id] = &externalLease{managedLease: managedLease{metadata: meta, binding: binding, pageID: pageID, idleTTL: m.policy.IdleTTL}, worker: worker, peer: route.grant.peer}
 	m.mu.Unlock()
 	return meta, binding, nil
 }
@@ -207,6 +209,18 @@ func (l *externalLease) recordIdentityError(err error) {
 	}
 }
 
+// Caller holds l.mu. Once lost, peer identity cannot be restored for this lease.
+func (m *ExternalLeaseManager) verifyLeasePeer(ctx context.Context, l *externalLease) error {
+	if l.peerLost {
+		return externalLeaseError(ErrLeaseTargetMismatch, l.metadata.BrowserLeaseID, "external peer identity lost", nil)
+	}
+	if err := m.verifyPeer(ctx, l.peer, l.worker); err != nil {
+		l.peerLost = true
+		return err
+	}
+	return nil
+}
+
 func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id, tool string, args map[string]any) (map[string]any, error) {
 	l, err := m.lease(id)
 	if err != nil {
@@ -225,6 +239,9 @@ func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id,
 	}
 	if _, exists := args["pageId"]; exists {
 		return nil, externalLeaseError(ErrLeaseTargetMismatch, id, "caller pageId forbidden", nil)
+	}
+	if err := m.verifyLeasePeer(ctx, l); err != nil {
+		return nil, err
 	}
 	if err := m.verifyTarget(ctx, l); err != nil {
 		return nil, err
@@ -271,7 +288,10 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 		return l.metadata, externalLeaseError(ErrLeaseStateInvalid, id, "lease cannot release", nil)
 	}
 	l.metadata.CleanupState = CleanupReleasing
-	closeErr := m.verifyTarget(ctx, l)
+	closeErr := m.verifyLeasePeer(ctx, l)
+	if closeErr == nil {
+		closeErr = m.verifyTarget(ctx, l)
+	}
 	if closeErr == nil {
 		closeErr = m.closeOwnedPage(ctx, l.worker, l.pageID)
 	}
@@ -362,6 +382,9 @@ func (m *ExternalLeaseManager) RecoverFailed(now time.Time) error {
 		}
 		l.metadata.CleanupState = CleanupComplete
 		l.metadata.CleanupReason = "external connector cleanup recovered; external browser/profile preserved"
+		if l.peerLost {
+			l.metadata.CleanupReason = "external connector cleanup recovered; owned page close unconfirmed; external browser/profile preserved"
+		}
 		l.nextCleanupRecoveryAt = time.Time{}
 		l.mu.Unlock()
 	}
