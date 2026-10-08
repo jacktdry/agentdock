@@ -233,10 +233,32 @@ func DefaultManifest() Manifest {
 				Operations: mcpOperations(), Streams: []StreamCapability{},
 				Reason: "Core-owned protected MCP inventory and revisioned standalone management; Plugin-owned entries remain read-only",
 			},
-			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),
+			{
+				Domain: DomainPlugin, Version: 1, Availability: AvailabilityAvailable,
+				Operations: pluginOperations(), Streams: []StreamCapability{},
+				Reason: "Core-owned Plugin inventory and revisioned lifecycle management; package selection uses a native picker and opaque immutable candidate review",
+			},
 			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
 			availableCapability(DomainDiagnostics, "Local file availability only; logs, content and environment are omitted", "snapshot"),
 		},
+	}
+}
+
+func pluginOperations() []OperationCapability {
+	return []OperationCapability{
+		{Name: "snapshot", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "inspect", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "environment", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "operationStatus", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "chooseCandidate", Access: AccessPrivileged, Availability: AvailabilityAvailable, NativeRequired: true},
+		{Name: "discardCandidate", Access: AccessMutating, Availability: AvailabilityAvailable},
+		{Name: "installCandidate", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "updateCandidate", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "setEnabled", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "removeKeep", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "removePurge", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "setEnvironment", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "unsetEnvironment", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
 	}
 }
 

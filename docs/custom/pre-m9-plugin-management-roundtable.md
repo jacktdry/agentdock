@@ -560,7 +560,7 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
    - opaque candidate；
    - private review token；
    - expiry/discard。
-3. **C — Shared UI ← NEXT**
+3. ✅ **C — Shared UI**
    - navigation/store；
    - summary/list/detail；
    - install review；
@@ -568,7 +568,7 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
    - enable/disable/remove；
    - MCP settings；
    - i18n/a11y/responsive。
-4. **D — Independent security review + hardening**
+4. **D — Independent security review + hardening ← NEXT**
 5. **E — Next-only package/live UAT**
 
 在 D 得到 0 BLOCKER / 0 HIGH 前，不 package/reinstall Next 做 P6 live UAT。
@@ -606,7 +606,40 @@ Validation：
 - `go vet` / `git diff --check`：PASS；
 - candidate source path / raw review token / storage key / runtime name / credential value不進 renderer-facing candidate response。
 
-下一步：**Phase C Shared UI**。在 Phase D independent security review 得到 0 BLOCKER / 0 HIGH 前，仍禁止 package/reinstall Next 做 P6 live UAT。
+下一步：**Phase D independent security review + hardening**。在 reviewer 得到 0 BLOCKER / 0 HIGH 前，仍禁止 package/reinstall Next 做 P6 live UAT。
+
+### 17.2 Phase C review-ready checkpoint — 2026-10-08
+
+Shared Plugin Management 已完成並進入 independent review gate，尚未 package/reinstall Next：
+
+- Shared navigation 新增 **Plugin Management**，並完成 P5 Plugin-owned MCP → P6 Plugin detail deep link；
+- summary / installed list / detail / recovery cleanup UX；
+- native folder/ZIP install 入口，不提供 renderer path input；
+- install review 顯示 identity/version/format/provenance/fingerprint、Skills、MCP、executables、warnings/issues；
+- update review 顯示 current → candidate version 與 Skills/MCP/executable/warning semantic diff；
+- install 保持 disabled-by-default，enable / disable 均 explicit confirmation 並顯示 local-process / remote side-effect notice；
+- Plugin-owned MCP connection values 採 write-only UX，只顯示 key + configured/missing，secret 送出後立即從 frontend state 清除；
+- remove 分為 keep data 與 purge data；purge 有第二層 destructive confirmation；
+- purge recovery item 提供 Retry cleanup；
+- 320px responsive layout 採 list/detail stack、review diff card，不使用寬 table；
+- English / 繁體中文 / 简体中文 stable catalog 同步更新並由 generator 產生平台 artifacts。
+
+Validation：
+
+- Shared frontend `vue-tsc --noEmit`：PASS；
+- Shared frontend Vitest：**16 files / 110 tests PASS**；
+- Shared frontend production build：PASS（169 modules）；
+- P6/backend targeted Go tests + Shared Desktop Go tests：PASS；
+- `go test -race`（Plugin / tool/plugin / app / runtimeapi / httpx / desktopapi / mcp client）：PASS；
+- `go test ./cmd/... ./internal/...`：PASS；
+- Windows/Linux P6 backend compile-only：PASS；
+- `go vet` / `git diff --check`：PASS；
+- Wails Plugin binding 只有 opaque candidate / lifecycle / env actions，沒有任何接收 absolute source path 的 renderer method；
+- renderer boundary scan：沒有 `review_token` / storage key / source/package/runtime path / access-refresh token 欄位；
+- i18n generator + catalog tests + coverage：PASS，三個 stable locale 均 **742/742 (100%)**；
+- repo-wide hard-coded Shared UI scanner 仍會對既有 Permission/ACP literals 回報非零；本次輸出沒有新增 P6 Plugin violation，列為既有 i18n debt，不誤宣稱整體 `i18n-check` 已全綠。
+
+下一步：**Phase D independent security review + hardening**。在 reviewer 給出 **0 BLOCKER / 0 HIGH** 前，仍禁止 package/reinstall Next。
 
 ## 18. Roundtable decision
 

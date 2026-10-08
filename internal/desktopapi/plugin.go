@@ -29,6 +29,20 @@ type PluginManagedItem struct {
 	Provenance         *PluginProvenance `json:"provenance,omitempty"`
 	RecoveryState      string            `json:"recoveryState,omitempty"`
 }
+type PluginMCPComponent struct {
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Transport        string   `json:"transport"`
+	Endpoint         string   `json:"endpoint,omitempty"`
+	Command          string   `json:"command,omitempty"`
+	EnvironmentNames []string `json:"environmentNames"`
+	HeaderNames      []string `json:"headerNames"`
+}
+type PluginDetail struct {
+	Plugin   PluginManagedItem    `json:"plugin"`
+	MCP      []PluginMCPComponent `json:"mcp"`
+	Warnings []string             `json:"warnings"`
+}
 type PluginProvenance struct {
 	Origin   string `json:"origin"`
 	Ref      string `json:"ref,omitempty"`
@@ -138,6 +152,7 @@ type PluginOperationResult struct {
 	ReconnectRequired bool                  `json:"reconnectRequired"`
 	RegistryRevision  string                `json:"registryRevision,omitempty"`
 	Plugin            *PluginManagedItem    `json:"plugin,omitempty"`
+	Detail            *PluginDetail         `json:"detail,omitempty"`
 	DataPolicy        string                `json:"dataPolicy,omitempty"`
 	DataPreserved     bool                  `json:"dataPreserved"`
 	EnvRevision       string                `json:"envRevision,omitempty"`
@@ -273,6 +288,10 @@ func (s *PluginService) operation(ctx context.Context, request pluginWireRequest
 	if wire.Plugin.Name != "" {
 		item := pluginItemFromWire(wire.Plugin)
 		result.Plugin = &item
+	}
+	if wire.Detail.Plugin.Name != "" {
+		detail := pluginDetailFromWire(wire.Detail)
+		result.Detail = &detail
 	}
 	if result.Error == nil && wire.SafeError != nil {
 		result.Error = pluginWireError(wire.SafeError)
@@ -461,12 +480,27 @@ type pluginWireItem struct {
 	Provenance         *PluginProvenance `json:"provenance"`
 	RecoveryState      string            `json:"recovery_state"`
 }
+type pluginWireMCPComponent struct {
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Transport        string   `json:"transport"`
+	Endpoint         string   `json:"endpoint"`
+	Command          string   `json:"command"`
+	EnvironmentNames []string `json:"environment_names"`
+	HeaderNames      []string `json:"header_names"`
+}
+type pluginWireDetail struct {
+	Plugin   pluginWireItem           `json:"plugin"`
+	MCP      []pluginWireMCPComponent `json:"mcp"`
+	Warnings []string                 `json:"warnings"`
+}
 type pluginWireResponse struct {
 	OK                bool                  `json:"ok"`
 	RegistryRevision  string                `json:"registry_revision"`
 	Authoritative     bool                  `json:"authoritative"`
 	Plugins           []pluginWireItem      `json:"plugins"`
 	Plugin            pluginWireItem        `json:"plugin"`
+	Detail            pluginWireDetail      `json:"detail"`
 	RecoveryItems     []PluginRecoveryItem  `json:"recovery_items"`
 	RequestID         string                `json:"request_id"`
 	Outcome           string                `json:"outcome"`
@@ -593,6 +627,18 @@ func pluginCandidateFromWire(w pluginCandidateWireView) PluginCandidate {
 
 func pluginItemFromWire(w pluginWireItem) PluginManagedItem {
 	return PluginManagedItem{Name: w.Name, Description: w.Description, Version: w.Version, Format: w.Format, Enabled: w.Enabled, Generation: w.Generation, InstalledAt: w.InstalledAt, SkillsCount: w.SkillsCount, MCPCount: w.MCPCount, WarningCount: w.WarningCount, PackageFingerprint: w.PackageFingerprint, Provenance: w.Provenance, RecoveryState: w.RecoveryState}
+}
+func pluginDetailFromWire(w pluginWireDetail) PluginDetail {
+	mcp := make([]PluginMCPComponent, 0, len(w.MCP))
+	for _, component := range w.MCP {
+		mcp = append(mcp, PluginMCPComponent{
+			Name: component.Name, Description: component.Description, Transport: component.Transport,
+			Endpoint: component.Endpoint, Command: component.Command,
+			EnvironmentNames: append([]string(nil), component.EnvironmentNames...),
+			HeaderNames:      append([]string(nil), component.HeaderNames...),
+		})
+	}
+	return PluginDetail{Plugin: pluginItemFromWire(w.Plugin), MCP: mcp, Warnings: append([]string(nil), w.Warnings...)}
 }
 func pluginSnapshotFromWire(w pluginWireResponse) PluginManagerSnapshot {
 	items := make([]PluginManagedItem, 0, len(w.Plugins))

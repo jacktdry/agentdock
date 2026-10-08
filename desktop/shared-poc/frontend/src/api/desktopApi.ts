@@ -3,6 +3,7 @@ import * as BasicSettingsService from '../../bindings/github.com/uvwt/agentdock/
 import * as UpdateService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/updateservice'
 import * as DiagnosticsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/diagnosticsservice'
 import * as MCPService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/mcpservice'
+import * as PluginService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/pluginservice'
 import { JSONStream, type JSONSocket } from '@wailsio/runtime'
 import * as ActivityProbeService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/activityprobeservice'
 import * as CoreActivityService from '../../bindings/github.com/uvwt/agentdock/desktop/shared-poc/coreactivityservice'
@@ -58,6 +59,21 @@ import type {
   MCPSnapshot,
   MCPSnapshotResult,
   MCPToolSummary,
+  PluginCandidate,
+  PluginCandidateActionResult,
+  PluginCandidateMutationInput,
+  PluginCandidatePickerInput,
+  PluginCandidateResult,
+  PluginCandidateReview,
+  PluginDetail,
+  PluginEnvironmentInput,
+  PluginManagedItem,
+  PluginManagerSnapshot,
+  PluginMCPComponent,
+  PluginMutationInput,
+  PluginOperationResult,
+  PluginRecoveryItem,
+  PluginSnapshotResult,
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import {
   OAuthPasswordState,
@@ -142,6 +158,21 @@ export type {
   MCPSnapshot,
   MCPSnapshotResult,
   MCPToolSummary,
+  PluginCandidate,
+  PluginCandidateActionResult,
+  PluginCandidateMutationInput,
+  PluginCandidatePickerInput,
+  PluginCandidateResult,
+  PluginCandidateReview,
+  PluginDetail,
+  PluginEnvironmentInput,
+  PluginManagedItem,
+  PluginManagerSnapshot,
+  PluginMCPComponent,
+  PluginMutationInput,
+  PluginOperationResult,
+  PluginRecoveryItem,
+  PluginSnapshotResult,
 }
 
 export const DESKTOP_API_VERSION = 1
@@ -315,6 +346,19 @@ export const desktopApi = {
   mcpClearAuthorization: (requestID: string, name: string, expectedRevision: string, expectedGeneration: string) =>
     MCPService.ClearAuthorization(requestID, name, expectedRevision, expectedGeneration),
   mcpOperationStatus: (requestID: string) => MCPService.OperationStatus(requestID),
+  pluginSnapshot: () => PluginService.Snapshot(),
+  pluginInspect: (name: string) => PluginService.Inspect(name),
+  pluginChooseCandidate: (input: PluginCandidatePickerInput) => PluginService.ChooseCandidate(input),
+  pluginDiscardCandidate: (candidateID: string) => PluginService.DiscardCandidate(candidateID),
+  pluginInstallCandidate: (input: PluginCandidateMutationInput) => PluginService.InstallCandidate(input),
+  pluginUpdateCandidate: (input: PluginCandidateMutationInput) => PluginService.UpdateCandidate(input),
+  pluginSetEnabled: (input: PluginMutationInput, enabled: boolean) => PluginService.SetEnabled(input, enabled),
+  pluginRemoveKeep: (input: PluginMutationInput) => PluginService.RemoveKeep(input),
+  pluginRemovePurge: (input: PluginMutationInput) => PluginService.RemovePurge(input),
+  pluginEnvironment: (name: string, component: string) => PluginService.Environment(name, component),
+  pluginSetEnvironment: (input: PluginEnvironmentInput) => PluginService.SetEnvironment(input),
+  pluginUnsetEnvironment: (input: PluginEnvironmentInput) => PluginService.UnsetEnvironment(input),
+  pluginOperationStatus: (requestID: string) => PluginService.OperationStatus(requestID),
   manifest: () => ContractService.Manifest(),
   negotiate: (domains: Domain[] = []) =>
     ContractService.Negotiate({

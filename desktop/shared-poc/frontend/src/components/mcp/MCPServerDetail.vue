@@ -17,6 +17,7 @@ const emit = defineEmits<{
   edit: []
   removed: []
   back: []
+  managePlugin: [name: string]
 }>()
 const store = useMCPStore()
 const { t } = useI18n()
@@ -86,6 +87,9 @@ async function confirmAction() {
       <strong>{{ t('mcp.read_only_plugin') }}</strong>
       <p>{{ t('mcp.plugin_hint') }}</p>
       <p v-if="server.pluginName">{{ t('mcp.plugin_owner', { name: server.pluginName }) }}</p>
+      <button v-if="server.pluginName" type="button" @click="emit('managePlugin', server.pluginName)">
+        {{ t('mcp.manage_plugin') }}
+      </button>
     </div>
 
     <dl class="status-grid mcp-detail-grid">

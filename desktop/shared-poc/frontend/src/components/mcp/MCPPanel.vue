@@ -11,6 +11,7 @@ import MCPServerList from './MCPServerList.vue'
 const store = useMCPStore()
 const contract = useContractStore()
 const { t } = useI18n()
+const emit = defineEmits<{ managePlugin: [name: string] }>()
 
 const selectedName = ref('')
 const editorOpen = ref(false)
@@ -143,6 +144,7 @@ onMounted(async () => {
         @edit="openEdit(selectedServer)"
         @removed="selectedName = ''"
         @back="selectedName = ''"
+        @manage-plugin="emit('managePlugin', $event)"
       />
       <div v-else class="panel mcp-detail-empty">
         <h3>{{ t('mcp.detail_title') }}</h3>

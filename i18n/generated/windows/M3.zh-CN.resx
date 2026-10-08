@@ -1031,7 +1031,7 @@
     <value>Activity 为实验功能，合成事件测试仅供开发者诊断。</value>
   </data>
   <data name="developer.scope" xml:space="preserve">
-    <value>次要架构诊断。此界面尚未实现浏览器、MCP 和插件功能。</value>
+    <value>次要架构诊断与尚未纳入主要管理页面的实验性界面。</value>
   </data>
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>架构</value>
@@ -1401,6 +1401,9 @@
   </data>
   <data name="mcp.loading" xml:space="preserve">
     <value>正在加载 MCP 状态…</value>
+  </data>
+  <data name="mcp.manage_plugin" xml:space="preserve">
+    <value>到 Plugin Management 管理</value>
   </data>
   <data name="mcp.missing" xml:space="preserve">
     <value>未配置</value>
@@ -1812,6 +1815,321 @@
   </data>
   <data name="permission.workspace_unavailable" xml:space="preserve">
     <value>Core 尚未证明此操作可取得限制于工作区的授权。</value>
+  </data>
+  <data name="plugin.back_to_plugins" xml:space="preserve">
+    <value>返回 Plugin 列表</value>
+  </data>
+  <data name="plugin.candidate_version" xml:space="preserve">
+    <value>候选版本</value>
+  </data>
+  <data name="plugin.choose_environment_key" xml:space="preserve">
+    <value>选择字段</value>
+  </data>
+  <data name="plugin.cleanup_required" xml:space="preserve">
+    <value>需要完成清理</value>
+  </data>
+  <data name="plugin.cleanup_required_hint" xml:space="preserve">
+    <value>之前的移除已到达提交点，但清理尚未完成。重新安装或更改此 Plugin 前，请先完成清理。</value>
+  </data>
+  <data name="plugin.configured" xml:space="preserve">
+    <value>已配置</value>
+  </data>
+  <data name="plugin.confirm_disable" xml:space="preserve">
+    <value>停用此 Plugin？</value>
+  </data>
+  <data name="plugin.confirm_disable_hint" xml:space="preserve">
+    <value>Plugin 提供的能力将停止可用；已保存的 Plugin 数据和连接设置会保留。</value>
+  </data>
+  <data name="plugin.confirm_enable" xml:space="preserve">
+    <value>启用此 Plugin？</value>
+  </data>
+  <data name="plugin.confirm_enable_hint" xml:space="preserve">
+    <value>启用后，Plugin 提供的能力会开始可用。</value>
+  </data>
+  <data name="plugin.confirm_install" xml:space="preserve">
+    <value>安装 Plugin</value>
+  </data>
+  <data name="plugin.confirm_purge" xml:space="preserve">
+    <value>永久删除此 Plugin 及 AgentDock 管理的数据？</value>
+  </data>
+  <data name="plugin.confirm_purge_hint" xml:space="preserve">
+    <value>这也会删除 Plugin Skill 数据和设置、Plugin-owned MCP 连接值以及已保存授权。此操作无法撤销。</value>
+  </data>
+  <data name="plugin.confirm_unset" xml:space="preserve">
+    <value>清除 {key}？</value>
+  </data>
+  <data name="plugin.confirm_unset_hint" xml:space="preserve">
+    <value>已保存的值会从此 Plugin-owned 连接范围移除。</value>
+  </data>
+  <data name="plugin.confirm_update" xml:space="preserve">
+    <value>更新 Plugin</value>
+  </data>
+  <data name="plugin.current_version" xml:space="preserve">
+    <value>当前版本</value>
+  </data>
+  <data name="plugin.detail_title" xml:space="preserve">
+    <value>Plugin 详细信息</value>
+  </data>
+  <data name="plugin.diff_added" xml:space="preserve">
+    <value>新增</value>
+  </data>
+  <data name="plugin.diff_changed" xml:space="preserve">
+    <value>变更</value>
+  </data>
+  <data name="plugin.diff_removed" xml:space="preserve">
+    <value>移除</value>
+  </data>
+  <data name="plugin.diff_resolved" xml:space="preserve">
+    <value>已解决</value>
+  </data>
+  <data name="plugin.disable" xml:space="preserve">
+    <value>停用 Plugin</value>
+  </data>
+  <data name="plugin.empty" xml:space="preserve">
+    <value>尚未安装任何 Plugin。可从本地文件夹或 ZIP 文件安装。</value>
+  </data>
+  <data name="plugin.enable" xml:space="preserve">
+    <value>启用 Plugin</value>
+  </data>
+  <data name="plugin.enable_local_process_notice" xml:space="preserve">
+    <value>此 Plugin 可能会以你的用户权限运行本地程序。</value>
+  </data>
+  <data name="plugin.enable_remote_notice" xml:space="preserve">
+    <value>此 Plugin 可能会连接外部服务。</value>
+  </data>
+  <data name="plugin.enabled" xml:space="preserve">
+    <value>已启用</value>
+  </data>
+  <data name="plugin.environment_empty" xml:space="preserve">
+    <value>此连接没有声明可配置的值。</value>
+  </data>
+  <data name="plugin.environment_hint" xml:space="preserve">
+    <value>此处只提供 Plugin 已声明的连接字段。值保存后永远不会回显。</value>
+  </data>
+  <data name="plugin.environment_key" xml:space="preserve">
+    <value>字段</value>
+  </data>
+  <data name="plugin.environment_names" xml:space="preserve">
+    <value>连接字段</value>
+  </data>
+  <data name="plugin.environment_title" xml:space="preserve">
+    <value>连接值</value>
+  </data>
+  <data name="plugin.environment_value" xml:space="preserve">
+    <value>值</value>
+  </data>
+  <data name="plugin.environment_write_only" xml:space="preserve">
+    <value>仅可写入：AgentDock 会把值存放在此 Plugin 专用范围，之后不会再返回到此页面。</value>
+  </data>
+  <data name="plugin.executable_item" xml:space="preserve">
+    <value>可执行文件：{value}</value>
+  </data>
+  <data name="plugin.executables" xml:space="preserve">
+    <value>可执行文件</value>
+  </data>
+  <data name="plugin.fingerprint" xml:space="preserve">
+    <value>包指纹</value>
+  </data>
+  <data name="plugin.fingerprint_changed" xml:space="preserve">
+    <value>包指纹已变更。</value>
+  </data>
+  <data name="plugin.fingerprint_unchanged" xml:space="preserve">
+    <value>包指纹未变更。</value>
+  </data>
+  <data name="plugin.format" xml:space="preserve">
+    <value>格式</value>
+  </data>
+  <data name="plugin.header_names" xml:space="preserve">
+    <value>Header 字段</value>
+  </data>
+  <data name="plugin.install_disabled_notice" xml:space="preserve">
+    <value>包会加入 AgentDock，但默认保持停用。请先查看或配置连接，再自行启用。</value>
+  </data>
+  <data name="plugin.install_disabled_title" xml:space="preserve">
+    <value>先安装，再单独启用</value>
+  </data>
+  <data name="plugin.install_folder" xml:space="preserve">
+    <value>从文件夹安装</value>
+  </data>
+  <data name="plugin.install_zip" xml:space="preserve">
+    <value>从 ZIP 安装</value>
+  </data>
+  <data name="plugin.installed" xml:space="preserve">
+    <value>已安装</value>
+  </data>
+  <data name="plugin.installed_at" xml:space="preserve">
+    <value>安装时间</value>
+  </data>
+  <data name="plugin.installed_hint" xml:space="preserve">
+    <value>安装在 AgentDock Next 本地环境中的 Plugins。</value>
+  </data>
+  <data name="plugin.installed_plugins" xml:space="preserve">
+    <value>已安装的 Plugins</value>
+  </data>
+  <data name="plugin.intro" xml:space="preserve">
+    <value>安全安装、查看、配置、更新、启用和移除本地 Plugin，不向界面暴露包路径或秘密值。</value>
+  </data>
+  <data name="plugin.loading" xml:space="preserve">
+    <value>正在加载 Plugin 状态…</value>
+  </data>
+  <data name="plugin.mcp_components" xml:space="preserve">
+    <value>MCP 连接</value>
+  </data>
+  <data name="plugin.mcp_settings" xml:space="preserve">
+    <value>MCP 设置</value>
+  </data>
+  <data name="plugin.mcp_settings_hint" xml:space="preserve">
+    <value>连接值只属于此 Plugin，并且始终只写不读。Plugin 提供的 MCP 生命周期仍由此处管理；MCP Management 对这些连接保持只读。</value>
+  </data>
+  <data name="plugin.missing" xml:space="preserve">
+    <value>未配置</value>
+  </data>
+  <data name="plugin.mutation_error" xml:space="preserve">
+    <value>Plugin 操作未完成。再次操作前请先检查重新加载后的状态。</value>
+  </data>
+  <data name="plugin.name" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="plugin.needs_attention" xml:space="preserve">
+    <value>需要处理</value>
+  </data>
+  <data name="plugin.no_mcp" xml:space="preserve">
+    <value>此 Plugin 没有提供 MCP 连接。</value>
+  </data>
+  <data name="plugin.open_mcp" xml:space="preserve">
+    <value>打开 MCP Management</value>
+  </data>
+  <data name="plugin.outcome_unknown" xml:space="preserve">
+    <value>操作结果未知。AgentDock 会先按 request ID 对账，再允许其他修改。</value>
+  </data>
+  <data name="plugin.provenance" xml:space="preserve">
+    <value>包来源</value>
+  </data>
+  <data name="plugin.provides_mcp" xml:space="preserve">
+    <value>提供 MCP</value>
+  </data>
+  <data name="plugin.provides_skills" xml:space="preserve">
+    <value>提供 Skills</value>
+  </data>
+  <data name="plugin.read_error" xml:space="preserve">
+    <value>无法加载 Plugin 状态。</value>
+  </data>
+  <data name="plugin.reconnect_required" xml:space="preserve">
+    <value>已保存新的连接设置，下次连接会应用；如需立即生效，请重新连接 Plugin 提供的 MCP。</value>
+  </data>
+  <data name="plugin.recovery_required" xml:space="preserve">
+    <value>Plugin 仍需要恢复。再次变更生命周期前，请先检查重新加载后的状态。</value>
+  </data>
+  <data name="plugin.reload_status" xml:space="preserve">
+    <value>重新加载</value>
+  </data>
+  <data name="plugin.remove" xml:space="preserve">
+    <value>移除 Plugin</value>
+  </data>
+  <data name="plugin.remove_keep" xml:space="preserve">
+    <value>移除 Plugin，保留数据</value>
+  </data>
+  <data name="plugin.remove_keep_description" xml:space="preserve">
+    <value>移除已安装的 Plugin 并停止其能力，但保留 AgentDock 管理的数据和连接设置，日后重新安装时可继续使用。</value>
+  </data>
+  <data name="plugin.remove_purge" xml:space="preserve">
+    <value>移除 Plugin 并删除数据</value>
+  </data>
+  <data name="plugin.remove_purge_description" xml:space="preserve">
+    <value>移除 Plugin，并永久删除 AgentDock 管理的 Plugin 数据、Skill 数据和设置、Plugin-owned MCP 连接值以及已保存授权。</value>
+  </data>
+  <data name="plugin.remove_title" xml:space="preserve">
+    <value>移除 Plugin</value>
+  </data>
+  <data name="plugin.replace_value" xml:space="preserve">
+    <value>替换值</value>
+  </data>
+  <data name="plugin.retry_cleanup" xml:space="preserve">
+    <value>重试清理</value>
+  </data>
+  <data name="plugin.review_attention" xml:space="preserve">
+    <value>需要留意</value>
+  </data>
+  <data name="plugin.review_install_eyebrow" xml:space="preserve">
+    <value>本地 Plugin 包</value>
+  </data>
+  <data name="plugin.review_invalid" xml:space="preserve">
+    <value>无法安装</value>
+  </data>
+  <data name="plugin.review_private_source" xml:space="preserve">
+    <value>选择的来源会保持私密</value>
+  </data>
+  <data name="plugin.review_title" xml:space="preserve">
+    <value>查看包</value>
+  </data>
+  <data name="plugin.review_update_eyebrow" xml:space="preserve">
+    <value>从本地包更新</value>
+  </data>
+  <data name="plugin.review_valid" xml:space="preserve">
+    <value>可以安装</value>
+  </data>
+  <data name="plugin.row_components" xml:space="preserve">
+    <value>{skills, number} 个 Skills · {mcp, number} 个 MCP</value>
+  </data>
+  <data name="plugin.row_warnings" xml:space="preserve">
+    <value>{count, number} 个警告</value>
+  </data>
+  <data name="plugin.save_value" xml:space="preserve">
+    <value>保存值</value>
+  </data>
+  <data name="plugin.select_plugin" xml:space="preserve">
+    <value>选择一个 Plugin 以查看能力、连接设置和生命周期。</value>
+  </data>
+  <data name="plugin.skills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="plugin.stale_hint" xml:space="preserve">
+    <value>Core 状态当前不可用，或页面打开后状态已发生变化。重新获取最新快照前会禁用修改操作。</value>
+  </data>
+  <data name="plugin.stale_title" xml:space="preserve">
+    <value>显示最后已知 Plugin 状态</value>
+  </data>
+  <data name="plugin.status_disabled" xml:space="preserve">
+    <value>已停用</value>
+  </data>
+  <data name="plugin.status_enabled" xml:space="preserve">
+    <value>已启用</value>
+  </data>
+  <data name="plugin.status_recovery" xml:space="preserve">
+    <value>需要清理</value>
+  </data>
+  <data name="plugin.title" xml:space="preserve">
+    <value>Plugin Management</value>
+  </data>
+  <data name="plugin.unset_value" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="plugin.update_changes" xml:space="preserve">
+    <value>变更内容</value>
+  </data>
+  <data name="plugin.update_disabled_notice" xml:space="preserve">
+    <value>此 Plugin 当前已停用；更新完成后仍会保持停用。</value>
+  </data>
+  <data name="plugin.update_folder" xml:space="preserve">
+    <value>从文件夹更新</value>
+  </data>
+  <data name="plugin.update_no_changes" xml:space="preserve">
+    <value>没有检测到已查看能力的变更。</value>
+  </data>
+  <data name="plugin.update_runtime_notice" xml:space="preserve">
+    <value>此 Plugin 当前已启用。更新时会暂时停止 Plugin 提供的连接，成功后启用已查看的包。</value>
+  </data>
+  <data name="plugin.update_runtime_notice_title" xml:space="preserve">
+    <value>更新行为</value>
+  </data>
+  <data name="plugin.update_zip" xml:space="preserve">
+    <value>从 ZIP 更新</value>
+  </data>
+  <data name="plugin.version" xml:space="preserve">
+    <value>版本</value>
+  </data>
+  <data name="plugin.warnings" xml:space="preserve">
+    <value>警告</value>
   </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action}完成。</value>

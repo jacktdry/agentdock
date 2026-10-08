@@ -8,6 +8,7 @@ import * as ContractService from "./contractservice.js";
 import * as DiagnosticsService from "./diagnosticsservice.js";
 import * as MCPService from "./mcpservice.js";
 import * as PermissionService from "./permissionservice.js";
+import * as PluginService from "./pluginservice.js";
 import * as RuntimeService from "./runtimeservice.js";
 import * as UpdateService from "./updateservice.js";
 export {
@@ -18,6 +19,7 @@ export {
     DiagnosticsService,
     MCPService,
     PermissionService,
+    PluginService,
     RuntimeService,
     UpdateService
 };
@@ -87,6 +89,25 @@ export type {
     OAuthPasswordRevealResult,
     OperationCapability,
     PermissionResult,
+    PluginCandidate,
+    PluginCandidateActionResult,
+    PluginCandidateMCP,
+    PluginCandidateMutationInput,
+    PluginCandidatePickerInput,
+    PluginCandidateProvenance,
+    PluginCandidateResult,
+    PluginCandidateReview,
+    PluginCandidateSkill,
+    PluginDetail,
+    PluginEnvironmentInput,
+    PluginMCPComponent,
+    PluginManagedItem,
+    PluginManagerSnapshot,
+    PluginMutationInput,
+    PluginOperationResult,
+    PluginProvenance,
+    PluginRecoveryItem,
+    PluginSnapshotResult,
     PublicEndpointResult,
     RuntimeActionResult,
     RuntimeStatus,

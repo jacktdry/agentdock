@@ -582,6 +582,176 @@ export interface PermissionResult {
     "error"?: APIError | null;
 }
 
+export interface PluginCandidate {
+    "candidateId": string;
+    "kind": string;
+    "targetName"?: string;
+    "expiresAt": string;
+    "review": PluginCandidateReview;
+    "current"?: PluginCandidateReview | null;
+}
+
+export interface PluginCandidateActionResult {
+    "completed": boolean;
+    "error"?: APIError | null;
+}
+
+export interface PluginCandidateMCP {
+    "name": string;
+    "description": string;
+    "transport": string;
+    "endpoint"?: string;
+    "command"?: string;
+    "environmentNames": string[] | null;
+    "headerNames": string[] | null;
+}
+
+export interface PluginCandidateMutationInput {
+    "requestId": string;
+    "candidateId": string;
+    "name": string;
+    "expectedRegistryRevision": string;
+    "expectedGeneration"?: string;
+}
+
+export interface PluginCandidatePickerInput {
+    "kind": string;
+    "sourceType": string;
+    "targetName"?: string;
+    "targetGeneration"?: string;
+}
+
+export interface PluginCandidateProvenance {
+    "origin"?: string;
+    "ref"?: string;
+    "revision"?: string;
+    "subdir"?: string;
+}
+
+export interface PluginCandidateResult {
+    "candidate"?: PluginCandidate | null;
+    "sourceLabel"?: string;
+    "cancelled": boolean;
+    "error"?: APIError | null;
+}
+
+export interface PluginCandidateReview {
+    "valid": boolean;
+    "name": string;
+    "version": string;
+    "description": string;
+    "format": string;
+    "packageFingerprint": string;
+    "provenance"?: PluginCandidateProvenance | null;
+    "skills": PluginCandidateSkill[] | null;
+    "mcp": PluginCandidateMCP[] | null;
+    "executables": string[] | null;
+    "warnings": string[] | null;
+    "issues": string[] | null;
+}
+
+export interface PluginCandidateSkill {
+    "name": string;
+    "description": string;
+}
+
+export interface PluginDetail {
+    "plugin": PluginManagedItem;
+    "mcp": PluginMCPComponent[] | null;
+    "warnings": string[] | null;
+}
+
+export interface PluginEnvironmentInput {
+    "requestId": string;
+    "name": string;
+    "expectedRegistryRevision": string;
+    "expectedGeneration": string;
+    "component": string;
+    "key": string;
+    "value"?: string | null;
+    "expectedEnvRevision": string;
+}
+
+export interface PluginMCPComponent {
+    "name": string;
+    "description": string;
+    "transport": string;
+    "endpoint"?: string;
+    "command"?: string;
+    "environmentNames": string[] | null;
+    "headerNames": string[] | null;
+}
+
+export interface PluginManagedItem {
+    "name": string;
+    "description": string;
+    "version": string;
+    "format": string;
+    "enabled": boolean;
+    "generation": string;
+    "installedAt": string;
+    "skillsCount": number;
+    "mcpCount": number;
+    "warningCount": number;
+    "packageFingerprint": string;
+    "provenance"?: PluginProvenance | null;
+    "recoveryState"?: string;
+}
+
+export interface PluginManagerSnapshot {
+    "registryRevision": string;
+    "authoritative": boolean;
+    "plugins": PluginManagedItem[] | null;
+    "recoveryItems": PluginRecoveryItem[] | null;
+}
+
+export interface PluginMutationInput {
+    "requestId": string;
+    "name": string;
+    "expectedRegistryRevision": string;
+    "expectedGeneration": string;
+}
+
+export interface PluginOperationResult {
+    "requestId"?: string;
+    "outcome"?: string;
+    "outcomeUnknown": boolean;
+    "completed": boolean;
+    "persisted": boolean;
+    "runtimeApplied": boolean;
+    "recoveryRequired": boolean;
+    "runtimeImpact"?: string;
+    "reconnectRequired": boolean;
+    "registryRevision"?: string;
+    "plugin"?: PluginManagedItem | null;
+    "detail"?: PluginDetail | null;
+    "dataPolicy"?: string;
+    "dataPreserved": boolean;
+    "envRevision"?: string;
+    "items"?: MCPEnvironmentEntry[] | null;
+    "found": boolean;
+    "pending": boolean;
+    "operationAction"?: string;
+    "error"?: APIError | null;
+}
+
+export interface PluginProvenance {
+    "origin": string;
+    "ref"?: string;
+    "revision"?: string;
+}
+
+export interface PluginRecoveryItem {
+    "name": string;
+    "generation": string;
+    "state": string;
+}
+
+export interface PluginSnapshotResult {
+    "snapshot": PluginManagerSnapshot;
+    "error"?: APIError | null;
+}
+
 export interface PublicEndpointResult {
     "state": string;
     "reasonCode"?: string;

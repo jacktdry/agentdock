@@ -83,10 +83,32 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 			}
 		}
 	}
-	for _, domain := range []Domain{DomainBrowser, DomainPlugin} {
-		if seen[domain].Availability != AvailabilityUnavailable {
-			t.Fatalf("%s should remain unavailable in M2 scaffold, got %#v", domain, seen[domain])
+	pluginCapability := seen[DomainPlugin]
+	if pluginCapability.Availability != AvailabilityAvailable || len(pluginCapability.Operations) != 13 {
+		t.Fatalf("Plugin capability = %#v", pluginCapability)
+	}
+	for _, operation := range pluginCapability.Operations {
+		switch operation.Name {
+		case "snapshot", "inspect", "environment", "operationStatus":
+			if operation.Access != AccessRead || operation.RequiresConfirmation {
+				t.Fatalf("Plugin read operation = %#v", operation)
+			}
+		case "chooseCandidate":
+			if operation.Access != AccessPrivileged || operation.RequiresConfirmation || !operation.NativeRequired {
+				t.Fatalf("Plugin candidate picker operation = %#v", operation)
+			}
+		case "discardCandidate":
+			if operation.Access != AccessMutating || operation.RequiresConfirmation {
+				t.Fatalf("Plugin discard candidate operation = %#v", operation)
+			}
+		default:
+			if operation.Access != AccessMutating || !operation.RequiresConfirmation {
+				t.Fatalf("Plugin mutation operation = %#v", operation)
+			}
 		}
+	}
+	if seen[DomainBrowser].Availability != AvailabilityUnavailable {
+		t.Fatalf("browser should remain unavailable, got %#v", seen[DomainBrowser])
 	}
 }
 

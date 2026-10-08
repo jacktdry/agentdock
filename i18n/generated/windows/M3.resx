@@ -1031,7 +1031,7 @@
     <value>Activity is experimental. This synthetic probe is for developer diagnostics.</value>
   </data>
   <data name="developer.scope" xml:space="preserve">
-    <value>Secondary architecture diagnostics. Browser, MCP and Plugin features are not implemented in this shell.</value>
+    <value>Secondary architecture diagnostics and experimental surfaces that are not part of the main management pages.</value>
   </data>
   <data name="diagnostics.architecture" xml:space="preserve">
     <value>Architecture</value>
@@ -1401,6 +1401,9 @@
   </data>
   <data name="mcp.loading" xml:space="preserve">
     <value>Loading MCP state…</value>
+  </data>
+  <data name="mcp.manage_plugin" xml:space="preserve">
+    <value>Manage in Plugin Management</value>
   </data>
   <data name="mcp.missing" xml:space="preserve">
     <value>Missing</value>
@@ -1812,6 +1815,321 @@
   </data>
   <data name="permission.workspace_unavailable" xml:space="preserve">
     <value>Core has not proven this operation can receive a workspace-confined grant.</value>
+  </data>
+  <data name="plugin.back_to_plugins" xml:space="preserve">
+    <value>Back to Plugins</value>
+  </data>
+  <data name="plugin.candidate_version" xml:space="preserve">
+    <value>Candidate</value>
+  </data>
+  <data name="plugin.choose_environment_key" xml:space="preserve">
+    <value>Choose a key</value>
+  </data>
+  <data name="plugin.cleanup_required" xml:space="preserve">
+    <value>Cleanup required</value>
+  </data>
+  <data name="plugin.cleanup_required_hint" xml:space="preserve">
+    <value>A previous removal reached its commit point but cleanup did not finish. Complete cleanup before reinstalling or changing this Plugin.</value>
+  </data>
+  <data name="plugin.configured" xml:space="preserve">
+    <value>Configured</value>
+  </data>
+  <data name="plugin.confirm_disable" xml:space="preserve">
+    <value>Disable this Plugin?</value>
+  </data>
+  <data name="plugin.confirm_disable_hint" xml:space="preserve">
+    <value>Plugin-provided capabilities will stop being available. Saved Plugin data and connection settings are kept.</value>
+  </data>
+  <data name="plugin.confirm_enable" xml:space="preserve">
+    <value>Enable this Plugin?</value>
+  </data>
+  <data name="plugin.confirm_enable_hint" xml:space="preserve">
+    <value>Plugin-provided capabilities become available after enabling.</value>
+  </data>
+  <data name="plugin.confirm_install" xml:space="preserve">
+    <value>Install Plugin</value>
+  </data>
+  <data name="plugin.confirm_purge" xml:space="preserve">
+    <value>Permanently delete this Plugin and its AgentDock-managed data?</value>
+  </data>
+  <data name="plugin.confirm_purge_hint" xml:space="preserve">
+    <value>This also deletes Plugin Skill data/settings, Plugin-owned MCP connection values, and saved authorizations. This cannot be undone.</value>
+  </data>
+  <data name="plugin.confirm_unset" xml:space="preserve">
+    <value>Unset {key}?</value>
+  </data>
+  <data name="plugin.confirm_unset_hint" xml:space="preserve">
+    <value>The saved value will be removed from this Plugin-owned connection scope.</value>
+  </data>
+  <data name="plugin.confirm_update" xml:space="preserve">
+    <value>Update Plugin</value>
+  </data>
+  <data name="plugin.current_version" xml:space="preserve">
+    <value>Current</value>
+  </data>
+  <data name="plugin.detail_title" xml:space="preserve">
+    <value>Plugin details</value>
+  </data>
+  <data name="plugin.diff_added" xml:space="preserve">
+    <value>Added</value>
+  </data>
+  <data name="plugin.diff_changed" xml:space="preserve">
+    <value>Changed</value>
+  </data>
+  <data name="plugin.diff_removed" xml:space="preserve">
+    <value>Removed</value>
+  </data>
+  <data name="plugin.diff_resolved" xml:space="preserve">
+    <value>Resolved</value>
+  </data>
+  <data name="plugin.disable" xml:space="preserve">
+    <value>Disable Plugin</value>
+  </data>
+  <data name="plugin.empty" xml:space="preserve">
+    <value>No Plugins installed. Install a Plugin from a local folder or ZIP file.</value>
+  </data>
+  <data name="plugin.enable" xml:space="preserve">
+    <value>Enable Plugin</value>
+  </data>
+  <data name="plugin.enable_local_process_notice" xml:space="preserve">
+    <value>This Plugin may run local programs with your user permissions.</value>
+  </data>
+  <data name="plugin.enable_remote_notice" xml:space="preserve">
+    <value>This Plugin may connect to external services.</value>
+  </data>
+  <data name="plugin.enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="plugin.environment_empty" xml:space="preserve">
+    <value>This connection does not declare any configurable values.</value>
+  </data>
+  <data name="plugin.environment_hint" xml:space="preserve">
+    <value>Only declared Plugin connection keys are available here. Values are never shown after they are saved.</value>
+  </data>
+  <data name="plugin.environment_key" xml:space="preserve">
+    <value>Key</value>
+  </data>
+  <data name="plugin.environment_names" xml:space="preserve">
+    <value>Connection keys</value>
+  </data>
+  <data name="plugin.environment_title" xml:space="preserve">
+    <value>Connection values</value>
+  </data>
+  <data name="plugin.environment_value" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="plugin.environment_write_only" xml:space="preserve">
+    <value>Write-only: AgentDock stores the value in the Plugin-owned scope and never returns it to this page.</value>
+  </data>
+  <data name="plugin.executable_item" xml:space="preserve">
+    <value>Executable: {value}</value>
+  </data>
+  <data name="plugin.executables" xml:space="preserve">
+    <value>Executables</value>
+  </data>
+  <data name="plugin.fingerprint" xml:space="preserve">
+    <value>Package fingerprint</value>
+  </data>
+  <data name="plugin.fingerprint_changed" xml:space="preserve">
+    <value>Package fingerprint changed.</value>
+  </data>
+  <data name="plugin.fingerprint_unchanged" xml:space="preserve">
+    <value>Package fingerprint is unchanged.</value>
+  </data>
+  <data name="plugin.format" xml:space="preserve">
+    <value>Format</value>
+  </data>
+  <data name="plugin.header_names" xml:space="preserve">
+    <value>Header keys</value>
+  </data>
+  <data name="plugin.install_disabled_notice" xml:space="preserve">
+    <value>The package will be added to AgentDock but will stay disabled. Review or configure its connections before enabling it.</value>
+  </data>
+  <data name="plugin.install_disabled_title" xml:space="preserve">
+    <value>Installed first, enabled separately</value>
+  </data>
+  <data name="plugin.install_folder" xml:space="preserve">
+    <value>Install from folder</value>
+  </data>
+  <data name="plugin.install_zip" xml:space="preserve">
+    <value>Install from ZIP</value>
+  </data>
+  <data name="plugin.installed" xml:space="preserve">
+    <value>Installed</value>
+  </data>
+  <data name="plugin.installed_at" xml:space="preserve">
+    <value>Installed</value>
+  </data>
+  <data name="plugin.installed_hint" xml:space="preserve">
+    <value>Plugins installed locally in AgentDock Next.</value>
+  </data>
+  <data name="plugin.installed_plugins" xml:space="preserve">
+    <value>Installed Plugins</value>
+  </data>
+  <data name="plugin.intro" xml:space="preserve">
+    <value>Install, review, configure, update, enable, and remove local Plugins without exposing package paths or secrets.</value>
+  </data>
+  <data name="plugin.loading" xml:space="preserve">
+    <value>Loading Plugin state…</value>
+  </data>
+  <data name="plugin.mcp_components" xml:space="preserve">
+    <value>MCP connections</value>
+  </data>
+  <data name="plugin.mcp_settings" xml:space="preserve">
+    <value>MCP settings</value>
+  </data>
+  <data name="plugin.mcp_settings_hint" xml:space="preserve">
+    <value>Connection values are scoped to this Plugin and remain write-only. Plugin-owned MCP lifecycle stays here; MCP Management remains read-only for these connections.</value>
+  </data>
+  <data name="plugin.missing" xml:space="preserve">
+    <value>Missing</value>
+  </data>
+  <data name="plugin.mutation_error" xml:space="preserve">
+    <value>The Plugin operation could not be completed. Review the refreshed state before trying again.</value>
+  </data>
+  <data name="plugin.name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="plugin.needs_attention" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
+  <data name="plugin.no_mcp" xml:space="preserve">
+    <value>This Plugin does not provide MCP connections.</value>
+  </data>
+  <data name="plugin.open_mcp" xml:space="preserve">
+    <value>Open MCP Management</value>
+  </data>
+  <data name="plugin.outcome_unknown" xml:space="preserve">
+    <value>The operation result is unknown. AgentDock will reconcile by request ID before another mutation.</value>
+  </data>
+  <data name="plugin.provenance" xml:space="preserve">
+    <value>Package source</value>
+  </data>
+  <data name="plugin.provides_mcp" xml:space="preserve">
+    <value>Provides MCP</value>
+  </data>
+  <data name="plugin.provides_skills" xml:space="preserve">
+    <value>Provides Skills</value>
+  </data>
+  <data name="plugin.read_error" xml:space="preserve">
+    <value>Plugin state could not be loaded.</value>
+  </data>
+  <data name="plugin.reconnect_required" xml:space="preserve">
+    <value>Saved connection settings will be used on the next connection. Reconnect the Plugin-provided MCP connection to apply them now.</value>
+  </data>
+  <data name="plugin.recovery_required" xml:space="preserve">
+    <value>Plugin recovery is still required. Review the refreshed state before another lifecycle change.</value>
+  </data>
+  <data name="plugin.reload_status" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="plugin.remove" xml:space="preserve">
+    <value>Remove Plugin</value>
+  </data>
+  <data name="plugin.remove_keep" xml:space="preserve">
+    <value>Remove Plugin, keep data</value>
+  </data>
+  <data name="plugin.remove_keep_description" xml:space="preserve">
+    <value>Remove the installed Plugin and stop its capabilities, but keep its AgentDock-managed data and connection settings for a future reinstall.</value>
+  </data>
+  <data name="plugin.remove_purge" xml:space="preserve">
+    <value>Remove Plugin and delete data</value>
+  </data>
+  <data name="plugin.remove_purge_description" xml:space="preserve">
+    <value>Remove the Plugin and permanently delete its AgentDock-managed Plugin data, Skill data and settings, Plugin-owned MCP connection values, and saved authorizations.</value>
+  </data>
+  <data name="plugin.remove_title" xml:space="preserve">
+    <value>Remove Plugin</value>
+  </data>
+  <data name="plugin.replace_value" xml:space="preserve">
+    <value>Replace value</value>
+  </data>
+  <data name="plugin.retry_cleanup" xml:space="preserve">
+    <value>Retry cleanup</value>
+  </data>
+  <data name="plugin.review_attention" xml:space="preserve">
+    <value>Review findings</value>
+  </data>
+  <data name="plugin.review_install_eyebrow" xml:space="preserve">
+    <value>Local Plugin package</value>
+  </data>
+  <data name="plugin.review_invalid" xml:space="preserve">
+    <value>Cannot install</value>
+  </data>
+  <data name="plugin.review_private_source" xml:space="preserve">
+    <value>Selected source is kept private</value>
+  </data>
+  <data name="plugin.review_title" xml:space="preserve">
+    <value>Review package</value>
+  </data>
+  <data name="plugin.review_update_eyebrow" xml:space="preserve">
+    <value>Update from local package</value>
+  </data>
+  <data name="plugin.review_valid" xml:space="preserve">
+    <value>Ready to install</value>
+  </data>
+  <data name="plugin.row_components" xml:space="preserve">
+    <value>{skills, number} Skills · {mcp, number} MCP</value>
+  </data>
+  <data name="plugin.row_warnings" xml:space="preserve">
+    <value>{count, number} warnings</value>
+  </data>
+  <data name="plugin.save_value" xml:space="preserve">
+    <value>Save value</value>
+  </data>
+  <data name="plugin.select_plugin" xml:space="preserve">
+    <value>Select a Plugin to inspect its capabilities, connection settings, and lifecycle.</value>
+  </data>
+  <data name="plugin.skills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="plugin.stale_hint" xml:space="preserve">
+    <value>Core state is unavailable or changed while this page was open. Mutations are disabled until a fresh snapshot is loaded.</value>
+  </data>
+  <data name="plugin.stale_title" xml:space="preserve">
+    <value>Last known Plugin state</value>
+  </data>
+  <data name="plugin.status_disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="plugin.status_enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="plugin.status_recovery" xml:space="preserve">
+    <value>Cleanup required</value>
+  </data>
+  <data name="plugin.title" xml:space="preserve">
+    <value>Plugin Management</value>
+  </data>
+  <data name="plugin.unset_value" xml:space="preserve">
+    <value>Unset</value>
+  </data>
+  <data name="plugin.update_changes" xml:space="preserve">
+    <value>What changes</value>
+  </data>
+  <data name="plugin.update_disabled_notice" xml:space="preserve">
+    <value>This Plugin is currently disabled. Updating keeps it disabled.</value>
+  </data>
+  <data name="plugin.update_folder" xml:space="preserve">
+    <value>Update from folder</value>
+  </data>
+  <data name="plugin.update_no_changes" xml:space="preserve">
+    <value>No reviewed capability changes were detected.</value>
+  </data>
+  <data name="plugin.update_runtime_notice" xml:space="preserve">
+    <value>This Plugin is currently enabled. Updating will temporarily stop its Plugin-provided connections and activate the reviewed package when the update succeeds.</value>
+  </data>
+  <data name="plugin.update_runtime_notice_title" xml:space="preserve">
+    <value>Update behavior</value>
+  </data>
+  <data name="plugin.update_zip" xml:space="preserve">
+    <value>Update from ZIP</value>
+  </data>
+  <data name="plugin.version" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="plugin.warnings" xml:space="preserve">
+    <value>Warnings</value>
   </data>
   <data name="runtime.action_completed" xml:space="preserve">
     <value>{action} completed.</value>

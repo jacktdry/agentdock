@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
@@ -31,10 +32,38 @@ type DesktopItem struct {
 	Provenance         *pluginruntime.Provenance `json:"provenance,omitempty"`
 	RecoveryState      string                    `json:"recovery_state,omitempty"`
 }
+type DesktopMCPComponent struct {
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Transport        string   `json:"transport"`
+	Endpoint         string   `json:"endpoint,omitempty"`
+	Command          string   `json:"command,omitempty"`
+	EnvironmentNames []string `json:"environment_names"`
+	HeaderNames      []string `json:"header_names"`
+}
+type DesktopDetail struct {
+	Plugin   DesktopItem           `json:"plugin"`
+	MCP      []DesktopMCPComponent `json:"mcp"`
+	Warnings []string              `json:"warnings"`
+}
 type DesktopRecoveryItem struct {
 	Name       string `json:"name"`
 	Generation string `json:"generation"`
 	State      string `json:"state"`
+}
+
+func uniqueDesktopStrings(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	result := values[:0]
+	for _, value := range values {
+		if value == "" || (len(result) > 0 && result[len(result)-1] == value) {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
 }
 
 func desktopText(value string) string {
@@ -48,7 +77,7 @@ func desktopText(value string) string {
 	if len(runes) > 512 {
 		runes = runes[:512]
 	}
-	return string(runes)
+	return redactAbsolutePathTokens(string(runes))
 }
 func desktopItem(state pluginruntime.State) DesktopItem {
 	item := DesktopItem{Name: state.Name, Description: desktopText(state.Description), Version: desktopText(state.Version), Format: state.Format,
@@ -61,13 +90,59 @@ func desktopItem(state pluginruntime.State) DesktopItem {
 	}
 	if state.Provenance != nil {
 		p := state.Provenance
-		safe := &pluginruntime.Provenance{Ref: desktopText(p.Ref), Revision: desktopText(p.Revision)}
+		safe := &pluginruntime.Provenance{
+			Ref:      safeCandidateOpaqueLabel(p.Ref, "", ""),
+			Revision: safeCandidateOpaqueLabel(p.Revision, "", ""),
+		}
 		if endpoint, err := url.Parse(p.Origin); err == nil && endpoint.Scheme == "https" && endpoint.Host != "" && endpoint.User == nil {
 			safe.Origin = "https://" + endpoint.Host
 		}
 		item.Provenance = safe
 	}
 	return item
+}
+
+func desktopDetail(state pluginruntime.State) DesktopDetail {
+	mcp := make([]DesktopMCPComponent, 0, len(state.Components.MCP))
+	for _, component := range state.Components.MCP {
+		envNames := make([]string, 0, len(component.Environment)+len(component.EnvBindings)+len(component.RequiredEnv))
+		for key := range component.Environment {
+			envNames = append(envNames, key)
+		}
+		for _, key := range component.EnvBindings {
+			envNames = append(envNames, key)
+		}
+		envNames = append(envNames, component.RequiredEnv...)
+		sort.Strings(envNames)
+		envNames = uniqueDesktopStrings(envNames)
+
+		headerNames := make([]string, 0, len(component.Headers)+len(component.HeaderEnv))
+		for key := range component.Headers {
+			headerNames = append(headerNames, key)
+		}
+		for key := range component.HeaderEnv {
+			headerNames = append(headerNames, key)
+		}
+		sort.Strings(headerNames)
+		headerNames = uniqueDesktopStrings(headerNames)
+
+		command := ""
+		if component.Command != "" {
+			command = safeCandidateText(filepath.Base(component.Command), 128)
+		}
+		mcp = append(mcp, DesktopMCPComponent{
+			Name: safeCandidateText(component.Name, 128), Description: safeCandidateText(component.Description, 512),
+			Transport: safeCandidateText(component.Transport, 32), Endpoint: safeCandidateOrigin(component.URL), Command: command,
+			EnvironmentNames: envNames, HeaderNames: headerNames,
+		})
+	}
+	warnings := make([]string, 0, len(state.Warnings))
+	for _, warning := range state.Warnings {
+		if safe := safeCandidateText(warning, 512); safe != "" {
+			warnings = append(warnings, safe)
+		}
+	}
+	return DesktopDetail{Plugin: desktopItem(state), MCP: mcp, Warnings: warnings}
 }
 
 func desktopSnapshot(reg pluginruntime.DesktopRegistry) Result {
@@ -142,10 +217,15 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 		return nil, DesktopError("INVALID_PLUGIN_REQUEST", "validation")
 	}
 	if r.Action == "desktop_inspect" {
-		snapshot := desktopSnapshot(reg)
-		for _, item := range snapshot["plugins"].([]DesktopItem) {
-			if item.Name == r.Name {
-				return Result{"registry_revision": reg.Revision, "authoritative": true, "plugin": item}, nil
+		for _, state := range reg.States {
+			if state.Name == r.Name {
+				for _, recovery := range reg.Recoveries {
+					if recovery.Name == r.Name {
+						return nil, DesktopError("PLUGIN_RECOVERY_REQUIRED", "conflict")
+					}
+				}
+				detail := desktopDetail(state)
+				return Result{"registry_revision": reg.Revision, "authoritative": true, "plugin": detail.Plugin, "detail": detail}, nil
 			}
 		}
 		return nil, DesktopError("PLUGIN_NOT_FOUND", "not_found")
@@ -167,6 +247,16 @@ func (s *Service) DesktopManage(ctx context.Context, r DesktopManageRequest) (Re
 	if r.Action == "desktop_install_candidate" {
 		if r.ExpectedRegistryRevision == "" || r.ExpectedRegistryRevision != reg.Revision {
 			return nil, DesktopError("PLUGIN_REGISTRY_CONFLICT", "conflict")
+		}
+		for _, recovery := range reg.Recoveries {
+			if recovery.Name == r.Name {
+				return nil, DesktopError("PLUGIN_RECOVERY_REQUIRED", "conflict")
+			}
+		}
+		for _, installed := range reg.States {
+			if installed.Name == r.Name {
+				return nil, DesktopError("PLUGIN_ALREADY_INSTALLED", "conflict")
+			}
 		}
 	} else {
 		_, state, err = s.desktopBasis(r)
