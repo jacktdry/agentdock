@@ -198,7 +198,7 @@ Shared ACP UI 不再只是 Runtime Monitor；P4 closeout 後下一個 Wave 3 dom
 
 ### P5 — MCP Management Shared UI
 
-**狀態：implementation + security hardening 已完成到 review-ready（2026-10-07）；final independent re-review 因 ACP quota 尚未取得 verdict，Next live UAT 仍 blocked。** 詳見 [P5 MCP Management roundtable](pre-m9-mcp-management-roundtable.md#20-implementation--security-checkpoint--2026-10-07)。
+**狀態：✅ closeout（2026-10-07）**。final Gemini 3.1 Pro / High independent review：**PASS — 0 BLOCKER / 0 HIGH**；Next-only package/deploy 與 Desktop bridge live UAT 已完成。詳見 [P5 MCP Management roundtable](pre-m9-mcp-management-roundtable.md#21-p5-closeout--2026-10-07)。
 
 P5 不直接把 Core `mcp_manage` 做成表單，而是先建立 Desktop-owned authority。Scope：
 
@@ -223,9 +223,19 @@ Frozen security rules：
 - plugin-owned mutation在 P5 backend一律拒絕；
 - no offline writes、no automatic tool discovery、no tool-call console。
 
-Core/Desktop authority與 Shared UI 已完成，包含 atomic update、revision/generation、authoritative safe reads、OAuth incarnation fence、redirect isolation、truthful partial-outcome、private request binding與 operation reconciliation。第一輪 independent review 的 6 HIGH 已逐項修正並通過本地 targeted/race/cross-platform/frontend gates；但 final independent PASS 因 reviewer quota 尚未取得，所以不進 package/live UAT，也不宣稱 P5 closeout。
+Core/Desktop authority與 Shared UI 已完成，包含 atomic update、revision/generation、authoritative safe reads、OAuth incarnation fence、redirect isolation、truthful partial-outcome、private request binding與 operation reconciliation。第一輪 independent review 的 6 HIGH 已逐項修正，final independent PASS、Next-only package/deploy與 live UAT皆已完成。
 
 ### P6 — Plugin Management Shared UI
+
+**狀態：Phase A Core/Desktop authority + Phase B opaque native candidate staging 已完成；Phase C Shared UI NEXT（2026-10-08）。**
+
+Checkpoint：
+
+- `f70a4715` — Desktop management authority；
+- `55e8be0b` — opaque immutable Desktop candidates；
+- `30fa143b` — native-control credential / generic-dispatch isolation / absolute-path redaction hardening。
+
+Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、Shared macOS tests / Windows compile / Linux server-tag compile；native Linux Wails build需 Linux CGO/GTK/WebKit環境，留到 release-native UAT。
 
 補 `DomainPlugin`，以管理已連線 / 已安裝的 plugins 為主，不發展 marketplace：
 
@@ -338,7 +348,7 @@ P4 ACP Manager full parity ✅
   ↓
 P5 MCP Management ✅
   ↓
-P6 Plugin Management ← **contract frozen / implementation in progress**
+P6 Plugin Management ← **Phase A/B ✅；Phase C Shared UI NEXT**
   ↓
 P7 Nexus / startup / platform essentials
   ↓
@@ -488,7 +498,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**現在從 Core/Desktop authority → opaque candidate staging → Shared UI 實作**；之後依序為 Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**Phase A Core/Desktop authority + Phase B opaque candidate staging 已完成，現在進 Phase C Shared UI**；之後依序為 Nexus / Platform Essentials → Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 

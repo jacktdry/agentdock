@@ -550,17 +550,17 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
 
 ## 17. Implementation order
 
-1. **A — Core/Desktop authority**
+1. ✅ **A — Core/Desktop authority**
    - registry revision / Plugin generation；
    - Desktop request contract；
    - operation journal / safe errors；
    - Plugin-owned MCP env scope。
-2. **B — Native candidate staging**
+2. ✅ **B — Native candidate staging**
    - file/folder picker；
    - opaque candidate；
    - private review token；
    - expiry/discard。
-3. **C — Shared UI**
+3. **C — Shared UI ← NEXT**
    - navigation/store；
    - summary/list/detail；
    - install review；
@@ -572,6 +572,41 @@ P6 live UAT使用最小、local、可完整清除的 fixture；不得拿使用�
 5. **E — Next-only package/live UAT**
 
 在 D 得到 0 BLOCKER / 0 HIGH 前，不 package/reinstall Next 做 P6 live UAT。
+
+### 17.1 Implementation checkpoint — 2026-10-08
+
+Phase A / B backend + native boundary 已完成，尚未進 package/live UAT：
+
+- `f70a4715 feat(plugin): add Desktop management authority`
+  - authoritative registry snapshot、persisted 256-bit Plugin generation；
+  - strict action-specific request semantics、revision/generation fence；
+  - request-id journal / semantic approval fingerprint / exact retry；
+  - enable/disable、remove keep/purge、Plugin-owned MCP write-only environment與 recovery outcome。
+- `55e8be0b feat(plugin): add opaque Desktop candidates`
+  - native folder / ZIP picker；
+  - AgentDock-owned immutable staged snapshot；
+  - opaque `candidateId` + server-held review state，renderer不取得 source path / raw review token；
+  - install強制 disabled、update綁定 exact target generation並保留既有 Enabled；
+  - candidate expiry / discard / single-use；
+  - current → candidate safe review projection。
+- `30fa143b fix(plugin): harden candidate staging boundary`
+  - candidate staging HTTP route從 ordinary Runtime dispatch完全拆離；
+  - staging要求 direct loopback + **native Desktop control credential**，ordinary Core bearer不可使用；
+  - provenance / warning / issue / description中的 absolute Unix / Windows / UNC path fail-closed redaction；
+  - generic Runtime handler不能繞過專用 candidate control route。
+
+Validation：
+
+- `go test ./cmd/... ./internal/...`：PASS；
+- P6/backend targeted + `go test -race`：PASS；
+- backend Windows/Linux compile-only：PASS；
+- Shared Desktop macOS tests + Windows compile：PASS；
+- Shared Desktop Linux `server` tag compile：PASS；
+- native Linux Wails build需要 Linux + CGO + GTK/WebKit toolchain，保留到 release-native UAT，不視為 P6 failure；
+- `go vet` / `git diff --check`：PASS；
+- candidate source path / raw review token / storage key / runtime name / credential value不進 renderer-facing candidate response。
+
+下一步：**Phase C Shared UI**。在 Phase D independent security review 得到 0 BLOCKER / 0 HIGH 前，仍禁止 package/reinstall Next 做 P6 live UAT。
 
 ## 18. Roundtable decision
 
