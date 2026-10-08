@@ -5,6 +5,15 @@
 > Next repo: /Users/wei/sideProject/agentdock-m8-permission-approval；工作分支 feature/m8-permission-approval。
 > ACP 將在獨立開發分支實作；以下規格只代表合約提案，是否實作以後續 ACP commit、測試結果為準。
 
+## ACP .13 共用文字輸出游標 checkpoint（2026-10-09）
+
+- ACP 原始碼候選版 **`1.2.0-agentdock.13`**；工作樹 `/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`5c49037`**，核心 Commit **`37f53dc`**。本機未推送、未部署；Stable 與 Next 安裝版均維持 `.8`。
+- 新增 **`Translator.reserveExternalText(row, exactText) / ackExternalText(token) / abortExternalText(token)`**，並由 `StreamPoller.reserveExternalText(conversationId, stepIndex, exactText)`（連同 `ack/abortExternalText`）使用**同一個 live Translator**。只有綁定且已開啟的 SQLite DB、有**唯一完成列 status=3**、Session/idx/文字完全一致、較早的步驟已經處理，才能保留外部文字發送。
+- 發送保留後阻止其他 Poller 更新插隊；送達確認後相同 SQLite 文字不再發送，但後續工具更新仍走 SQLite。遠端更新結果不確定或提交後 DB 文字改寫時 **fail closed**，不偷偷重播；Replay 仍以 DB 為準、不受此機制改動。
+- ACP 整合驗證：**`bun test` 440 pass／0 fail（42 files）**；TypeScript/Lint（僅既有 1 warning、4 info）／macOS arm64 native build **PASS**。合成 + 臨時 SQLite 的新測試見 `tests/conversation/external-text-delivery.test.ts`，研究與剩餘整合門檻見 `docs/research/stream-direct-admission.md`。
+- **仍未接入 `Adapter.runPrompt`，也未新增直接串流模式**：`AGY_ACP_STREAM_JSON` 維持預設 disabled、可選 shadow，SQLite 仍是唯一正式 ACP Update／History／Replay 來源。原生 M8 Hook 仍為離線 fixture，沒有可信 Next Core 授權 IPC。ACP 已送出 chunk 無法撤回，未驗證不可宣稱 direct/fallback 可無損切換，亦不可宣稱已改善首 token 延遲。
+- **下一階段交接 Gate：** 待 Next Core ready 後，先用完全獨立的 Next 測試環境驗證 Stream/DB event parity、實際 Session 身分、工具/圖片/取消/模型/Keychain/OAuth、嚴格單一輸出序列與送達不確定時的失敗策略，再審核是否可新增 next-only direct opt-in。**本輪未執行真實 AGY `-p`／OAuth 測試，也沒有修改 Next Core/UI。**
+
 ## ACP .12 獨立研發 checkpoint（2026-10-09）
 
 > 這是 ACP 端新增的 **直接串流驗證核心**，不是 Next Core 的整合需求變更，也沒有啟用直接串流。
