@@ -200,7 +200,7 @@ func DefaultManifest() Manifest {
 				Streams: []StreamCapability{},
 				Reason:  "Revisioned configuration inventory/save are Desktop-owned and available without Core; saves preserve runtime and require Core restart to load. Lifecycle and diagnostics retain the local Core control plane",
 			},
-			unavailableCapability(DomainBrowser, "browser routing contract is scheduled for the browser-routing milestone"),
+			availableCapability(DomainBrowser, "Phase A passive broker snapshot only; Next identity and authenticated local Core required; no connector health or mutations", "snapshot"),
 			{
 				Domain:       DomainActivity,
 				Version:      ActivitySchemaVersion,

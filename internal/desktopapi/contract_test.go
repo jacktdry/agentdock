@@ -107,8 +107,9 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 			}
 		}
 	}
-	if seen[DomainBrowser].Availability != AvailabilityUnavailable {
-		t.Fatalf("browser should remain unavailable, got %#v", seen[DomainBrowser])
+	browser := seen[DomainBrowser]
+	if browser.Availability != AvailabilityAvailable || len(browser.Operations) != 1 || browser.Operations[0].Name != "snapshot" || browser.Operations[0].Access != AccessRead || browser.Operations[0].RequiresConfirmation || len(browser.Streams) != 0 {
+		t.Fatalf("browser must expose only the passive Phase A snapshot, got %#v", browser)
 	}
 }
 

@@ -90,6 +90,7 @@ func main() {
 			application.NewService(desktopapi.NewDiagnosticsService(*runtimeRootFlag)),
 			application.NewService(desktopapi.NewACPService(*runtimeRootFlag)),
 			application.NewService(mcpService),
+			application.NewService(desktopapi.NewBrowserService(*runtimeRootFlag)),
 			application.NewService(pluginService),
 			application.NewService(desktopapi.NewPermissionService(*runtimeRootFlag)),
 			application.NewService(settings),

@@ -263,6 +263,15 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P8 — Browser Broker Shared UI
 
+> 2026-10-08 P8 Phase A source checkpoint: passive Broker diagnostics projection,
+> Core local authenticated GET and **verified macOS Next Unix Desktop Control**
+> `browser.snapshot` (PID/UID + signed process instance, no Desktop bearer over
+> TCP), typed Wails `BrowserService.Snapshot` and tests are implemented. This
+> is not the Shared UI or live browser acceptance. Browser UI, connector health,
+> mutation authority, P6/P7 native GUI and M9 release gates remain pending.
+> See [P8 Browser Broker Phase A contract](pre-m9-browser-broker-roundtable.md).
+
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

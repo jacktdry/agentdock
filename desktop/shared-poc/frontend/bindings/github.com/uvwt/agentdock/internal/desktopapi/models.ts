@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as browserdesktop$0 from "../browserdesktop/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as desktopruntime$0 from "../desktopruntime/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -225,6 +228,11 @@ export interface BasicSettingsResult {
 
 export interface BasicSettingsSaveResult {
     "completed": boolean;
+    "error"?: APIError | null;
+}
+
+export interface BrowserSnapshotResult {
+    "snapshot": browserdesktop$0.Snapshot;
     "error"?: APIError | null;
 }
 

@@ -97,3 +97,8 @@ type PluginDesktopRuntime interface {
 type PluginDesktopCandidateRuntime interface {
 	RuntimePluginDesktopCandidate(context.Context, map[string]any) (app.Result, error)
 }
+
+// BrowserDesktopRuntime is an optional passive observation capability.
+type BrowserDesktopRuntime interface {
+	RuntimeBrowserDesktop() app.Result
+}

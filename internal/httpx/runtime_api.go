@@ -29,6 +29,7 @@ func registerRuntimeAPI(mux *http.ServeMux, runtime runtimeapi.Runtime, cfg conf
 	}
 	mux.HandleFunc("/internal/runtime/analytics", h)
 	mux.HandleFunc("/internal/runtime/diagnostics", h)
+	mux.HandleFunc("/internal/runtime/browser/desktop", h)
 	mux.HandleFunc("/internal/runtime/execution", h)
 	mux.HandleFunc("/internal/runtime/activity", h)
 	mux.HandleFunc("/internal/runtime/insertions", h)
@@ -69,11 +70,11 @@ func runtimeAPIHandler(runtime runtimeapi.Runtime, cfg config.Config, oauthStore
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime analytics requires local access or authentication")
 			return
 		}
-		if (cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop") && !isDirectLoopbackRequest(r) {
+		if (cleanPath == "/internal/runtime/browser/desktop" || cleanPath == "/internal/runtime/execution" || cleanPath == "/internal/runtime/activity" || cleanPath == "/internal/runtime/insertions" || cleanPath == "/internal/runtime/permissions" || cleanPath == "/internal/runtime/approvals" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop") && !isDirectLoopbackRequest(r) {
 			writeRuntimeAPIError(w, http.StatusForbidden, "LOCAL_ACCESS_REQUIRED", "runtime execution state requires direct local access")
 			return
 		}
-		if authRequired && !authn.OK {
+		if (authRequired || cleanPath == "/internal/runtime/browser/desktop") && !authn.OK {
 			setBearerChallenge(w, cfg, r, strings.TrimSpace(r.Header.Get("Authorization")) != "")
 			writeRuntimeAPIError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 			return

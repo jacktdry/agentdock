@@ -3,6 +3,7 @@
 
 import * as ACPService from "./acpservice.js";
 import * as BasicSettingsService from "./basicsettingsservice.js";
+import * as BrowserService from "./browserservice.js";
 import * as ConnectionService from "./connectionservice.js";
 import * as ContractService from "./contractservice.js";
 import * as DiagnosticsService from "./diagnosticsservice.js";
@@ -15,6 +16,7 @@ import * as UpdateService from "./updateservice.js";
 export {
     ACPService,
     BasicSettingsService,
+    BrowserService,
     ConnectionService,
     ContractService,
     DiagnosticsService,
@@ -57,6 +59,7 @@ export type {
     BasicSettings,
     BasicSettingsResult,
     BasicSettingsSaveResult,
+    BrowserSnapshotResult,
     ConnectionActionResult,
     ConnectionAutostartRequest,
     ConnectionPortRequest,

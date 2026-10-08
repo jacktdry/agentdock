@@ -58,6 +58,12 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 
 	taskID, isTaskPath := runtimeTaskID(path)
 	switch {
+	case path == "/internal/runtime/browser/desktop":
+		browser, ok := runtime.(BrowserDesktopRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "BROWSER_DESKTOP_UNSUPPORTED", Message: "browser snapshot unavailable", Category: "not_found"}
+		}
+		return map[string]any(browser.RuntimeBrowserDesktop()), nil
 	case path == "/internal/runtime/status":
 		return map[string]any(runtime.RuntimeStatus()), nil
 	case path == "/internal/runtime/analytics":

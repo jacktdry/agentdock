@@ -156,6 +156,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			if request.Method == "permission.bootstrap" {
 				return runtime.DesktopPermissionBootstrap(request.Params)
 			}
+			if request.Method == "browser.snapshot" {
+				return runtime.RuntimeBrowserDesktop(), nil
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,
