@@ -5,6 +5,17 @@
 > Next repo: /Users/wei/sideProject/agentdock-m8-permission-approval；工作分支 feature/m8-permission-approval。
 > ACP 將在獨立開發分支實作；以下規格只代表合約提案，是否實作以後續 ACP commit、測試結果為準。
 
+## ACP .12 獨立研發 checkpoint（2026-10-09）
+
+> 這是 ACP 端新增的 **直接串流驗證核心**，不是 Next Core 的整合需求變更，也沒有啟用直接串流。
+
+- ACP 工作樹：`/Users/wei/sideProject/antigravity-acp-next-integration`；分支 `feature/next-integration-optin`；候選版 `1.2.0-agentdock.12`，最新 Commit `120ee25`（核心 `aad33b1`，由獨立分支 `b44f5d4` 驗證）。
+- `src/agy/stream-direct-ledger.ts` 已加入純資料的 `StreamDirectLedger`：AGY stream 事件和 SQLite **最終完成列**的精確比對、Conversation/Step 身分、1 MiB/128 step 邊界、預約與確認機制、拒絕重複傳送、取消/工具事件/部分送出後不可安全重試的標示。
+- 新增 14 項測試（`tests/agy/stream-direct-ledger.test.ts`），與 ACP 整合後 **全套 430 pass/0 fail（41 files）**；TypeScript、Lint、macOS arm64 build 均通過。
+- **尚未接進 Adapter.runPrompt**：`AGY_ACP_STREAM_JSON` 仍只有 `disabled`（預設）和 `shadow`，沒有 `direct`。SQLite Poller 維持 ACP Update/Replay 唯一真實來源，不影響原版 AgentDock。
+- 核心發現：傳給 ACP Client 的文字不可撤回；若日後 SQLite 改寫已傳送文字，或 `client.update` 可能已成功但回覆拋錯，單靠「fallback SQLite」不能保證零重複／零遺漏。因此 **正式直接串流仍需經獨立 UAT、工具／圖片／Session／Replay 對齊、可持久化的共用去重游標與故障處理策略**，才能由 Next Session 審核 opt-in。見 ACP `docs/research/stream-direct-admission.md`。
+- 目前原版 AgentDock 與 Next 安裝版維持 `1.2.0-agentdock.8`，ACP `.12` 只在本機 Git 分支、未推送／部署。本輪沒有呼叫真實 `agy -p`、未觸發 OAuth，未修改任何 Next Core/UI。
+
 ## 不可改變的相容條件
 
 1. **原版 AgentDock 不動**：不修改 Core、UI、設定、HOME、ACP Profile、服務及部署。維護版 ACP 預設行為須保留 Legacy；不因新增 Next 功能而改變現行權限旗標或 Session 行為。
