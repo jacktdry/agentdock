@@ -247,7 +247,7 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P7 — Nexus / Startup / Platform Essentials
 
-2026-10-08 已完成唯讀能力盤點，尚未凍結 UX/authority contract，亦未開始 P7 實作；詳見 [P7 read-only inventory](pre-m9-platform-essentials-inventory.md)。P6 的 native GUI UAT 仍是獨立待完成 gate。
+2026-10-08 已完成唯讀能力盤點與 P7 UX / Security / Cross-platform 設計收斂；已記錄 [P7 Desktop authority 與 UI contract](pre-m9-platform-essentials-roundtable.md)，尚未開始 P7 實作。NexusDock 作為 Connection 的獨立子畫面；先完成 Next-only identity、SSRF / redirect、generation fencing、truthful pairing/restart 安全 backend，再實作 UI。P6 的 native GUI UAT 仍是獨立待完成 gate。
 
 補齊日常 parity：
 
@@ -500,7 +500,7 @@ Worker 成功不等於 Pre-M9 step 完成。
 1. 先讀本文件、`roadmap.md`、`agentdock-next-isolation.md`；
 2. 確認 branch / clean worktree / latest docs commit；
 3. P1/P2、connector 建立與 P3 side-by-side validation 均已完成；不要重跑已 closeout 的 Wave 0–2。
-4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**Phase A/B/C 與 Phase D independent review（0 BLOCKER / 0 HIGH）已完成，Phase E Desktop/Core live UAT 已通過、native GUI UAT 待補**；完成後再依序為 Nexus / Platform Essentials → Browser Broker UI；
+4. Wave 3 已完成 ACP Manager 與 P5 MCP Management；P6 Plugin Management UX / IA + authority contract 已於 2026-10-08 凍結，**Phase A/B/C 與 Phase D independent review（0 BLOCKER / 0 HIGH）已完成，Phase E Desktop/Core live UAT 已通過、native GUI UAT 待補**；[P7 Nexus / Platform Essentials UX/security contract](pre-m9-platform-essentials-roundtable.md) 已收斂，下一步 Phase A 安全 backend → Shared UI；再處理 Browser Broker UI；
 5. 每個主要 UI domain 實作前先跑 AI UX/IA roundtable，收斂 page goal、資訊層級、actions、help/warning、error/retry/accessibility；
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 

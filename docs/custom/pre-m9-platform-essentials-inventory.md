@@ -1,6 +1,6 @@
 # P7 Nexus / Startup / Platform Essentials — Read-only Inventory
 
-> 2026-10-08 discovery only. UX/authority contract not frozen, no P7 implementation started. P6 still needs native GUI acceptance.
+> 2026-10-08 discovery-only snapshot. The subsequent UX/security/authority design is documented in [P7 roundtable contract](pre-m9-platform-essentials-roundtable.md); no P7 implementation has started. P6 still needs native GUI acceptance.
 
 ## Existing implementation and gaps
 
@@ -16,7 +16,7 @@
 | Tray/menu | Legacy macOS AppKit and Windows tray exist; Next Shared Desktop uses Wails | **Native parity audit**: inventory actual Next menu ownership first. |
 | OS permission/elevation | Existing M8 Permission policy + separate OS/native adapters | **Native-backed**: OS grants distinct from AgentDock Allow/Ask/Deny. |
 
-## Proposed UX design questions (not approved)
+## Original proposed UX design questions (superseded by roundtable)
 
 Preserve existing Connection, Settings, Runtime, Diagnostics page ownership. Prefer focused Nexus status-first UI: connection health, safe identity details, explicit pairing, then advanced/help. Device token is write-only; use `device_token_stored`, not raw value. Pairing must explain restart/reconnect truthfully.
 
@@ -24,4 +24,4 @@ Security roundtable must freeze Desktop-owned pairing authority, re-pair confirm
 
 ## Next gate
 
-Run sequential Product/UX + Security/operator + Cross-platform design review and freeze interaction/authority contracts **before P7 code**. This was read-only investigation, not P7 implementation or P6 closeout. M9 remains gated.
+The design review was completed afterward in [P7 roundtable](pre-m9-platform-essentials-roundtable.md). Its Phase A security prerequisites apply before any P7 Shared UI. This inventory was read-only investigation, not P7 implementation or P6 closeout. M9 remains gated.
