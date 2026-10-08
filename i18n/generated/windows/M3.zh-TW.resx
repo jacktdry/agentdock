@@ -598,6 +598,147 @@
   <data name="basicsettings.validation" xml:space="preserve">
     <value>連接埠必須是 1 至 65535 的整數，並選擇支援的記錄層級。</value>
   </data>
+  <data name="browser.acp_disabled" xml:space="preserve">
+    <value>ACP 已停用</value>
+  </data>
+  <data name="browser.acp_enabled" xml:space="preserve">
+    <value>ACP 已啟用</value>
+  </data>
+  <data name="browser.active_leases" xml:space="preserve">
+    <value>有效租約</value>
+  </data>
+  <data name="browser.active_operations" xml:space="preserve">
+    <value>執行中作業</value>
+  </data>
+  <data name="browser.anomalies" xml:space="preserve">
+    <value>租約與生命週期計數</value>
+  </data>
+  <data name="browser.anomalies_hint" xml:space="preserve">
+    <value>異常類別可能重疊。孤立紀錄與生命週期錯誤是保留診斷；不執行清理或即時程序檢查。</value>
+  </data>
+  <data name="browser.availability" xml:space="preserve">
+    <value>可用性</value>
+  </data>
+  <data name="browser.available" xml:space="preserve">
+    <value>可用 — 橋接存在</value>
+  </data>
+  <data name="browser.broker_unavailable" xml:space="preserve">
+    <value>Broker 無法使用</value>
+  </data>
+  <data name="browser.browser_disabled" xml:space="preserve">
+    <value>瀏覽器功能已停用</value>
+  </data>
+  <data name="browser.browser_enabled" xml:space="preserve">
+    <value>瀏覽器功能已啟用</value>
+  </data>
+  <data name="browser.capability_unavailable" xml:space="preserve">
+    <value>快照能力協商無法使用或遭拒絕。</value>
+  </data>
+  <data name="browser.company_required_edge_policies" xml:space="preserve">
+    <value>已設定的公司必要 Edge 路由數</value>
+  </data>
+  <data name="browser.core_unavailable" xml:space="preserve">
+    <value>Core 無法使用；沒有已確認的快照或計數。</value>
+  </data>
+  <data name="browser.expired_leases" xml:space="preserve">
+    <value>已到期租約</value>
+  </data>
+  <data name="browser.external_orphans" xml:space="preserve">
+    <value>外部孤立紀錄</value>
+  </data>
+  <data name="browser.failed_leases" xml:space="preserve">
+    <value>失敗租約</value>
+  </data>
+  <data name="browser.failed_workers" xml:space="preserve">
+    <value>失敗工作程序</value>
+  </data>
+  <data name="browser.idle" xml:space="preserve">
+    <value>閒置 — 沒有保留租約</value>
+  </data>
+  <data name="browser.leases" xml:space="preserve">
+    <value>租約</value>
+  </data>
+  <data name="browser.leases_present" xml:space="preserve">
+    <value>存在保留租約</value>
+  </data>
+  <data name="browser.lifecycle_error" xml:space="preserve">
+    <value>已記錄生命週期錯誤</value>
+  </data>
+  <data name="browser.loading" xml:space="preserve">
+    <value>正在觀察 Broker…</value>
+  </data>
+  <data name="browser.managed_orphans" xml:space="preserve">
+    <value>受管理孤立紀錄</value>
+  </data>
+  <data name="browser.max_concurrency" xml:space="preserve">
+    <value>最大並行數</value>
+  </data>
+  <data name="browser.observation_hint" xml:space="preserve">
+    <value>觀察時間是此次診斷觀察的 UTC 時間。stale 表示保留的 Broker 異常，不代表快照經過多久或連接器健康。各計數分別觀察，並非原子快照。</value>
+  </data>
+  <data name="browser.observed_at" xml:space="preserve">
+    <value>觀察時間（UTC）</value>
+  </data>
+  <data name="browser.operations" xml:space="preserve">
+    <value>准入佇列</value>
+  </data>
+  <data name="browser.operations_hint" xml:space="preserve">
+    <value>執行中與排隊作業獨立於有效租約。限制表示 Broker 准入容量。</value>
+  </data>
+  <data name="browser.owners" xml:space="preserve">
+    <value>擁有者</value>
+  </data>
+  <data name="browser.policy_hint" xml:space="preserve">
+    <value>公司必要 Edge 原則僅計算已設定的驗證 Edge 路由；不代表可連線、驗證成功或健康。</value>
+  </data>
+  <data name="browser.queue_capacity" xml:space="preserve">
+    <value>佇列容量</value>
+  </data>
+  <data name="browser.queued_operations" xml:space="preserve">
+    <value>排隊作業</value>
+  </data>
+  <data name="browser.ready_workers" xml:space="preserve">
+    <value>就緒工作程序</value>
+  </data>
+  <data name="browser.releasing_leases" xml:space="preserve">
+    <value>釋放中租約</value>
+  </data>
+  <data name="browser.retained" xml:space="preserve">
+    <value>保留紀錄</value>
+  </data>
+  <data name="browser.retained_hint" xml:space="preserve">
+    <value>擁有者、租約與工作程序是保留紀錄，不代表全部正在執行。有效租約為待清理、有擁有者且未到期；就緒工作程序是保留狀態，並非程序探測。</value>
+  </data>
+  <data name="browser.routes" xml:space="preserve">
+    <value>預設路由：受管理的隔離 Chrome。公司路由：嚴格要求已設定的驗證 Edge。</value>
+  </data>
+  <data name="browser.scope" xml:space="preserve">
+    <value>唯讀 Broker 診斷。可用僅代表橋接存在，不代表即時連接器健康。</value>
+  </data>
+  <data name="browser.snapshot_unavailable" xml:space="preserve">
+    <value>快照傳輸無法使用；無法確認 Broker 閒置。</value>
+  </data>
+  <data name="browser.stale" xml:space="preserve">
+    <value>存在保留異常</value>
+  </data>
+  <data name="browser.stale_flag" xml:space="preserve">
+    <value>保留異常旗標（stale）</value>
+  </data>
+  <data name="browser.state" xml:space="preserve">
+    <value>保留狀態</value>
+  </data>
+  <data name="browser.title" xml:space="preserve">
+    <value>瀏覽器 Broker</value>
+  </data>
+  <data name="browser.unavailable" xml:space="preserve">
+    <value>無法使用</value>
+  </data>
+  <data name="browser.unowned_leases" xml:space="preserve">
+    <value>無擁有者租約</value>
+  </data>
+  <data name="browser.workers" xml:space="preserve">
+    <value>工作程序</value>
+  </data>
   <data name="common.cancel" xml:space="preserve">
     <value>取消</value>
   </data>

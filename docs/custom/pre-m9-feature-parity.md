@@ -272,6 +272,15 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > See [P8 Browser Broker Phase A contract](pre-m9-browser-broker-roundtable.md).
 
 
+> P8 Phase B source checkpoint (2026-10-08): read-only Browser navigation,
+> contract-gated manual snapshot UI, safe status/count labels and three locales
+> are implemented. Focused tests 15/15 and typecheck pass; global i18n check
+> remains blocked by existing unrelated hard-coded text. Native GUI / installed
+> Next UAT, live browser health and P6/P7 native acceptance remain pending;
+> live Nexus remains deferred. Overrides and cleanup are future inventory only.
+> See [Phase B source checkpoint](pre-m9-browser-broker-roundtable.md#phase-b-offline-shared-ui-source-checkpoint-2026-10-08).
+
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：

@@ -1,3 +1,4 @@
+import * as BrowserService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/browserservice'
 import * as ConnectionService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/connectionservice'
 import * as NexusService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/nexusservice'
 import * as BasicSettingsService from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/basicsettingsservice'
@@ -348,6 +349,7 @@ async function nexusMutation(call: () => Promise<NexusMutationResult> & { cancel
 }
 
 export const desktopApi = {
+  browserSnapshot: () => BrowserService.Snapshot(),
   nexusSnapshot: () => nexusCall(() => NexusService.Snapshot(), 10_000),
   nexusPair: (request: NexusPairRequest) => nexusMutation(() => NexusService.Pair(request)),
   nexusReconcile: (generation: string) => nexusMutation(() => NexusService.Reconcile(generation)),

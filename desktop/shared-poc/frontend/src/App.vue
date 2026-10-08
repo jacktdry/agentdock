@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrowserPanel from './components/browser/BrowserPanel.vue'
 import PermissionPanel from './components/permission/PermissionPanel.vue'
 import ACPPanel from './components/acp/ACPPanel.vue'
 import MCPPanel from './components/mcp/MCPPanel.vue'
@@ -71,6 +72,7 @@ function openPlugin(name: string) {
         <ExecutionCenterPanel v-else-if="section === 'execution'" />
         <ConnectionWorkspace v-else-if="section === 'connection'" />
         <ACPPanel v-else-if="section === 'acp'" />
+        <BrowserPanel v-else-if="section === 'browser'" />
         <MCPPanel v-else-if="section === 'mcp'" @manage-plugin="openPlugin" />
         <PluginPanel v-else-if="section === 'plugin'" :focus-name="pluginTarget" @open-mcp="navigate('mcp')" />
         <PermissionPanel v-else-if="section === 'permission'" />

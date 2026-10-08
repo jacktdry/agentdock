@@ -3,8 +3,9 @@
 Checkpoint: 2026-10-08, source development from `32822bcd` on
 `feature/m8-permission-approval`. This contract narrows the future P8 inventory
 in [feature parity §P8](pre-m9-feature-parity.md#p8--browser-broker-shared-ui).
-Phase A establishes passive Core-to-Desktop observation only. Shared UI,
-connector health, route overrides and recovery controls are not implemented.
+Phase A establishes passive Core-to-Desktop observation only. Phase B adds the
+read-only Shared UI described below; connector health, route overrides and
+recovery controls are not implemented.
 
 ## UX and security decisions
 
@@ -52,7 +53,7 @@ errors and does not cache successful snapshots.
 `DomainBrowser` v1 advertises only read access to `snapshot`. This is service
 capability metadata, not proof that the selected Core or broker is available.
 Wails registers the typed service; generated bindings are the only frontend
-changes in Phase A. There is no Shared UI screen or navigation change.
+changes in Phase A. Phase A made no Shared UI screen or navigation change; Phase B adds these below.
 
 ## Snapshot meanings
 
@@ -99,8 +100,42 @@ target warning occurred during the Shared test. Initial independent review
 identified credential-to-unverified-TCP risks; the Desktop transport was changed
 to existing verified Unix control and no longer handles Core bearer credentials.
 Whole-repository test suites were not completed; native GUI or installed Core
-UAT and live connector tests are not asserted. P6 GUI, P7 GUI, P8 UI and M9 remain
-**pending**. Future P8 UI must retain
+UAT and live connector tests are not asserted. At the Phase A checkpoint, P6 GUI, P7 GUI, P8 UI and M9 remained
+**pending**. The P8 UI must retain
 the distinctions above, show observation time, avoid stale-as-live labels and add
 neither company bypass nor external-process cleanup. Live Nexus UAT remains
 deferred under the existing user direction and does not block this source phase.
+
+## Phase B offline Shared UI source checkpoint (2026-10-08)
+
+From clean `eafc7b5f`, the Browser primary navigation section, read-only
+`BrowserPanel` / `BrowserSnapshotDetails`, and Pinia browser store are implemented.
+Snapshot is called only on mount or manual refresh after negotiated
+`DomainBrowser.snapshot` capability. Failed negotiation, transport errors and
+Core unavailability clear previous observations and counters; no zero-count idle
+claim is made. Errors render fixed i18n labels only. No polling or mutations exist.
+
+The semantic headings and definition lists distinguish bridge availability,
+disabled features, idle/retained/stale state, UTC observation time, retained record
+counts, active leases, queue admission and overlapping anomalies. Company Edge
+counts describe configured authenticated route intent only. Responsive styling
+supports narrow screens; native keyboard/GUI verification has not been performed.
+English, Traditional Chinese and Simplified Chinese YAML sources were added and
+catalogs generated with `go run ./tools/i18n generate` (11 artifacts).
+
+Independent Gemini UI/security review: **PASS**, with no BLOCKER/HIGH after
+hiding counter grids for disabled/unavailable broker states. A stable live-region
+announces loading/status; optional future work includes canceling an in-flight
+read when leaving the page and extracting shared status-grid markup.
+
+Offline validation: focused Vitest browser store and i18n suites **15/15 passed**
+(2 files); `npm run typecheck` **passed**. `go run ./tools/i18n check` **failed**
+on existing hard-coded text in Permission/ACP/Plugin/Connection source/tests;
+no Browser additions remain in its findings. Generated artifact comparison passed
+before the hard-coded-text scan. No broad builds or whole-repository Go tests ran.
+
+This is built UI source, not native acceptance: native GUI / installed Next UAT
+and live browser connector checks are **not done**. P6/P7 native GUI remains
+pending, live Nexus remains deferred, and M9 gates remain unchanged. Stable
+AgentDock, Core 8765 and stable state were untouched. No Next restart,
+installation, deployment, network or live Nexus/browser/CDP call occurred.
