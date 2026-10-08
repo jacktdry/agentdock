@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
@@ -170,22 +172,119 @@ func parseUniqueEdgeListener(raw string, port int) (edgeListener, bool) {
 }
 
 func edgeCommandMatches(cmd string, port int, dataDir string) bool {
-	executable := "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-	trimmed := strings.TrimSpace(cmd)
-	if !strings.HasPrefix(trimmed, executable+" ") {
+	const executable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+	if len(cmd) > 8192 || !utf8.ValidString(cmd) || port < 1 || port > 65535 ||
+		!filepath.IsAbs(dataDir) || filepath.Clean(dataDir) != dataDir {
 		return false
 	}
-	// Do not infer the default data directory from an absent command-line flag.
-	// Having matching args is a precondition, not proof of authenticated profile.
-	matches := remoteDebuggingPortPattern.FindAllStringSubmatch(trimmed, -1)
-	if len(matches) != 1 || matches[0][1] != strconv.Itoa(port) {
+	// ps emits one trailing LF; no other control/format characters or non-ASCII
+	// whitespace are accepted, including inside quoted values.
+	cmd = strings.TrimSuffix(cmd, "\n")
+	for _, r := range cmd {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || (unicode.IsSpace(r) && r != ' ') {
+			return false
+		}
+	}
+	cmd = strings.Trim(cmd, " ")
+	if !strings.HasPrefix(cmd, executable+" ") {
 		return false
 	}
-	if !strings.Contains(trimmed, "--user-data-dir") || !filepath.IsAbs(dataDir) {
-		return false
+	// This is a deliberately narrow ps text grammar, not shell evaluation or
+	// recovery of arbitrary argv. Quotes must enclose a complete value; only
+	// unquoted escaped spaces are supported. Concatenation fails closed.
+	type argument struct {
+		value  string
+		quoted bool // whole-token quote, which cannot establish a flag
 	}
-	extracted := extractUserDataDir(trimmed)
-	return extracted == dataDir
+	var args []argument
+	text := strings.TrimPrefix(cmd, executable)
+	for i := 0; i < len(text); {
+		if text[i] == ' ' {
+			i++
+			continue
+		}
+		var value strings.Builder
+		wholeQuote := false
+		for i < len(text) && text[i] != ' ' {
+			c := text[i]
+			switch c {
+			case '\'', '"':
+				prefix := value.String()
+				if prefix != "" && !strings.HasSuffix(prefix, "=") {
+					return false
+				}
+				wholeQuote = prefix == ""
+				i++
+				for i < len(text) && text[i] != c {
+					if text[i] == '\\' { // shell-dependent quote escapes are ambiguous
+						return false
+					}
+					value.WriteByte(text[i])
+					i++
+				}
+				if i == len(text) {
+					return false
+				}
+				i++
+				if i < len(text) && text[i] != ' ' {
+					return false
+				}
+			case '\\':
+				if i+1 == len(text) || text[i+1] != ' ' {
+					return false
+				}
+				value.WriteByte(' ')
+				i += 2
+			default:
+				value.WriteByte(c)
+				i++
+			}
+		}
+		args = append(args, argument{value.String(), wholeQuote})
+	}
+	seenPort, seenDir := false, false
+	seenOther := make(map[string]bool)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		key, value, equal := strings.Cut(arg.value, "=")
+		if arg.quoted || !strings.HasPrefix(key, "--") || len(key) == 2 {
+			return false
+		}
+		for _, c := range key[2:] {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+		if key != "--remote-debugging-port" && key != "--user-data-dir" {
+			if seenOther[key] || strings.Contains(arg.value, "--remote-debugging-port") || strings.Contains(arg.value, "--user-data-dir") || strings.HasPrefix(value, "-") {
+				return false
+			}
+			seenOther[key] = true
+			continue
+		}
+		if !equal {
+			i++
+			if i == len(args) {
+				return false
+			}
+			value = args[i].value
+		}
+		if value == "" || strings.HasPrefix(value, "-") || strings.Contains(value, "--remote-debugging-port") || strings.Contains(value, "--user-data-dir") {
+			return false
+		}
+		if key == "--remote-debugging-port" {
+			if seenPort || value != strconv.Itoa(port) {
+				return false
+			}
+			seenPort = true
+		} else {
+			if seenDir || value != dataDir || filepath.Clean(value) != value {
+				return false
+			}
+			seenDir = true
+		}
+	}
+	return seenPort && seenDir
 }
 
 // mappedExecutableIsEdge checks the first macOS lsof text mapping rather

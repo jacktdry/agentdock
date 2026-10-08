@@ -652,3 +652,25 @@ qualification or route grant is minted. Actual authenticated runtime identity,
 profile consent, atomic CDP transport binding and native GUI/live UAT remain
 P8 release gates. The signed Edge build on this macOS host passed a separate
 read-only signature check, but that is not live connector qualification.
+
+## Phase C2b-B2e fail-closed Edge command-line grammar (2026-10-09)
+
+`edgeCommandMatches` now parses the macOS `ps -o command=` text using a bounded,
+conservative token grammar instead of matching a port regex anywhere within a
+command and extracting the first `--user-data-dir` substring. It accepts only the
+fixed system Edge executable plus a **single explicit** numeric CDP port and a
+**single canonical absolute** user-data directory (both `--flag=value` and
+`--flag value`); unambiguous whole-value quoting and escaped spaces are supported.
+Duplicate or ambiguous flags, embedded/suffixed lookalikes, malformed quotes,
+noncanonical directory text, control/non-ASCII whitespace, non-UTF-8 data, and
+oversized process strings fail closed. Regression fixtures cover normal argument
+shapes and spoofed/duplicated/hidden flags, and prove rejection occurs before
+mapped-image and on-disk signing work. This parser applies only to the private
+Edge OS preflight, not generic discovery of managed/other-platform browsers.
+
+**Scope boundary:** `ps` text is not a kernel-provided, immutable argv vector;
+even successfully parsed command text is not identity, authentication, signed
+running-code proof, user profile consent, no-focus guarantee, safe release, or
+atomic CDP transport. Production `ConnectorStatusProvider` and
+`externalPeerVerifier` are still `nil`; Edge remains `UNQUALIFIED`, no route
+grant is minted, and no live browser/CDP or installed GUI UAT was performed.

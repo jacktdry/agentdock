@@ -12,6 +12,96 @@ import (
 
 const testEdgeExecutable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
 
+func TestEdgeCommandMatchesConservativeArguments(t *testing.T) {
+	const dir = "/tmp/Edge Profile"
+	for i, args := range []string{
+		`--remote-debugging-port=9222 --user-data-dir="/tmp/Edge Profile"`,
+		`--user-data-dir '/tmp/Edge Profile' --remote-debugging-port 9222`,
+		`--remote-debugging-port="9222" --user-data-dir='/tmp/Edge Profile'`,
+		`--remote-debugging-port '9222' --user-data-dir /tmp/Edge\ Profile`,
+		`--no-first-run --remote-debugging-port 9222 --user-data-dir=/tmp/Edge\ Profile --lang=en`,
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if !edgeCommandMatches("  "+testEdgeExecutable+"  "+args+" \n", 9222, dir) {
+				t.Fatal("unambiguous explicit port/profile fixture rejected")
+			}
+		})
+	}
+}
+
+func TestEdgeCommandMatchesRejectsSpoofedOrAmbiguousArguments(t *testing.T) {
+	const valid = `--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture`
+	for i, args := range []string{
+		`--x--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port-suffix=9222 --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222suffix --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=09222 --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9223 --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --x--user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir-suffix=/tmp/edge-fixture`,
+		`"--remote-debugging-port=9222" --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 '--user-data-dir=/tmp/edge-fixture'`,
+		`--note="--remote-debugging-port=9222" --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --note='--user-data-dir=/tmp/edge-fixture'`,
+		`--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture-suffix`,
+		`--remote-debugging-port=9222 --user-data-dir=/tmp/../tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir=tmp/edge-fixture`,
+		`--remote-debugging-port --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir`,
+		`--remote-debugging-port=9222 --user-data-dir=`,
+		`--remote-debugging-port=9222 --user-data-dir=""`,
+		`--remote-debugging-port=9222 --user-data-dir='--hidden'`,
+		`--remote-debugging-port="9222 --hidden" --user-data-dir=/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir='/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir="/tmp/edge-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir=/tmp/edge-'fixture'`,
+		`--remote-debugging-port=9222 --user-data-dir='/tmp/edge-'fixture`,
+		`--remote-debugging-port=9222 --user-data-dir=/tmp/edge\-fixture`,
+		`--remote-debugging-port=9222 --user-data-dir="/tmp/edge\ fixture"`,
+		`--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture\`,
+		valid + ` --remote-debugging-port=9222`,
+		valid + ` --remote-debugging-port 9223`,
+		valid + ` --user-data-dir=/tmp/edge-fixture`,
+		valid + ` --user-data-dir /tmp/other`,
+		valid + ` --note="text --remote-debugging-port=9223"`,
+		valid + ` --note='text --user-data-dir=/tmp/other'`,
+		valid + ` -- --user-data-dir=/tmp/other`,
+		valid + ` --note --remote-debugging-port=9222`,
+		valid + ` --note=--hidden`,
+		valid + ` --lang=en --lang=zh`,
+		valid + "\t--hidden", valid + "\x00", valid + "\r", valid + "\n\n",
+		valid + "\n--hidden", valid + "\x7f", valid + "\u200b--hidden",
+		valid + "\u00a0--hidden", valid + "\xff",
+		valid + strings.Repeat(" ", 8193),
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// Invalid text must stop before image/signer work and expose no evidence.
+			f := edgeFixture()
+			f.commandsRaw[0] = testEdgeExecutable + " " + args
+			e, err := readEdgeProcessPreflight(context.Background(),
+				"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
+			if !errors.Is(err, errEdgeProcessUnqualified) || e != (edgeProcessPreflight{}) || f.imageCalls != 0 || f.signatureCalls != 0 {
+				t.Fatal("ambiguous argv advanced preflight or exposed evidence")
+			}
+		})
+	}
+	for _, cmd := range []string{testEdgeExecutable + "-helper " + valid, `"` + testEdgeExecutable + `" ` + valid, "\n" + testEdgeExecutable + " " + valid} {
+		if edgeCommandMatches(cmd, 9222, "/tmp/edge-fixture") {
+			t.Fatal("non-fixed executable accepted")
+		}
+	}
+	for _, dir := range []string{"", "relative", "/tmp/../tmp/edge-fixture"} {
+		if edgeCommandMatches(testEdgeExecutable+" "+valid, 9222, dir) {
+			t.Fatal("noncanonical expected path accepted")
+		}
+	}
+	for _, port := range []int{0, -1, 65536} {
+		if edgeCommandMatches(testEdgeExecutable+" "+valid, port, "/tmp/edge-fixture") {
+			t.Fatal("invalid expected port accepted")
+		}
+	}
+}
+
 type fakeEdgeProcessProbe struct {
 	listenerCalls  int
 	commandCalls   int

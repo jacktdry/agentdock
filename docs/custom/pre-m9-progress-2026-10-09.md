@@ -43,3 +43,9 @@
 - 在 B2c 的唯讀 `lsof`／`ps`／映像路徑與二次 PID/epoch/argv 複驗間加入 Microsoft Edge 本機磁碟簽章前置檢查，限制 Apple generic chain、Team ID `UBF8T346G9` 與 `com.microsoft.edgemac`，同一 2 秒 deadline；未觸碰 Edge tabs/登入/CDP。`--deep` 在現有安裝 Edge 約 4 秒，故改為嚴格驗證 App 簽章及執行檔（各約 0.2 秒），**不視作巢狀 framework 信任或實際執行中二進位身分證明**。
 - 既有 macOS localhost `httptest` 有間歇性逾時：初次完整 Browser suite 5 例逾時，重新執行整套 PASS；新 Edge focused + race、go vet、Linux/Windows crossbuild PASS。此異常需後續追蹤，不視為已根治。
 - **尚未安裝／部署**，正式 runtime provider/peer verifier 維持 nil，Edge `UNQUALIFIED`，仍需 PID/簽章/已登入 Profile /no-focus/安全釋放及原子 CDP transport 綁定，且尚未執行 native GUI UAT。
+
+## 2026-10-09 B2e Edge 參數解析防混淆（Next source-only）
+
+- 接續 `eecb41d8`：將 Edge macOS `ps` 命令列驗證改為嚴格邊界解析，限定固定 Edge executable、唯一 `--remote-debugging-port` 和 `--user-data-dir`，接受明確的空白／引號格式，拒絕重複、混淆、控制字元、過長或非 canonical 路徑。只改私人 Edge OS preflight，不變更通用 CDP discovery。
+- 新增正常與惡意 fixture，特別驗證拒絕發生在 image/signature 查驗之前。未修改 stable、AGY-ACP、Next runtime，未部署、未呼叫 Edge/CDP；`NewRoutePlanner(..., nil)` 與 `UNQUALIFIED` gate 持續有效。
+- 本機偶有高負載與短時 localhost 測試逾時，對照實際測試紀錄評估，不將負載猜測當成已證實原因；避免多個 Go test/vet 並行編譯。
