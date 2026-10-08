@@ -5,6 +5,14 @@
 > Next repo: /Users/wei/sideProject/agentdock-m8-permission-approval；工作分支 feature/m8-permission-approval。
 > ACP 將在獨立開發分支實作；以下規格只代表合約提案，是否實作以後續 ACP commit、測試結果為準。
 
+## ACP .14 跨事件驗證與 Fail-Closed 修正（2026-10-09）
+
+- **ACP 最新原始碼候選版 `1.2.0-agentdock.14`**；`/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`87cff1e`**，功能修正 **`9381b04`**；尚未推送、部署。原版／Next 已安裝 ACP 仍為 `.8`。
+- 修正先前 .13 的安全缺口：文字已向 ACP Client 確認送出後，若 SQLite 對應資料列遭刪除、status 由完成回退、同一 Step ID 重複，或文字改寫，先在 `StreamPoller.poll()` **和下次 reserveExternalText 前**檢查全量已確認列，一旦不一致立即 fail-closed，不能自動重播。驗證採 O(DB rows + acknowledged step count) 索引，避免多列時反覆巢狀掃描。
+- `StreamDirectLedger` 同步改為已 ACK 的資料列消失或回退非完成狀態 → `POST_COMMIT_DIVERGENCE`，`safeToRetry=false`。跨事件模擬涵蓋多段 UTF-8、部分送達／遠端 ACK 不明、取消競態、工具事件不直接輸出、上游 ERROR、完成前 DB 尚未落地、Session 恢復時僅發送新回合、歷史 Replay 與雙 Ledger 狀態。
+- ACP 整合測試 **456 pass／0 fail（43 files）**，TypeScript、Lint（既有非阻擋提示）及 macOS arm64 build PASS。研究詳見 `docs/research/stream-direct-admission.md` 與 `tests/agy/stream-cross-event-recovery.test.ts`。
+- **仍沒有 `AGY_ACP_STREAM_JSON=direct`，未接到正式 `Adapter.runPrompt`。** 本次只用合成／SQLite 測試，不進行真實 AGY `-p`／OAuth。直接輸出仍需要 Next Core 與 ACP 一起證明真實事件 parity、訊息無法撤回時的恢復策略、工具/圖片/Session/Keychain 結合驗收；Hook/M8 IPC 仍待 Next 整合。不可將這份離線測試當正式部署授權。
+
 ## ACP .13 共用文字輸出游標 checkpoint（2026-10-09）
 
 - ACP 原始碼候選版 **`1.2.0-agentdock.13`**；工作樹 `/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`5c49037`**，核心 Commit **`37f53dc`**。本機未推送、未部署；Stable 與 Next 安裝版均維持 `.8`。
