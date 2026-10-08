@@ -13,7 +13,14 @@ cd "$ROOT_DIR"
 [[ ! -L "$ROOT_DIR/dist" ]] || exit 1
 mkdir -p "$ROOT_DIR/dist"
 BUILD_DIR="$(mktemp -d "$ROOT_DIR/dist/next-shared-arm64.XXXXXX")"
-export GOCACHE="$BUILD_DIR/go-cache"
+# Go caches compilation by input/compiler content. Keep it strictly repo-local
+# and Next-only so every signed bundle still builds from current sources.
+NEXT_GO_CACHE="$ROOT_DIR/dist/next-go-build-cache"
+[[ ! -L "$NEXT_GO_CACHE" ]] || { print -u2 -- "Refusing a symlinked Next Go cache"; exit 1; }
+mkdir -p -m 700 "$NEXT_GO_CACHE"
+[[ -d "$NEXT_GO_CACHE" && -O "$NEXT_GO_CACHE" && ! -L "$NEXT_GO_CACHE" ]] || exit 1
+chmod 700 "$NEXT_GO_CACHE"
+export GOCACHE="$NEXT_GO_CACHE"
 export TMPDIR="$BUILD_DIR/tmp"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/clang-cache"
 export SWIFT_MODULECACHE_PATH="$BUILD_DIR/swift-cache"

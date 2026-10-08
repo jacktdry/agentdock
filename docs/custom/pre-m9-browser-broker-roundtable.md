@@ -556,3 +556,33 @@ No Edge/browser/CDP operation, installed App build, deployment or restart was
 performed. C2b/P8/M9 remain open.
 
 Mac-Dev host validation (Go on macOS): `go test ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=120s`, focused `go test -race ./internal/tool/browser -run 'Test(ExternalAdmission|ExternalCallQuarantines|ExternalLeasePeer|ExternalLeaseOperations|ExternalAcquire|Planner)' -count=1 -timeout=120s`, `go vet ./internal/tool/browser ./internal/browserpolicy`, and `git diff --check` all **PASS**. `go test -tags browser_integration -run '^$' ./internal/tool/browser` **compiled**, with zero real browser integration tests executed. These are offline mock/contract tests, not a real authenticated Edge, foreground-focus, process identity or transport-fencing UAT.
+
+## Next-only installed build and registrar recovery evidence (2026-10-09)
+
+Source HEAD `539c68ac` (includes C2b-A/B1/B2a/B2b) was built as ad-hoc
+signed `AgentDock Next.app`, verified by package checks (8/8), installed
+at `~/Applications/AgentDock Next.app` using the repository's Next-only
+atomic Contents installer, and activated using the **bundle-local Next
+`AgentDockServiceRegistrar reregister core`**. The core's installed SHA-256
+matched the built source and its dedicated `127.0.0.1:8767/healthz` returned
+HTTP 200 from new PID `44161`. The Next-only Tunnel was re-registered
+(label `dev.dropabit.agentdock.next.tunnel`, PID `44594`), and the GUI
+was quit/relaunched in the background (PID `44873`).
+
+Important rollback lesson: a bare `launchctl kickstart -k` after an
+ad-hoc-signed Contents swap failed with macOS Launch Constraint Violation
+(`78: EX_CONFIG`); restoring old Contents alone did not refresh the
+SMAppService signing identity. Re-registering **Next** Core via the
+shipped Registrar restored it; after that, the verified new Contents and
+proper re-registration succeeded. The previous Next Contents rollback
+artifact remains in a private Next-specific backup. The safe repeatable
+helper `packaging/macos/deploy-next-shared.py` and corresponding offline
+tests were added; the helper itself has not yet been used for live native
+UAT. See `docs/custom/agentdock-next-isolation.md`.
+
+**This does not complete P8 GUI or real Edge acceptance.** Source route
+provider remains nil, Edge remains unqualified, no real CDP/Edge/browser
+operation or visual WebView inspection was performed, and native keyboard
+UAT remains pending. Original AgentDock and AGY-ACP were unaffected;
+Nexus live UAT remains deferred and M9 release signed/update gates remain
+open.

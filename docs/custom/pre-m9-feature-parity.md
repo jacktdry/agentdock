@@ -371,6 +371,18 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > remains open. Stable AgentDock, runtime, and AGY-ACP are untouched.
 > See [C2b-B2b checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2b-post-operation-peer-consistency-checkpoint-2026-10-09).
 
+> **2026-10-09 Next-only installed source smoke:** arm64 ad-hoc Shared Desktop,
+> Core, ZIP/DMG and package validation passed; deployed with isolated Next
+> Contents swap and bundled Next `AgentDockServiceRegistrar` re-registration.
+> New Next Core 8767 HTTP 200, Tunnel launchd job running, GUI process
+> restarted in background; previous Next Contents backup retained. An
+> initial bare launchctl kickstart failed due stale macOS Launch Constraint,
+> recovered by Next-only Registrar (see
+> [isolation UAT](agentdock-next-isolation.md#2026-10-09-next-only-shared-desktop-installed-build--rollback-uat)).
+> Browser/Policy/Desktop API/Desktop Runtime Go tests and vet passed. **No
+> native visual GUI or authenticated Edge UAT**: P6/P7/P8 and M9 gates stay
+> open. Live Nexus remains deferred.
+
 **不要 1:1 搬回舊 Browser CDP 設定。**
 
 舊的 managed / reuse existing CDP / specified CDP URL 已由 M6 Browser Broker 架構取代。Shared UI 應重新設計為：
