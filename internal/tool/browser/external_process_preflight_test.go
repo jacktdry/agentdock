@@ -103,6 +103,8 @@ func TestEdgeCommandMatchesRejectsSpoofedOrAmbiguousArguments(t *testing.T) {
 }
 
 type fakeEdgeProcessProbe struct {
+	profileCalls       int
+	onProfile          func(context.Context, string, int) (edgeProfileMetadata, error)
 	listenerCalls      int
 	commandCalls       int
 	startCalls         int
@@ -119,6 +121,15 @@ type fakeEdgeProcessProbe struct {
 	imagesRaw          []string
 	err                error
 	cancel             context.CancelFunc
+}
+
+func (f *fakeEdgeProcessProbe) profileMetadata(ctx context.Context, dir string) (edgeProfileMetadata, error) {
+	i := f.profileCalls
+	f.profileCalls++
+	if f.onProfile != nil {
+		return f.onProfile(ctx, dir, i)
+	}
+	return profileFixtureMetadata(ctx, dir)
 }
 
 func (f *fakeEdgeProcessProbe) listeners(ctx context.Context, _ int) (string, error) {
@@ -225,7 +236,7 @@ func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
 		p.executable != testEdgeExecutable || time.Since(p.observedAt) > time.Second {
 		t.Fatal("read-only process preflight lost source identity")
 	}
-	if f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 || f.signatureCalls != 1 || f.liveSignatureCalls != 1 {
+	if f.profileCalls != 2 || f.listenerCalls != 2 || f.startCalls != 2 || f.commandCalls != 2 || f.imageCalls != 2 || f.signatureCalls != 1 || f.liveSignatureCalls != 1 {
 		t.Fatal("did not recheck process evidence after observation")
 	}
 }

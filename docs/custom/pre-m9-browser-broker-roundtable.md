@@ -700,3 +700,29 @@ release guarantee. Runtime provider/peer verifier remain nil, Edge remains
 **UNQUALIFIED**, and no grants are minted. No Edge discovery, CDP, tabs, profile,
 service, install or deployment action occurred. Native negative fixtures query
 only this Go test process, never the user's Edge. P8/C2b/M9 remain open.
+
+## Phase C2b-B2g bounded profile-directory metadata prerequisite (2026-10-09)
+
+Source-only, based on `23fa0dd1`: private `edgeProcessProbe.profileMetadata`
+now brackets all process/signing evidence. macOS uses `os.Lstat` only on the
+canonical absolute ancestor chain (max 32 components / 4096 path bytes), with
+forward/reverse observations per check. Every component must be a real directory,
+owned by root or the current uid, with nonzero device/inode and without group/other write permission; the leaf
+must belong to the current uid. Symlinks, unsafe modes (including sticky writable
+ancestors), missing/non-directory paths, observed owner/mode/device/inode changes,
+errors and cancellation yield opaque unqualified error and zero evidence.
+No directory enumeration or profile contents are opened/read/written.
+
+This conservative policy rejects paths through sticky `/tmp` or symlink aliases.
+Success and race tests use injected metadata; native negatives use only `t.TempDir`.
+Observed replacements within a sweep or across signer/process evidence reject;
+Lstat is not an atomic fence and cannot exclude unobserved ABA swaps. Filesystem
+syscalls cannot be interrupted mid-call; context is checked before/after each.
+Physical identity is only a prerequisite, not profile authentication or consent.
+Provider/peer verifier remain nil, Edge UNQUALIFIED; no grants, actual Edge/CDP,
+login/tab inspection, install/deployment, stable or AGY ACP changes occurred.
+
+Validation: `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run
+'Test(Edge|UniqueEdge|MacEdgeProfile)' -count=1 -timeout=120s` PASS;
+sequential `CGO_ENABLED=0 go test -p 2 -c ./internal/tool/browser` cross-builds
+for linux/amd64, windows/amd64 and darwin/arm64 PASS. Native focused tests include macOS cgo. Additional independent full Browser/BrowserPolicy suite, targeted Race Detector and go vet all PASS (bounded GOMAXPROCS=2); no native browser UAT was run.

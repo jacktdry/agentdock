@@ -42,6 +42,7 @@ type edgeProcessProbe interface {
 	// liveSignature independently checks dynamic code for the observed PID.
 	// It is not authentication or a transport-bound peer attestation.
 	liveSignature(context.Context, int) error
+	profileMetadata(context.Context, string) (edgeProfileMetadata, error)
 }
 
 type edgeListener struct {
@@ -52,7 +53,8 @@ type edgeListener struct {
 var errEdgeProcessUnqualified = errors.New("external Edge process identity unqualified")
 
 // readEdgeProcessPreflight never probes CDP, browser tabs, login state, or the
-// user's profile on disk. All raw OS evidence stays package-private.
+// profile contents. Only bounded directory metadata is inspected; all raw
+// OS evidence stays package-private.
 func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDataDir string, probe edgeProcessProbe) (edgeProcessPreflight, error) {
 	fail := func() (edgeProcessPreflight, error) {
 		return edgeProcessPreflight{}, errEdgeProcessUnqualified
@@ -79,6 +81,10 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	profile, err := probe.profileMetadata(probeCtx, expectedDataDir)
+	if err != nil || !profile.valid() || probeCtx.Err() != nil {
+		return fail()
+	}
 	firstRaw, err := probe.listeners(probeCtx, port)
 	if err != nil || probeCtx.Err() != nil {
 		return fail()
@@ -130,6 +136,10 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	}
 	endArgs, err := probe.command(probeCtx, first.pid)
 	if err != nil || endArgs != args || probeCtx.Err() != nil {
+		return fail()
+	}
+	endProfile, err := probe.profileMetadata(probeCtx, expectedDataDir)
+	if err != nil || !endProfile.valid() || endProfile != profile || probeCtx.Err() != nil {
 		return fail()
 	}
 	return edgeProcessPreflight{
