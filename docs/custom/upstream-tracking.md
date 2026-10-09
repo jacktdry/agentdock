@@ -17,6 +17,8 @@ workbench
 
 `upstream` 是唯一 runtime upstream；`workbench` 是 feature radar。
 
+> **2026-10-09 Next 專案決策補充**：第 2 節記載的是歷史上的定期同步程序，**現在不再以追趕 upstream 版本或自動 merge 為開發目標**。本階段僅針對已確認的 upstream release/PR 做一次性差異盤點、明確採用清單與選擇性重作；未經新的合併決策不執行 `upstream/main → custom/main`，不因官方新版本而打斷 Pre-M9/M9。`main` 保留官方相容基準與既有 branch 治理，但不是這一輪的變更目標。
+
 ## 2. AgentDock 更新流程
 
 每次官方更新：

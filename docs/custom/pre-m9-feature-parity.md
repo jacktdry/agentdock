@@ -444,6 +444,16 @@ Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external
 
 保留真正需要 native 的 platform adapters，例如 OS permissions、credential store、startup/elevation、installer/updater/signing integration。
 
+### P13 — MCP Task Progress 單一卡片（上游 PR #229，獨立非阻塞 UX）
+
+**規劃採用，尚未實作或部署**。此編號只作 Next 非阻塞採用項目索引，不新增 M9 hard gate，也不改動現有 P12 native UI deprecation 定義。詳細技術規格及 T01–T08 驗收見 [PR #229 Task live card](upstream-ports/task-progress-live-card-pr229.md)。
+
+- `task_create` 負責建立一個持久 Task，ChatGPT 聊天模式僅掛載**一張** Task Progress MCP App；使用者後續要求「繼續」且確實屬於同一工作時，沿用 `task_id`，不得為了顯示進度重複建立新 Task。
+- `task_manage checkpoint/block/resume/final_review/complete` 更新權威 Task State，不掛載第二張 Task 卡；既有 `task_manage action=create` 應保留向後相容且也只掛一張卡。不同 Task ID 各保留自己的卡片，**不得**合併無關任務。
+- 已存在的卡片以 app-only `task_snapshot(task_id)` 取得最小化唯讀摘要；active/blocked 分別約 2/10 秒更新，hidden/teardown/completed 停止輪詢，失聯時 truthful stale/retry，具多卡 bounded QPS、並發限制及 Core scope/authorization。
+- 需驗證 ChatGPT MCP App bridge、full/compact/off metadata、連線及舊 plugin registration cache 的更新路徑；只跑 Go tests 不代表聊天畫面的原卡片確實原地更新。
+- 隔離於 Browser Broker B2i/B2j/B2k、AGY .14、自動更新／M9 release 工作；不修改 stable connector 或已部署的 Next，於獨立 worktree 實作並由 `$mac-dev` 控制驗證。
+
 ## Current parity matrix
 
 | Domain / 功能 | Stable native | Next backend | Shared UI | 決策 |

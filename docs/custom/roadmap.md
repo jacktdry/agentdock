@@ -438,6 +438,21 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 並行策略：Pre-M9 採 wave-based execution。Wave 0 的 parity inventory / UX-IA / Security UX / architecture mapping 可平行；Wave 1 的 port ownership、Connection/Auth API、Tunnel backend 可平行但需 contract freeze 後才做 UI；P1/P2、connector 建立與 P3 side-by-side validation 均已完成。Wave 3 的 ACP 與 MCP domain 均已 closeout；現在依 **Plugin → Nexus / Platform Essentials → Browser Broker** 的順序接續，各 domain 先做 AI UX/IA roundtable，再以獨立 worktree 推進，active writing workers 以 3–4 個為上限；`app-identity.sh` debt / CBM lifecycle triage 可走 side lane。所有 repo/build/install/live mutation 仍由 stable `mac-dev` orchestrate。M9 只能在必要 parity + hardening integration review 完成後啟動；release candidate 凍結後 macOS/Windows/WSL/Linux helper native UAT 才按平台平行。完整 gate / worktree / integration ownership 見 [Pre-M9 parallel execution plan](pre-m9-feature-parity.md#parallel-execution-plan)。
 
+## 上游 v1.0.1／PR #229 選擇性採用（2026-10-09，已定案為待開發清單）
+
+**不直接 merge 上游**。依 [v0.9.1→v1.0.1 採用矩陣](upstream-v101-adoption-plan.md) 和 [PR #229 規格](upstream-ports/task-progress-live-card-pr229.md) 逐項實作、測試；「採用」表示排入 Next 開發清單，**不表示已移植／已部署**。此前來源版本的正式 tag 必須以 upstream 遠端 SHA 核對，不能把本機同名 tag 當比較基準。
+
+| 對照來源 | Next 採用決策／必要修改 | 安排階段與完成 Gate |
+| --- | --- | --- |
+| v1.0.0/v1.0.1 immutable Release source／簽章驗證／artifact gate | **採用／按 Next 重做**：`custom/main` release source、Next tag/buildinfo、更新通道、Developer ID/Windows installer 信任與制品 provenance | **M9 P10**：版號、來源 commit、安裝／執行／更新狀態一致，正式 RC artifacts 驗證 |
+| v1.0.1 updater／Windows active generation recovery／service lifecycle | **採用故障模式與測試**，不覆寫既有 Arbiter／Shared UI；拒絕 stale journal 錯誤回滾、恢復不應改變 stable | **M9 P11**：下載/安裝/中斷/試用/失敗 rollback、macOS/Windows/WSL/Linux 原生證據 |
+| v1.0.0 cloudflared Component Store/Catalog/atomic active pointer | **採用設計、延後程式移植**：可信元件來源、驗證、原子版本切換、legacy import、Next 簽章／runtime ownership 與 Tunnel 兼容 | **M9 後獨立里程碑**，依 [Component Manager 設計與 Gate](upstream-ports/cloudflared-component-manager.md) |
+| v1.0.0 observability／stage timing | **已具備部分後端**；不重建 recorder，僅補 Execution Center 可用性／隱私 UX | **非阻塞後續 UX**；先比對既有 trace／p95／execution evidence |
+| v1.0.0 原生 macOS/WinUI 重設計 | **只參考流程與易用性**；Next 保留 Wails+Vue Shared UI 與 OS 必要原生 adapters | **P12 後續 UX**；不遷回重複原生業務 UI |
+| **尚未合併的 PR #229** Task Progress 單張即時卡片 | **採用／獨立設計**：`task_create` 建立一張卡、`task_snapshot` 唯讀同 Task ID 更新；`task_manage` checkpoint/final_review/complete 不再新增 Task UI；保留 legacy create 相容 | **非阻塞 UX 支線（P2）**：完成權限/scope/快取/輪詢負載、ChatGPT full/compact/off 真實 UI UAT 才 closeout |
+
+**PR #229 的產品邊界**：目標是「**同一個 Task ID 的多次操作只維持一張會更新的卡片**」，不是把不同任務合併。ChatGPT 使用者連續說「繼續」時，若仍是同一工作，Orchestrator 應沿用原 `task_id`；每次另外 create 新 Task 仍會產生新卡片，PR 無法自行消除。最新採用與等待佇列另見 [剩餘工作 checkpoint](remaining-work-checkpoint-2026-10-09.md)。
+
 ## M9 — Release Migration
 
 建立從 `custom/main` 的正式 cross-platform release pipeline。

@@ -20,6 +20,15 @@ Next 的 `internal/tool/task` 持久化 Task 已存在；`internal/app/specs_tas
 | 上游 `UIVisibility: ["app"]` | **REVIEW SECURITY** | UI metadata 不是服務端 ACL，Task snapshots 仍須經 Core 授權及 scope；不得因標示 app-only 就假定任意連線無法呼叫 |
 | 上游 `task_snapshot` 含 `state_dir` | **OMIT FROM CARD**（若不必要） | 本機絕對路徑對前端無業務價值，可能洩漏 Host 目錄位置；僅傳必要的 task summary |
 
+## ChatGPT 聊天模式產品行為（明確驗收目標）
+
+**本 PR 修正的不是「只准有一個任務」**，而是「一個 persistent Task 的 create/checkpoint/complete 應呈現在同一張更新中的卡片」。建立全新 Task ID 仍有獨立卡片。對同一開發專案接續「繼續」的操作，是否該沿用舊 Task ID 需由 Agent/Orchestrator 的既有任務管理決定；前端輪詢不應偷偷做任務 dedup 或跨 task_id 合併。
+
+1. `task_create`（或 legacy `task_manage action=create`）→ 建立卡片並綁定回傳的 `task_id`。
+2. `task_manage checkpoint/block/resume` → 更新既有 Task State，由舊卡片刷新，**不能額外掛一張卡片**。
+3. `task_manage final_review/complete` → 同一張卡片反映結束狀態，停止輪詢，最終結果留在聊天紀錄。
+4. 錯誤／後端短暫離線／Plugin 仍沿用舊註冊 metadata 時，卡片不得虛構完成進度或要求重建 stable `mac-dev` connector。
+
 ## 安全與操作必要條件
 
 1. **權限與 Session/Workspace 隔離**：不可只依賴猜不到 `task_id`；同一 MCP Core 多連線或 Nexus delegation 下需驗證 Task 讀取範圍；snapshot 只返回顯示需要的截斷欄位，不能讀回敏感 workflow guidance/私密環境或 `state_dir`。

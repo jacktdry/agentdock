@@ -18,6 +18,8 @@
 | Nexus pairing | 使用者要求延後真實配對 | **DEFER**：本次不操作配對、不擴大範圍 |
 | **PR #229（不在 v1.0.1 tag 內，尚未 merge）** Task Progress live-card | Next 仍只有 `task_manage`，MCP Apps 會重複掛 Task UI/新狀態不更新舊卡 | **SELECTIVE ADOPT（P2 排程 / 高價值 UX）**：獨立於 P8 導入，需 snapshot scope/權限、UI 快取與真實 ChatGPT UAT；[`詳見`](upstream-ports/task-progress-live-card-pr229.md) |
 
+**採用執行索引**：正式 Roadmap 採用矩陣位於 [`roadmap.md`](roadmap.md)；此處保留來源、實作與安全 Gate。PR #229 是尚未合併的獨立 PR，不應計入 v1.0.1 tag 的變更。
+
 ## 2. 不可破壞的不變式
 
 1. 舊版 `mac-dev` 是唯一允許 Next repo/build/install/service mutations 的控制連線；`macbook-air-m3`（Next）不得自我更新／重裝。stable App/Core、`~/.agentdock`、port 8765、Memory 8766 都不碰；Next Core 8767、Tunnel/公網域名/OAuth/connector、state/log/registry/launchd labels 不可串線。
