@@ -140,3 +140,55 @@ TEST ONLY decorator 使用既有 fakeLeaseBackend，無 socket、真實 browser 
 主 Session 獨立驗證 PASS：Browser／BrowserPolicy 完整 Go tests、共享原型定點 `-race`、Go vet、Linux／Windows amd64 與 macOS arm64 無 CGO 編譯、gofmt／git diff check。尚未證明實際 Chrome DevTools MCP context／storage isolation、零 debugging popup／focus、owned temp-dir 清理或 crash orphan reconciliation。
 沒有 real npx、Chrome／Edge、remote debug、GUI、app restart、install、deploy／push；未觸碰 AGY repo／stable。
 P8／M9 gates、公司 Edge authority 與指定 Chrome Profile acceptance 仍未結案。
+
+## 8. P8-B real headless proof harness（SOURCE-ONLY；isolated live proof PASS）
+
+基於 `ffd67c08` 新增 `internal/tool/browser/managed_shared_worker_real_test.go`，不修改 production wiring。
+Darwin／Linux 的 `TestManagedSharedRealHeadless` 僅在 `AGENTDOCK_TEST_REAL_MANAGED_CHROME=1` 執行；預設 suite 跳過。
+Supervisor 專用指令（worker 未執行 real test）：
+
+```sh
+rtk proxy env AGENTDOCK_TEST_REAL_MANAGED_CHROME=1 NPM_CONFIG_OFFLINE=true GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestManagedSharedRealHeadless$' -count=1 -v -timeout=170s
+```
+
+測試使用 cached exact `chrome-devtools-mcp@1.7.0`，真實 `NewWorkerRegistry` stdio connection 與 shared adapter，Open 額外加 npm `--offline`。
+保留 managed `--isolated --headless` config，不使用 attach／autoConnect／使用者 Profile、外部 URL、GUI 或 focus action。
+同一 canonical temporary cwd 的 runtime owner 與兩個 fake ACP owners 經 Manager Acquire／Call／Release：檢查唯一 context／page／borrow token、同一實際 connector PID、底層 starts=1、一個 isolated headless Chrome main process；A window value 對 B／C 不可見，18 次交錯讀寫及 owner release 後 sibling 可用。
+`evaluate_script` 嚴格驗證 `isError`、`structuredContent.message` 的 JSON value 與 reconnect flag；不以 text fallback 猜 page identity。
+
+Cleanup 在 startup 前以 `t.Cleanup` 註冊，Fatal 仍執行；先透過 backend owned Stop／registry Shutdown 清理，再 bounded `ps` 檢查 connector process group、已觀測 child identities 與 test-only TMPDIR marker，觀測失敗或殘留均 fail。
+主操作 context 100 秒、cleanup context 45 秒，terminal hard cap 170 秒；外部強制中止／Go timeout panic 不保證執行 cleanup，supervisor 應保存測試 PID log 與唯一 temporary profile path，僅以這些 owned identities 查核殘留，不得 broad kill Chrome／Node／npx 或其他 session MCP。
+TMPDIR 僅改測試程序環境，HOME 不變；test-owned temporary files 由 `t.TempDir` cleanup 回收。程序快照非原子，不能證明任意逃逸／未觀測 descendants 或 crash reconciliation。
+
+可能 blocker：offline npm cache 不完整、Node／Chrome 不可用、MCP handshake/schema 不合 1.7.0、實際 pages／isolatedContext 或 evaluate structured message 不符契約、page targeting 串頁、close_page failure、owned shutdown failure、ps 權限／程序殘留。不得以安裝、升版、切 profile 或 attach workaround 自動修復。
+此 harness 初次撰寫時只有未啟用選擇的編譯／skip 驗證；後續 supervisor 已在 managed isolated headless Chrome 執行並通過，最終證據見本節末尾。使用者真實工作時的零提示、零搶焦點與完整 native UAT 仍 pending。
+
+### P8-B keeper 修正（歷史失敗與修正）
+
+Supervisor 回報首次 real opt-in：MCP PID `79761`、Chrome main=1、三個 owners 的 ownership／isolation 與 18+ 交錯操作通過；僅最後 owner2 Release 因 `close_page` 回報 ACTION_FAILED。失敗後 cleanup 確認 owned MCP／Chrome processes gone。
+這是 shared pool cleanup invariant 缺口；本機 cached exact 1.7.0 `McpContext.js:215-217` 確認 `closePage` 在 `#mcpPages.size === 1` 拋出 `CLOSE_PAGE_ERROR`。
+
+Shared adapter 在底層 StartManaged 成功後、關閉 startDone／發布任何 borrow 前，建立一次 pool-owned `about:blank` background page，context 為 `agentdock-pool-keeper-` + random token。
+驗證 MCP isError 與 isolatedPageID；keeper startup／解析／取消失敗會 poison 並封閉 generation，由既有 finalizer 等 startup 完成後停止該 owned worker一次，不發布 borrow，也不猜測 page cleanup。
+keeper page ID 不可回傳為 lease page；借用仍只能操作自己的已確認 page。Keeper 不逐頁 close，idle 時保留，terminal owned worker Stop 才完整清理。
+Fake backend 新增 1.7.0 last-page guard，測試涵蓋 keeper 建立一次、borrower 無法 close keeper、final release 僅剩 keeper、terminal Stop 清理、keeper call／malformed／isError startup failure 與 borrower page ID collision fail closed。
+
+Worker 本次僅執行 `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestManagedShared' -count=1 -timeout=120s`（明確移除 real opt-in env，加 `-v` 保存 skip 證據）：**PASS（0.553s）；合成案例全數通過，real test 明確 SKIP**。gofmt 與 git diff --check 通過。
+此歷史 checkpoint 的 keeper-only 第一次 rerun 仍失敗；最終由下一段 selected-page guard 解決，見本節末尾驗證。未啟動 npx／Chrome／Edge，未 commit／push／deploy，也未修改 production wiring。
+
+### P8-B selected-page cleanup guard（real rerun PASS）
+
+Supervisor 在 keeper 修正後再次 real rerun：三 owners／一個 headless Chrome／18+ evaluates 通過；close_page 3、4 成功，最後 pageId=5 實際已關閉，但 response 與 retry 均 isError，訊息為 `The selected page has been closed. Call list_pages to see open pages.`；owned processes cleanup 通過。因此 keeper-only 並未結案，last-page guard 不能解釋這次失敗。
+Shared adapter 的 primary close 與 Stop fallback 均在既有 gate 內，先檢查 owned keeper != target，再以 internal `select_page`／`bringToFront:false` 選 keeper，驗證 isError 後才 close owner page；backend Call 期間不持有 adapter mu。
+Selection failure 保留已知 owner page、poison generation 並回報錯誤，禁止 close 與新借用；仍由 terminal owned Shutdown 清理。Caller 無法呼叫 select_page，也無法取得／關閉 keeper。
+WorkerRegistry 原有 select_page 禁令維持；僅 opt-in real test backend wrapper 在核對 owned worker/PID 後，透過該 owned StdioSession 執行 selection 並驗證實際工具 input schema。未加入 production ACPBridge wiring，不能直接視為 production backend 已支援共享 selection。
+Fake tests 驗證 primary／Stop fallback 每次 close 前均選 owned keeper、bringToFront=false、正確 underlying worker，且 selection transport／isError failure 不派送 close、不掩蓋 cleanup error。Real close_page 受限診斷 logging 保留（只記錄測試自建分頁 ID／結果，不輸出使用者資料）；supervisor rerun 最終 PASS。
+本次 focused `^TestManagedShared` selection（移除 real opt-in env，`GOMAXPROCS=2`／`-p 2`／`-count=1`／`-timeout=120s`）**PASS（0.554s）**；real test 明確 SKIP。gofmt 與 git diff --check 通過；未啟動 npx／Chrome／Edge，未 commit／deploy。
+
+### 2026-10-10 主 Session 實機隔離驗證結論（P8-B source checkpoint）
+
+- **真實 MCP 1.7.0 + 一個 AgentDock-owned 隔離 Headless Chrome 驗證 PASS**：`AGENTDOCK_TEST_REAL_MANAGED_CHROME=1 NPM_CONFIG_OFFLINE=true NPM_CONFIG_UPDATE_NOTIFIER=false GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestManagedSharedRealHeadless$' -count=1 -v -timeout=180s`（35.37s）。三個不同 Owner 借用同一 MCP Worker／同一瀏覽器主程序；實際 JavaScript 狀態讀寫在各自 Context 隔離，交錯操作不串頁，分別釋放所有 Owner 後 shared owned Worker 最終停止一次。
+- 測試以離線 npm cache 使用 exact `chrome-devtools-mcp@1.7.0`；僅 `about:blank`、測試專屬 `TMPDIR`／隔離 Chrome Profile；沒有啟動／接管使用者的 Edge、Chrome、真實登入 Profile，也沒有使用者互動 UI、網站發布或前景動作。
+- 首輪發現「最後一個分頁不可關閉」，加 pool-owned keeper 後第二輪仍遇選取目標關閉的 MCP 格式化錯誤；第三輪在**內部 `select_page`／`bringToFront:false` 選 keeper 再 close owner page** 後，3 次實際 `close_page` 均 `isError=false`，`t.Cleanup` 實測 owned MCP／Chrome process 清零。原版／Next Core 與其他 ACP 原有 MCP 程序未干預。
+- 主 Session 獨立回歸：Browser／BrowserPolicy Go suite、P8 shared focused `-race`、Go vet、gofmt／git diff check，以及 Linux／Windows amd64、macOS arm64 無 CGO browser test cross-build **全部 PASS**。普通測試不設定顯式 opt-in 會 SKIP real Chrome case。
+- **仍未結案：** `managedSharedWorkerBackend` 仍 private opt-in，`ACPBridge` 的 runtime route／lease coordinator 還是 per-lease exclusive；real 試驗是**同一 canonical CWD 的合成 ChatGPT+兩個 ACP Owner scopes**，不是三個真實 ACP/ChatGPT 的 live broker injection。跨 workspace 共享、真正 page/context storage 安全性全貌、Chrome 程序與暫存檔的長期量測、crash orphan reconciliation、真實桌面 no-focus/零 debugging prompt、使用者原有 Edge/explicit Chrome Profile 都需要後續 native UAT。不能以 1 次 isolated PASS 假設完整產品 ready，禁止直接部署切換。

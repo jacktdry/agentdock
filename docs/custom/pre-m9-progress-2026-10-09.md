@@ -1,5 +1,12 @@
 # AgentDock Next — Pre-M9 最新進度（2026-10-09）
 
+## 2026-10-10 P8-B shared Headless Chrome 真實隔離 PoC（SOURCE-ONLY）
+
+- 對 `ffd67c08` 的 private opt-in shared managed backend 增加 MCP pool-owned `about:blank` keeper；關閉租約 page 前以內部 `select_page({pageId: keeper, bringToFront: false})` 避免 MCP 1.7.0 回傳 `The selected page has been closed`，但不改用戶視窗焦點。Keeper 不分配給 Agent；原有 Managed runtime 尚未切換共享。
+- `TestManagedSharedRealHeadless` 預設 SKIP、明確 opt-in 才啟動測試專屬離線 cached `chrome-devtools-mcp@1.7.0 --isolated --headless`。真實 opt-in **PASS（35.37s）**：同一個 Worker／Chrome 主程序供三個不同 owner scope、三組 Context 和 PageID 操作，18+ 次交錯操作隔離成功；所有 owned pages、MCP／Chrome 測試程序最終清理完成。此前前兩輪暴露 last-page 及 selected-page cleanup 問題，均已按實際 MCP 行為修復；未吞掉錯誤或停止其他 Session 程序。
+- 主 Session Browser／BrowserPolicy 完整 Go suite、focused `-race`、Go vet、Linux／Windows amd64 及 macOS arm64 no-CGO cross-build、格式與 diff 均 PASS。未使用真實 Edge／個人 Chrome Profile、未碰使用者分頁、未啟動 GUI UAT／未部署 Next／未 push。下一步為跨 workspace 設計、正式 Worker/lease DTO 與自動回收、ACPBridge opt-in 接線及零提示／零搶焦點 native UAT。
+- 詳見 [P8-B real proof](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
+
 ## 2026-10-10 P8-A/B shared managed worker initial spike（SOURCE-ONLY）
 
 - 基於乾淨 `376cf23c`、`feature/m8-permission-approval`：新增 private opt-in backend／fake tests，未改 ACPBridge、Manager、Coordinator、Registry、launch config 或 legacy tests；正式 managed 路由仍 exclusive。架構與限制見 [shared worker checkpoint](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。

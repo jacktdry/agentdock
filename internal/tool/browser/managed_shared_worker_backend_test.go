@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +21,7 @@ type sharedProofBackend struct {
 	startEntered, startGate, callEntered, callGate   chan struct{}
 	ignoreStartCancel, ignoreCallCancel              bool
 	newFailure, malformed, closeFailure, stopFailure bool
+	selectFailure, selectMCPError                    bool
 }
 
 func (f *sharedProofBackend) StartManaged(ctx context.Context, opts ManagedWorkerOptions) (WorkerInfo, error) {
@@ -66,9 +69,27 @@ func (f *sharedProofBackend) Call(ctx context.Context, worker, tool string, args
 	if tool == "new_page" && f.newFailure {
 		return nil, errors.New("unknown new page side effect")
 	}
+	if tool == "select_page" {
+		f.mu.Lock()
+		f.calls = append(f.calls, leaseBackendCall{worker: worker, tool: tool, args: maps.Clone(args)})
+		f.mu.Unlock()
+		f.proofMu.Lock()
+		name := f.pages[args["pageId"].(float64)]
+		f.proofMu.Unlock()
+		if !strings.HasPrefix(name, "agentdock-pool-keeper-") || args["bringToFront"] != false || f.selectFailure {
+			return nil, errors.New("keeper selection failed")
+		}
+		return map[string]any{"isError": f.selectMCPError}, nil
+	}
 	if tool == "close_page" {
 		f.proofMu.Lock()
 		page, _ := args["pageId"].(float64)
+		// Match MCP 1.7.0's last-page guard, so final lease release must rely
+		// on the reserved pool keeper rather than hiding a cleanup error.
+		if len(f.pages) == 1 {
+			f.proofMu.Unlock()
+			return nil, errors.New("CLOSE_PAGE_ERROR: cannot close last page")
+		}
 		if _, ok := f.pages[page]; !ok {
 			f.unownedCloses++
 		}
@@ -222,7 +243,7 @@ func TestManagedSharedThreeOwners(t *testing.T) {
 		t.Fatal("release stopped shared worker")
 	}
 	f.proofMu.Lock()
-	if len(f.pages) != 0 || f.unownedCloses != 0 || f.wrongWorkers != 0 || f.peak != 1 {
+	if len(f.pages) != 1 || b.keeperPage == nil || !strings.HasPrefix(f.pages[*b.keeperPage], "agentdock-pool-keeper-") || f.unownedCloses != 0 || f.wrongWorkers != 0 || f.peak != 1 {
 		t.Error("ownership/serialization failure")
 	}
 	f.proofMu.Unlock()
@@ -253,6 +274,155 @@ func TestManagedSharedThreeOwners(t *testing.T) {
 	}
 	if _, _, err := m.Acquire(context.Background(), a.Scope, start, ""); err == nil {
 		t.Fatal("stopped generation reused")
+	}
+}
+
+func TestManagedSharedKeeperReserved(t *testing.T) {
+	f := &sharedProofBackend{}
+	b, m := sharedProof(t, f)
+	for i := range 3 {
+		meta := sharedAcquire(t, m, sharedScope(i))
+		if b.keeperPage == nil || meta.PageID == fmt.Sprint(*b.keeperPage) {
+			t.Fatal("keeper returned as a lease")
+		}
+		if _, err := b.Call(context.Background(), meta.WorkerID, "close_page", map[string]any{"pageId": *b.keeperPage}); err == nil {
+			t.Fatal("borrower can close keeper")
+		}
+		if _, err := b.Call(context.Background(), meta.WorkerID, "select_page", map[string]any{"pageId": *b.keeperPage, "bringToFront": false}); err == nil {
+			t.Fatal("keeper selection exposed as borrower tool")
+		}
+		cleanup, err := m.Release(context.Background(), meta.Scope, meta.BrowserLeaseID)
+		if err != nil || cleanup.CleanupError != "" {
+			t.Fatalf("final lease release requires keeper: %+v %v", cleanup, err)
+		}
+	}
+	// Stop also closes a known page when no primary close has happened.
+	fallback := sharedAcquire(t, m, sharedScope(3))
+	if err := b.Stop(fallback.WorkerID); err != nil {
+		t.Fatal("Stop fallback must select keeper before close", err)
+	}
+	f.mu.Lock()
+	keepers := 0
+	selections := 0
+	for index, call := range f.calls {
+		if call.tool == "select_page" {
+			selections++
+			if call.worker != "1" || call.args["pageId"] != *b.keeperPage || call.args["bringToFront"] != false {
+				t.Error("selection must target owned keeper without focus")
+			}
+		}
+		if call.tool == "new_page" && strings.HasPrefix(fmt.Sprint(call.args["isolatedContext"]), "agentdock-pool-keeper-") {
+			keepers++
+			if call.args["url"] != "about:blank" || call.args["background"] != true {
+				t.Error("keeper must be blank/background")
+			}
+		}
+		if call.tool == "close_page" && call.args["pageId"] == *b.keeperPage {
+			t.Error("keeper individually closed")
+		}
+		if call.tool == "close_page" && (index == 0 || f.calls[index-1].tool != "select_page") {
+			t.Error("close must follow keeper selection")
+		}
+	}
+	f.mu.Unlock()
+	if keepers != 1 || selections != 4 || backendStarts(&f.fakeLeaseBackend) != 1 || sharedStops(f) != 0 {
+		t.Fatal("keeper/start must be once per generation")
+	}
+	f.proofMu.Lock()
+	if len(f.pages) != 1 || !strings.HasPrefix(f.pages[*b.keeperPage], "agentdock-pool-keeper-") {
+		t.Error("only reserved keeper should remain idle")
+	}
+	f.proofMu.Unlock()
+	if err := b.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.proofMu.Lock()
+	if len(f.pages) != 0 {
+		t.Error("owned Stop did not clean keeper")
+	}
+	f.proofMu.Unlock()
+}
+
+func TestManagedSharedKeeperSelectionFailure(t *testing.T) {
+	for _, mcpError := range []bool{false, true} {
+		t.Run(fmt.Sprint(mcpError), func(t *testing.T) {
+			f := &sharedProofBackend{}
+			b, m := sharedProof(t, f)
+			meta := sharedAcquire(t, m, sharedScope(0))
+			f.selectFailure, f.selectMCPError = !mcpError, mcpError
+			if _, err := m.Release(context.Background(), meta.Scope, meta.BrowserLeaseID); err == nil {
+				t.Fatal("selection failure masked")
+			}
+			b.mu.Lock()
+			if !b.poisoned || b.borrows[meta.WorkerID].page == nil {
+				t.Error("failed selection lost known page or did not poison")
+			}
+			b.mu.Unlock()
+			f.mu.Lock()
+			selected := 0
+			for _, call := range f.calls {
+				if call.tool == "select_page" {
+					selected++
+				}
+				if call.tool == "close_page" {
+					t.Error("failed selection reached close_page")
+				}
+			}
+			f.mu.Unlock()
+			if selected != 2 {
+				t.Fatal("both primary and Stop fallback must select keeper")
+			}
+			if err := b.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if sharedStops(f) != 1 {
+				t.Fatal("owned cleanup must stop once")
+			}
+		})
+	}
+}
+
+func TestManagedSharedKeeperStartupFailure(t *testing.T) {
+	for _, mode := range []string{"call", "malformed", "mcp error", "borrow collision"} {
+		t.Run(mode, func(t *testing.T) {
+			f := &sharedProofBackend{}
+			b, m := sharedProof(t, f)
+			switch mode {
+			case "call":
+				f.newFailure = true
+			case "malformed":
+				f.malformed = true
+			case "mcp error":
+				f.response = func(string, string) map[string]any { return map[string]any{"isError": true} }
+			case "borrow collision":
+				w, err := b.StartManaged(context.Background(), b.options)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := b.Stop(w.WorkerID); err != nil {
+					t.Fatal(err)
+				}
+				f.response = func(_ string, name string) map[string]any { return leasePages(name, *b.keeperPage) }
+			}
+			meta, _, err := m.Acquire(context.Background(), sharedScope(0), leaseStart(t), "")
+			if err == nil || meta.BrowserLeaseID != "" || len(m.leases) != 0 {
+				t.Fatal("keeper failure/collision published a lease")
+			}
+			if err := b.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			b.mu.Lock()
+			if !b.poisoned || len(b.borrows) != 0 && mode != "borrow collision" {
+				t.Error("failed keeper allowed borrowing")
+			}
+			b.mu.Unlock()
+			if backendStarts(&f.fakeLeaseBackend) != 1 || sharedStops(f) != 1 {
+				t.Fatal("failed keeper must stop owned worker once")
+			}
+			if _, err := b.StartManaged(context.Background(), b.options); err == nil {
+				t.Fatal("failed generation reused")
+			}
+		})
 	}
 }
 

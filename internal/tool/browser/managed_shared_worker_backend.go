@@ -32,6 +32,7 @@ type managedSharedWorkerBackend struct {
 	cancel                              context.CancelFunc
 	mu                                  sync.Mutex
 	worker                              WorkerInfo // Immutable after startDone closes.
+	keeperPage                          *float64   // Pool-owned; never borrowed or individually closed.
 	startDone                           chan struct{}
 	done                                chan struct{}
 	gate                                chan struct{} // Serializes all calls, page cleanup and final Stop.
@@ -61,11 +62,33 @@ func (b *managedSharedWorkerBackend) start() {
 	if err == nil && (worker.WorkerID == "" || worker.State != WorkerReady) {
 		err = errManagedSharedUnavailable
 	}
+	var keeper *float64
+	if err == nil {
+		// MCP cannot close its last page. Reserve one before any borrower can
+		// become ready; only terminal owned worker Stop cleans this page.
+		name := "agentdock-pool-keeper-" + rand.Text()
+		result, callErr := b.backend.Call(ctx, worker.WorkerID, "new_page", map[string]any{"url": "about:blank", "background": true, "isolatedContext": name})
+		err = callErr
+		if err == nil {
+			err = leaseCallResultError(result)
+		}
+		if err == nil {
+			var page float64
+			page, _, err = isolatedPageID(result, name)
+			if err == nil {
+				keeper = &page
+			}
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
+	}
 	b.mu.Lock()
-	b.worker, b.startErr = worker, err
+	b.worker, b.keeperPage, b.startErr = worker, keeper, err
 	b.idleAt = time.Now()
 	close(b.startDone)
 	if err != nil {
+		b.poisoned = true
 		b.closeLocked()
 	}
 	b.mu.Unlock()
@@ -125,6 +148,23 @@ func (b *managedSharedWorkerBackend) lockCall(ctx context.Context) error {
 	}
 }
 
+// Caller holds gate. MCP formats close responses using its selected page, so
+// keep that selection on our reserved page without foregrounding the browser.
+func (b *managedSharedWorkerBackend) selectKeeper(ctx context.Context, workerID string, target float64) error {
+	b.mu.Lock()
+	keeper := b.keeperPage
+	valid := !b.closed && workerID == b.worker.WorkerID && keeper != nil && *keeper != target
+	b.mu.Unlock()
+	if !valid {
+		return errManagedSharedUnavailable
+	}
+	result, err := b.backend.Call(ctx, workerID, "select_page", map[string]any{"pageId": *keeper, "bringToFront": false})
+	if err == nil {
+		err = leaseCallResultError(result)
+	}
+	return err
+}
+
 func (b *managedSharedWorkerBackend) Call(ctx context.Context, id, tool string, args map[string]any) (map[string]any, error) {
 	if err := b.lockCall(ctx); err != nil {
 		return nil, err
@@ -156,7 +196,19 @@ func (b *managedSharedWorkerBackend) Call(ctx context.Context, id, tool string, 
 	stopCancel := context.AfterFunc(b.ctx, cancel)
 	defer cancel()
 	defer stopCancel()
-	result, err := b.backend.Call(callCtx, workerID, tool, maps.Clone(args))
+	var result map[string]any
+	var err error
+	if tool == "close_page" {
+		err = b.selectKeeper(callCtx, workerID, args["pageId"].(float64))
+		if err != nil {
+			b.mu.Lock()
+			borrow.err, b.poisoned = errors.Join(borrow.err, err), true
+			b.mu.Unlock()
+		}
+	}
+	if err == nil {
+		result, err = b.backend.Call(callCtx, workerID, tool, maps.Clone(args))
+	}
 	if err == nil {
 		err = leaseCallResultError(result)
 	}
@@ -169,6 +221,9 @@ func (b *managedSharedWorkerBackend) Call(ctx context.Context, id, tool string, 
 			page, _, err = isolatedPageID(result, isolation)
 		}
 		if err == nil {
+			if b.keeperPage == nil || page == *b.keeperPage {
+				err = errManagedSharedUnavailable
+			}
 			for _, other := range b.borrows {
 				if other != borrow && other.page != nil && *other.page == page {
 					err = errManagedSharedUnavailable
@@ -229,10 +284,13 @@ func (b *managedSharedWorkerBackend) Stop(id string) error {
 	}
 	var err error
 	if page != nil {
-		result, callErr := b.backend.Call(ctx, workerID, "close_page", map[string]any{"pageId": *page})
-		err = callErr
+		err = b.selectKeeper(ctx, workerID, *page)
 		if err == nil {
-			err = leaseCallResultError(result)
+			result, callErr := b.backend.Call(ctx, workerID, "close_page", map[string]any{"pageId": *page})
+			err = callErr
+			if err == nil {
+				err = leaseCallResultError(result)
+			}
 		}
 	}
 	b.mu.Lock()
