@@ -800,3 +800,85 @@ Independent supervisor verification also PASS: full Browser/BrowserPolicy test s
 focused External/Planner Race Detector, `go vet`, `git diff --check`, and
 Linux/Windows amd64 browser test cross-build, run serially with `GOMAXPROCS=2`.
 No native/live Edge UAT or CDP binding proof was performed.
+
+## Phase C2b-B2j single-socket pinned CDP relay primitive (2026-10-09)
+
+Next source-only, based on clean `6ff0f789` on `feature/m8-permission-approval`.
+New private `external_pinned_cdp_relay.go` implements a real single-upstream
+WebSocket and one-shot Core-owned loopback relay, using existing gorilla/websocket.
+It has no production caller and does not implement `externalTransportFence` on
+WorkerRegistry or enable ExternalLeaseManager admission.
+
+Canonical upstream input must be `ws://127.0.0.1:<port>/devtools/browser/<opaque>`
+or canonical IPv6 loopback (`::1`), passing BrowserPolicy validation and literal
+IP checks. Aliases, other hosts/schemes, missing browser IDs, queries, fragments,
+escaped/non-browser paths and invalid ports fail before dial. Missing injected
+attestor or nil/aliased expected source/incarnation also fail before dial.
+`websocket.Dialer.NetDialContext` captures the actual established TCP `net.Conn`;
+the injected callback observes that socket before ANY upstream HTTP/WS handshake
+bytes. Only its independently observed exact identity match permits handshake.
+Proxy is nil; redirects are not followed. Failure closes the TCP socket, returns
+nil relay and a fixed opaque error, discarding raw causes and endpoint/token data.
+
+After successful upstream handshake, Core binds `127.0.0.1:0` and creates a
+256-bit crypto-random bearer URL under `/devtools/browser/`. This private URL is
+the future adapter capability, never a renderer/user browser endpoint. Exact
+request URI/Host, absent Origin and WS upgrade are required. Wrong tokens,
+malformed routes, plain HTTP probes and second clients are rejected without
+redirects or token-bearing responses/logs. Only one authorized upgrade attempt
+is permitted; failed upgrade is terminal. At most four simultaneous downstream
+TCP connections (including probes/upgrades) are retained, with bounded HTTP
+headers and two-second HTTP/handshake/write deadlines. Each WS message is capped
+at 8MiB; the session has a five-minute absolute lifetime/read deadline.
+
+Text/binary messages and ping/pong/close controls travel through gorilla WS in
+both directions; message payload/type are preserved, not original fragmentation.
+No reconnect/redial path exists. Either socket loss, forwarding failure, context
+cancellation, timeout or Close permanently latches lost and closes both WS
+sockets, listener and pending HTTP connections. Upstream application reads
+begin only after the downstream attach: early
+unsolicited CDP events remain in the established socket/TCP buffers and are
+forwarded after attach (bounded by kernel TCP backpressure, no application queue).
+Owned relay workers and HTTP handlers have a completion signal. A noncooperative
+injected attestor may retain ONE process-wide worker/slot until it returns;
+cancellation still closes its socket and rejects the caller, and further
+verification workers are refused. A context deadline cannot forcibly stop an
+arbitrary callback.
+
+`withPinnedPeer` admits only the saved exact peer while this immutable local
+transport has not latched loss, and supplies no socket/reconnect/swap capability
+to its callback. Loss during callback quarantines completion. **This is NOT
+atomic CDP command semantics:** remote loss is observable only when I/O detects
+it, Close may race callback execution, and callback side effects cannot be
+undone. Connecting this capability URL to chrome-devtools-mcp, immutable worker
+binding and a new reviewed fencing backend remain pending. Initial OS listener
+attribution is NOT guaranteed: injected fixtures must be replaced by an
+independently reviewed established-socket owner attestor. Process/profile
+preflight, a successful handshake and an identity fixture cannot qualify Edge.
+
+Production ConnectorStatusProvider and externalPeerVerifier remain nil,
+WorkerRegistry remains legacy, no status/grant is minted, Edge remains
+UNQUALIFIED and P8/M9 gates remain open. No real Edge/CDP/tab/login/profile,
+stable AgentDock, AGY .14, installation, deployment or push was touched.
+Only the new relay/test and the two requested append-only checkpoint docs change.
+
+Validation: gofmt and final
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'TestPinnedCDP' -count=1 -timeout=90s`
+PASS (0.534s), using the existing Go cache and LOCAL synthetic httptest/TCP
+fixtures only. Tests cover echo/control, one downstream, malformed/wrong token
+and HTTP rejection, invalid inputs/nil verifier/aliased peer with no TCP dial,
+exact established socket addresses, mismatched/error/panicking verifier with
+zero handshake data, cancellation (including before attach), bounded blocked
+attestor, both-side irreversible loss/no redial, concurrent Close, both-side
+message limits and repeated lifecycle worker bounds. First sandbox attempt
+failed on loopback bind permission; approved reruns used the same cache. First
+functional run found a leak-test fixture lifetime error (retained HTTP servers),
+corrected to clean each child fixture before measurement; subsequent runs PASS.
+Independent supervisor validation: `TestPinnedCDP` focused tests including
+pre-attach unsolicited events, complete Browser/BrowserPolicy suite, focused
+`-race`, `go vet`, Linux/Windows amd64 test cross-build, gofmt and
+`git diff --check` all PASS (serial GOMAXPROCS=2). The first supervisor
+`-race` run found a fixture WaitGroup Add/Wait cleanup race; guarded the
+fixture terminal state under a mutex and reran PASS. No real/native Edge UAT
+or authenticated socket/process ownership test was executed. All synthetic
+runtime resources are closed by test cleanup; no task server remains running.
