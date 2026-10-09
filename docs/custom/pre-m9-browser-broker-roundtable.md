@@ -882,3 +882,59 @@ pre-attach unsolicited events, complete Browser/BrowserPolicy suite, focused
 fixture terminal state under a mutex and reran PASS. No real/native Edge UAT
 or authenticated socket/process ownership test was executed. All synthetic
 runtime resources are closed by test cleanup; no task server remains running.
+
+## Phase C2b-B2k established TCP ownership evidence (2026-10-09)
+
+Next-only bounded source implementation based on clean `bf77b6b6805af4f53e252746258bc7f252bf0fc4`
+on `feature/m8-permission-approval`. New PRIVATE `readEdgeEstablishedSocketEvidence`
+accepts an already-established concrete TCP socket and expected process preflight.
+It rejects invalid/canceled inputs, preflight older than two seconds or in the
+future, malformed PID/epoch/path/endpoint and mismatched/non-loopback TCP tuples.
+It performs no socket I/O and does not inspect profile metadata or contents.
+
+The native macOS probe runs only `/usr/sbin/lsof -nP -a -p <PID> -iTCP
+-sTCP:ESTABLISHED -FpnT`, reuses the existing UID/startToken observation and
+dynamic Security.framework signature check, and shares a fixed two-second
+context. Two socket observations surround the first epoch/signature checks;
+epoch/signature are checked again after the second socket observation. Each
+observation requires exactly one server-to-client tuple reversing the observed
+client socket. Output allocation is capped at 8192 bytes, records at 64 and
+lines at 512 bytes; stderr is discarded. Parser requires one exact PID header,
+distinct numeric file descriptors, one canonical numeric loopback tuple and
+one `TST=ESTABLISHED` per record; only optional numeric TQR/TQS fields are
+accepted. Wildcards, aliases, mapped/zoned/noncanonical IPv6, duplicate tuples,
+missing records, malformed/unknown fields and wrong direction fail closed.
+Any failure returns zero evidence and the fixed opaque process-unqualified
+error. Other platforms reject; Darwin without cgo cannot pass live signature.
+
+A read-only synthetic host experiment queried ONLY its own Python PID and
+confirmed `p`, `f`, `n`, `TST=ESTABLISHED`, `TQR=0`, `TQS=0` output. The original
+sandbox experiment/test attempts were denied loopback bind; authorized reruns
+used the same existing Go cache. Focused tests use TEST ONLY `net.Listen`/dial,
+fake lsof/signature/epoch probes and deterministic IPv4/IPv6 parser fixtures;
+all sockets/listeners are registered for cleanup. No user's Edge was queried.
+
+**This is non-atomic OS process evidence, NOT authenticated login, socket proof,
+a complete trusted pinned relay attestor, or an external route grant.** PID
+epochs have existing timestamp granularity, socket tuples may be reused between
+observations, and loss after observation is possible. Concrete probes must
+honor context; the helper cannot forcibly terminate arbitrary injected probes.
+The existing native signature slot bounds uncancelable Security.framework work.
+No externalPeerIdentity is minted, no externalTransportFence implementation is
+added, and relay wiring/provider/verifier/WorkerRegistry remain unchanged.
+Edge remains UNQUALIFIED; P8/M9 gates remain open. Real/live Edge
+ownership and native GUI UAT remain untested.
+No stable/AGY, push/install/deploy or persistent background server work occurred.
+
+Validation: gofmt applied; final `GOMAXPROCS=2 go test -p 2
+./internal/tool/browser -run TestEdgeEstablishedSocket -count=1 -timeout=90s`
+PASS (2.487s). An earlier authorized focused run also passed (2.440s), before
+adding explicit root/NUL/overlong-component preflight path rejection.
+`git diff --check` and gofmt verification PASS. No test was skipped within
+the focused selection; this does not establish native Edge ownership acceptance.
+
+Independent supervisor verification: complete Browser/BrowserPolicy test suite,
+`TestEdgeEstablishedSocket` focused Race Detector, go vet, gofmt/diff check,
+and Linux/Windows amd64 and Darwin arm64/no-cgo browser test cross-build
+all PASS (serial,
+GOMAXPROCS=2). No live Edge socket or profile was queried.
