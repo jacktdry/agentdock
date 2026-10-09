@@ -411,7 +411,7 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 - queue/concurrency；
 - cleanup / recovery status。
 
-> **P8 2026-10-10 使用者新硬性規格：** Next 所有 Chrome／Edge（含 Managed）禁止 Remote Debugging/CDP、`chrome.debugger` 及 silent fallback；CMS 指定既有 Edge Profile、明確要求個人 Chrome Profile 時必須使用該 Profile。原有 CDP 架構僅歷史紀錄，Next 目前**尚未實作／部署**此禁令；先做 MV3 Extension + Native Messaging 有界 PoC，再決定實作。詳見 [最新 Browser 決策](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)。
+> **P8 2026-10-10 約 01:10 更正 gate：** CDP／Remote Debugging 允許，首要要求是共享 Broker 與不干擾 UAT：零反覆提示、不搶焦點、不為每 ACP 新啟 browser。公司 CMS 使用既有 Edge Profile，明確指定 Chrome 時使用 exact Profile；失敗不 silent fallback。managed Headless Chrome DevTools MCP 為候選主路徑；使用者 Profile 可評估 authorized persistent CDP 或 Extension + Native Messaging contingency，均須獨立 UAT、不得繞過同意。**尚未完成新規格實作／部署／live acceptance；歷史 checkpoints 保留。** 詳見 [現行 Browser 決策](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
 
 ### P9 — Pre-M9 Hardening
 

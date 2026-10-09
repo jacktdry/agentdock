@@ -1,3 +1,6 @@
+> **SUPERSEDED — 2026-10-10 約 01:10（Asia/Taipei）使用者更正。** 本文件全面禁止 Remote Debugging 的結論屬需求誤解，已失效。
+> 現行權威決策為 [Non-interrupting Browser Routing](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)：允許已授權且不干擾的 CDP；以下歷史文字原樣保留，不代表有效規格。
+
 # AgentDock Next P8 — Browser 需求／安全架構評估與禁止 Remote Debugging 決策
 
 日期：2026-10-10（Asia/Taipei） · 性質：**需求與架構決策／尚未實作及部署** · 基礎：`70d23cca`。
