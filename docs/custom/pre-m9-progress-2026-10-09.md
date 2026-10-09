@@ -1,5 +1,13 @@
 # AgentDock Next — Pre-M9 最新進度（2026-10-09）
 
+## 2026-10-10 P8-A/B shared managed worker initial spike（SOURCE-ONLY）
+
+- 基於乾淨 `376cf23c`、`feature/m8-permission-approval`：新增 private opt-in backend／fake tests，未改 ACPBridge、Manager、Coordinator、Registry、launch config 或 legacy tests；正式 managed 路由仍 exclusive。架構與限制見 [shared worker checkpoint](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
+- 一個 pinned underlying worker connection，concurrent startup singleflight、所有 Call 序列化；既有 Manager 的三個 agent scopes 各取得 distinct background page／isolatedContext。以唯一 borrow token 作 adapter WorkerID，避免相同 workerID refcount 無法識別 Stop 重複／recovery；底層 workerID 仍只有一個。固定 workspace，cross-workspace 拒絕。
+- 釋放只清理該 borrow 已確認 page，保留 worker 30 秒至手動 idle reap／Shutdown；重複釋放不扣其他 holder。unknown new_page／清理失敗會禁止新借用且保留 cleanup failure，不猜 page、不殺 sibling。terminal Stop 最多一次，失敗保留；stopped generation 不重用。tombstones 上限 1024。Manager cleanup reason 尚是 exclusive 語意，禁止直接 runtime wiring。
+- 指定且唯一 focused selection `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestManagedShared' -count=1 -timeout=100s` PASS（0.548s），無 skip；gofmt／git diff --check PASS。TEST ONLY 使用既有 fakeLeaseBackend decorator，實測 startup=1、distinct pages／contexts、serialized peak=1、unowned page closes=0、wrong-worker calls=0；涵蓋 spoof／cross-owner／workspace rejection、單一 failure 隔離、idle reuse／reap、failed start／new-page／close／Stop、cancel after page，以及 concurrent Acquire／Release／Shutdown、stuck startup／Call 的 deadline 與 late cleanup。無背景 runtime 資源。
+- Shutdown deadline 不是強制中止 callback 或已完成 browser cleanup 的證據；不合作 callback 返回後才 final Stop。這是 architecture contract／opt-in offline proving，**未部署，未證明 actual chrome-devtools-mcp multi-client safe、零 popup／focus、真實 storage isolation、temp-dir／crash orphan cleanup**。完整／race／vet／cross-build 由 orchestrator 執行。無 real npx／Chrome／Edge／remote debug／GUI／restart／install／deploy／commit／push，未觸碰 AGY／stable；P8／M9 未結案。
+
 > 核對時間：2026-10-09 03:12 Asia/Taipei。Repo：`/Users/wei/sideProject/agentdock-m8-permission-approval`；分支 `feature/m8-permission-approval`，核對時 HEAD `057ae1a2`。本 checkpoint 為狀態與交接，不代表 P8/M9 closeout。
 
 ## 各工作線狀態

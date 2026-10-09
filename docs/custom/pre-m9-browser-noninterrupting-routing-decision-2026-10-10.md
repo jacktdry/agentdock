@@ -1,7 +1,7 @@
 # AgentDock Next P8 — Non-interrupting Browser Routing Decision
 
 日期：2026-10-10（Asia/Taipei）；依使用者約 01:10 的明確更正。
-性質：**權威產品／架構決策；尚未實作、部署或完成 live UAT**。文件修正基礎：`e8585929`。
+性質：**權威產品／架構決策；已有 private opt-in 離線 spike，尚無 runtime wiring、部署或 live UAT**。文件修正基礎：`e8585929`；spike 基礎：`376cf23c`。
 
 > **SUPERSEDES** [舊 no-remote-debugging 決策](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)。
 > 舊文件把需求誤解為全面禁止 Remote Debugging；正確要求是 UAT 不得干擾使用者日常桌面操作。
@@ -102,7 +102,7 @@ Chrome 136+ 在預設 user data directory 不接受 remote-debugging port／pipe
 9. 負向案例不得改路由／Profile 或自動核准；回報 blocker，替代整合須有獨立明確授權。
 10. 各版本／平台分別保存 startup、reconnect、cleanup 證據；離線測試與設定不等於 live UAT。
 
-本次只更正文件；未修改 Go／JS、未執行 build／tests／live UAT、未操作 browser、未部署。
+初次決策修正只更正文件；當時未修改 Go／JS、未執行 build／tests／live UAT、未操作 browser、未部署。
 既有 B2i～B2n-B checkpoints 保留歷史證據，不能自動轉成新決策的 acceptance。
 
 ## 6. 官方參考
@@ -110,3 +110,33 @@ Chrome 136+ 在預設 user data directory 不接受 remote-debugging port／pipe
 - [Chrome DevTools agents configuration](https://developer.chrome.com/docs/devtools/agents/get-started/configuration)：headless／isolated 與 endpoint flags。
 - [Debug your browser session](https://developer.chrome.com/blog/chrome-devtools-mcp-debug-your-browser-session)：autoConnect 每次 debugging session 同意。
 - [Remote debugging switches security changes](https://developer.chrome.com/blog/remote-debugging-port)：Chrome 136+ default user data directory 限制。
+
+## 7. P8-A/B initial shared managed worker spike（2026-10-10，SOURCE-ONLY）
+
+基於乾淨 `376cf23ce80b1d8474b10eaf79d5e905adc13da4`、`feature/m8-permission-approval`。
+新增 package-private `managed_shared_worker_backend.go` 與合成測試；**只由測試明確 opt-in 建構**。
+`ACPBridge`、`ManagedLeaseManager`、exclusive coordinator、WorkerRegistry、managed launch config 及 legacy tests 都未修改。
+production 仍是每個 exclusive lease 啟動／停止 worker；本 spike 尚未達成產品 live acceptance。
+
+### Adapter 契約與必要偏離
+
+- 底層只呼叫一次 StartManaged，保存 immutable underlying WorkerInfo／worker generation，透過同一 backend worker connection 序列化所有 Call。既有 Manager 建立各 lease 的 background page、唯一 named isolatedContext，驗證完整 owner scope 並注入 pageId；adapter 再檢查每個 borrow 的已知 pageId。
+- **不向 Manager 回傳相同 WorkerID**：單純 refcount 無法辨認 paired Stop、cleanup recovery 或重複 Stop，可能扣掉其他 holder。採不修改 Manager 的 adapter：每次借用回傳唯一 opaque borrow token 作 WorkerID；底層操作映射到同一 pinned workerID。token 不可直接用於 WorkerRegistry，也不是獨立 process／worker generation；不能直接當 production worker DTO。
+- 固定一個 canonical workspace root；不同 agent owner 可共享，不同 Cwd 拒絕且不派送底層呼叫。跨 workspace 共享路由／authority 未實作。
+- Stop 只釋放指定 borrow，重複 Stop／recovery 不再次扣數。成功意味該 borrow 已知 page 已清理，**不是 shared browser 已停止**。Manager 既有 cleanup reason 仍寫 exclusive worker stopped；此文字不適合 shared runtime，故禁止直接 wiring。
+- Manager 的 close_page 失敗時，Stop 以獨立 bounded context 再清理已確認 owned page；仍失敗則回報 cleanup failure。new_page error／malformed／duplicate-page result 無法排除未知副作用，禁止新借用、保留其他 active holders，不猜 page、不關 sibling worker；待 active=0 後手動 reap 或 explicit Shutdown 完整清理 owned worker。
+- 預設 idle retention 30 秒，手動 ReapIdle(now)，沒有背景 timer。取消 startup waiter 不取消其他 waiter 共用的 startup；取消後已確認建立的 page 仍由 paired Stop 清理。startup 若無 holder，保留到 idle reap；維持者必須呼叫 reap／Shutdown。
+- reap／Shutdown 永久封閉這個 adapter generation，不自動 restart 或重用 stopped worker。底層 Stop 全 generation 最多一次；錯誤保留、無隱式重試。borrow tombstones 上限 1024，達上限拒絕新借用；replacement／輪替不在本 spike。
+- Shutdown 先禁止新工作並取消 startup／Call context，再等待 startup 完成與單一 connection gate，最後只 Stop 該 owned backend 的 StartManaged 回傳的 worker。ownership 依賴受信任 backend 契約，PID 不授予所有權。不碰 user Chrome／Edge／profile。Shutdown deadline 到期回報未完成；不合作 callback 無法強制中止，只保留一個受阻 callback 與一個 finalizer，callback 最終返回後完成一次清理，不能宣稱 deadline 即完成 cleanup。
+
+### 本次證據與未驗證事項
+
+唯一 focused selection：`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestManagedShared' -count=1 -timeout=100s` **PASS（0.548s），無 skip**。已 gofmt；git diff --check PASS。
+TEST ONLY decorator 使用既有 fakeLeaseBackend，無 socket、真實 browser 或程序啟動。
+三個並行 agent scopes（runtime + 兩個 ACP）經完整 Manager Acquire／Call／Release，實測底層 startup=1、不同 page／context／borrow identity、底層並行 Call peak=1、unowned page closes=0、wrong-worker calls=0；跨 workspace／跨 owner／caller pageId 不到達 backend。
+涵蓋 repeated Release／borrow Stop、單一操作 failure 不殺 sibling、順序 idle reuse、active holder 不 reap、idle retention／terminal reap／Stop once、failed start／unknown new_page／malformed result／cancel after page／close failure／Stop error，以及 concurrent Acquire／Release／Shutdown、startup waiter 取消、不合作 startup／Call 的 bounded Shutdown 與 late cleanup。
+
+**這是 architecture contract 與 opt-in offline proving；不是 actual chrome-devtools-mcp multi-client-safe 證據。**
+主 Session 獨立驗證 PASS：Browser／BrowserPolicy 完整 Go tests、共享原型定點 `-race`、Go vet、Linux／Windows amd64 與 macOS arm64 無 CGO 編譯、gofmt／git diff check。尚未證明實際 Chrome DevTools MCP context／storage isolation、零 debugging popup／focus、owned temp-dir 清理或 crash orphan reconciliation。
+沒有 real npx、Chrome／Edge、remote debug、GUI、app restart、install、deploy／push；未觸碰 AGY repo／stable。
+P8／M9 gates、公司 Edge authority 與指定 Chrome Profile acceptance 仍未結案。
