@@ -726,3 +726,33 @@ Validation: `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run
 'Test(Edge|UniqueEdge|MacEdgeProfile)' -count=1 -timeout=120s` PASS;
 sequential `CGO_ENABLED=0 go test -p 2 -c ./internal/tool/browser` cross-builds
 for linux/amd64, windows/amd64 and darwin/arm64 PASS. Native focused tests include macOS cgo. Additional independent full Browser/BrowserPolicy suite, targeted Race Detector and go vet all PASS (bounded GOMAXPROCS=2); no native browser UAT was run.
+
+## Phase C2b-B2h safe-release peer consistency (2026-10-09)
+
+Next source-only, based on clean `d1b0656b`: release now independently verifies
+the saved peer after target `list_pages`, immediately before `close_page`, and
+again after close returns, including close errors. A rejected pre-close check
+prevents close; a rejected post-close check quarantines apparent success and
+raw close errors behind the opaque peer error. Peer loss remains permanently
+latched. Successful connector Stop still means `CleanupComplete`, with
+`owned page close unconfirmed` whenever close identity cannot be verified.
+Stop failure recovery retries only the AgentDock-owned connector, never a page
+operation; SweepExpired uses the same release path.
+
+TEST ONLY fake operation hooks cover source/incarnation changes, revocation,
+verifier failure, cancellation after close, error precedence, exact check counts,
+connector-only Stop/recovery and no repeated close. Managed lease tests are
+included in focused validation. This is TOCTOU mitigation and response quarantine,
+not an atomic transport/CDP fence: close may already have taken effect and a
+swap between observations remains possible. Production provider/verifier remain
+nil, Edge remains UNQUALIFIED, and P8/M9 gates remain open. No live Edge/CDP,
+native browser UAT, install, service restart, deployment or push occurred.
+
+Validation: `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run
+'Test(External|ManagedLease)' -count=1 -timeout=120s` PASS (4.740s); gofmt applied.
+The initial sandbox invocation failed during setup because the existing Go cache
+was not writable; the authorized rerun used that same cache, with no fresh GOCACHE.
+Independent supervisor verification also passed: complete Browser/BrowserPolicy
+suite, targeted release/admission `-race`, `go vet` and `git diff --check`
+with `GOMAXPROCS=2` and serial execution. Cross-build and live native UAT
+were not run for B2h.

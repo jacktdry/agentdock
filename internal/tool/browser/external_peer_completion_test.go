@@ -3,10 +3,131 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TEST ONLY: run a hook after a fake page operation, before returning its result.
+type releasePhaseBackend struct {
+	*externalFakeBackend
+	after func(string)
+}
+
+func (b *releasePhaseBackend) CallExternal(ctx context.Context, worker WorkerInfo, tool string, args map[string]any) (map[string]any, error) {
+	result, err := b.externalFakeBackend.CallExternal(ctx, worker, tool, args)
+	b.after(tool)
+	return result, err
+}
+
+func TestExternalReleaseQuarantinesPeerAtCloseBoundaries(t *testing.T) {
+	for _, phase := range []string{"list_pages", "close_page"} {
+		for _, mode := range []string{"source", "incarnation", "revoked", "unavailable", "canceled", "close error"} {
+			for _, recovery := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/recovery=%t", phase, mode, recovery), func(t *testing.T) {
+					m, b, v, meta, d := acquiredControlledPeer(t)
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					if recovery {
+						b.stopErr = errors.New("owned connector stop failed")
+					}
+					if mode == "close error" {
+						b.closeErr = errors.New("close-secret ws://private PID=456")
+					}
+					m.backend = &releasePhaseBackend{b, func(tool string) {
+						if tool != phase {
+							return
+						}
+						wantChecks := 4 // acquire's three checks, then release's initial check
+						if phase == "close_page" {
+							wantChecks = 5
+						}
+						if v.count() != wantChecks {
+							t.Errorf("peer check not at expected phase: %d", v.count())
+						}
+						if mode == "canceled" {
+							cancel()
+						} else {
+							rejectMode := mode
+							if mode == "close error" {
+								rejectMode = "unavailable"
+							}
+							rejectControlledPeer(m, v, rejectMode)
+						}
+					}}
+					var cleaned LeaseMetadata
+					var err error
+					if mode == "source" && !recovery {
+						err = m.SweepExpired(meta.ExpiresAt.Add(time.Second))
+						lease, _ := m.lease(meta.BrowserLeaseID)
+						cleaned = lease.metadata
+					} else {
+						cleaned, err = m.Release(ctx, d.Scope, meta.BrowserLeaseID)
+					}
+					l, _ := m.lease(meta.BrowserLeaseID)
+					if !l.peerLost {
+						t.Fatal("peer loss was not latched")
+					}
+					wantChecks := 5
+					if phase == "close_page" {
+						wantChecks++
+					}
+					if mode == "canceled" {
+						wantChecks-- // canceled contexts reject before invoking verifier
+					}
+					if v.count() != wantChecks {
+						t.Fatalf("peer checks=%d want=%d", v.count(), wantChecks)
+					}
+					for _, text := range []string{cleaned.CleanupError, fmt.Sprint(err)} {
+						if strings.Contains(text, "secret") || strings.Contains(text, "ws://") || strings.Contains(text, "PID=") {
+							t.Fatal("verifier/close details escaped quarantine")
+						}
+					}
+					if recovery {
+						assertBrowserCode(t, err, ErrActionFailed)
+						if cleaned.CleanupState != CleanupFailed {
+							t.Fatal("Stop failure lost recovery state")
+						}
+						b.stopErr = nil
+						v.mu.Lock()
+						v.observed, v.err = d.grant.peer, nil
+						v.mu.Unlock()
+						if err := m.RecoverFailed(time.Now().UTC().Add(time.Hour)); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if !recovery && err != nil {
+						t.Fatal(err)
+					}
+					// Repeated Release/Sweep never regain page authority, even if peer recovers.
+					cleaned, err = m.Release(context.Background(), d.Scope, meta.BrowserLeaseID)
+					if err != nil || cleaned.CleanupState != CleanupComplete || !strings.Contains(cleaned.CleanupReason, "owned page close unconfirmed") {
+						t.Fatalf("false close confirmation: %+v %v", cleaned, err)
+					}
+					if err := m.SweepExpired(meta.ExpiresAt.Add(time.Hour)); err != nil {
+						t.Fatal(err)
+					}
+					wantCloses, wantStops := 0, 1
+					if phase == "close_page" {
+						wantCloses = 1
+					}
+					if recovery {
+						wantStops++
+					}
+					if externalCallCount(b, "list_pages") != 2 || externalCallCount(b, "close_page") != wantCloses || externalCallCount(b, "stop") != wantStops || v.count() != wantChecks {
+						t.Fatal("cleanup/recovery repeated page operation or verification")
+					}
+					for _, call := range b.calls {
+						if call.worker != meta.WorkerID || (call.tool == "close_page" && call.args["pageId"] != l.pageID) {
+							t.Fatal("cleanup touched resources outside owned connector/page")
+						}
+					}
+				})
+			}
+		}
+	}
+}
 
 // Synthetic TEST-ONLY peer changes are injected inside fake backend operations.
 // None of these tests connect to CDP, Edge, or a real browser process.

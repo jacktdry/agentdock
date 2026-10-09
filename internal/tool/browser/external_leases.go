@@ -307,7 +307,16 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 		closeErr = m.verifyTarget(ctx, l)
 	}
 	if closeErr == nil {
+		closeErr = m.verifyLeasePeer(ctx, l)
+	}
+	if closeErr == nil {
 		closeErr = m.closeOwnedPage(ctx, l.worker, l.pageID)
+		// This brackets the close with independent observations, not an atomic
+		// transport/CDP fence. Quarantine even apparent success (or a raw close
+		// error) when the post-close peer cannot be verified. Never retry close.
+		if peerErr := m.verifyLeasePeer(ctx, l); peerErr != nil {
+			closeErr = peerErr
+		}
 	}
 	stopErr := m.backend.Stop(l.worker.WorkerID)
 	if stopErr != nil {

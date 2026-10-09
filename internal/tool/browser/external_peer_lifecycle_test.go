@@ -55,7 +55,7 @@ func TestExternalLeasePeerRevalidationOutlivesAdmission(t *testing.T) {
 		}
 	}
 	cleaned, err := m.Release(context.Background(), d.Scope, meta.BrowserLeaseID)
-	if err != nil || cleaned.CleanupReason != "owned external page closed and connector stopped" || v.count() != 10 {
+	if err != nil || cleaned.CleanupReason != "owned external page closed and connector stopped" || v.count() != 12 {
 		t.Fatalf("missing repeated peer checks: checks=%d cleanup=%+v err=%v", v.count(), cleaned, err)
 	}
 	if externalCallCount(b, "list_pages") != 5 || externalCallCount(b, "close_page") != 1 || externalCallCount(b, "stop") != 1 {

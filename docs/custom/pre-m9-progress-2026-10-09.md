@@ -63,3 +63,10 @@
 - 最多 32 個 path components／4096 bytes；保守拒絕 sticky writable ancestors（含 `/tmp`）。所有成功／race fixtures 為注入資料，native negatives 僅 `t.TempDir`；不列目錄、不讀取 profile 內容、不接觸實際 Edge/CDP。
 - focused Go tests（`GOMAXPROCS=2 go test -p 2`）及依序 Linux/Windows/macOS 無 cgo test cross-build PASS。獨立複驗完整 Browser/BrowserPolicy suite、targeted race 與 go vet 均 PASS；未做 native browser UAT；未提交／部署。
 - 只建立 physical directory prerequisite，不證明認證／同意，也不保證原子 fence 或排除未觀察到的 ABA race；provider/peer verifier 仍 nil、Edge UNQUALIFIED，P8/M9 gate 維持開放。
+
+## 2026-10-09 B2h safe-release peer 一致性（Next source-only）
+
+- 基於乾淨 `d1b0656b`：release 在 target `list_pages` 後、close 前立即複驗 peer，close 返回後再獨立複驗；前者失敗不 close，後者失敗隔離看似成功的 close 或原始 close error，優先保留 opaque peer error 並永久 latch peerLost。
+- connector Stop 成功仍為 CleanupComplete；無法獨立確認 close 身分時明確標記 `owned page close unconfirmed`。Stop 失敗回復只重試 AgentDock-owned connector Stop、不重試頁面操作；SweepExpired 共用此路徑。
+- TEST ONLY fake hooks 精確注入 list/close 階段 peer 替換、撤銷、verifier failure、close 後取消與錯誤優先順序，檢查 happy-path counts、connector-only recovery 和不重複 close；focused validation 包含 managed lease 回歸。`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'Test(External|ManagedLease)' -count=1 -timeout=120s` PASS（4.740s）；首次 sandbox 指令於 setup 因既有 Go cache 寫入權限失敗，獲准後用同一 cache 執行，未建立新 GOCACHE。已 gofmt；由主 Session 獨立重跑完整 Browser/BrowserPolicy suite、release/admission 專項 race 與 go vet，全部 PASS。這輪未跑 cross-build。
+- 這是 TOCTOU 緩解與 response quarantine，**不是 atomic transport/CDP fence**；close 可能已生效，仍不能排除觀察間 swap。正式 provider/verifier 維持 nil、Edge UNQUALIFIED，未呼叫 live Edge/CDP、未做 native browser UAT、安裝／重新啟動／部署／push，P8/M9 gate 仍開放。
