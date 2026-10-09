@@ -938,3 +938,58 @@ Independent supervisor verification: complete Browser/BrowserPolicy test suite,
 and Linux/Windows amd64 and Darwin arm64/no-cgo browser test cross-build
 all PASS (serial,
 GOMAXPROCS=2). No live Edge socket or profile was queried.
+
+## Phase C2b-B2l safe evidence/attestor composition (2026-10-09)
+
+Source-only checkpoint based on clean `99a88b7a52a7dbf5c7a2a7bf9c7f57377a88ada2`
+on `feature/m8-permission-approval`. New PRIVATE `newEdgeEvidencePinnedRelay`
+requires an injected B2k probe, a distinct independent `pinnedCDPAttestor`, and
+an expected private peer validated by B2j. Endpoint must exactly equal the
+preflight endpoint, including browser path. Its adapter first requires
+`readEdgeEstablishedSocketEvidence` on the exact concrete TCP socket supplied
+by B2j's `NetDialContext`; only successful evidence with a still-live context
+permits the independent attestor to observe that same socket. Evidence is
+discarded, never converted into identity; neither expected identity nor evidence
+is passed to the independent attestor. The independent observed peer must match
+expected under B2j's existing comparison. Missing inputs, stale/malformed
+preflight, socket/epoch/signature failures, second-stage mismatch/error/panic or
+cancellation/timeout return nil relay and the fixed opaque B2j error; socket
+closure occurs before any WS handshake bytes. B2j and externalTransportFence
+are unchanged. No runtime caller, public API, provider, verifier or wiring added.
+
+TEST ONLY local synthetic WebSocket/TCP fixtures count actual upstream read
+bytes, not just upgrade requests. Constructor echo and instrumented composition
+tests prove a single upstream dial, strict `ctscts` probe order before independent
+attestation, exact client pointer reuse and reversed four-tuple derived from
+that client. Because B2k's probe interface receives PID rather than conn, a test
+decorator records the composition's client pointer; the constructor-only test
+instead derives the matching tuple from the accepted server socket. The fake
+probe owns its synthetic epoch independently. Negative cases cover missing and
+typed-nil inputs, invalid peer, endpoint host/path differences, malformed or
+different profile, stale/future preflight, wrong PID/tuple/epoch/signature at both
+observations, cancellation, deadline, B2j timeout and probe/attestor panic.
+First-stage failures never invoke the second attestor. Rejection observes zero
+handshake bytes and server-side socket closure with no returned downstream relay;
+success closes both relay sockets/listener and waits for relay/fixture workers.
+Non-TCP, nil and typed-nil sockets fail the adapter directly.
+
+**B2k remains non-atomic read-only process evidence. The independent second
+attestor still has no production implementation; callback independence is a
+required caller contract, not something this adapter can infer. Composition is
+NOT OS-authenticated actual Edge, consent, login, protected-profile proof or
+per-command CDP atomicity.** B2j's single attestation slot still bounds arbitrary
+noncooperative callbacks; they cannot be forcibly terminated. Formal provider
+and peer verifier remain nil, WorkerRegistry has no fence, Edge remains
+UNQUALIFIED and P8/M9 gates remain open. No real Edge/browser/Chrome/AGY/stable
+or Next installation, profile, native UAT, push or deployment touched.
+
+Validation: gofmt applied. The sole targeted selection
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'TestEdgeEvidencePinned' -count=1 -timeout=90s`
+PASS (2.383s), no selected test skipped. Initial sandbox attempt failed at
+loopback bind before functional testing; authorized rerun used the same existing
+Go cache, with no fresh GOCACHE or concurrent testing. `git diff --check` PASS.
+Independent supervisor verification also PASS: complete Browser/BrowserPolicy
+suites, B2l focused `-race`, `go vet`, `git diff --check` and
+Linux/Windows amd64 plus macOS arm64/no-cgo browser test cross-build, all
+run serially with `GOMAXPROCS=2`. No native/live Edge UAT or authenticated
+peer attestor exists.
