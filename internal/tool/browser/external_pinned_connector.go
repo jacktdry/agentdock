@@ -109,9 +109,15 @@ func newPinnedExternalConnector(ctx context.Context, relay *pinnedCDPRelay, expe
 }
 
 // Tests/future reviewed backend ONLY. No WorkerRegistry.CallExternal fallback.
-// Reject overlap rather than queue another operation behind a live permit.
+// Only one operation per immutable binding. Overlap/reentry closes transport
+// synchronously; the lifetime watcher cleans up without waiting here for the
+// worker mutex held by the first call (which may itself be the reentrant caller).
 func (c *pinnedExternalConnector) callBound(ctx context.Context, expected WorkerInfo, peer externalPeerIdentity, tool string, args map[string]any) (result map[string]any, err error) {
-	if c == nil || !c.callMu.TryLock() {
+	if c == nil {
+		return nil, errPinnedConnectorUnavailable
+	}
+	if !c.callMu.TryLock() {
+		c.relay.Close()
 		return nil, errPinnedConnectorUnavailable
 	}
 	defer c.callMu.Unlock()

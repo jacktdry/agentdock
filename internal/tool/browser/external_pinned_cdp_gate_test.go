@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -115,6 +116,63 @@ func TestPinnedCDPGateBootstrapPermitAndIdleEvent(t *testing.T) {
 	if err != nil || string(event) != `{"method":"Target.targetCreated"}` || frames.Load() != 2 {
 		t.Fatal("idle upstream event was blocked")
 	}
+	if result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil); result != nil || err != errPinnedConnectorUnavailable {
+		t.Fatal("spent connector accepted second operation")
+	}
+	pinnedWait(t, c.relay.done)
+	if calls != 1 || frames.Load() != 2 || s.closes != 1 {
+		t.Fatal("second operation dispatched or did not quarantine owned connector")
+	}
+}
+
+func TestPinnedCDPGateSingleUseQueuedOperationA(t *testing.T) {
+	c, s, frames, _ := pinnedGateBinding(t)
+	var queued io.WriteCloser
+	calls := 0
+	s.call = func(context.Context) (map[string]any, error) {
+		calls++
+		if calls == 1 {
+			if err := pinnedGateEcho(s); err != nil {
+				return nil, err
+			}
+			var err error
+			queued, err = s.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return nil, err
+			}
+			// Exceed Gorilla's write buffer: a non-final fragment reaches the
+			// relay reader during A, but ReadMessage waits for the final fragment.
+			_, err = queued.Write([]byte(`{"id":2,"method":"Browser.getVersion"}` + strings.Repeat(" ", 8192)))
+			return map[string]any{"A": true}, err
+		}
+		// Under B2n-A this final fragment would complete A's queued message
+		// inside B's permit. B2n-B must never invoke this second Session.Call.
+		if err := queued.Close(); err != nil {
+			return nil, err
+		}
+		_, _, err := s.conn.ReadMessage()
+		return map[string]any{"B": true}, err
+	}
+	result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil)
+	if err != nil || result["A"] != true || frames.Load() != 2 {
+		t.Fatal("A frame/result not delivered", err)
+	}
+	for i := 0; i < 4; i++ {
+		if result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil); result != nil || err != errPinnedConnectorUnavailable {
+			t.Fatal("B/replay accepted")
+		}
+	}
+	_ = queued.Close()
+	pinnedWait(t, c.relay.done)
+	if calls != 1 || frames.Load() != 2 || s.closes != 1 {
+		t.Fatal("queued A frame passed in B or connector not quarantined")
+	}
+	c.relay.mu.Lock()
+	spent := c.relay.operationSpent && c.relay.lost && c.relay.gate == pinnedCDPClosed
+	c.relay.mu.Unlock()
+	if !spent {
+		t.Fatal("Close reset single-use reservation")
+	}
 }
 
 func TestPinnedCDPGateUnsolicitedAndLateFrames(t *testing.T) {
@@ -185,8 +243,52 @@ func TestPinnedCDPGateOverlap(t *testing.T) {
 	pinnedWait(t, entered)
 	result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil)
 	close(release)
-	if result != nil || err != errPinnedConnectorUnavailable || <-done != nil || calls.Load() != 1 || frames.Load() != 2 {
-		t.Fatal("overlapping permit dispatched or disrupted first call")
+	if result != nil || err != errPinnedConnectorUnavailable || <-done != errPinnedConnectorUnavailable || calls.Load() != 1 {
+		t.Fatal("overlapping permit dispatched or did not quarantine first call")
+	}
+	pinnedWait(t, c.relay.done)
+	_ = c.Stop()
+	if frames.Load() != 1 || s.closes != 1 {
+		t.Fatal("overlap forwarded frames or leaked connector")
+	}
+}
+
+func TestPinnedCDPGateReentrantAndCanceledFirst(t *testing.T) {
+	for _, mode := range []string{"reentrant", "canceled", "nil context"} {
+		t.Run(mode, func(t *testing.T) {
+			c, s, frames, _ := pinnedGateBinding(t)
+			calls := 0
+			s.call = func(context.Context) (map[string]any, error) {
+				calls++
+				result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil)
+				if result != nil || err != errPinnedConnectorUnavailable {
+					t.Error("reentry accepted")
+				}
+				return map[string]any{"private": true}, nil
+			}
+			ctx := context.Background()
+			if mode == "canceled" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			} else if mode == "nil context" {
+				ctx = nil
+			}
+			if result, err := c.callBound(ctx, c.worker, c.peer, "list_pages", nil); result != nil || err != errPinnedConnectorUnavailable {
+				t.Fatal("invalid first call accepted")
+			}
+			if result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil); result != nil || err != errPinnedConnectorUnavailable {
+				t.Fatal("invalid first call reopened")
+			}
+			pinnedWait(t, c.relay.done)
+			wantCalls := 0
+			if mode == "reentrant" {
+				wantCalls = 1
+			}
+			if calls != wantCalls || frames.Load() != 1 || s.closes != 1 {
+				t.Fatal("reentry/cancellation dispatched or leaked")
+			}
+		})
 	}
 }
 
@@ -245,6 +347,9 @@ func TestPinnedCDPGateCancellationStopAndGenerationQuarantine(t *testing.T) {
 			}
 			if result != nil || err != errPinnedConnectorUnavailable || frames.Load() != want || s.closes != 1 {
 				t.Fatal("invalid output escaped or frame/connector not quarantined", mode)
+			}
+			if result, err := c.callBound(context.Background(), c.worker, c.peer, "list_pages", nil); result != nil || err != errPinnedConnectorUnavailable || frames.Load() != want {
+				t.Fatal("failed/canceled/stopped epoch reopened")
 			}
 		})
 	}

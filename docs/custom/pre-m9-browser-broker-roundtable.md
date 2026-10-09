@@ -1128,3 +1128,54 @@ Gorilla WebSocket concurrent writer DATA RACE in the *synthetic server test
 fixture*; a single writer mutex now serializes all synthetic upstream writes;
 focused -race and supervisor independent rerun PASS. No native/live Edge UAT.
 The production relay write gate was not weakened to work around this test issue.
+
+## Phase C2b-B2n-B SINGLE-USE CDP operation epoch (2026-10-09)
+
+Next SOURCE-ONLY change from clean `2da83b6f`, branch
+`feature/m8-permission-approval`. This supersedes B2n-A's reusable temporal
+permit: each private B2m relay/immutable Worker/Connector lifetime permits at
+most ONE MCP operation. `openPermit` consumes an irreversible reservation
+before validation and Session.Call; success/failure closes the gate permanently.
+Close never resets the reservation; Stop, cancellation and panic leave it spent.
+Subsequent calls fail opaque and close the owned relay before any new window
+can open, then stop the owned connector. Overlap/reentry closes transport
+synchronously and uses the existing lifetime watcher for connector cleanup,
+avoiding a reentrant wait on the first operation's worker mutex. No queue/replay
+can obtain a second permit. First-operation success alone does not close the
+connection: idle upstream-to-downstream events remain allowed until relay loss
+or a second operation quarantines the binding.
+
+TEST ONLY httptest/fake-session coverage sends A's valid CDP command and
+delivers A's result, then leaves another A command fragmented in the downstream
+reader. B is attempted immediately; the final fragment would complete inside
+B's permit under B2n-A. B/replays now never invoke Session.Call, close the
+connector/relay and leave the upstream count at bootstrap + A only. Tests also
+cover idle reverse-event delivery before the second-call quarantine, overlap,
+reentry, pre-canceled/nil context, and retry after failure/cancellation/Stop/panic.
+B2m bootstrap remains unchanged, including the synthetic plain-text handshake.
+Standalone B2j's legacy gate remains unchanged; its broader regression tests
+are outside this requested test selection and belong to the supervisor.
+
+**LIMITATIONS:** ONE MCP operation per Connector is an intentional usability
+regression and is unsuitable for real multi-step workflows. This removes a
+later B window; it does NOT prove authenticated MCP-tool-to-CDP-method
+provenance. Black-box chrome-devtools-mcp cannot annotate frames with that
+proof. Initial bootstrap may emit CDP; background traffic during A may still
+pass. No envelope parser or semantic authorization claim is introduced.
+A future remedy requires a trustworthy CDP command dispatcher/provenance,
+not a timer. Existing bounded-write, cancellation, remote-loss and
+noncooperative-session limits still apply. OS trust/login/consent remain
+unresolved. WorkerRegistry/production backend still do not implement
+`externalTransportFence`; production provider/verifier remain nil and Edge
+UNQUALIFIED. Default managed Chrome and browser lifecycles are unchanged.
+No live browser, real npx, AGY/stable/Next restart, install, deploy or push.
+
+Validation: gofmt completed. The ONE requested selection
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^(TestPinnedCDPGate|TestPinnedConnector)' -count=1 -timeout=120s`
+PASS (2.553s), no selected skips. Initial sandbox execution failed at httptest
+loopback bind; authorized rerun of the same selection passed. Independent
+supervisor verification then PASS: full Browser/BrowserPolicy test suites,
+B2n/B2m/B2j pinned focused Race Detector, Go vet, gofmt/diff check, and
+Linux/Windows amd64 plus macOS arm64 no-CGO browser test cross-build, all
+run serially with `GOMAXPROCS=2`. No native/live Edge UAT. Synthetic fixture
+resources are cleaned up by test cleanup; no temporary runtime remains.

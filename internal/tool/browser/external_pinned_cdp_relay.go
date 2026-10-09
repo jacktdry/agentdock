@@ -75,6 +75,7 @@ type pinnedCDPRelay struct {
 	gateWorker     WorkerInfo
 	bootstrapCtx   context.Context
 	permit         *pinnedCDPPermit
+	operationSpent bool // Single-use reservation; never reset, including Close.
 	closeOnce      sync.Once
 }
 
@@ -253,6 +254,10 @@ func (r *pinnedCDPRelay) writeFrame(upstream bool, kind int, data []byte, contro
 func (r *pinnedCDPRelay) openPermit(p *pinnedCDPPermit) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.operationSpent {
+		return errPinnedCDPUnavailable
+	}
+	r.operationSpent = true // Consume before validation and before Session.Call.
 	if p == nil || p.ctx == nil || p.ctx.Err() != nil || r.lost || r.gate != pinnedCDPClosed ||
 		r.peer != p.peer || r.gatePeer != p.peer || r.gateWorker != p.worker || r.down == nil {
 		return errPinnedCDPUnavailable
@@ -354,6 +359,9 @@ func (r *pinnedCDPRelay) withPinnedPeer(expected externalPeerIdentity, callback 
 func (r *pinnedCDPRelay) Close() {
 	r.mu.Lock()
 	r.lost = true
+	if r.bound {
+		r.operationSpent = true
+	}
 	down := r.down
 	r.mu.Unlock()
 	r.closeOnce.Do(func() {
