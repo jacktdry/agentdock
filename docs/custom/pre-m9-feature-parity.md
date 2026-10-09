@@ -411,6 +411,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 - queue/concurrency；
 - cleanup / recovery status。
 
+> **P8 2026-10-10 使用者新硬性規格：** Next 所有 Chrome／Edge（含 Managed）禁止 Remote Debugging/CDP、`chrome.debugger` 及 silent fallback；CMS 指定既有 Edge Profile、明確要求個人 Chrome Profile 時必須使用該 Profile。原有 CDP 架構僅歷史紀錄，Next 目前**尚未實作／部署**此禁令；先做 MV3 Extension + Native Messaging 有界 PoC，再決定實作。詳見 [最新 Browser 決策](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)。
+
 ### P9 — Pre-M9 Hardening
 
 1. 修正既有 `packaging/macos/app-identity.sh` script-governance inventory debt，讓 root suite 不再需要 baseline exception。

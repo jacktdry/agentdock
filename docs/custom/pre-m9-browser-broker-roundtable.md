@@ -1,3 +1,7 @@
+> **2026-10-10 P8 新需求／安全架構 SUPERSEDES 此文件原先「公司 Edge 以 Remote Debugging/CDP attach」的正式路線。**
+> 使用者指定 Chrome Profile 必須連到該 Profile；公司 CMS 預設用既有 Edge Profile；Next 不得透過任何 Remote Debugging 使用 Chrome/Edge（含 managed）。
+> 既有 B2i～B2n-B 為歷史／離線研究，非可部署的新 Browser 路由；目前 Next 尚未合規。詳見 [Browser no-remote-debugging decision](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)。
+
 # Pre-M9 P8 Browser Broker — frozen Phase A contract
 
 Checkpoint: 2026-10-08, source development from `32822bcd` on

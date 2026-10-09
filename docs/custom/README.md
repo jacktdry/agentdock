@@ -30,6 +30,7 @@
 - [pre-m9-mcp-management-roundtable.md](pre-m9-mcp-management-roundtable.md)：Wave 3 P5 MCP Management 的 standalone/plugin ownership、revision/generation、credential/OAuth、reconnect 與 Shared UI authority contract。
 - [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 - [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)：Browser / CDP process ownership、stale cleanup、Edge connector 去重與 ACP browser child lifecycle。
+- [pre-m9-browser-no-remote-debugging-decision-2026-10-10.md](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)：**2026-10-10 P8 新優先決策**：CMS 使用既有 Edge Profile、明確指定時用個人 Chrome Profile；所有 Edge／Chrome（含 managed）禁止 Remote Debugging；Extension／Native Messaging 評估、風險模型與 B3 PoC gate。
 - [pre-m9-browser-broker-roundtable.md](pre-m9-browser-broker-roundtable.md)：P8 Browser Broker Phase A 唯讀 Core 快照、經驗證的 Next Unix Desktop Control、權限／敏感資訊邊界、測試與 Shared UI 待辦。
 - [computer-use-backends.md](computer-use-backends.md)：Computer Use provider 選型、Orca / OpenAI Sky 實測、no-focus policy 與 ACP Computer Control Broker 邊界。
 - [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)：Codebase Memory 更新後 supervisor / worker build 衝突、現場證據與後續 lifecycle 改善方向。

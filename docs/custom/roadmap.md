@@ -438,6 +438,8 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 並行策略：Pre-M9 採 wave-based execution。Wave 0 的 parity inventory / UX-IA / Security UX / architecture mapping 可平行；Wave 1 的 port ownership、Connection/Auth API、Tunnel backend 可平行但需 contract freeze 後才做 UI；P1/P2、connector 建立與 P3 side-by-side validation 均已完成。Wave 3 的 ACP 與 MCP domain 均已 closeout；現在依 **Plugin → Nexus / Platform Essentials → Browser Broker** 的順序接續，各 domain 先做 AI UX/IA roundtable，再以獨立 worktree 推進，active writing workers 以 3–4 個為上限；`app-identity.sh` debt / CBM lifecycle triage 可走 side lane。所有 repo/build/install/live mutation 仍由 stable `mac-dev` orchestrate。M9 只能在必要 parity + hardening integration review 完成後啟動；release candidate 凍結後 macOS/Windows/WSL/Linux helper native UAT 才按平台平行。完整 gate / worktree / integration ownership 見 [Pre-M9 parallel execution plan](pre-m9-feature-parity.md#parallel-execution-plan)。
 
+> **2026-10-10 P8 架構改版 gate：** 使用者要求 CMS 既有 Edge Profile、指定時使用其個人 Chrome Profile，並完全禁止 Next 對 Edge／Chrome 的 Remote Debugging（包括 managed Chrome/CDP/`chrome.debugger`）。此前 B2i～B2n-B 不再是正式連線目標；先行 Extension + Native Messaging 可行性評估／PoC，失敗時明確拒絕而非 fallback。**目前 source/installed Next 未合規、未部署替代實作。** 詳見 [需求與安全決策](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)。
+
 ## M9 — Release Migration
 
 建立從 `custom/main` 的正式 cross-platform release pipeline。
