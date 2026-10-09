@@ -16,6 +16,7 @@
 | macOS service lifecycle、Windows WinUI UI | Next 已採 Shared Vue/Wails + native platform adapters | **REFERENCE**：只選生命週期與互動可用性測試，不重建雙份原生 Business UI |
 | 觀測／tool stage timing／OpenTelemetry | Next 的 `internal/observability`、`internal/app/runtime_observability.go` 已有相關後端 | **ALREADY PRESENT**：僅評估 Execution Center 的欄位／隱私 UX，不重複移植 |
 | Nexus pairing | 使用者要求延後真實配對 | **DEFER**：本次不操作配對、不擴大範圍 |
+| **PR #229（不在 v1.0.1 tag 內，尚未 merge）** Task Progress live-card | Next 仍只有 `task_manage`，MCP Apps 會重複掛 Task UI/新狀態不更新舊卡 | **SELECTIVE ADOPT（P2 排程 / 高價值 UX）**：獨立於 P8 導入，需 snapshot scope/權限、UI 快取與真實 ChatGPT UAT；[`詳見`](upstream-ports/task-progress-live-card-pr229.md) |
 
 ## 2. 不可破壞的不變式
 
