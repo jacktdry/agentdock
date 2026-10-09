@@ -35,19 +35,21 @@ type pinnedCDPAttestor func(context.Context, net.Conn) (externalPeerIdentity, er
 var pinnedCDPAttestationSlot = make(chan struct{}, 1)
 
 type pinnedCDPRelay struct {
-	mu       sync.Mutex
-	peer     externalPeerIdentity
-	up       *websocket.Conn
-	down     *websocket.Conn
-	listener *pinnedCDPListener
-	server   *http.Server
-	endpoint string // Core-only bearer capability; never serialize or log.
-	path     string
-	lost     bool
-	claimed  bool
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	done     chan struct{}
+	mu             sync.Mutex
+	peer           externalPeerIdentity
+	up             *websocket.Conn
+	down           *websocket.Conn
+	listener       *pinnedCDPListener
+	server         *http.Server
+	endpoint       string // Core-only bearer capability; never serialize or log.
+	sourceEndpoint string // Immutable admitted upstream; Core-only.
+	bound          bool   // One connector constructor reservation, never reset.
+	path           string
+	lost           bool
+	claimed        bool
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	done           chan struct{}
 }
 
 func pinnedCDPEndpointValid(endpoint string) bool {
@@ -88,7 +90,7 @@ func attestPinnedCDP(ctx context.Context, c net.Conn, attest pinnedCDPAttestor, 
 	}
 }
 
-// No production caller, discovery, reconnect, worker binding, or status mint.
+// No production caller, discovery, reconnect, or status mint.
 func newPinnedCDPRelay(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor) (*pinnedCDPRelay, error) {
 	if ctx == nil || ctx.Err() != nil || attest == nil || expected.source == nil || expected.incarnation == nil ||
 		expected.source == expected.incarnation || !pinnedCDPEndpointValid(endpoint) {
@@ -139,7 +141,7 @@ func newPinnedCDPRelay(ctx context.Context, endpoint string, expected externalPe
 		return nil, errPinnedCDPUnavailable
 	}
 	lifetime, cancel := context.WithTimeout(ctx, pinnedCDPSessionLimit)
-	r := &pinnedCDPRelay{peer: expected, up: up, listener: &pinnedCDPListener{Listener: l, conns: make(map[*pinnedCDPConn]bool)},
+	r := &pinnedCDPRelay{peer: expected, up: up, sourceEndpoint: endpoint, listener: &pinnedCDPListener{Listener: l, conns: make(map[*pinnedCDPConn]bool)},
 		path: "/devtools/browser/" + hex.EncodeToString(token[:]), cancel: cancel, done: make(chan struct{})}
 	r.endpoint = "ws://" + l.Addr().String() + r.path
 	r.server = &http.Server{Handler: http.HandlerFunc(r.attach), ReadHeaderTimeout: pinnedCDPTimeout,

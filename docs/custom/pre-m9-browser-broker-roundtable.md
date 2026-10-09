@@ -993,3 +993,67 @@ suites, B2l focused `-race`, `go vet`, `git diff --check` and
 Linux/Windows amd64 plus macOS arm64/no-cgo browser test cross-build, all
 run serially with `GOMAXPROCS=2`. No native/live Edge UAT or authenticated
 peer attestor exists.
+
+## Phase C2b-B2m Connector to pinned relay immutable worker binding (2026-10-09)
+
+Source-only checkpoint based on clean `184b172e4bf8d1433f8b7ab4ed6a5b0fce606a38`
+on `feature/m8-permission-approval`. PRIVATE `pinnedExternalConnector` accepts
+only an existing admitted relay, exact private expected peer, original external
+RouteDecision validated by `validateExternalStart`, live context and open
+WorkerRegistry. It validates the relay's canonical capability endpoint/path and
+exact original upstream endpoint; no route or grant is changed or consumed.
+`externalWorkerConfig` retains every launch option except `--wsEndpoint`, which
+is replaced with the Core-owned one-shot loopback capability. The original
+browser endpoint is never a connector argument. Relay reservation is permanent
+and serialized before start, independently of downstream WS claim, so concurrent
+constructors and replay cannot launch a second connector.
+
+Two necessary existing-source adjustments: relay retains its admitted source
+endpoint and binding reservation; WorkerRegistry's private start helper accepts
+a pre-Open observation and immutable cleanup hook. Legacy `StartExternal`
+behavior is unchanged. After the probe, observed loss/cancellation prevents Open;
+after start, worker readiness, immutable WorkerInfo generation, live SessionInfo
+and successful downstream attachment are checked against the exact relay peer.
+Handshake failure returns a fixed opaque error, closes relay and best-effort
+stops only the AgentDock connector. Future private `checkAlive` dispatches no
+browser operation; observed relay loss or worker/session change permanently
+invalidates the binding. Concurrent binding Stop is idempotent. Registry Stop
+and Shutdown close the relay before connector cleanup, even on cleanup error.
+No cleanup operation closes a user browser process, profile or page.
+
+TEST ONLY fake WorkerDependencies.Probe/Open use the committed managed tool
+schemas and synthetic SessionInfo. Local httptest WS fixtures exercise the real
+relay: exact single pinned endpoint argument, unchanged other options, one
+upstream dial, synthetic handshake/echo, immutable binding and live upstream
+fixture listener after cleanup. Rejection coverage includes nil/canceled inputs,
+invalid route/source endpoint/path/peer/registry, closed or claimed relay,
+concurrent reservation/replay, probe/Open failures, missing attachment/session,
+version/schema/SessionInfo mismatch, loss/cancellation during probe or handshake,
+later worker/session/peer changes, concurrent Stop and Stop error cleanup.
+
+The bearer capability appears in the child connector process argv; this is
+NOT a secret against local same-user process inspection. The only defense at
+this stage is loopback-only one-shot attachment plus the short relay lifetime;
+production authorization must not rely on the endpoint being confidential.
+The existing WorkerRegistry retains legacy direct CallExternal for callers
+outside this private binding; this is not yet a browser dispatch security fence.
+
+**This is immutable source-only worker binding, NOT atomic per-command fencing.**
+`withPinnedPeer` still provides pre/post local observations; Close may race
+execution and remote loss may require I/O to observe. No generic CallExternal
+is exposed by this object, no `CallExternalFenced` implementation is added, and
+WorkerRegistry still does not satisfy `externalTransportFence`. No production
+caller/provider/peer verifier is enabled, no browser status/grant is minted,
+and no independent production OS peer attestor exists. Edge stays UNQUALIFIED;
+P8/M9 gates remain open. No live Edge/Chrome/discovery, stable/AGY repository,
+Next installation/deploy/restart, real npx, push or native/live UAT.
+
+Validation: gofmt applied. The sole focused selection
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^TestPinnedConnector' -count=1 -timeout=100s`
+PASS (0.591s), no selected tests skipped. Initial sandbox attempt failed at
+existing Go-cache write before tests; authorized rerun used that same cache and
+synthetic loopback fixtures. Independent supervisor validation also PASS: complete Browser/BrowserPolicy
+Go tests, B2m targeted Race Detector, go vet, gofmt/diff checks, and
+Linux/Windows amd64 plus macOS arm64 no-CGO browser test cross-build;
+all run serially with `GOMAXPROCS=2`. No native/live Edge UAT was done.
+`git diff --check` PASS. Test-local relay/WS/listener resources are cleaned up.
