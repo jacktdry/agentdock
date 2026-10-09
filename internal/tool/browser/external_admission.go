@@ -31,6 +31,29 @@ type externalPeerVerifier interface {
 	VerifyExternalPeer(context.Context, externalPeerIdentity, WorkerInfo) (externalPeerIdentity, error)
 }
 
+// externalTransportFence is a required admission capability, not an attestation.
+// At EACH dispatch, the owning connector transport must atomically pin and
+// compare the actual socket/session peer against the immutable expected peer.
+// Reject missing, invalid or mismatched identity before any browser operation.
+// Echoing expected identity or rechecking around legacy CallExternal is forbidden
+// in production: neither provides transport-bound CDP fencing. WorkerRegistry
+// does not implement this capability; no real bound transport exists yet.
+type externalTransportFence interface {
+	CallExternalFenced(context.Context, WorkerInfo, externalPeerIdentity, string, map[string]any) (map[string]any, error)
+}
+
+func externalTransportFenceError() error {
+	return externalLeaseError(ErrRequiredRouteUnavailable, "", "external transport fence unavailable or mismatched", nil)
+}
+
+func (m *ExternalLeaseManager) callExternalFenced(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, tool string, args map[string]any) (map[string]any, error) {
+	fence, ok := m.backend.(externalTransportFence)
+	if !ok || peer.source == nil || peer.incarnation == nil || peer.source == peer.incarnation {
+		return nil, externalTransportFenceError()
+	}
+	return fence.CallExternalFenced(ctx, worker, peer, tool, args)
+}
+
 func (g *externalRouteGrant) fresh() bool {
 	return g != nil && time.Now().UTC().Before(g.expiresAt)
 }

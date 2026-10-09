@@ -15,8 +15,8 @@ type releasePhaseBackend struct {
 	after func(string)
 }
 
-func (b *releasePhaseBackend) CallExternal(ctx context.Context, worker WorkerInfo, tool string, args map[string]any) (map[string]any, error) {
-	result, err := b.externalFakeBackend.CallExternal(ctx, worker, tool, args)
+func (b *releasePhaseBackend) CallExternalFenced(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, tool string, args map[string]any) (map[string]any, error) {
+	result, err := b.externalFakeBackend.CallExternalFenced(ctx, worker, peer, tool, args)
 	b.after(tool)
 	return result, err
 }

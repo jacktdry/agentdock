@@ -70,3 +70,12 @@
 - connector Stop 成功仍為 CleanupComplete；無法獨立確認 close 身分時明確標記 `owned page close unconfirmed`。Stop 失敗回復只重試 AgentDock-owned connector Stop、不重試頁面操作；SweepExpired 共用此路徑。
 - TEST ONLY fake hooks 精確注入 list/close 階段 peer 替換、撤銷、verifier failure、close 後取消與錯誤優先順序，檢查 happy-path counts、connector-only recovery 和不重複 close；focused validation 包含 managed lease 回歸。`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'Test(External|ManagedLease)' -count=1 -timeout=120s` PASS（4.740s）；首次 sandbox 指令於 setup 因既有 Go cache 寫入權限失敗，獲准後用同一 cache 執行，未建立新 GOCACHE。已 gofmt；由主 Session 獨立重跑完整 Browser/BrowserPolicy suite、release/admission 專項 race 與 go vet，全部 PASS。這輪未跑 cross-build。
 - 這是 TOCTOU 緩解與 response quarantine，**不是 atomic transport/CDP fence**；close 可能已生效，仍不能排除觀察間 swap。正式 provider/verifier 維持 nil、Edge UNQUALIFIED，未呼叫 live Edge/CDP、未做 native browser UAT、安裝／重新啟動／部署／push，P8/M9 gate 仍開放。
+
+
+## 2026-10-09 B2i transport-fence admission contract（Next source-only）
+
+- 基於乾淨 `44c30c28`，加入 private required `externalTransportFence` 能力契約；要求 owning connector transport 在每次 dispatch 原子 pin／比對 actual socket/session peer，禁止用 echo 或 legacy CallExternal 前後複驗冒充正式 fence。
+- Acquire 消耗一次性 grant 後、Start 前拒絕缺少能力的 backend，回 sanitized ErrRequiredRouteUnavailable，零啟動／零頁面操作、不 fallback；Acquire／Call／Release（含取得失敗的已證明頁面清理）全部帶 immutable expected peer 走 CallExternalFenced。既有驗證、worker identity、清理規則保留。
+- WorkerRegistry 不實作 fence，直接 StartExternal API 保持不變；build-tag live integration 的真實 registry lease attach 刻意維持阻擋。TEST ONLY fake 保存並比對 private peer，回歸涵蓋 missing fence、grant replay、zero／aliased／forged peer 與 legacy dispatch 零使用。
+- **B2i 僅為 fail-closed 前置條件，未實作真實 bound transport、未提供 atomic guarantee、未建立 production external route grant。** 正式 planner provider／peer verifier 仍 nil、Edge UNQUALIFIED，P8/M9 未結案。未觸碰 live Edge/CDP/tab/profile、managed Chrome、stable／AGY、App runtime 或部署；未 push。
+- 已 gofmt；唯一 focused command `GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'Test(External|Planner)' -count=1 -timeout=120s` PASS（4.974s）；依序 `GOMAXPROCS=2 go test -p 2 -tags browser_integration -c ./internal/tool/browser` PASS（僅編譯）。首次 compile 因 sandbox 既有 Go cache 存取限制於 setup 失敗，獲准後使用同一 cache 通過。`git diff --check` PASS；主 Session 獨立跑完整 Browser/BrowserPolicy 測試、External/Planner 專項 Race Detector、go vet，以及 Linux/Windows amd64 交叉編譯，皆 PASS。未執行 native/live UAT。詳細契約見 [B2i checkpoint](pre-m9-browser-broker-roundtable.md#phase-c2b-b2i-transport-fence-admission-contract-2026-10-09)。

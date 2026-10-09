@@ -73,6 +73,11 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if ctx.Err() != nil || !consumeExternalRouteGrant(route) {
 		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrRequiredRouteUnavailable, "", "external route admission unavailable", nil)
 	}
+	// Consume admission once even when the required transport is unavailable.
+	// Do not start a legacy connector or touch any browser without this fence.
+	if _, ok := m.backend.(externalTransportFence); !ok {
+		return LeaseMetadata{}, EngineBinding{}, externalTransportFenceError()
+	}
 	worker, err := m.backend.StartExternal(ctx, ExternalWorkerOptions{Cwd: scope.CanonicalWorkspaceRoot, Route: route})
 	var pageID float64
 	proven := false
@@ -82,7 +87,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if proven {
-				if closeErr := m.closeOwnedPage(cleanupCtx, worker, pageID); closeErr != nil {
+				if closeErr := m.closeOwnedPage(cleanupCtx, worker, route.grant.peer, pageID); closeErr != nil {
 					cause = errors.Join(cause, externalLeaseError(ErrActionFailed, "", "external owned target cleanup failed", closeErr))
 				}
 			}
@@ -104,7 +109,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
 		return fail(err)
 	}
-	baselineResult, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
+	baselineResult, err := m.callExternalFenced(ctx, worker, route.grant.peer, "list_pages", map[string]any{})
 	if err != nil {
 		return fail(err)
 	}
@@ -121,7 +126,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
 		return fail(err)
 	}
-	result, createErr := m.backend.CallExternal(ctx, worker, "new_page", map[string]any{"url": url, "background": true})
+	result, createErr := m.callExternalFenced(ctx, worker, route.grant.peer, "new_page", map[string]any{"url": url, "background": true})
 	var pageString string
 	pageID, pageString, err = externalNewPageID(baseline, result)
 	if err != nil {
@@ -166,8 +171,8 @@ func (m *ExternalLeaseManager) lease(id string) (*externalLease, error) {
 }
 
 // verifyTarget never substitutes another page for a missing lease target.
-func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worker WorkerInfo) (map[float64]externalPage, error) {
-	result, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
+func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity) (map[float64]externalPage, error) {
+	result, err := m.callExternalFenced(ctx, worker, peer, "list_pages", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -184,8 +189,8 @@ func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worke
 // closeOwnedPage is version-pinned compatibility logic. The connector is
 // stopped immediately after release, so we never repair MCP selection by
 // selecting or otherwise touching a user-owned page.
-func (m *ExternalLeaseManager) closeOwnedPage(ctx context.Context, worker WorkerInfo, pageID float64) error {
-	result, err := m.backend.CallExternal(ctx, worker, "close_page", map[string]any{"pageId": pageID})
+func (m *ExternalLeaseManager) closeOwnedPage(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, pageID float64) error {
+	result, err := m.callExternalFenced(ctx, worker, peer, "close_page", map[string]any{"pageId": pageID})
 	if err != nil {
 		return err
 	}
@@ -197,7 +202,7 @@ func (m *ExternalLeaseManager) verifyTarget(ctx context.Context, l *externalLeas
 	if l.targetLost {
 		return externalLeaseError(ErrLeaseTargetMismatch, id, "external target identity lost", nil)
 	}
-	pages, err := m.externalPagesForWorker(ctx, l.worker)
+	pages, err := m.externalPagesForWorker(ctx, l.worker, l.peer)
 	if err != nil {
 		l.recordIdentityError(err)
 		return err
@@ -259,7 +264,7 @@ func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id,
 		targetArgs = make(map[string]any)
 	}
 	targetArgs["pageId"] = l.pageID
-	result, err := m.backend.CallExternal(ctx, l.worker, tool, targetArgs)
+	result, err := m.callExternalFenced(ctx, l.worker, l.peer, tool, targetArgs)
 	// Recheck after the operation before releasing any data. The action may
 	// already have taken effect; this is a response quarantine, not atomic
 	// peer fencing or rollback. Never return a stale peer's raw results.
@@ -310,9 +315,9 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 		closeErr = m.verifyLeasePeer(ctx, l)
 	}
 	if closeErr == nil {
-		closeErr = m.closeOwnedPage(ctx, l.worker, l.pageID)
-		// This brackets the close with independent observations, not an atomic
-		// transport/CDP fence. Quarantine even apparent success (or a raw close
+		closeErr = m.closeOwnedPage(ctx, l.worker, l.peer, l.pageID)
+		// These independent observations supplement the required transport
+		// fence; they cannot implement it. Quarantine even apparent success (or a raw close
 		// error) when the post-close peer cannot be verified. Never retry close.
 		if peerErr := m.verifyLeasePeer(ctx, l); peerErr != nil {
 			closeErr = peerErr

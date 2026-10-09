@@ -35,6 +35,8 @@ func externalPageResult(entries ...any) map[string]any {
 }
 
 type externalFakeBackend struct {
+	peers                                            map[string]externalPeerIdentity
+	legacyCalls                                      int
 	mu                                               sync.Mutex
 	pages                                            map[string]map[string]any
 	actionResult                                     map[string]any
@@ -57,10 +59,36 @@ func (b *externalFakeBackend) StartExternal(_ context.Context, options ExternalW
 		b.workers = make(map[string]WorkerInfo)
 	}
 	b.workers[w.WorkerID] = w
+	if b.peers == nil {
+		b.peers = make(map[string]externalPeerIdentity)
+	}
+	if options.Route.grant != nil {
+		b.peers[w.WorkerID] = options.Route.grant.peer
+	}
 	b.calls = append(b.calls, leaseBackendCall{worker: w.WorkerID, tool: "start"})
 	return w, b.startErr
 }
-func (b *externalFakeBackend) CallExternal(ctx context.Context, expected WorkerInfo, tool string, args map[string]any) (map[string]any, error) {
+
+// TEST ONLY: model the admission contract using synthetic private identities.
+// This fake does not implement socket/session peer binding.
+func (b *externalFakeBackend) CallExternalFenced(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, tool string, args map[string]any) (map[string]any, error) {
+	b.mu.Lock()
+	valid := peer.source != nil && peer.incarnation != nil && peer.source != peer.incarnation && b.peers[worker.WorkerID] == peer
+	b.mu.Unlock()
+	if !valid {
+		return nil, externalTransportFenceError()
+	}
+	return b.callOperation(ctx, worker, tool, args)
+}
+
+func (b *externalFakeBackend) CallExternal(ctx context.Context, worker WorkerInfo, tool string, args map[string]any) (map[string]any, error) {
+	b.mu.Lock()
+	b.legacyCalls++
+	b.mu.Unlock()
+	return b.callOperation(ctx, worker, tool, args)
+}
+
+func (b *externalFakeBackend) callOperation(ctx context.Context, expected WorkerInfo, tool string, args map[string]any) (map[string]any, error) {
 	b.mu.Lock()
 	w := b.workers[expected.WorkerID]
 	if w.WorkerID != expected.WorkerID || w.CreatedAt != expected.CreatedAt || w.Session != expected.Session || w.State != WorkerReady {

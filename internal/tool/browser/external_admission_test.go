@@ -323,3 +323,87 @@ func TestExternalAdmissionNoncooperativeVerifierRetainsSlot(t *testing.T) {
 		t.Fatal("stuck verifier spawned more work or touched pages")
 	}
 }
+
+// The interface field exposes only legacy methods, even when its value can fence.
+type legacyExternalBackend struct{ ExternalLeaseBackend }
+
+func TestExternalAdmissionMissingTransportFenceConsumesGrantWithoutDispatch(t *testing.T) {
+	b := &externalFakeBackend{}
+	d := externalRoute(externalStart())
+	m := newTestExternalLeaseManager(legacyExternalBackend{b})
+	meta, binding, err := m.Acquire(context.Background(), d, "secret-url")
+	assertBrowserCode(t, err, ErrRequiredRouteUnavailable)
+	if meta != (LeaseMetadata{}) || binding != (EngineBinding{}) || !d.grant.used.Load() || len(m.leases) != 0 || len(m.orphans) != 0 {
+		t.Fatal("missing fence admitted resources or retained reusable grant")
+	}
+	encoded, marshalErr := json.Marshal(err)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	for _, sensitive := range []string{"secret-url", d.Start.Endpoint, d.Start.ConnectorID, "incarnation", "PID="} {
+		if strings.Contains(err.Error(), sensitive) || strings.Contains(string(encoded), sensitive) {
+			t.Fatal("missing-fence error exposed private details")
+		}
+	}
+	// A copied grant cannot retry against a backend that does have the capability.
+	_, _, err = newTestExternalLeaseManager(b).Acquire(context.Background(), d, "")
+	assertBrowserCode(t, err, ErrRequiredRouteUnavailable)
+	if b.starts != 0 || len(b.calls) != 0 || b.legacyCalls != 0 {
+		t.Fatal("missing fence or replay started connector/touched browser")
+	}
+	registry := NewWorkerRegistry(WorkerDependencies{})
+	if _, ok := any(registry).(externalTransportFence); ok {
+		t.Fatal("legacy WorkerRegistry falsely advertises transport fencing")
+	}
+	_, _, err = newTestExternalLeaseManager(registry).Acquire(context.Background(), externalRoute(externalStart()), "")
+	assertBrowserCode(t, err, ErrRequiredRouteUnavailable)
+}
+
+func TestExternalTransportFenceRejectsInvalidExpectedPeer(t *testing.T) {
+	b := &externalFakeBackend{}
+	d := externalRoute(externalStart())
+	worker, err := b.StartExternal(context.Background(), ExternalWorkerOptions{Route: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Stop(worker.WorkerID)
+	for name, peer := range map[string]externalPeerIdentity{
+		"zero":                {},
+		"missing source":      {incarnation: d.grant.peer.incarnation},
+		"missing incarnation": {source: d.grant.peer.source},
+		"aliased":             {source: d.grant.peer.source, incarnation: d.grant.peer.source},
+		"forged source":       {source: &connectorEvidenceIdentity{}, incarnation: d.grant.peer.incarnation},
+		"forged incarnation":  {source: d.grant.peer.source, incarnation: &connectorEvidenceIdentity{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := b.CallExternalFenced(context.Background(), worker, peer, "new_page", nil)
+			assertBrowserCode(t, err, ErrRequiredRouteUnavailable)
+			if result != nil || len(b.calls) != 1 {
+				t.Fatal("invalid peer dispatched browser operation")
+			}
+		})
+	}
+}
+
+func TestExternalManagerDispatchNeverUsesLegacyCall(t *testing.T) {
+	b := &externalFakeBackend{}
+	m := newTestExternalLeaseManager(b)
+	meta, _ := acquireExternal(t, m)
+	if _, err := m.Call(context.Background(), leaseScope(), meta.BrowserLeaseID, "click", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Release(context.Background(), leaseScope(), meta.BrowserLeaseID); err != nil {
+		t.Fatal(err)
+	}
+	if b.legacyCalls != 0 || externalCallCount(b, "list_pages") != 3 || externalCallCount(b, "new_page") != 1 || externalCallCount(b, "click") != 1 || externalCallCount(b, "close_page") != 1 {
+		t.Fatal("manager bypassed fenced dispatch")
+	}
+	// Failed acquisition's proven-page cleanup must also use the fence.
+	b.newErr = errors.New("synthetic creation error with page proof")
+	if _, _, err := m.Acquire(context.Background(), externalRoute(externalStart()), ""); err == nil {
+		t.Fatal("failed create published lease")
+	}
+	if b.legacyCalls != 0 || externalCallCount(b, "close_page") != 2 {
+		t.Fatal("acquire cleanup bypassed fence")
+	}
+}

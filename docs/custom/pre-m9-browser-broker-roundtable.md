@@ -756,3 +756,47 @@ Independent supervisor verification also passed: complete Browser/BrowserPolicy
 suite, targeted release/admission `-race`, `go vet` and `git diff --check`
 with `GOMAXPROCS=2` and serial execution. Cross-build and live native UAT
 were not run for B2h.
+
+
+## Phase C2b-B2i transport-fence admission contract (2026-10-09)
+
+Next source-only, based on clean `44c30c28`: private required backend capability
+`externalTransportFence.CallExternalFenced` now carries the immutable expected
+`externalPeerIdentity` alongside the immutable worker at every manager dispatch:
+Acquire `list_pages`/`new_page` (including proven-page failure cleanup), Call
+`list_pages`/action, and Release `list_pages`/`close_page`. Its contract requires
+actual socket/session peer pinning and atomic comparison at EACH dispatch inside
+the owning connector transport. Echoing identity or wrapping legacy
+`CallExternal` with pre/post checks is forbidden for production implementations.
+Existing independent verification, response quarantine, worker generation and
+connector-only recovery rules remain in place.
+
+Acquire consumes the one-shot grant, then rejects a backend missing the capability
+with sanitized `ErrRequiredRouteUnavailable` before connector Start or any browser
+operation. There is no legacy fallback. `WorkerRegistry` deliberately does not
+implement the capability; its direct StartExternal API is unchanged, while lease
+admission through it stays blocked. TEST ONLY backends compare synthetic distinct
+non-nil private identities saved at start and preserve release phase hooks.
+Regressions cover missing-fence zero start/call, sanitized errors, grant replay,
+zero/aliased/forged peer rejection and no manager legacy dispatch, including
+Acquire failure cleanup.
+
+**B2i is ONLY a fail-closed prerequisite. NO real bound transport is implemented,
+no production external route grant exists, and no atomic guarantee is provided
+by this change.** Production `NewRoutePlanner(..., nil)` and peer verifier stay
+nil; Edge remains UNQUALIFIED and P8/M9 gates stay open. The build-tagged live
+integration uses real WorkerRegistry and intentionally remains blocked; its
+compile check must not be interpreted as live attach acceptance. No live
+Edge/CDP/tab/profile, managed Chrome, stable/AGY, app runtime, deployment,
+or push work is included.
+
+Validation: gofmt applied; the single focused command
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run 'Test(External|Planner)' -count=1 -timeout=120s`
+PASS (4.974s). Serial `GOMAXPROCS=2 go test -p 2 -tags browser_integration -c
+./internal/tool/browser` PASS; no integration test binary was executed. Its first
+sandbox attempt failed at setup on existing Go-cache access; the approved rerun
+used the same cache. `git diff --check` PASS.
+Independent supervisor verification also PASS: full Browser/BrowserPolicy test suite,
+focused External/Planner Race Detector, `go vet`, `git diff --check`, and
+Linux/Windows amd64 browser test cross-build, run serially with `GOMAXPROCS=2`.
+No native/live Edge UAT or CDP binding proof was performed.
