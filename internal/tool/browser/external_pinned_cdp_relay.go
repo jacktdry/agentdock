@@ -25,6 +25,25 @@ const pinnedCDPSessionLimit = 5 * time.Minute
 
 var errPinnedCDPUnavailable = errors.New("external pinned transport unavailable")
 
+// Legacy standalone fixtures remain open. Only the private connector reserves
+// bootstrap and then irreversibly arms the closed/permit state machine.
+type pinnedCDPGate uint8
+
+const (
+	pinnedCDPLegacy pinnedCDPGate = iota
+	pinnedCDPBootstrap
+	pinnedCDPClosed
+	pinnedCDPPermitted
+)
+
+const pinnedCDPOperationLimit = 2 * time.Second
+
+type pinnedCDPPermit struct {
+	ctx    context.Context
+	peer   externalPeerIdentity
+	worker WorkerInfo
+}
+
 // TEST-ONLY injection until an independently reviewed OS socket-owner attestor
 // exists. The input is the established TCP socket, before any WS handshake/data.
 // It must independently observe identity, never echo a planner assertion.
@@ -50,6 +69,13 @@ type pinnedCDPRelay struct {
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 	done           chan struct{}
+	lifetime       context.Context
+	gate           pinnedCDPGate
+	gatePeer       externalPeerIdentity
+	gateWorker     WorkerInfo
+	bootstrapCtx   context.Context
+	permit         *pinnedCDPPermit
+	closeOnce      sync.Once
 }
 
 func pinnedCDPEndpointValid(endpoint string) bool {
@@ -142,7 +168,7 @@ func newPinnedCDPRelay(ctx context.Context, endpoint string, expected externalPe
 	}
 	lifetime, cancel := context.WithTimeout(ctx, pinnedCDPSessionLimit)
 	r := &pinnedCDPRelay{peer: expected, up: up, sourceEndpoint: endpoint, listener: &pinnedCDPListener{Listener: l, conns: make(map[*pinnedCDPConn]bool)},
-		path: "/devtools/browser/" + hex.EncodeToString(token[:]), cancel: cancel, done: make(chan struct{})}
+		path: "/devtools/browser/" + hex.EncodeToString(token[:]), cancel: cancel, lifetime: lifetime, done: make(chan struct{})}
 	r.endpoint = "ws://" + l.Addr().String() + r.path
 	r.server = &http.Server{Handler: http.HandlerFunc(r.attach), ReadHeaderTimeout: pinnedCDPTimeout,
 		ReadTimeout: pinnedCDPTimeout, WriteTimeout: pinnedCDPTimeout, IdleTimeout: pinnedCDPTimeout, MaxHeaderBytes: 4096,
@@ -173,17 +199,75 @@ func (r *pinnedCDPRelay) configure(c *websocket.Conn) {
 }
 
 func (r *pinnedCDPRelay) control(from *websocket.Conn, kind int, data string) error {
+	return r.writeFrame(from == r.up, kind, []byte(data), true)
+}
+
+// The gate check and each write share mu. Never acquire a worker mutex here:
+// callBound holds worker.mu before opening/closing its permit. Socket/resource
+// cleanup runs only after releasing mu; a write holds it for at most its deadline.
+// Context cancellation cannot retract bytes already handed to the socket.
+func (r *pinnedCDPRelay) writeFrame(upstream bool, kind int, data []byte, control bool) error {
 	r.mu.Lock()
 	to := r.up
-	if from == r.up {
+	if upstream {
 		to = r.down
 	}
-	lost := r.lost
+	allowed := !r.lost && to != nil
+	deadline := time.Now().Add(pinnedCDPTimeout)
+	if !upstream && r.gate != pinnedCDPLegacy {
+		allowed = allowed && r.peer == r.gatePeer && r.lifetime.Err() == nil
+		switch r.gate {
+		case pinnedCDPBootstrap:
+			allowed = allowed && r.bootstrapCtx != nil && r.bootstrapCtx.Err() == nil
+		case pinnedCDPPermitted:
+			p := r.permit
+			allowed = allowed && p != nil && p.peer == r.peer && p.worker == r.gateWorker && p.ctx.Err() == nil
+			if p != nil {
+				if end, ok := p.ctx.Deadline(); ok && end.Before(deadline) {
+					deadline = end
+				}
+			}
+		default:
+			allowed = false
+		}
+	}
+	var err error
+	if !allowed {
+		err = errPinnedCDPUnavailable
+	} else if control {
+		err = to.WriteControl(kind, data, deadline)
+	} else if err = to.SetWriteDeadline(deadline); err == nil {
+		err = to.WriteMessage(kind, data)
+	}
+	if err != nil {
+		r.lost = true // Latch before unlocking; no subsequent writer can pass.
+	}
 	r.mu.Unlock()
-	if lost || to == nil {
+	if err != nil {
+		r.Close()
 		return errPinnedCDPUnavailable
 	}
-	return to.WriteControl(kind, []byte(data), time.Now().Add(pinnedCDPTimeout))
+	return nil
+}
+
+func (r *pinnedCDPRelay) openPermit(p *pinnedCDPPermit) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p == nil || p.ctx == nil || p.ctx.Err() != nil || r.lost || r.gate != pinnedCDPClosed ||
+		r.peer != p.peer || r.gatePeer != p.peer || r.gateWorker != p.worker || r.down == nil {
+		return errPinnedCDPUnavailable
+	}
+	r.permit, r.gate = p, pinnedCDPPermitted
+	return nil
+}
+
+func (r *pinnedCDPRelay) closePermit(p *pinnedCDPPermit) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ok := !r.lost && r.gate == pinnedCDPPermitted && r.permit == p &&
+		p.ctx.Err() == nil && r.peer == p.peer && r.gatePeer == p.peer
+	r.permit, r.gate = nil, pinnedCDPClosed
+	return ok
 }
 
 func (r *pinnedCDPRelay) attach(w http.ResponseWriter, req *http.Request) {
@@ -239,18 +323,7 @@ func (r *pinnedCDPRelay) forward(from *websocket.Conn, upstream bool) {
 		if err != nil {
 			return
 		}
-		r.mu.Lock()
-		to := r.up
-		if upstream {
-			to = r.down
-		}
-		lost := r.lost
-		r.mu.Unlock()
-		// Unsolicited upstream data before attachment is terminal, never buffered.
-		if lost || to == nil {
-			return
-		}
-		if to.SetWriteDeadline(time.Now().Add(pinnedCDPTimeout)) != nil || to.WriteMessage(kind, data) != nil {
+		if r.writeFrame(upstream, kind, data, false) != nil {
 			return
 		}
 	}
@@ -280,20 +353,18 @@ func (r *pinnedCDPRelay) withPinnedPeer(expected externalPeerIdentity, callback 
 
 func (r *pinnedCDPRelay) Close() {
 	r.mu.Lock()
-	if r.lost {
-		r.mu.Unlock()
-		return
-	}
 	r.lost = true
 	down := r.down
 	r.mu.Unlock()
-	r.cancel()
-	_ = r.up.Close()
-	if down != nil {
-		_ = down.Close()
-	}
-	_ = r.listener.Close()
-	_ = r.server.Close()
+	r.closeOnce.Do(func() {
+		r.cancel()
+		_ = r.up.Close()
+		if down != nil {
+			_ = down.Close()
+		}
+		_ = r.listener.Close()
+		_ = r.server.Close()
+	})
 }
 
 // Bound simultaneous HTTP probes, including connections hijacked during an

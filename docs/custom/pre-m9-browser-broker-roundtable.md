@@ -1057,3 +1057,74 @@ Go tests, B2m targeted Race Detector, go vet, gofmt/diff checks, and
 Linux/Windows amd64 plus macOS arm64 no-CGO browser test cross-build;
 all run serially with `GOMAXPROCS=2`. No native/live Edge UAT was done.
 `git diff --check` PASS. Test-local relay/WS/listener resources are cleaned up.
+
+## Phase C2b-B2n-A CDP outbound frame permit gate (2026-10-09)
+
+Next SOURCE-ONLY checkpoint based on clean `6b96e952` on
+`feature/m8-permission-approval`. Standalone B2j relays retain their legacy
+behavior. Only the private B2m binding reserves restricted bootstrap mode;
+initialization frames may pass on the original admitted socket until validated
+worker readiness and downstream attachment arm the CLOSED gate. Bootstrap
+checks the constructor context and exact saved peer; constructor cancellation
+closes the relay. There is no reconnect, socket replacement or second attachment.
+
+PRIVATE `callBound(ctx, expected WorkerInfo, peer, tool, args)` is for synthetic
+tests/future reviewed backend only. It rejects overlap without queueing, checks
+the existing strict tool allowlist and exact immutable worker/peer, holds the
+managed worker mutex, and directly invokes the captured session's Call. It never
+uses general WorkerRegistry.CallExternal. A single permit is bounded by caller
+context and a two-second operation deadline. The frame pump checks peer, loss,
+permit identity/context and gate state under the same relay mutex as every
+downstream-to-upstream data/control write. Writes have bounded deadlines;
+socket/listener shutdown and worker cleanup happen outside the relay mutex.
+The lock order is worker -> relay; the pump never acquires worker.mu. Stop closes
+the relay before waiting for worker cleanup, preventing reverse lock acquisition.
+
+Session.Call return closes the permit before post-call SessionInfo/generation
+and reconnect checks; cancellation, loss, identity change, call errors or panic
+quarantine output and stop only the AgentDock-owned connector. Idle unsolicited
+or late downstream frames are dropped and permanently latch loss. A single
+relay-lifetime watcher also stops the owned connector after idle transport loss.
+Upstream-to-downstream async CDP events still pass while CLOSED. No cleanup
+closes the external browser, its profile or its pages. Errors remain fixed opaque
+values and do not include tool arguments, bearer URLs, tokens, PIDs or raw causes.
+
+**LIMITATIONS — controlled frame dispatch only, NOT complete B2n atomic trust
+or authorization.** Background outbound CDP during a permit cannot be attributed
+semantically to its MCP tool. Frames processed after permit closure are rejected,
+including commands emitted after the tool returns; initialization traffic is
+allowed only in bootstrap. Already queued traffic may be processed during a
+later permit: this is a temporal gate, not a command provenance check. Incoming
+events that provoke connector-generated outbound replies while idle can
+quarantine the connector (including downstream WS control replies). Cancellation
+cannot retract bytes already handed to the socket; Close may wait for a bounded
+write to release relay.mu. Remote loss may remain unobserved until I/O. The
+worker mutex excludes managed generation mutations, but live SessionInfo remains
+a pre/post observation, not an atomic per-frame OS identity check. A session
+ignoring context cannot be forcibly interrupted: the transport window expires,
+but the direct call and owned connector cleanup may wait for that session.
+Local same-user inspection can still observe the connector's bearer argv.
+
+WorkerRegistry/production backend do NOT implement `externalTransportFence`.
+Planner provider and peer verifier remain nil; no runtime caller, public browser
+API, status/grant mint, OS trust/authentication/login/consent claim or independent
+production attestor was added. Edge remains UNQUALIFIED and P8/M9 gates stay open.
+No real npx, Edge/browser/CDP/user screens, native/live UAT, stable/AGY changes,
+install/deploy/restart or push. Tests use only local synthetic httptest
+WS and fake WorkerDependencies. Native managed Chrome and standalone B2j source
+paths remain unchanged; their broader regression execution belongs to supervisor.
+
+Validation: gofmt and `git diff --check` PASS. Final focused selection
+`GOMAXPROCS=2 go test -p 2 ./internal/tool/browser -run '^(TestPinnedCDPGate|TestPinnedConnector)' -count=1 -timeout=120s`
+PASS (2.645s), no selected skips. The first sandbox attempt failed on the existing
+Go cache before execution; authorized synthetic-loopback execution passed
+(2.835s). One corrective rerun of the same selection followed immediate
+post-Session.Call permit closure and queued-frame cancellation coverage; no other
+test selections ran. Existing cache was reused. Independent supervisor verification
+also PASS: complete Browser/BrowserPolicy tests, pinned B2n/B2m/B2j focused
+Race Detector, go vet, gofmt/diff check, and Linux/Windows amd64 plus macOS
+arm64 no-CGO browser test cross-build. First Race Detector pass exposed a
+Gorilla WebSocket concurrent writer DATA RACE in the *synthetic server test
+fixture*; a single writer mutex now serializes all synthetic upstream writes;
+focused -race and supervisor independent rerun PASS. No native/live Edge UAT.
+The production relay write gate was not weakened to work around this test issue.
