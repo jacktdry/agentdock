@@ -272,3 +272,11 @@
 - macOS Unix Socket 核對 `LOCAL_PEERPID`／`LOCAL_PEERCRED` 加兩次 Core kernel birth 才接納 MAC frame；非 macOS unavailable。隔離 Go Core／Worker／Supervisor 原生測試確認假的 Core socket、錯誤 MAC、重播被拒絕，並在測試 Core 被終止後由 NOTE_EXIT 繼續更新狀態。詳見 P8 §23；未將真實 ACP/Chrome transport 交給 Supervisor。
 
 - 驗證完成：完整五模組 Go tests／targeted race／go vet／Linux、Windows amd64 no-CGO tests crossbuild（包含 independent observer cmd build）PASS。OS exit state 更新入口保持 process 內部私有，經外部驗證的 UnixConn 是唯一對外 attach 入口。Native 客戶端 ACK 之後才關閉 socket，排除連線提早結束造成的 peer 核對競態。尚無 production Supervisor。
+
+
+### 2026-10-10 P8-B supervisor-owned stdio proof（SOURCE-ONLY）
+
+- 新增 Darwin-only Supervisor 自行啟動並持有 Worker 的 stdin/stdout/Go process handle、直接子程序核對與 kqueue NOTE_EXIT；命令與退出皆只允許自己的子程序，無對任意 PID kill/cleanup 權限，Linux/Windows 一律 unavailable。
+- Supervisor-owned HMAC handoff 和既有 Core-owned 模式嚴格分離（owner + PID/PPID/birth/UID/PGID 綁定），測試 Core 意外退出後，自有 Supervisor 仍能向 Worker 發出指令、接收回覆、等待其自然退出。仍無真實 MCP WorkerRegistry 整合或 Chrome 完整回收授權；參閱 P8 §24。
+
+- 回歸補強：晚啟動 Setsid fixture 改待子程序進入執行期再確認 PGID，並讓背景取樣與**同一 Worker** kqueue NOTE_EXIT 有界協調，防止正常退出時保守誤報。任何沒有核實退出證據的失敗仍 fail-closed；晚啟動用例 10 次 PASS。

@@ -172,6 +172,9 @@ func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWit
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	// Per-worker proof only; a different worker's NOTE_EXIT cannot authorize
+	// suppression of this worker's sampler uncertainty.
+	verifiedExit := make(chan struct{})
 	monitorDone := make(chan struct{})
 	g.exitWatches = append(g.exitWatches, sharedExitWatch{cancel: cancel, done: done, monitorDone: monitorDone})
 	g.mu.Unlock()
@@ -183,6 +186,7 @@ func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWit
 		switch {
 		case err == nil && closeErr == nil:
 			g.exitObserved++
+			close(verifiedExit)
 		case ctx.Err() == nil:
 			g.exitUncertain = true
 		}
@@ -207,8 +211,22 @@ func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWit
 					return
 				}
 				if err := g.refreshReadyDescendants(ctx, root); err != nil && ctx.Err() == nil {
+					// Kernel UID snapshots can race the wrapper's normal exit.
+					// Allow the SAME birth-attested kernel NOTE_EXIT watch to settle
+					// before classifying this as an incomplete lifecycle. Never
+					// use a global watcher count or a guessed PID disappearance.
+					timer := time.NewTimer(350 * time.Millisecond)
+					select {
+					case <-verifiedExit:
+						timer.Stop()
+						return
+					case <-ctx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
 					g.mu.Lock()
-					g.exitUncertain = true // A durable observation gap blocks clean auto-unlink.
+					g.exitUncertain = true // Unverified sample failure keeps crash fence.
 					g.mu.Unlock()
 					return
 				}

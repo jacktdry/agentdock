@@ -22,6 +22,8 @@ import (
 func TestSharedBrowserDescendantFixtureHelper(t *testing.T) {
 	switch os.Getenv("AGENTDOCK_TEST_APP_DESCENDANT_ROLE") {
 	case "grandchild":
+		// Emitted AFTER Setsid in the child, unlike the parent's cmd.Start.
+		fmt.Println("GRANDCHILD_READY")
 		_, _ = io.Copy(io.Discard, os.Stdin)
 	case "late-parent":
 		fmt.Println("LATE_PARENT_READY")
@@ -37,12 +39,21 @@ func TestSharedBrowserDescendantFixtureHelper(t *testing.T) {
 		grand.Env = append(os.Environ(), "AGENTDOCK_TEST_APP_DESCENDANT_ROLE=grandchild")
 		grand.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		grand.Stdin = r
-		grand.Stdout = io.Discard
+		grandOutput, err := grand.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
 		grand.Stderr = os.Stderr
 		if err := grand.Start(); err != nil {
 			t.Fatal(err)
 		}
 		_ = r.Close()
+		// Do not announce a Setsid child before its own program confirms it
+		// has passed fork/exec and the session transition completed.
+		grandScanner := bufio.NewScanner(grandOutput)
+		if !grandScanner.Scan() || grandScanner.Text() != "GRANDCHILD_READY" {
+			t.Fatal("child failed Setsid/exec handshake")
+		}
 		fmt.Printf("LATE_GRANDCHILD_PID=%d\n", grand.Process.Pid)
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		_ = w.Close()
@@ -267,6 +278,13 @@ func TestSharedBrowserLiveLateSpawnCrossGroupNative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Kernel group may have been sampled DURING fork, before the child called
+	// setsid: such a historical PGID is valid evidence, not a false lineage.
+	// The separate live kernel assertion proves the child DID leave the group.
+	confirmed, err := processcontrol.ObserveBirthIdentity(context.Background(), childPID)
+	if err != nil || confirmed.ProcessGroupID != childPID || confirmed.ParentPID != cmd.Process.Pid {
+		t.Fatalf("child did not become a separate session: %+v %v", confirmed, err)
+	}
 	var witnessed bool
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
@@ -283,8 +301,8 @@ func TestSharedBrowserLiveLateSpawnCrossGroupNative(t *testing.T) {
 				continue
 			}
 			if entry.RootPID != cmd.Process.Pid || entry.ParentPID != cmd.Process.Pid ||
-				entry.PGID != childPID {
-				t.Fatalf("different PGID new child incorrectly captured: %+v", entry)
+				(entry.PGID != childPID && entry.PGID != cmd.Process.Pid) {
+				t.Fatalf("late child lineage or historical group incorrectly captured: %+v", entry)
 			}
 			witnessed = true
 		}

@@ -188,3 +188,51 @@ func TestReadOnlySupervisorHandoffInvalidBirthAndEntropy(t *testing.T) {
 		t.Fatal("reused entropy for separate Core sessions")
 	}
 }
+
+func TestSupervisorOwnedReadOnlyHandoffParentMode(t *testing.T) {
+	core, supervisor, worker := testHandoffIdentities()
+	worker.ParentPID = supervisor.PID
+	key := bytes.Repeat([]byte{0x39}, 32)
+	if _, err := NewReadOnlySupervisorHandoff(core, supervisor, worker, key); err == nil {
+		t.Fatal("Core-owned contract admitted Supervisor-owned worker")
+	}
+	h, err := NewSupervisorOwnedReadOnlyHandoff(core, supervisor, worker, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := h.Challenge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := HandoffAttachMAC(key, challenge, core, supervisor, worker); err == nil {
+		t.Fatal("Legacy Core-owned MAC admitted different worker parent")
+	}
+	frame, err := HandoffAttachMACForWorkerParent(key, challenge, core, supervisor, worker, SupervisorWorkerParentSupervisor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := frame
+	wrong.MAC = bytesToFakeMAC()
+	if err := h.attachVerifiedPeer(core, wrong); err == nil {
+		t.Fatal("bad MAC admitted")
+	}
+	if err := h.attachVerifiedPeer(core, frame); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.attachVerifiedPeer(core, frame); err == nil {
+		t.Fatal("replayed Supervisor-owned MAC accepted")
+	}
+	changed := worker
+	changed.StartUsec++
+	if _, err := NewSupervisorOwnedReadOnlyHandoff(core, supervisor, changed, key); err != nil {
+		t.Fatalf("separate birth with same parent invalid: %v", err)
+	}
+	invalid := worker
+	invalid.ParentPID = 123
+	if _, err := NewSupervisorOwnedReadOnlyHandoff(core, supervisor, invalid, key); err == nil {
+		t.Fatal("unowned worker admitted")
+	}
+	if _, err := HandoffAttachMACForWorkerParent(key, challenge, core, supervisor, worker, "unknown"); err == nil {
+		t.Fatal("unknown ownership mode admitted")
+	}
+}

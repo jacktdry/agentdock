@@ -15,6 +15,15 @@ import (
 // nor transitions confer signal, cleanup or crash-fence removal permissions.
 var ErrSupervisorHandoffUnavailable = errors.New("read-only supervisor handoff unavailable")
 
+// SupervisorWorkerParent distinguishes the actual OS parent. A Core-owned
+// provenance claim must NEVER be reinterpreted as Supervisor-owned authority.
+type SupervisorWorkerParent string
+
+const (
+	SupervisorWorkerParentCore       SupervisorWorkerParent = "core"
+	SupervisorWorkerParentSupervisor SupervisorWorkerParent = "supervisor"
+)
+
 type SupervisorHandoffPhase string
 
 const (
@@ -44,23 +53,36 @@ type SupervisorHandoffAttach struct {
 // future supervisor should own this in memory. It has no process control APIs.
 // Attach frames may only arrive over a kernel-verified local Core peer.
 type ReadOnlySupervisorHandoff struct {
-	mu         sync.Mutex
-	core       BirthIdentity
-	supervisor BirthIdentity
-	worker     BirthIdentity
-	key        [32]byte
-	challenge  SupervisorHandoffChallenge
-	phase      SupervisorHandoffPhase
+	mu           sync.Mutex
+	core         BirthIdentity
+	supervisor   BirthIdentity
+	worker       BirthIdentity
+	workerParent SupervisorWorkerParent
+	key          [32]byte
+	challenge    SupervisorHandoffChallenge
+	phase        SupervisorHandoffPhase
 }
 
 // Secret is delivered through a future protected inherited IPC channel, not
 // argv/env, TCP, a world-readable file or the handoff Unix socket itself.
 func NewReadOnlySupervisorHandoff(core, supervisor, worker BirthIdentity, secret []byte) (*ReadOnlySupervisorHandoff, error) {
+	return newReadOnlySupervisorHandoff(core, supervisor, worker, secret, SupervisorWorkerParentCore)
+}
+
+// NewSupervisorOwnedReadOnlyHandoff does not take ownership of any OS process.
+// It only admits a Worker born as the Supervisor's DIRECT kernel child.
+func NewSupervisorOwnedReadOnlyHandoff(core, supervisor, worker BirthIdentity, secret []byte) (*ReadOnlySupervisorHandoff, error) {
+	return newReadOnlySupervisorHandoff(core, supervisor, worker, secret, SupervisorWorkerParentSupervisor)
+}
+
+func newReadOnlySupervisorHandoff(core, supervisor, worker BirthIdentity, secret []byte, owner SupervisorWorkerParent) (*ReadOnlySupervisorHandoff, error) {
 	if len(secret) != 32 || !validLineageBirth(core) || !validLineageBirth(supervisor) ||
 		!validLineageBirth(worker) || core.PID == supervisor.PID || worker.PID == core.PID ||
-		worker.PID == supervisor.PID || worker.ParentPID != core.PID ||
+		worker.PID == supervisor.PID ||
+		(owner != SupervisorWorkerParentCore && owner != SupervisorWorkerParentSupervisor) ||
 		core.EffectiveUID != worker.EffectiveUID || supervisor.EffectiveUID != core.EffectiveUID ||
-		!bornNoEarlier(worker, core) {
+		(owner == SupervisorWorkerParentCore && (worker.ParentPID != core.PID || !bornNoEarlier(worker, core))) ||
+		(owner == SupervisorWorkerParentSupervisor && (worker.ParentPID != supervisor.PID || !bornNoEarlier(worker, supervisor))) {
 		return nil, ErrSupervisorHandoffUnavailable
 	}
 	var session, nonce [16]byte
@@ -71,7 +93,7 @@ func NewReadOnlySupervisorHandoff(core, supervisor, worker BirthIdentity, secret
 		return nil, ErrSupervisorHandoffUnavailable
 	}
 	h := &ReadOnlySupervisorHandoff{
-		core: core, supervisor: supervisor, worker: worker,
+		core: core, supervisor: supervisor, worker: worker, workerParent: owner,
 		challenge: SupervisorHandoffChallenge{Version: 1, Session: hex.EncodeToString(session[:]), Nonce: hex.EncodeToString(nonce[:])},
 		phase:     SupervisorAwaitingCore,
 	}
@@ -95,6 +117,18 @@ func (h *ReadOnlySupervisorHandoff) Challenge() (SupervisorHandoffChallenge, err
 // conveyed through a protected channel. It binds identity, nonce and sequence.
 func HandoffAttachMAC(secret []byte, challenge SupervisorHandoffChallenge,
 	core, supervisor, worker BirthIdentity) (SupervisorHandoffAttach, error) {
+	return HandoffAttachMACForWorkerParent(secret, challenge, core, supervisor, worker, SupervisorWorkerParentCore)
+}
+
+func HandoffAttachMACForWorkerParent(secret []byte, challenge SupervisorHandoffChallenge,
+	core, supervisor, worker BirthIdentity, owner SupervisorWorkerParent) (SupervisorHandoffAttach, error) {
+	if owner != SupervisorWorkerParentCore && owner != SupervisorWorkerParentSupervisor {
+		return SupervisorHandoffAttach{}, ErrSupervisorHandoffUnavailable
+	}
+	if (owner == SupervisorWorkerParentCore && worker.ParentPID != core.PID) ||
+		(owner == SupervisorWorkerParentSupervisor && worker.ParentPID != supervisor.PID) {
+		return SupervisorHandoffAttach{}, ErrSupervisorHandoffUnavailable
+	}
 	if len(secret) != 32 || challenge.Version != 1 ||
 		len(challenge.Session) != 32 || len(challenge.Nonce) != 32 {
 		return SupervisorHandoffAttach{}, ErrSupervisorHandoffUnavailable
@@ -106,16 +140,16 @@ func HandoffAttachMAC(secret []byte, challenge SupervisorHandoffChallenge,
 		return SupervisorHandoffAttach{}, ErrSupervisorHandoffUnavailable
 	}
 	frame := SupervisorHandoffAttach{Version: 1, Operation: "attach-readonly", Session: challenge.Session, Nonce: challenge.Nonce, Sequence: 1}
-	payload := supervisorHandoffPayload(frame, core, supervisor, worker)
+	payload := supervisorHandoffPayload(frame, core, supervisor, worker, owner)
 	mac := hmac.New(sha256.New, secret)
 	_, _ = mac.Write([]byte(payload))
 	frame.MAC = hex.EncodeToString(mac.Sum(nil))
 	return frame, nil
 }
 
-func supervisorHandoffPayload(frame SupervisorHandoffAttach, core, supervisor, worker BirthIdentity) string {
-	return fmt.Sprintf("agentdock-next-supervisor-handoff-v1|%d|%s|%s|%s|%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d",
-		frame.Version, frame.Operation, frame.Session, frame.Nonce, frame.Sequence,
+func supervisorHandoffPayload(frame SupervisorHandoffAttach, core, supervisor, worker BirthIdentity, owner SupervisorWorkerParent) string {
+	return fmt.Sprintf("agentdock-next-supervisor-handoff-v1|%s|%d|%s|%s|%s|%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d",
+		owner, frame.Version, frame.Operation, frame.Session, frame.Nonce, frame.Sequence,
 		core.PID, core.ParentPID, core.StartSec, core.StartUsec, core.EffectiveUID, core.ProcessGroupID,
 		supervisor.PID, supervisor.ParentPID, supervisor.StartSec, supervisor.StartUsec, supervisor.EffectiveUID, supervisor.ProcessGroupID,
 		worker.PID, worker.ParentPID, worker.StartSec, worker.StartUsec, worker.EffectiveUID, worker.ProcessGroupID)
@@ -138,7 +172,7 @@ func (h *ReadOnlySupervisorHandoff) attachVerifiedPeer(peer BirthIdentity, frame
 		return ErrSupervisorHandoffUnavailable
 	}
 	mac := hmac.New(sha256.New, h.key[:])
-	_, _ = mac.Write([]byte(supervisorHandoffPayload(frame, h.core, h.supervisor, h.worker)))
+	_, _ = mac.Write([]byte(supervisorHandoffPayload(frame, h.core, h.supervisor, h.worker, h.workerParent)))
 	if subtle.ConstantTimeCompare(got, mac.Sum(nil)) != 1 {
 		return ErrSupervisorHandoffUnavailable
 	}
