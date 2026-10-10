@@ -212,3 +212,10 @@
 - 在 §14 wrapper PID 唯讀 journal 基礎上，加入 Darwin kern.proc.pid kernel start sec/usec＋UID＋PGID birth fingerprint。Next-only ready witness 缺任何指紋證據就 fail-closed，重啟時僅將匹配、PID 被重用、舊版 PID-only、缺 PID／OS 觀測失敗等**安全分類**回報，不發送 signal、沒有解除 crash marker。
 - 完整 app/browser/browserpolicy/mcp-client/process Go tests、定點 app/browser/process race、go vet、Linux/Windows amd64 process/app/browser no-CGO crossbuild 與格式檢查全部 PASS。
 - 真實觀測僅自己的測試程序（不啟動 Chrome/Edge），合成 PID/時間/權限失效測試另行隔離；仍**不是**正式 OS orphan cleanup 或 Next native UAT。詳見 [P8 §15](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
+
+
+### 2026-10-10 P8-B kernel process group lineage（SOURCE ONLY）
+
+- 新增 macOS kernel `kern.proc.pgrp` 唯讀 process group enumeration，與原 Next-only wrapper PID+birth 指紋串接。只有原 wrapper 都不可見後才分類群組仍有成員／群組空但 detached 子程序未驗證／成員身分衝突／無法觀測，所有分支仍拒絕自動解鎖、重啟或回收。
+- 完整 app/browser/browserpolicy/mcp-client/process Go tests、app/process/browser 定點 race、go vet、Linux/Windows amd64 no-CGO 的 process/app/browser crossbuild、gofmt/diff 均 PASS。
+- 只以自己現存的 Go 測試程序群組做 real read-only case；其餘用 fake 觀測驗證，沒有啟動 Chrome/Edge/ACP，沒有更動原版 AgentDock、AGY 或已安裝 Next。詳見 P8 §16。

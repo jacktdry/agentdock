@@ -102,17 +102,28 @@ const (
 	sharedOrphanPIDVisible             = "pid_present_identity_unverified"
 	sharedOrphanBirthMatched           = "worker_birth_matches_descendants_unverified"
 	sharedOrphanBirthChanged           = "worker_pid_reused_or_changed_descendants_unverified"
+	sharedOrphanGroupMembers           = "worker_group_members_descendants_unverified"
+	sharedOrphanGroupEmpty             = "worker_group_empty_detached_descendants_unverified"
+	sharedOrphanGroupConflict          = "worker_group_identity_conflict"
 	sharedOrphanPIDAbsent              = "worker_pid_absent_descendants_unverified"
 	sharedOrphanObservationUnavailable = "observation_unavailable"
 )
 
 func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observe func(context.Context, int) processcontrol.Snapshot) sharedBrowserOrphanInspection {
-	return inspectSharedBrowserOrphanEvidenceWithIdentity(ctx, root, observe, processcontrol.ObserveBirthIdentity)
+	return inspectSharedBrowserOrphanEvidenceWithGroup(ctx, root, observe, processcontrol.ObserveBirthIdentity, processcontrol.ObserveGroupBirths)
 }
 
 func inspectSharedBrowserOrphanEvidenceWithIdentity(ctx context.Context, root string,
 	observe func(context.Context, int) processcontrol.Snapshot,
 	birth func(context.Context, int) (processcontrol.BirthIdentity, error),
+) sharedBrowserOrphanInspection {
+	return inspectSharedBrowserOrphanEvidenceWithGroup(ctx, root, observe, birth, nil)
+}
+
+func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root string,
+	observe func(context.Context, int) processcontrol.Snapshot,
+	birth func(context.Context, int) (processcontrol.BirthIdentity, error),
+	group func(context.Context, int) (processcontrol.GroupObservation, error),
 ) sharedBrowserOrphanInspection {
 	untrusted := sharedBrowserOrphanInspection{Status: sharedOrphanUntrusted}
 	if ctx == nil || ctx.Err() != nil || observe == nil || birth == nil {
@@ -212,6 +223,9 @@ func inspectSharedBrowserOrphanEvidenceWithIdentity(ctx context.Context, root st
 		result.Status = sharedOrphanPIDVisible
 	default:
 		result.Status = sharedOrphanPIDAbsent
+	}
+	if result.Status == sharedOrphanPIDAbsent && group != nil {
+		result.Status = classifyMissingWorkerGroups(ctx, pids, group)
 	}
 	return result
 }

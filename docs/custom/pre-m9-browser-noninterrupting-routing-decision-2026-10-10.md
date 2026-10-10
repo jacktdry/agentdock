@@ -300,3 +300,13 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 - 測試覆蓋：真實測試程序自身 PID（非瀏覽器）出生身分讀取／寫入／比對、虛擬 PID 重用（start_usec changed）、UID/PGID/欄位不完整或損毀、核查失敗、PID absent、舊版 PID-only 相容與不升權，以及 Darwin/非 Darwin build boundary。Race/完整 tests 與跨平台建置結果記錄於進度。
 - Source-only 確認 PASS：完整 app/browser/browserpolicy/mcp-client/process Go tests；定點 app/browser/process race；上述五模組 go vet；Linux/Windows amd64 無 CGO 的 process/app/browser test crossbuild；gofmt 與 git diff check。
 - **尚未完成**：跨 Core 可信 process handle、OS managed launch 與 detached Chrome process tree 的原子性 parentage／birth 取證、故障清理的成功證明、可授權解鎖流程、三個真實 Agent 零搶焦點 native UAT、用戶 Chrome／Edge exact Profile route。維持 source-only opt-in，不安裝／不部署、不干擾 stable AgentDock／AGY／日常瀏覽器。
+
+
+## 16. 2026-10-10 P8-B kernel group lineage observation（SOURCE ONLY；不授權回收）
+
+- 承接 §15 macOS Next-only wrapper birth fingerprint。現有 `internal/process/process_unix.go` 的 `Controller` 只在 Core 存活期間持有由 `SysProcAttr.Setpgid` 創建的程序群組 ID；Core 被強制終止後，群組 ID 不能視為仍具所有權的核心程序把手。即使群組內看不到成員，Chrome 仍可藉由 setsid/setpgid 或其他分離途徑留下 detached descendants。
+- 新增 `process.ObserveGroupBirths(ctx, pgid)`（macOS `unix.SysctlKinfoProcSlice("kern.proc.pgrp", pgid)`），唯讀取得群組現有 PID、kernel start sec/usec、UID、PGID 觀測；最多 256 個成員、PID 不重複、每項身分/群組必須與 kernel 回傳條件一致。群組快照是非原子的，數字 PGID 可能被重用，也不綁定任何被控制的行程身分；Windows/Linux 本輪保守 unavailable。沒有 shell/ps 列舉任意使用者進程名稱，也不會發出 OS signal 或觸碰 Profile。
+- **僅在前一階段證明所有 recorded wrapper PID 都不再可見時**，Next-only crash inspection 才會讀取帶 birth fingerprint 的舊 process group：仍有成員回 `worker_group_members_descendants_unverified`；無成員回 `worker_group_empty_detached_descendants_unverified`；不符合 UID、子程序 starttime 早於 parent、group ID 不符、PID 重用或快照衝突回 `worker_group_identity_conflict`；無法讀取則回 `observation_unavailable`。既有純 PID-only journal 與非 group leader wrapper **不觸發**群組歸屬推論。
+- 分類不包含 PID/UID/PGID/argv/Workspace/使用者 Profile；不管是群組存活、群組清空或觀測不確定都**禁止自動解除 §13 sticky marker 或自動終止任何程序**。這是 crash triage／生存性線索，**不是可證明 detached browser child 全部結束的證書**。
+- Source-only 驗證 PASS：完整 `go test -p 2 ./internal/app ./internal/tool/browser ./internal/browserpolicy ./internal/mcp/client ./internal/process -count=1 -timeout=180s`；app/process/browser group lineage 專項 `-race`；上述五模組 `go vet`；Linux/Windows amd64 no-CGO 的 process/app/browser tests cross-build；gofmt／diff。
+- 測試只唯讀列舉 **自身 Go 測試程序既有群組**，另用 synthetic birth/group snapshots 驗證 PID 重用、UID/PGID 不符、時間線逆序、group member 存活、empty group、legacy、nonleader、observer failure 及 marker 完整保留。禁止 production 切換與瀏覽器 GUI 啟動；仍待 kernel 可驗證的 process handle / descendant 生命週期、Crash/Orphan safe reconciliation、ChatGPT+Codex+AGY 原生零搶焦點併發 UAT。
