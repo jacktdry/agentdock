@@ -288,3 +288,9 @@
 - 無 production Core-to-Supervisor RPC relay、auth call admission、真實 ACP BrowserRegistry、Chrome process lifetime control。原版 AgentDock/AGY/已安裝 Next 未修改。詳細安全界線參照 P8 §25。
 
 - 本輪源碼驗證：完整 Go 五模組、targeted race、go vet、Linux/Windows no-CGO 四模組交叉編譯全數 PASS；保留 source-only，無部署／推送／正式 BrowserRegistry 接線。
+
+
+### 2026-10-10 P8-B Core-to-Supervisor scoped MCP IPC（SOURCE-ONLY）
+
+- 增加 Darwin-only kernel-attested Core Unix peer → bounded per-call HMAC frame → Supervisor-local MCP SDK tool call relay。綁定同一 Core+Worker birth 與 session/sequence/工具/引數 SHA，僅 Supervisor trusted allowlist 可放行，序號一次性消耗；重播、scope 外、參數竄改、換 Worker 或 Core crash 後冒用都 fail closed。真實 Go-only Core + Supervisor-owned MCP echo native test 通過，Worker stdio 並未交給 Core。
+- 仍無正式 Next BrowserRegistry 連線、M8 user principal/approval、跨 Core 重啟認證、持久 response/replay 防護與完整 Chrome subtree ownership；不部署、不解除 crash fence。詳見 P8 §26。

@@ -53,14 +53,15 @@ type SupervisorHandoffAttach struct {
 // future supervisor should own this in memory. It has no process control APIs.
 // Attach frames may only arrive over a kernel-verified local Core peer.
 type ReadOnlySupervisorHandoff struct {
-	mu           sync.Mutex
-	core         BirthIdentity
-	supervisor   BirthIdentity
-	worker       BirthIdentity
-	workerParent SupervisorWorkerParent
-	key          [32]byte
-	challenge    SupervisorHandoffChallenge
-	phase        SupervisorHandoffPhase
+	mu               sync.Mutex
+	core             BirthIdentity
+	supervisor       BirthIdentity
+	worker           BirthIdentity
+	workerParent     SupervisorWorkerParent
+	key              [32]byte
+	challenge        SupervisorHandoffChallenge
+	phase            SupervisorHandoffPhase
+	lastToolSequence uint64
 }
 
 // Secret is delivered through a future protected inherited IPC channel, not
@@ -226,4 +227,17 @@ func (h *ReadOnlySupervisorHandoff) Phase() SupervisorHandoffPhase {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.phase
+}
+
+// MatchesSupervisorOwnedWorker is a read-only identity gate. A signed tool
+// request may never be dispatched through an SDK session for a DIFFERENT
+// worker birth generation, even if the tool name and scope are identical.
+func (h *ReadOnlySupervisorHandoff) MatchesSupervisorOwnedWorker(worker BirthIdentity) bool {
+	if h == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.phase == SupervisorCoreAttached &&
+		h.workerParent == SupervisorWorkerParentSupervisor && h.worker == worker
 }

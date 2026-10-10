@@ -19,14 +19,15 @@ import (
 // It does NOT start/kill a Worker or expose stdio to a Core or socket peer.
 // No Next runtime/BrowserRegistry calls this prototype.
 type SupervisorOwnedMCPSession struct {
-	mu      sync.Mutex
-	session *mcpsdk.ClientSession
-	info    SessionInfo
-	tools   map[string]Tool
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	timeout time.Duration
-	closed  bool
+	mu          sync.Mutex
+	session     *mcpsdk.ClientSession
+	info        SessionInfo
+	workerBirth processcontrol.BirthIdentity
+	tools       map[string]Tool
+	stdin       io.WriteCloser
+	stdout      io.ReadCloser
+	timeout     time.Duration
+	closed      bool
 }
 
 // ConnectSupervisorOwnedMCPPrototype consumes ONCE the pipes belonging to a
@@ -97,7 +98,7 @@ func ConnectSupervisorOwnedMCPPrototype(ctx context.Context, cfg ServerConfig,
 		info.ServerVersion = initialized.ServerInfo.Version
 	}
 	result := &SupervisorOwnedMCPSession{
-		session: session, info: info, tools: tools, stdin: writer, stdout: reader,
+		session: session, info: info, workerBirth: owned.Birth(), tools: tools, stdin: writer, stdout: reader,
 		timeout: time.Duration(cfg.TimeoutMS) * time.Millisecond,
 	}
 	connected = true
