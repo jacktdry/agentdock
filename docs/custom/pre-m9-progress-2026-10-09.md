@@ -198,3 +198,10 @@
 - 新增 Next-only shared Browser sticky marker，於共享 ACPBridge 建立前 O_EXCL/O_NOFOLLOW + fsync。僅 ACP 與 Bridge 均 clean Close 且 marker inode/owner 一致才 unlink；Core hard crash、舊 marker、篡改與不安全目錄一律拒絕下一次 shared startup。普通 exclusive 模式不變，沒有 OS PID kill。
 - 主 Session 已獨立驗證 app/browser/browserpolicy/mcp-client/process 五模組全量測試、Restart Guard/Next opt-in 專項 race、go vet，以及 Linux/Windows amd64 app/browser 無 CGO 編譯均 PASS；diff/gofmt check PASS。
 - 只有 test-only TMP/HOME marker 與自己建立的測試子程序 SIGKILL，沒有啟動 Chrome/Edge/npx。完整 orphan ownership/reconciliation、使用者可安全解除與真實多 Agent UAT 尚未完成。詳見 [P8 §13](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#13-2026-10-10-p8-b-sticky-core-restart-fencesource-only非-orphan-自動回收)。
+
+
+### 2026-10-10 P8-B orphan diagnostic checkpoint（SOURCE ONLY）
+
+- Next-only 共享 Worker 在 validated ready 時 append+fsync wrapper PID 觀測值至 §13 restart marker；異常或不完整持久化直接 fail-closed。Runtime 因 sticky marker 拒絕重啟時，從私有 marker + OS 唯讀 snapshot 輸出**不含 PID/路徑**的安全分類；PID 存在或已消失都不構成解除 marker／終止程序授權。
+- 完整 app/browser/browserpolicy/mcp-client/process Go tests、app/browser targeted race、go vet、Linux/Windows amd64 no-CGO app/browser crossbuild、gofmt/diff check 全部 PASS。
+- 新增假的 Worker、並行寫入、corrupt/symlink、失敗注入與 startup unknown 的 deterministic tests。**這不是 orphan cleanup**：可靠 process start identity、detached Chrome 子程序驗證、可證明 ownership 的 terminate/cancel 與 GUI recovery 尚未完成；source-only，沒有改動安裝版 Next、stable、AGY 或真實瀏覽器。詳見 [P8 §14](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。

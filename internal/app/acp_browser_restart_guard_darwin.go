@@ -92,6 +92,29 @@ func (g *sharedBrowserRestartGuard) releaseAfterVerifiedClose() (err error) {
 		marker.Uid != uint32(os.Geteuid()) || marker.Mode&0077 != 0 {
 		return errSharedBrowserRestartGuard
 	}
+	// A same-inode corrupted/partially written witness is not a clean release
+	// certificate. Read under the pinned directory and refuse to unlink it.
+	fd, openErr := unix.Openat(g.dirfd, sharedBrowserRestartMarker, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if openErr != nil {
+		return errSharedBrowserRestartGuard
+	}
+	var verified unix.Stat_t
+	verifyErr := unix.Fstat(fd, &verified)
+	valid := verifyErr == nil && uint64(verified.Dev) == g.device && verified.Ino == g.inode &&
+		verified.Size >= int64(len(sharedBrowserEvidencePrefix)) && verified.Size <= sharedBrowserEvidenceMaxBytes
+	if valid {
+		buf := make([]byte, verified.Size)
+		n, readErr := unix.Pread(fd, buf, 0)
+		if readErr != nil || n != len(buf) {
+			valid = false
+		} else {
+			_, valid = parseSharedBrowserEvidence(string(buf))
+		}
+	}
+	_ = unix.Close(fd)
+	if !valid {
+		return errSharedBrowserRestartGuard
+	}
 	if unix.Unlinkat(g.dirfd, sharedBrowserRestartMarker, 0) != nil {
 		return errSharedBrowserRestartGuard
 	}

@@ -1,13 +1,16 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 	"github.com/uvwt/agentdock/internal/config"
+	processcontrol "github.com/uvwt/agentdock/internal/process"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
 )
 
@@ -37,8 +40,17 @@ func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePla
 	}
 	guard, err := acquireSharedBrowserRestartGuard(cfg.AgentDockHome)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Next shared ACP browser restart blocked: %w", err)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		inspection := inspectSharedBrowserOrphanEvidence(ctx, cfg.AgentDockHome, processcontrol.Observe)
+		// Classification is advisory only; all statuses refuse a new worker.
+		// Do not include PID, command line, workspace, or filesystem paths.
+		return nil, nil, fmt.Errorf("Next shared ACP browser restart blocked (%s): %w", inspection.Status, err)
 	}
+	// Only the opted-in Next registry writes advisory worker-start evidence.
+	// An evidence persistence failure blocks lease publication and preserves
+	// the sticky marker; stable/exclusive registries have no witness callback.
+	registry = toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{ReadyWitness: guard.recordManagedWorker})
 	bridge, err := toolbrowser.NewNextSingleWorkspaceSharedACPBridge(planner, registry, root)
 	if err != nil {
 		// This constructor never dispatches a worker. It is safe to clear a

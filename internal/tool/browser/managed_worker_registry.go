@@ -39,6 +39,10 @@ type WorkerSession interface {
 type WorkerDependencies struct {
 	Probe VersionProbe
 	Open  func(context.Context, mcpclient.ServerConfig) (WorkerSession, error)
+	// ReadyWitness persists optional owner-scoped diagnostic evidence before
+	// the ready WorkerInfo reaches lease admission. Failure is fail-closed.
+	// This callback does NOT grant OS process ownership or kill authority.
+	ReadyWitness func(WorkerInfo) error
 }
 type ManagedWorkerOptions struct{ Cwd string }
 
@@ -180,6 +184,11 @@ func (r *WorkerRegistry) startWorkerWithCleanup(ctx context.Context, cfg mcpclie
 	w.info.Compatibility = compatibility
 	result := w.info
 	w.mu.Unlock()
+	if r.deps.ReadyWitness != nil {
+		if err := r.deps.ReadyWitness(result); err != nil {
+			return fail(workerError(ErrEngineUnavailable, w.info.WorkerID, err))
+		}
+	}
 	return result, nil
 }
 
