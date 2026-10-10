@@ -3,9 +3,12 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"sync"
+
+	processcontrol "github.com/uvwt/agentdock/internal/process"
 
 	"golang.org/x/sys/unix"
 )
@@ -20,6 +23,18 @@ type sharedBrowserRestartGuard struct {
 	inode      uint64
 	released   bool
 	releaseErr error
+
+	// Next-only kernel NOTE_EXIT observers are live only while this Core lives.
+	// Events cannot authorize unlocking or clearing the durable marker.
+	closing       bool
+	exitWatches   []sharedExitWatch
+	exitObserved  int
+	exitUncertain bool
+}
+
+type sharedExitWatch struct {
+	cancel context.CancelFunc
+	done   <-chan struct{}
 }
 
 var errSharedBrowserRestartGuard = errors.New("Next shared browser restart reconciliation required")
@@ -75,6 +90,9 @@ func (g *sharedBrowserRestartGuard) releaseAfterVerifiedClose() (err error) {
 	if g == nil {
 		return nil
 	}
+	// Stop and join all Core-lifetime watchers before final marker checks.
+	// No watcher may race a closed guard dirfd or be kept alive after Close.
+	g.stopExitWatches()
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.released {
@@ -85,6 +103,11 @@ func (g *sharedBrowserRestartGuard) releaseAfterVerifiedClose() (err error) {
 		g.released = true
 		g.releaseErr = err
 	}()
+	// Missing or ambiguous OS events cannot certify verified shutdown.
+	// Even a positive wrapper exit does not attest detached Chrome children.
+	if g.exitUncertain {
+		return errSharedBrowserRestartGuard
+	}
 	var marker unix.Stat_t
 	if unix.Fstatat(g.dirfd, sharedBrowserRestartMarker, &marker, unix.AT_SYMLINK_NOFOLLOW) != nil ||
 		uint64(marker.Dev) != g.device || marker.Ino != g.inode ||
@@ -122,4 +145,52 @@ func (g *sharedBrowserRestartGuard) releaseAfterVerifiedClose() (err error) {
 		return errSharedBrowserRestartGuard
 	}
 	return nil
+}
+
+// watchReadyExit attaches a live, identity-checked kqueue registration after
+// journal persistence but before WorkerInfo publication. It never grants
+// cleanup authority. Caller keeps ownership on attachment failure.
+func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWitness) error {
+	if g == nil || watch == nil {
+		return errSharedBrowserEvidence
+	}
+	g.mu.Lock()
+	if g.released || g.closing {
+		g.mu.Unlock()
+		return errSharedBrowserEvidence
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	g.exitWatches = append(g.exitWatches, sharedExitWatch{cancel: cancel, done: done})
+	g.mu.Unlock()
+	go func() {
+		defer close(done)
+		err := watch.Wait(ctx)
+		closeErr := watch.Close()
+		g.mu.Lock()
+		switch {
+		case err == nil && closeErr == nil:
+			g.exitObserved++
+		case ctx.Err() == nil:
+			g.exitUncertain = true
+		}
+		g.mu.Unlock()
+	}()
+	return nil
+}
+
+func (g *sharedBrowserRestartGuard) stopExitWatches() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	g.closing = true
+	watches := append([]sharedExitWatch(nil), g.exitWatches...)
+	for _, w := range watches {
+		w.cancel()
+	}
+	g.mu.Unlock()
+	for _, w := range watches {
+		<-w.done
+	}
 }

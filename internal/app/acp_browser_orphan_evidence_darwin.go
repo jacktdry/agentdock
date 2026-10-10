@@ -29,9 +29,33 @@ var errSharedBrowserEvidence = errors.New("Next shared browser worker evidence u
 // PID is recorded for future human/forensic observation, NOT to authorize kill,
 // signal, unlink, profile control or automatic crash recovery.
 func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerInfo) error {
-	return g.recordManagedWorkerWithIdentity(info, func(ctx context.Context, childPID int) (processcontrol.BirthIdentity, error) {
-		return processcontrol.ObserveDirectChildBirth(ctx, os.Getpid(), childPID)
-	})
+	if g == nil || info.Session.PID <= 0 {
+		return errSharedBrowserEvidence
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	identity, err := processcontrol.ObserveDirectChildBirth(ctx, os.Getpid(), info.Session.PID)
+	if err != nil {
+		return errSharedBrowserEvidence
+	}
+	watch, err := processcontrol.WatchVerifiedExit(ctx, identity)
+	if err != nil {
+		return errSharedBrowserEvidence
+	}
+	// The proof has been checked twice and kernel NOTE_EXIT armed.
+	// A persistence or close race must refuse the ready Worker and retain
+	// the sticky restart marker, never publish a lease.
+	if err := g.recordManagedWorkerWithIdentity(info, func(context.Context, int) (processcontrol.BirthIdentity, error) {
+		return identity, nil
+	}); err != nil {
+		_ = watch.Close()
+		return err
+	}
+	if err := g.watchReadyExit(watch); err != nil {
+		_ = watch.Close()
+		return err
+	}
+	return nil
 }
 
 func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbrowser.WorkerInfo, observe func(context.Context, int) (processcontrol.BirthIdentity, error)) error {
@@ -47,7 +71,7 @@ func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbro
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.released {
+	if g.released || g.closing {
 		return errSharedBrowserEvidence
 	}
 	fd, err := unix.Openat(g.dirfd, sharedBrowserRestartMarker, unix.O_RDWR|unix.O_APPEND|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)

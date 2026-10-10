@@ -226,3 +226,10 @@
 - Next-only shared ACP ReadyWitness 由原「單一 PID kernel birth」補強為 **4 次 kernel read 的 parent/child 兩次核對**，必須符合 PPID=目前 Core、child UID=Core、獨立 PGID=child PID、出生時間順序與兩次身分完全一致。失敗一律 fail-closed、保留 marker；原 stable/exclusive 路徑完全不受影響。
 - 完整 app/browser/browserpolicy/mcp-client/process Go tests、定點 app/process/browser race、go vet、Linux/Windows amd64 process/app/browser no-CGO crossbuild 與格式檢查全部 PASS。
 - macOS real UAT 限自建 Go test child，核對成功可以寫入 private test marker，Core 本身 PID 被拒絕且 marker 不受污染；沒有執行 npx/Chrome/Edge/AGY。該檢查仍不具跨 Core kill 或 detached Chrome cleanup 授權，詳見 P8 §17。
+
+
+### 2026-10-10 P8-B kqueue NOTE_EXIT live witness（SOURCE ONLY）
+
+- macOS Next shared Worker 於 ready 准入前新增 birth 身分雙次核對包夾的唯讀 kqueue NOTE_EXIT 事件監看。監看資源於 Runtime verified close 前取消並 join，監看異常阻止解除 guard，不會導致自動 kill/unlink/recovery；其它路徑保持現況。
+- 全面 Go tests、定點 race、vet、Linux/Windows no-CGO crossbuild 與格式檢查 PASS。初次同時交叉編譯時有既有 Browser queue 3 秒逾時測試失敗 1 次；停止資源競爭後單獨連跑 3 次與 Browser full suite 都 PASS，未修改 Browser 佇列邏輯。
+- 使用自建 Go test child（非 Chrome/Edge/npx）測試正常 EOF 退出、kernel NOTE_EXIT 事件、監看取消／關閉、PID 身分不符拒絕；文件見 P8 §18。仍缺跨 Core 存活的所有權把手與 detached Chrome descendants 清理證據。

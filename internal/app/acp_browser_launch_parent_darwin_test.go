@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -88,5 +89,79 @@ func TestSharedBrowserReadyWitnessAcceptsOnlyOwnedFixture(t *testing.T) {
 	}
 	if err := guard.releaseAfterVerifiedClose(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A separate ready fixture exits naturally on stdin EOF. The Next guard
+// should observe NOTE_EXIT without sending a termination signal.
+func TestSharedBrowserOwnedNaturalExitHelper(t *testing.T) {
+	if os.Getenv("AGENTDOCK_TEST_BROWSER_NATURAL_EXIT") != "1" {
+		return
+	}
+	fmt.Println("OWNED_NATURAL_EXIT_READY")
+	_, _ = io.Copy(io.Discard, os.Stdin)
+}
+
+func TestSharedBrowserReadyWitnessObservesNaturalExit(t *testing.T) {
+	root := testPrivateNextState(t)
+	guard, err := acquireSharedBrowserRestartGuard(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestSharedBrowserOwnedNaturalExitHelper$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "AGENTDOCK_TEST_BROWSER_NATURAL_EXIT=1")
+	processcontrol.Configure(cmd)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
+	ready := make(chan bool, 1)
+	go func() {
+		scan := bufio.NewScanner(stdout)
+		ready <- scan.Scan() && scan.Text() == "OWNED_NATURAL_EXIT_READY"
+	}()
+	select {
+	case ok := <-ready:
+		if !ok {
+			t.Fatal("owned fixture not ready")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("owned fixture did not start")
+	}
+	if err := guard.recordManagedWorker(readyEvidence(cmd.Process.Pid)); err != nil {
+		t.Fatal(err)
+	}
+	if err := stdin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	limit := time.Now().Add(3 * time.Second)
+	for {
+		guard.mu.Lock()
+		observed, uncertain := guard.exitObserved, guard.exitUncertain
+		guard.mu.Unlock()
+		if uncertain {
+			t.Fatal("owned child NOTE_EXIT became uncertain")
+		}
+		if observed == 1 {
+			break
+		}
+		if time.Now().After(limit) {
+			t.Fatal("owned child natural exit was not observed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := guard.releaseAfterVerifiedClose(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, sharedBrowserRestartMarker)); !os.IsNotExist(err) {
+		t.Fatalf("clean test guard not released after explicit verified close: %v", err)
 	}
 }
