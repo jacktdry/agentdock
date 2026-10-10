@@ -17,7 +17,7 @@ func observeGroupBirths(groupID int) ([]BirthIdentity, error) {
 	ids := make([]BirthIdentity, 0, len(rows))
 	for _, r := range rows {
 		ids = append(ids, BirthIdentity{
-			PID: int(r.Proc.P_pid), StartSec: r.Proc.P_starttime.Sec,
+			PID: int(r.Proc.P_pid), ParentPID: int(r.Eproc.Ppid), StartSec: r.Proc.P_starttime.Sec,
 			StartUsec:    int64(r.Proc.P_starttime.Usec),
 			EffectiveUID: r.Eproc.Ucred.Uid, ProcessGroupID: int(r.Eproc.Pgid),
 		})

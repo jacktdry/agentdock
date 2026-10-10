@@ -219,3 +219,10 @@
 - 新增 macOS kernel `kern.proc.pgrp` 唯讀 process group enumeration，與原 Next-only wrapper PID+birth 指紋串接。只有原 wrapper 都不可見後才分類群組仍有成員／群組空但 detached 子程序未驗證／成員身分衝突／無法觀測，所有分支仍拒絕自動解鎖、重啟或回收。
 - 完整 app/browser/browserpolicy/mcp-client/process Go tests、app/process/browser 定點 race、go vet、Linux/Windows amd64 no-CGO 的 process/app/browser crossbuild、gofmt/diff 均 PASS。
 - 只以自己現存的 Go 測試程序群組做 real read-only case；其餘用 fake 觀測驗證，沒有啟動 Chrome/Edge/ACP，沒有更動原版 AgentDock、AGY 或已安裝 Next。詳見 P8 §16。
+
+
+### 2026-10-10 P8-B Next worker direct-parent admission proof（SOURCE ONLY）
+
+- Next-only shared ACP ReadyWitness 由原「單一 PID kernel birth」補強為 **4 次 kernel read 的 parent/child 兩次核對**，必須符合 PPID=目前 Core、child UID=Core、獨立 PGID=child PID、出生時間順序與兩次身分完全一致。失敗一律 fail-closed、保留 marker；原 stable/exclusive 路徑完全不受影響。
+- 完整 app/browser/browserpolicy/mcp-client/process Go tests、定點 app/process/browser race、go vet、Linux/Windows amd64 process/app/browser no-CGO crossbuild 與格式檢查全部 PASS。
+- macOS real UAT 限自建 Go test child，核對成功可以寫入 private test marker，Core 本身 PID 被拒絕且 marker 不受污染；沒有執行 npx/Chrome/Edge/AGY。該檢查仍不具跨 Core kill 或 detached Chrome cleanup 授權，詳見 P8 §17。

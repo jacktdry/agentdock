@@ -29,7 +29,9 @@ var errSharedBrowserEvidence = errors.New("Next shared browser worker evidence u
 // PID is recorded for future human/forensic observation, NOT to authorize kill,
 // signal, unlink, profile control or automatic crash recovery.
 func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerInfo) error {
-	return g.recordManagedWorkerWithIdentity(info, processcontrol.ObserveBirthIdentity)
+	return g.recordManagedWorkerWithIdentity(info, func(ctx context.Context, childPID int) (processcontrol.BirthIdentity, error) {
+		return processcontrol.ObserveDirectChildBirth(ctx, os.Getpid(), childPID)
+	})
 }
 
 func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbrowser.WorkerInfo, observe func(context.Context, int) (processcontrol.BirthIdentity, error)) error {

@@ -11,7 +11,9 @@ var ErrIdentityUnavailable = errors.New("process birth identity unavailable")
 // Snapshot identity does not pin a process handle, attest child ownership,
 // authorize signals or establish that detached browser descendants have exited.
 type BirthIdentity struct {
-	PID            int
+	PID int
+	// ParentPID is a kernel-observed relation, not a durable ownership right.
+	ParentPID      int
 	StartSec       int64
 	StartUsec      int64
 	EffectiveUID   uint32

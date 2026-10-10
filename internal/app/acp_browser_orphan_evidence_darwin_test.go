@@ -224,7 +224,9 @@ func TestSharedBrowserOrphanRealSelfBirthSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := os.Getpid()
-	if err := g.recordManagedWorker(readyEvidence(pid)); err != nil {
+	// This test proves the kernel birth journal round-trip for our test PID.
+	// It is not a direct-child launch test, which is in process tests.
+	if err := g.recordManagedWorkerWithIdentity(readyEvidence(pid), processcontrol.ObserveBirthIdentity); err != nil {
 		t.Fatal(err)
 	}
 	result := inspectSharedBrowserOrphanEvidence(context.Background(), root, processcontrol.Observe)

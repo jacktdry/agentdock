@@ -12,7 +12,7 @@ func observeBirthIdentity(pid int) (BirthIdentity, error) {
 		return BirthIdentity{}, ErrIdentityUnavailable
 	}
 	return BirthIdentity{
-		PID: pid, StartSec: k.Proc.P_starttime.Sec,
+		PID: pid, ParentPID: int(k.Eproc.Ppid), StartSec: k.Proc.P_starttime.Sec,
 		StartUsec:    int64(k.Proc.P_starttime.Usec),
 		EffectiveUID: k.Eproc.Ucred.Uid, ProcessGroupID: int(k.Eproc.Pgid),
 	}, nil
