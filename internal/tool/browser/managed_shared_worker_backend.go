@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"errors"
 	"maps"
+	"math"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -20,7 +22,7 @@ type managedSharedBorrow struct {
 	err               error
 }
 
-// Offline opt-in adapter, never constructed by ACPBridge. WorkerID at this
+// Private opt-in adapter. WorkerID at this
 // boundary is a unique borrow token, NOT the underlying worker generation.
 // This preserves Manager's paired Stop/recovery semantics without refcount ABA.
 // A single canonical workspace is pinned; other roots need a separate adapter.
@@ -44,6 +46,45 @@ type managedSharedWorkerBackend struct {
 }
 
 var _ ManagedLeaseBackend = (*managedSharedWorkerBackend)(nil)
+
+// Unexported marker cannot be implemented by caller-supplied external backends.
+type sharedManagedCleanup interface{ sharedManagedBorrowCleanup() }
+
+func (*managedSharedWorkerBackend) sharedManagedBorrowCleanup() {}
+
+// Only the opt-in pool owns this adapter. General registry callers still cannot
+// select pages; even this adapter can select only its pool's reserved keeper.
+type sharedRegistryBackend struct {
+	*WorkerRegistry
+	shared *managedSharedWorkerBackend
+}
+
+func (a *sharedRegistryBackend) Call(ctx context.Context, id, tool string, args map[string]any) (map[string]any, error) {
+	if tool != "select_page" {
+		return a.WorkerRegistry.Call(ctx, id, tool, args)
+	}
+	page, ok := args["pageId"].(float64)
+	if a.shared == nil || !ok || math.IsNaN(page) || math.IsInf(page, 0) || page < 0 || math.Trunc(page) != page || len(args) != 2 || args["bringToFront"] != false {
+		return nil, errManagedSharedUnavailable
+	}
+	a.shared.mu.Lock()
+	pinned := a.shared.worker
+	valid := !a.shared.closed && id == pinned.WorkerID && a.shared.keeperPage != nil && page == *a.shared.keeperPage
+	a.shared.mu.Unlock()
+	if !valid {
+		return nil, errManagedSharedUnavailable
+	}
+	w, err := a.worker(id)
+	if err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if ctx.Err() != nil || w.info.State != WorkerReady || w.info.WorkerID != pinned.WorkerID || workerSessionNil(w.session) || !reflect.DeepEqual(w.info.Session, pinned.Session) || !reflect.DeepEqual(w.session.Info(), pinned.Session) {
+		return nil, errManagedSharedUnavailable
+	}
+	return w.session.Call(ctx, "select_page", map[string]any{"pageId": page, "bringToFront": false})
+}
 
 func newManagedSharedWorkerBackend(backend ManagedLeaseBackend, options ManagedWorkerOptions) (*managedSharedWorkerBackend, error) {
 	if backend == nil || !filepath.IsAbs(options.Cwd) || filepath.Clean(options.Cwd) != options.Cwd {

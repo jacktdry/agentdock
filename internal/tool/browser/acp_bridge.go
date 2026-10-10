@@ -34,6 +34,9 @@ type ACPBridge struct {
 	managed   *managedLeaseCoordinator
 	external  *ExternalLeaseManager
 	lifecycle *browserLifecycleRunner
+	shared    *managedSharedWorkerBackend // Private opt-in; runtime constructor stays exclusive.
+	closeOnce sync.Once
+	closeErr  error
 
 	mu            sync.Mutex
 	byToken       map[string]*acpBrowserOwner
@@ -43,15 +46,38 @@ type ACPBridge struct {
 }
 
 func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, error) {
+	return newACPBridge(planner, registry, registry, nil)
+}
+
+// Source-only spike: one canonical workspace and one terminal pool generation.
+// No product setting or runtime caller enables this constructor.
+func newACPBridgeSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string) (*ACPBridge, error) {
+	if planner == nil || registry == nil {
+		return nil, errManagedSharedUnavailable
+	}
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	adapter := &sharedRegistryBackend{WorkerRegistry: registry}
+	shared, err := newManagedSharedWorkerBackend(adapter, ManagedWorkerOptions{Cwd: root})
+	if err != nil {
+		return nil, err
+	}
+	adapter.shared = shared
+	return newACPBridge(planner, registry, shared, shared)
+}
+
+func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend) (*ACPBridge, error) {
 	if planner == nil || registry == nil {
 		return nil, browserError(ErrPolicyConflict, "ACP browser bridge requires planner and worker registry", "acp", nil, nil)
 	}
-	managed, err := newManagedLeaseCoordinator(registry, defaultManagedLeasePolicy())
+	managed, err := newManagedLeaseCoordinator(backend, defaultManagedLeasePolicy())
 	if err != nil {
 		return nil, err
 	}
 	bridge := &ACPBridge{
-		planner: planner, registry: registry, managed: managed, external: NewExternalLeaseManager(registry),
+		planner: planner, registry: registry, managed: managed, shared: shared, external: NewExternalLeaseManager(registry),
 		byToken: make(map[string]*acpBrowserOwner), bySession: make(map[string]*acpBrowserOwner),
 	}
 	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
@@ -91,12 +117,16 @@ func (b *ACPBridge) sweepLifecycle(now time.Time) error {
 	if b == nil {
 		return nil
 	}
-	return errors.Join(
+	err := errors.Join(
 		b.managed.SweepExpired(now),
 		b.external.SweepExpired(now),
 		b.managed.RecoverFailed(now),
 		b.external.RecoverFailed(now),
 	)
+	if b.shared != nil {
+		err = errors.Join(err, b.shared.ReapIdle(now))
+	}
+	return err
 }
 
 func (b *ACPBridge) RegisterSession(sessionID, profileID, cwd string) (string, error) {
@@ -164,6 +194,9 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
+	if b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd {
+		return LeaseMetadata{}, errManagedSharedUnavailable
+	}
 	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"url": url})
 	if err != nil {
 		return LeaseMetadata{}, err
@@ -174,6 +207,9 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	decision, err := b.planner.Resolve(ctx, owner.scope, nil)
 	if err != nil {
 		return LeaseMetadata{}, err
+	}
+	if b.shared != nil && decision.Route != browserpolicy.RouteManaged {
+		return LeaseMetadata{}, errManagedSharedUnavailable
 	}
 	switch decision.Route {
 	case browserpolicy.RouteManaged:
@@ -309,6 +345,11 @@ func (b *ACPBridge) Close() error {
 	if b == nil {
 		return nil
 	}
+	b.closeOnce.Do(func() { b.closeErr = b.close() })
+	return b.closeErr
+}
+
+func (b *ACPBridge) close() error {
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
@@ -331,6 +372,9 @@ func (b *ACPBridge) Close() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
+	if b.shared != nil {
+		failures = append(failures, b.shared.Shutdown(ctx))
+	}
 	failures = append(failures, b.registry.Shutdown(ctx))
 	return errors.Join(failures...)
 }
