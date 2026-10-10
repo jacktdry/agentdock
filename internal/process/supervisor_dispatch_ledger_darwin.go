@@ -33,6 +33,7 @@ type SupervisorDispatchSnapshot struct {
 	RequestSHA256 string
 	Outcome       string
 	ReplySHA256   string
+	Acknowledged  bool
 }
 
 // The Supervisor alone opens this read/write state directory. Do NOT expose
@@ -298,8 +299,16 @@ func InspectSupervisorDispatchReceipt(stateDir string, frame SupervisorToolCallF
 		pathStat.Uid != uint32(os.Geteuid()) || pathStat.Mode&0777 != 0600 || pathStat.Nlink != 1 {
 		return zero, ErrSupervisorDispatchLedgerUnavailable
 	}
+	return parseSupervisorDispatchReceipt(data, frame)
+}
+
+func parseSupervisorDispatchReceipt(data []byte, frame SupervisorToolCallFrame) (SupervisorDispatchSnapshot, error) {
+	var zero SupervisorDispatchSnapshot
+	if len(data) == 0 || len(data) > supervisorReceiptMaxBytes || data[len(data)-1] != '\n' {
+		return zero, ErrSupervisorDispatchLedgerUnavailable
+	}
 	lines := bytes.Split(bytes.TrimSuffix(data, []byte{'\n'}), []byte{'\n'})
-	if len(lines) != 1 && len(lines) != 2 {
+	if len(lines) < 1 || len(lines) > 3 {
 		return zero, ErrSupervisorDispatchLedgerUnavailable
 	}
 	decode := func(line []byte) (SupervisorDispatchSnapshot, error) {
@@ -318,7 +327,7 @@ func InspectSupervisorDispatchReceipt(stateDir string, frame SupervisorToolCallF
 	first, err := decode(lines[0])
 	if err != nil || first.State != "accepted" || first.Session != frame.Session ||
 		first.Sequence != frame.Sequence || first.RequestSHA256 != dispatchRequestDigest(frame) ||
-		!validLineageBirth(first.Core) || !validLineageBirth(first.Worker) || first.Outcome != "" || first.ReplySHA256 != "" {
+		!validLineageBirth(first.Core) || !validLineageBirth(first.Worker) || first.Outcome != "" || first.ReplySHA256 != "" || first.Acknowledged {
 		return zero, ErrSupervisorDispatchLedgerUnavailable
 	}
 	if len(lines) == 1 {
@@ -328,7 +337,7 @@ func InspectSupervisorDispatchReceipt(stateDir string, frame SupervisorToolCallF
 	if err != nil || second.State != "settled" ||
 		(second.Outcome != "succeeded" && second.Outcome != "failed" && second.Outcome != "unknown") ||
 		len(second.ReplySHA256) != 64 || second.Session != "" || second.Sequence != 0 ||
-		second.Core.PID != 0 || second.Worker.PID != 0 || second.RequestSHA256 != "" {
+		second.Core.PID != 0 || second.Worker.PID != 0 || second.RequestSHA256 != "" || second.Acknowledged {
 		return zero, ErrSupervisorDispatchLedgerUnavailable
 	}
 	if _, err := hex.DecodeString(second.ReplySHA256); err != nil {
@@ -337,5 +346,14 @@ func InspectSupervisorDispatchReceipt(stateDir string, frame SupervisorToolCallF
 	first.State = "settled"
 	first.Outcome = second.Outcome
 	first.ReplySHA256 = second.ReplySHA256
+	if len(lines) == 3 {
+		ack, err := decode(lines[2])
+		if err != nil || ack.State != "acknowledged" || ack.ReplySHA256 != second.ReplySHA256 ||
+			ack.Session != "" || ack.Sequence != 0 || ack.Core.PID != 0 || ack.Worker.PID != 0 ||
+			ack.Outcome != "" || ack.RequestSHA256 != "" || ack.Acknowledged {
+			return zero, ErrSupervisorDispatchLedgerUnavailable
+		}
+		first.Acknowledged = true
+	}
 	return first, nil
 }

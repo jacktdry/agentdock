@@ -31,6 +31,7 @@ type supervisorToolIPCTestEnvelope struct {
 	Socket     string                                    `json:"socket"`
 	M8         bool                                      `json:"m8"`
 	Durable    bool                                      `json:"durable"`
+	CoreACK    bool                                      `json:"core_ack"`
 }
 
 func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
@@ -62,6 +63,7 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 		t.Fatalf("Supervisor handoff not accepted: %q %v", ack, err)
 	}
 	_ = conn.Close()
+	var acknowledgments []processcontrol.SupervisorDispatchAckFrame
 	call := func(frame processcontrol.SupervisorToolCallFrame, allowed bool, expected string) {
 		t.Helper()
 		peer, err := net.Dial("unix", env.Socket)
@@ -79,6 +81,21 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 			payload, ok := reply.Result["structuredContent"].(map[string]any)
 			if !ok || payload["echo"] != expected {
 				t.Fatalf("wrong real MCP echo result: %+v", reply)
+			}
+			if env.CoreACK {
+				ack, err := processcontrol.SignSupervisorDispatchAckPrototype(secret, env.Core,
+					env.Supervisor, env.Worker, frame, reply)
+				if err != nil {
+					t.Fatal(err)
+				}
+				fresh, err := net.Dial("unix", env.Socket)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := SendSupervisorCoreACKPrototype(context.Background(), fresh.(*net.UnixConn), frame, ack); err != nil {
+					t.Fatalf("authenticated Core ACK failed: %v", err)
+				}
+				acknowledgments = append(acknowledgments, ack)
 			}
 		} else if reply.Error != "denied" {
 			t.Fatalf("denied call leaked detail: %+v", reply)
@@ -156,6 +173,18 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 		}
 		fmt.Fprintln(os.Stdout, string(rawFirst))
 		fmt.Fprintln(os.Stdout, string(rawSecond))
+		if env.CoreACK {
+			if len(acknowledgments) != 2 {
+				t.Fatalf("unexpected ACK count %d", len(acknowledgments))
+			}
+			for _, ack := range acknowledgments {
+				raw, err := json.Marshal(ack)
+				if err != nil {
+					t.Fatal(err)
+				}
+				fmt.Fprintln(os.Stdout, string(raw))
+			}
+		}
 	}
 	// Owned Core test process intentionally exits ONLY when its parent kills
 	// this exact Go helper; the independent Supervisor retains the MCP SDK.
@@ -163,17 +192,20 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 }
 
 func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
-	runSupervisorScopedIPCTest(t, false, false)
+	runSupervisorScopedIPCTest(t, false, false, false)
 }
 
 func TestSupervisorM8ScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
-	runSupervisorScopedIPCTest(t, true, false)
+	runSupervisorScopedIPCTest(t, true, false, false)
 }
 
 func TestSupervisorM8DurableScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
-	runSupervisorScopedIPCTest(t, true, true)
+	runSupervisorScopedIPCTest(t, true, true, false)
 }
-func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
+func TestSupervisorM8DurableCoreACKActualKernelPeer(t *testing.T) {
+	runSupervisorScopedIPCTest(t, true, true, true)
+}
+func runSupervisorScopedIPCTest(t *testing.T, m8, durable, coreACK bool) {
 	// ALL processes are private copies of this Go test executable.
 	ctx, cancel := context.WithTimeout(context.Background(), 17*time.Second)
 	defer cancel()
@@ -280,7 +312,7 @@ func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
 	defer coreExit.Close()
 	env := supervisorToolIPCTestEnvelope{
 		Challenge: challenge, Core: core, Supervisor: supervisor, Worker: worker,
-		Secret: hex.EncodeToString(secret), Socket: path, M8: m8, Durable: durable,
+		Secret: hex.EncodeToString(secret), Socket: path, M8: m8, Durable: durable, CoreACK: coreACK,
 	}
 	// Even a valid MAC cannot be used by a different kernel PID / UID.
 	spoof, err := net.Dial("unix", path)
@@ -348,6 +380,15 @@ func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
 		}
 		if err == nil {
 			admitted++
+			if coreACK {
+				ackConn, err := listener.AcceptUnix()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := ServeSupervisorCoreACKPrototype(ctx, ackConn, handoff, ledger); err != nil {
+					t.Fatalf("Core received reply but ACK rejected: %v", err)
+				}
+			}
 		} else if errors.Is(err, processcontrol.ErrSupervisorHandoffUnavailable) {
 			rejected++
 		} else {
@@ -379,6 +420,7 @@ func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
 		t.Fatal("Core fixture did not verify tool call results")
 	}
 	if durable {
+		acknowledgedRequests := make([]processcontrol.SupervisorToolCallFrame, 0, 2)
 		for _, sequence := range []uint64{1, 2} {
 			if !scanned.Scan() {
 				t.Fatal("Core did not return signed frame for durable test")
@@ -390,10 +432,41 @@ func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
 			if frame.Sequence != sequence {
 				t.Fatal("wrong signed Core sequence")
 			}
+			acknowledgedRequests = append(acknowledgedRequests, frame)
 			snapshot, err := processcontrol.InspectSupervisorDispatchReceipt(filepath.Join(root, "dispatch"), frame)
 			if err != nil || snapshot.State != "settled" || snapshot.Outcome != "succeeded" ||
-				snapshot.Core != core || snapshot.Worker != worker || len(snapshot.ReplySHA256) != 64 {
+				snapshot.Core != core || snapshot.Worker != worker || len(snapshot.ReplySHA256) != 64 || snapshot.Acknowledged != coreACK {
 				t.Fatalf("successful Core IPC did not durably settle before reply: %+v %v", snapshot, err)
+			}
+		}
+		if coreACK {
+			for _, frame := range acknowledgedRequests {
+				if !scanned.Scan() {
+					t.Fatal("Core did not report its signed ACK")
+				}
+				var ack processcontrol.SupervisorDispatchAckFrame
+				if err := json.Unmarshal(scanned.Bytes(), &ack); err != nil {
+					t.Fatal(err)
+				}
+				if ack.Sequence != frame.Sequence {
+					t.Fatal("ACK sequence mismatch")
+				}
+				stalePeer, err := net.Dial("unix", path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				received, err := listener.AcceptUnix()
+				if err != nil {
+					t.Fatal(err)
+				}
+				done := make(chan error, 1)
+				go func() { done <- SendSupervisorCoreACKPrototype(ctx, stalePeer.(*net.UnixConn), frame, ack) }()
+				if err := ServeSupervisorCoreACKPrototype(ctx, received, handoff, ledger); err == nil {
+					t.Fatal("forged Core ACK accepted from wrong process")
+				}
+				if err := <-done; err == nil {
+					t.Fatal("forged ACK received positive response")
+				}
 			}
 		}
 		entries, err := os.ReadDir(filepath.Join(root, "dispatch"))

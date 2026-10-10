@@ -325,3 +325,9 @@
 
 - macOS `SupervisorDispatchLedger` + M8 gated `ServeSupervisorM8DurableMCPCallPrototype`：核對 live Core kernel Unix peer/HMAC/Worker birth/M8 Allow/local tool scope 後，先 write-ahead accepted fsync 收據（owner-private 0700 dir / 0600 O_EXCL + O_NOFOLLOW + inode pin），再允許 MCP tool；SDK 返回後先 fsync settled outcome / reply digest，再回覆 Core。提供嚴格唯讀 inspection，accepted-only、torn/symlink/權限錯、duplicate sequence 與 IO failure 全部保守阻擋。沒有原始工具參數或回覆儲存，無自動重放／回收／解鎖。
 - Native Go-only Core/Worker/M8 SDK echo 實測兩筆 settled receipts，拒絕請求不記錄 accepted；單元測試含寫入失敗永久 quarantine 與 ledger reopen 時 O_EXCL 拒絕舊 sequence。`29 的 Core 有已執行工具後禁止自動重連仍維持，詳細見 P8 `30。
+
+
+### 2026-10-11 P8-B Core reply ACK（SOURCE ONLY）
+
+- 在 `30 private SupervisorDispatchLedger 增加 MAC-bound Core post-response `ACK`：由相同 live Core OS kernel peer 新開 Unix socket，把 session/seq/request SHA/reply SHA+完整出生世代簽章，Supervisor 核對私有 journal 已持久 `accepted+settled`、結果非 unknown 才 fsync 追加第三行 `acknowledged`。另外的 PID、不同請求序號／reply digest、未完成紀錄、重複或損毀 ACK 都拒絕；不存在持久化 Core inbox 或授權自動恢復。
+- Go-only 真實 MCP echo + Core ACK native fixture 支援兩次 separate-socket ACK 並確認兩筆 receipt 皆三行；收到相同 MAC 但非 Core PID 的 ACK 必拒絕。Unit negative 包含 concurrent/replay/unknown/torn/file mode。核心原 `29 rotation` gate 仍一律禁止曾接受工具呼叫的 Core crash 自動重接。詳見 P8 `31。

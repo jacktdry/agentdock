@@ -9,9 +9,10 @@ var ErrSupervisorDispatchLedgerUnavailable = errors.New("supervisor dispatch led
 type SupervisorDispatchLedger struct{}
 type SupervisorDispatchTicket struct{}
 type SupervisorDispatchSnapshot struct {
-	State    string
-	Session  string
-	Sequence uint64
+	State        string
+	Session      string
+	Sequence     uint64
+	Acknowledged bool
 }
 
 func OpenSupervisorDispatchLedger(string) (*SupervisorDispatchLedger, error) {
