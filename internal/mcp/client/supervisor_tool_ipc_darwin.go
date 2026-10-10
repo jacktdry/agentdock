@@ -26,6 +26,15 @@ type SupervisorToolCallReply struct {
 	Error    string         `json:"error,omitempty"`
 }
 
+// ServeSupervisorM8ScopedMCPCallPrototype extends the authenticated, scoped
+// prototype with a mandatory MAC-bound M8 Allow claim. It remains source-only
+// until the real Next Core admission path and principal provider are wired.
+func ServeSupervisorM8ScopedMCPCallPrototype(ctx context.Context, conn *net.UnixConn,
+	handoff *processcontrol.ReadOnlySupervisorHandoff,
+	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}) error {
+	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, true)
+}
+
 // ServeSupervisorScopedMCPCallPrototype is a ONE-REQUEST Unix socket endpoint
 // run only INSIDE the independent Supervisor process. It never transfers
 // raw stdio or an SDK session handle to the Core and never affects PID cleanup.
@@ -34,6 +43,12 @@ type SupervisorToolCallReply struct {
 func ServeSupervisorScopedMCPCallPrototype(ctx context.Context, conn *net.UnixConn,
 	handoff *processcontrol.ReadOnlySupervisorHandoff,
 	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}) error {
+	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, false)
+}
+
+func serveSupervisorScopedMCPCall(ctx context.Context, conn *net.UnixConn,
+	handoff *processcontrol.ReadOnlySupervisorHandoff,
+	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}, requireM8 bool) error {
 	if ctx == nil || ctx.Err() != nil || conn == nil || handoff == nil || session == nil ||
 		len(allowedTools) == 0 || !handoff.MatchesSupervisorOwnedWorker(session.workerBirth) {
 		return processcontrol.ErrSupervisorHandoffUnavailable
@@ -48,6 +63,12 @@ func ServeSupervisorScopedMCPCallPrototype(ctx context.Context, conn *net.UnixCo
 	}
 	var trailing any
 	if err := dec.Decode(&trailing); err != io.EOF {
+		return processcontrol.ErrSupervisorHandoffUnavailable
+	}
+	// M8-gated endpoint does not accept earlier allowlist-only frames.
+	// Permission claims are in the call HMAC, verified again by process gate.
+	if requireM8 && !processcontrol.ValidSupervisorPermissionProof(frame.Permission) {
+		_ = writeSupervisorToolReply(conn, SupervisorToolCallReply{Version: 1, Sequence: frame.Sequence, OK: false, Error: "denied"})
 		return processcontrol.ErrSupervisorHandoffUnavailable
 	}
 	// Before a tool can run, bind the same socket to the actual kernel Core

@@ -24,3 +24,8 @@ func CallSupervisorScopedMCPPrototype(context.Context, *net.UnixConn,
 	processcontrol.SupervisorToolCallFrame) (SupervisorToolCallReply, error) {
 	return SupervisorToolCallReply{}, processcontrol.ErrSupervisorHandoffUnavailable
 }
+
+func ServeSupervisorM8ScopedMCPCallPrototype(context.Context, *net.UnixConn,
+	*processcontrol.ReadOnlySupervisorHandoff, *SupervisorOwnedMCPSession, map[string]struct{}) error {
+	return processcontrol.ErrSupervisorHandoffUnavailable
+}

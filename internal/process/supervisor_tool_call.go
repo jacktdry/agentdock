@@ -13,19 +13,44 @@ import (
 
 const SupervisorToolCallMaxArguments = 4096
 
+// SupervisorPermissionProof is a MAC-bound claim minted ONLY by trusted Core
+// after its M8 admission gate returned Allow. It never authorizes directly:
+// Supervisor must ALSO prove OS peer, worker generation, sequence and scope.
+type SupervisorPermissionProof struct {
+	Version            uint8  `json:"version"`
+	Effect             string `json:"effect"`
+	PolicyRevision     uint64 `json:"policy_revision"`
+	RuntimeEpoch       string `json:"runtime_epoch"`
+	Fingerprint        string `json:"fingerprint"`
+	PrincipalHash      string `json:"principal_hash"`
+	ConsumedApprovalID string `json:"consumed_approval_id,omitempty"`
+}
+
+func ValidSupervisorPermissionProof(proof *SupervisorPermissionProof) bool {
+	if proof == nil || proof.Version != 1 || proof.Effect != "allow" || proof.PolicyRevision == 0 ||
+		len(proof.RuntimeEpoch) == 0 || len(proof.RuntimeEpoch) > 128 ||
+		len(proof.PrincipalHash) == 0 || len(proof.PrincipalHash) > 128 ||
+		len(proof.ConsumedApprovalID) > 128 || !strings.HasPrefix(proof.Fingerprint, "sha256:") || len(proof.Fingerprint) != 71 {
+		return false
+	}
+	_, err := hex.DecodeString(proof.Fingerprint[7:])
+	return err == nil
+}
+
 // SupervisorToolCallFrame is ONE scoped call request on a fresh, kernel-
 // authenticated local Unix socket. A MAC is not a process-control capability.
 type SupervisorToolCallFrame struct {
-	Version         int             `json:"version"`
-	Operation       string          `json:"operation"`
-	Session         string          `json:"session"`
-	Sequence        uint64          `json:"sequence"`
-	Tool            string          `json:"tool"`
-	WorkerPID       int             `json:"worker_pid"`
-	WorkerStartSec  int64           `json:"worker_start_sec"`
-	WorkerStartUsec int64           `json:"worker_start_usec"`
-	Arguments       json.RawMessage `json:"arguments"`
-	MAC             string          `json:"mac"`
+	Version         int                        `json:"version"`
+	Operation       string                     `json:"operation"`
+	Session         string                     `json:"session"`
+	Sequence        uint64                     `json:"sequence"`
+	Tool            string                     `json:"tool"`
+	WorkerPID       int                        `json:"worker_pid"`
+	WorkerStartSec  int64                      `json:"worker_start_sec"`
+	WorkerStartUsec int64                      `json:"worker_start_usec"`
+	Arguments       json.RawMessage            `json:"arguments"`
+	Permission      *SupervisorPermissionProof `json:"permission,omitempty"`
+	MAC             string                     `json:"mac"`
 }
 
 func validScopedToolName(name string) bool {
@@ -63,9 +88,11 @@ func canonicalToolArgs(raw []byte) ([]byte, error) {
 
 func supervisorToolCallPayload(frame SupervisorToolCallFrame, core, supervisor, worker BirthIdentity, owner SupervisorWorkerParent) string {
 	digest := sha256.Sum256(frame.Arguments)
-	return fmt.Sprintf("agentdock-next-supervisor-tool-call-v1|%s|%d|%s|%s|%d|%s|%d,%d,%d|%x|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d",
+	proofBytes, _ := json.Marshal(frame.Permission)
+	proofDigest := sha256.Sum256(proofBytes)
+	return fmt.Sprintf("agentdock-next-supervisor-tool-call-v1|%s|%d|%s|%s|%d|%s|%d,%d,%d|%x|%x|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d|%d,%d,%d,%d,%d,%d",
 		owner, frame.Version, frame.Operation, frame.Session, frame.Sequence, frame.Tool,
-		frame.WorkerPID, frame.WorkerStartSec, frame.WorkerStartUsec, digest,
+		frame.WorkerPID, frame.WorkerStartSec, frame.WorkerStartUsec, digest, proofDigest,
 		core.PID, core.ParentPID, core.StartSec, core.StartUsec, core.EffectiveUID, core.ProcessGroupID,
 		supervisor.PID, supervisor.ParentPID, supervisor.StartSec, supervisor.StartUsec, supervisor.EffectiveUID, supervisor.ProcessGroupID,
 		worker.PID, worker.ParentPID, worker.StartSec, worker.StartUsec, worker.EffectiveUID, worker.ProcessGroupID)
@@ -99,6 +126,25 @@ func SignSupervisorOwnedToolCallPrototype(key []byte, challenge SupervisorHandof
 		Tool: tool, WorkerPID: worker.PID, WorkerStartSec: worker.StartSec,
 		WorkerStartUsec: worker.StartUsec, Arguments: raw,
 	}
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(supervisorToolCallPayload(frame, core, supervisor, worker, SupervisorWorkerParentSupervisor)))
+	frame.MAC = hex.EncodeToString(mac.Sum(nil))
+	return frame, nil
+}
+
+// AttachSupervisorPermissionProof signs the M8 Allow claim into the existing
+// call MAC. A legacy unsigned-approval frame is NOT valid for the M8 endpoint.
+// This helper is strictly a cryptographic operation: only trusted Core may
+// construct proof from actual AdmissionGate.Admit results, never wire input.
+func AttachSupervisorPermissionProof(key []byte, core, supervisor, worker BirthIdentity,
+	frame SupervisorToolCallFrame, proof SupervisorPermissionProof) (SupervisorToolCallFrame, error) {
+	if len(key) != 32 || !ValidSupervisorPermissionProof(&proof) ||
+		frame.Version != 1 || frame.Operation != "call-tool-scoped" ||
+		frame.WorkerPID != worker.PID || frame.WorkerStartSec != worker.StartSec ||
+		frame.WorkerStartUsec != worker.StartUsec || worker.ParentPID != supervisor.PID {
+		return SupervisorToolCallFrame{}, ErrSupervisorHandoffUnavailable
+	}
+	frame.Permission = &proof
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(supervisorToolCallPayload(frame, core, supervisor, worker, SupervisorWorkerParentSupervisor)))
 	frame.MAC = hex.EncodeToString(mac.Sum(nil))

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/permission"
 	processcontrol "github.com/uvwt/agentdock/internal/process"
 )
 
@@ -28,6 +29,7 @@ type supervisorToolIPCTestEnvelope struct {
 	Worker     processcontrol.BirthIdentity              `json:"worker"`
 	Secret     string                                    `json:"secret"`
 	Socket     string                                    `json:"socket"`
+	M8         bool                                      `json:"m8"`
 }
 
 func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
@@ -81,7 +83,33 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 			t.Fatalf("denied call leaked detail: %+v", reply)
 		}
 	}
+	var coreAdmission CoreSupervisorM8Context
+	if env.M8 {
+		store, err := permission.NewStore(t.TempDir(), "core-m8-test-epoch")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gate, err := permission.NewAdmissionGate(store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		coreAdmission = CoreSupervisorM8Context{Gate: gate,
+			Binding: permission.PermissionBinding{
+				Principal:    permission.AuthorizationPrincipal{Kind: "native-test-sso", ID: "trusted-core-user", Authenticated: true, Stable: true},
+				RuntimeEpoch: store.RuntimeEpoch(), Source: "supervisor_core", Provider: "test-mcp",
+			}, Audit: permission.AuditBinding{CallID: "initial"},
+		}
+	}
 	signed := func(seq uint64, name, text string) processcontrol.SupervisorToolCallFrame {
+		if env.M8 {
+			coreAdmission.Audit.CallID = fmt.Sprintf("native-m8-%d-%s", seq, name)
+			frame, decision, err := AdmitAndSignSupervisorM8Call(context.Background(), coreAdmission, secret, env.Challenge,
+				env.Core, env.Supervisor, env.Worker, seq, name, map[string]any{"text": text})
+			if err != nil || decision.Decision.Effect != permission.Allow {
+				t.Fatalf("M8 trusted Core did not admit: %+v %v", decision, err)
+			}
+			return frame
+		}
 		f, err := processcontrol.SignSupervisorOwnedToolCallPrototype(secret, env.Challenge,
 			env.Core, env.Supervisor, env.Worker, seq, name, map[string]any{"text": text})
 		if err != nil {
@@ -100,6 +128,19 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 	tampered := signed(2, "echo", "legitimate")
 	tampered.Arguments, _ = json.Marshal(map[string]any{"text": "tampered"})
 	call(tampered, false, "")
+	if env.M8 {
+		// Even an attested Core may not bypass AdmissionGate by using the
+		// earlier allowlist-only signer against the M8 endpoint.
+		legacy, err := processcontrol.SignSupervisorOwnedToolCallPrototype(secret, env.Challenge,
+			env.Core, env.Supervisor, env.Worker, 2, "echo", map[string]any{"text": "legacy"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		call(legacy, false, "")
+		modifiedProof := signed(2, "echo", "proof-changed")
+		modifiedProof.Permission.PolicyRevision++
+		call(modifiedProof, false, "")
+	}
 	second := signed(2, "echo", "second-from-core")
 	call(second, true, "second-from-core")
 	fmt.Fprintln(os.Stdout, "IPC_CORE_DONE")
@@ -109,6 +150,14 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 }
 
 func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
+	runSupervisorScopedIPCTest(t, false)
+}
+
+func TestSupervisorM8ScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
+	runSupervisorScopedIPCTest(t, true)
+}
+
+func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 	// ALL processes are private copies of this Go test executable.
 	ctx, cancel := context.WithTimeout(context.Background(), 17*time.Second)
 	defer cancel()
@@ -202,13 +251,8 @@ func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
 	defer coreExit.Close()
 	env := supervisorToolIPCTestEnvelope{
 		Challenge: challenge, Core: core, Supervisor: supervisor, Worker: worker,
-		Secret: hex.EncodeToString(secret), Socket: path,
+		Secret: hex.EncodeToString(secret), Socket: path, M8: m8,
 	}
-	// The test-only secret moves ONLY over an inherited private stdin pipe.
-	if err := json.NewEncoder(stdin).Encode(env); err != nil {
-		t.Fatal(err)
-	}
-
 	// Even a valid MAC cannot be used by a different kernel PID / UID.
 	spoof, err := net.Dial("unix", path)
 	if err != nil {
@@ -227,6 +271,12 @@ func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
 	}
 	_ = spoofConn.Close()
 	_ = spoof.Close()
+
+	// Only NOW let the real Core open its handoff socket. Never race the
+	// fake-peer negative assertion with the genuine Core in AcceptUnix.
+	if err := json.NewEncoder(stdin).Encode(env); err != nil {
+		t.Fatal(err)
+	}
 
 	// One verified handoff and six single-request connections, each with the
 	// ACTUAL OS peer still alive until the bounded response is received.
@@ -251,12 +301,20 @@ func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
 	scope := map[string]struct{}{"echo": {}}
 	admitted := 0
 	rejected := 0
-	for i := 0; i < 6; i++ {
+	calls := 6
+	if m8 {
+		calls = 8
+	}
+	for i := 0; i < calls; i++ {
 		conn, err := listener.AcceptUnix()
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
+		if m8 {
+			err = ServeSupervisorM8ScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
+		} else {
+			err = ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
+		}
 		if err == nil {
 			admitted++
 		} else if errors.Is(err, processcontrol.ErrSupervisorHandoffUnavailable) {
@@ -265,7 +323,11 @@ func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if admitted != 2 || rejected != 4 {
+	expectedRejected := 4
+	if m8 {
+		expectedRejected = 6
+	}
+	if admitted != 2 || rejected != expectedRejected {
 		t.Fatalf("unexpected scope/replay admission: accepted=%d refused=%d", admitted, rejected)
 	}
 	scanned := bufio.NewScanner(stdout)
@@ -313,8 +375,14 @@ func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
 		_, err := CallSupervisorScopedMCPPrototype(ctx, attacker.(*net.UnixConn), signed3)
 		spoofDone <- err
 	}()
-	if err := ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope); !errors.Is(err, processcontrol.ErrSupervisorHandoffUnavailable) {
-		t.Fatalf("dead Core generation impersonated from local Supervisor peer: %v", err)
+	var refusedErr error
+	if m8 {
+		refusedErr = ServeSupervisorM8ScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
+	} else {
+		refusedErr = ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
+	}
+	if !errors.Is(refusedErr, processcontrol.ErrSupervisorHandoffUnavailable) {
+		t.Fatalf("dead Core generation impersonated from local Supervisor peer: %v", refusedErr)
 	}
 	if err := <-spoofDone; err != nil {
 		t.Fatal(err)
