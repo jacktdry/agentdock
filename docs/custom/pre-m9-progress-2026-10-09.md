@@ -264,3 +264,11 @@
 - macOS 自行啟動 Go 測試三程序證實獨立 observer 先 armed 後 **Core-like 程序被強制終止**，observer 還能觀測自行啟動的 Worker 最後自然退出並持久記錄。CLI 未打包、未掛到 Next service，也不能證明 detached Chrome descendants 全部退出；預備作為跨 Core supervisor ownership 與 authenticated IPC 合約設計的驗證依據。詳見 P8 §22。
 
 - 本輪 Go 完整測試、定點 Race Detector、go vet 及 Linux／Windows no-CGO 編譯（含新 observer command）通過；receipt inode/dev 再核對與單一 JSON 請求限制已加入。此 prototype 仍非 shipped/runtime-integrated 功能。
+
+
+### 2026-10-10 P8-B supervisor authenticated handoff（SOURCE-ONLY CONTRACT）
+
+- 新增隨機 session/nonce、HMAC-SHA256 綁定完整 Core/Supervisor/Worker birth、單次 sequence/operation 與 advisory await→attach→Core NOTE_EXIT→Worker NOTE_EXIT/uncertain 狀態機，不授權 kill 或 crash marker 自動解鎖。
+- macOS Unix Socket 核對 `LOCAL_PEERPID`／`LOCAL_PEERCRED` 加兩次 Core kernel birth 才接納 MAC frame；非 macOS unavailable。隔離 Go Core／Worker／Supervisor 原生測試確認假的 Core socket、錯誤 MAC、重播被拒絕，並在測試 Core 被終止後由 NOTE_EXIT 繼續更新狀態。詳見 P8 §23；未將真實 ACP/Chrome transport 交給 Supervisor。
+
+- 驗證完成：完整五模組 Go tests／targeted race／go vet／Linux、Windows amd64 no-CGO tests crossbuild（包含 independent observer cmd build）PASS。OS exit state 更新入口保持 process 內部私有，經外部驗證的 UnixConn 是唯一對外 attach 入口。Native 客戶端 ACK 之後才關閉 socket，排除連線提早結束造成的 peer 核對競態。尚無 production Supervisor。
