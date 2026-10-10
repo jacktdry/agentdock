@@ -252,3 +252,12 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 - 實測第一輪曾在啟動時得到 opaque unavailable，後續可重現 run 顯示 `list_pages` 工具要求非 nil 的 JSON arguments object；測試用 `map[string]any{}` 修正後，第三次 opt-in 成功。未改變 production policy、忽略實際錯誤或繞過原有權限。
 - 主 Session 獨立執行 Browser／BrowserPolicy 完整 Go tests、`TestACPBridgeShared|TestManagedShared` 專項 Race Detector、Go vet、gofmt／diff 與 Linux／Windows amd64、macOS arm64 no-CGO 交叉編譯，**全部 PASS**；一般測試未設定 opt-in 時 real case SKIP。
 - **尚未發行**：現有 `NewACPBridge` 仍為 exclusive default，沒有 production flag、Next 安裝版切換或三個真實 Agent 併發 UAT。日常 Edge／Chrome Profile、零彈窗／零搶焦點 native UAT、跨 workspace 真實多程序行為、crash/orphan reconciliation 與長期用量觀測仍未完成。
+
+
+## 11. 2026-10-10 P8-B shared budget observability checkpoint（SOURCE ONLY）
+
+- 在私有 budgeted rotating ACPBridge 新增 mutex-consistent `managedSharedBrowserBudget.snapshot()`；`SharedManagedBudgetDiagnostic` 只輸出 `capacity_slots`、`occupied_slots`、`available_slots`、`claimed_owners`、`uncertain_slots` 五個整數，不含 Workspace／PID／Profile／token／頁面／敏感路徑。
+- Budget 下的 reservation map 與 `used`、`owners`、`uncertain` 均在同一 mutex 保護下快照；成功 release 原子扣除且冪等，啟動結果不確定持續占 slot。保留原本 pending／failed Stop fail-closed；只有全部 bridge cleanup 成功才退 owner claim。**這不是 OS 權威 orphan reconciliation，也不會按計時器猜測 cleanup 成功。**
+- `BrokerDiagnostics.shared_budget` 只在私有 budgeted rotating shared 實例出現；預設 `NewACPBridge` 仍 exclusive 且 JSON 欄位不增加。沒有新增 runtime API、設定、授權或 production switch，亦沒有跨 Core 共享資源上限。
+- 合成測試驗證容量耗盡、unknown launch 保留、blocked Stop 不退位、Close owner 清理、idempotence、concurrent snapshot invariants、JSON 欄位僅數字及 exclusive 回歸。驗證 PASS：定點 `Test(SharedBudgetSnapshot|ACPBridgeSharedBudget)`、完整 Browser/BrowserPolicy tests、定點 `-race`、`go vet`、`gofmt`、`git diff --check`；未以本次合成案例冒稱重新跑 §10 的 real Chrome proof。
+- 仍待 Next-only runtime opt-in、可信 crash／orphan reconciliation、三個真實 Agent 連續操作與零提示／零搶焦點 native UAT、公司 Edge／指定 Chrome Profile S1/S2 驗證。原版 stable、AGY、已安裝 Next、真實 Chrome／Edge 與使用者 Profile 均未修改、重啟或部署；未 push。

@@ -176,3 +176,10 @@
 - 基於乾淨 `8f06e268`：唯一 claim identity 防止 stale／ABA release；僅全部 owner cleanup、rotating Shutdown、registry Shutdown 成功的 ACPBridge.Close 才移除 registry pointer。阻塞／failed Stop／uncertain launch 不轉移 claim，Close 維持 idempotent；constructor canonical validation 先於 claim，無副作用 construction failure 回滾 claim。
 - 新增 fake tests：同 CWD 75 次新 registry 替換、Close 後 owners／slots 均 0、舊 token／WorkerID 拒絕、同 registry ABA、double Close／release、失敗與 concurrent blocked Close／claim，以及其他 live registry browser 的 Shutdown fence。
 - gofmt／diff check PASS；唯一指定 `^TestACPBridgeSharedBudget` focused test **PASS（1.441s）**，無 skip，real Chrome opt-in unset／dependency network off。沒有實際 Chrome／Edge／npx／ACP、OS orphan detection 或 runtime wiring；完整 suite／race／vet／cross-build／native UAT 待 supervisor。詳見 [claim cleanup checkpoint](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#2026-10-10-p8-b-budget-owner-claim-lifecycle-cleanupsource-only)。
+
+
+### 2026-10-10 P8-B safe aggregate budget telemetry（SOURCE ONLY）
+
+- 私有 budgeted rotating ACPBridge 新增安全數值 `shared_budget` diagnostics（capacity／used／available／claims／uncertain）；only opt-in shared，預設 exclusive 不變，沒有可識別 Workspace／PID／Profile／token，沒有 runtime switch。
+- Reservation／uncertain latch／release 均在同一 budget mutex 同步；unknown launch／failed Stop 不退 slot。Focused／full Browser+BrowserPolicy、focused race、go vet、gofmt／diff 均 PASS；僅 synthetic、沒有真實 Browser UAT／部署／push。詳見 [P8 §11](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#11-2026-10-10-p8-b-shared-budget-observability-checkpointsource-only)。
+- 後續需 Next-only runtime wiring、權威 orphan／crash reconciliation 與實際 ChatGPT+2 ACP native UAT；不能因安全數字監測就視 P8/M9 已結案。

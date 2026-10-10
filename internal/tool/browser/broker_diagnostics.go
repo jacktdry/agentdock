@@ -63,11 +63,12 @@ type BrokerQueueDiagnostic struct {
 }
 
 type BrokerDiagnostics struct {
-	Owners             []BrokerOwnerDiagnostic  `json:"owners"`
-	Leases             []BrokerLeaseDiagnostic  `json:"leases"`
-	Workers            []BrokerWorkerDiagnostic `json:"workers"`
-	Queue              BrokerQueueDiagnostic    `json:"queue"`
-	LifecycleLastError string                   `json:"lifecycle_last_error,omitempty"`
+	Owners             []BrokerOwnerDiagnostic        `json:"owners"`
+	Leases             []BrokerLeaseDiagnostic        `json:"leases"`
+	Workers            []BrokerWorkerDiagnostic       `json:"workers"`
+	Queue              BrokerQueueDiagnostic          `json:"queue"`
+	LifecycleLastError string                         `json:"lifecycle_last_error,omitempty"`
+	SharedBudget       *SharedManagedBudgetDiagnostic `json:"shared_budget,omitempty"`
 }
 
 func (r *WorkerRegistry) Snapshot() []BrokerWorkerDiagnostic {
@@ -170,7 +171,12 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 	if b.lifecycle != nil && b.lifecycle.LastError() != nil {
 		lastErr = b.lifecycle.LastError().Error()
 	}
-	return BrokerDiagnostics{Owners: owners, Leases: leases, Workers: b.registry.Snapshot(), Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr}
+	var sharedBudget *SharedManagedBudgetDiagnostic
+	if b.rotating != nil && b.rotating.budget != nil {
+		snapshot := b.rotating.budget.snapshot()
+		sharedBudget = &snapshot
+	}
+	return BrokerDiagnostics{Owners: owners, Leases: leases, Workers: b.registry.Snapshot(), Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr, SharedBudget: sharedBudget}
 }
 
 func (b *ACPBridge) CleanupStale(now time.Time) error { return b.sweepLifecycle(now.UTC()) }
