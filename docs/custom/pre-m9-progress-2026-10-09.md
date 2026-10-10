@@ -319,3 +319,9 @@
 - 使用本機私有 Go Core A/Core B/Worker 實際 kernel unix peer reattach 測試，包含老 Session/key/MAC 拒絕、若舊工具 dispatch 不明則 reauth 拒絕、取消 watcher、假的 Supervisor/Worker birth 與 watcher wait 不阻塞活動 Core。仍無 production Supervisor runtime、Chrome、AGY 或安全自動回收；參閱 P8 `29。
 
 - 世代切換驗證：完整六模組 Go、targeted process/app/mcpclient Race Detector、go vet、Linux/Windows amd64 no-CGO 交叉編譯均 PASS；未部署 Next。跨 Supervisor 事故與工具請求持久記錄仍是 blocking gate。
+
+
+### 2026-10-11 P8-B Supervisor durable dispatch receipt（SOURCE ONLY）
+
+- macOS `SupervisorDispatchLedger` + M8 gated `ServeSupervisorM8DurableMCPCallPrototype`：核對 live Core kernel Unix peer/HMAC/Worker birth/M8 Allow/local tool scope 後，先 write-ahead accepted fsync 收據（owner-private 0700 dir / 0600 O_EXCL + O_NOFOLLOW + inode pin），再允許 MCP tool；SDK 返回後先 fsync settled outcome / reply digest，再回覆 Core。提供嚴格唯讀 inspection，accepted-only、torn/symlink/權限錯、duplicate sequence 與 IO failure 全部保守阻擋。沒有原始工具參數或回覆儲存，無自動重放／回收／解鎖。
+- Native Go-only Core/Worker/M8 SDK echo 實測兩筆 settled receipts，拒絕請求不記錄 accepted；單元測試含寫入失敗永久 quarantine 與 ledger reopen 時 O_EXCL 拒絕舊 sequence。`29 的 Core 有已執行工具後禁止自動重連仍維持，詳細見 P8 `30。

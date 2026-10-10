@@ -26,13 +26,30 @@ type SupervisorToolCallReply struct {
 	Error    string         `json:"error,omitempty"`
 }
 
+// ServeSupervisorM8DurableMCPCallPrototype is a separate SOURCE-ONLY route.
+// It requires M8 approval plus the Supervisor's owner-private write-ahead
+// receipt BEFORE calling a tool; the SDK outcome receipt is fsynced BEFORE
+// any success response can be sent. This does not enable Core recovery.
+func ServeSupervisorM8DurableMCPCallPrototype(ctx context.Context, conn *net.UnixConn,
+	handoff *processcontrol.ReadOnlySupervisorHandoff,
+	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{},
+	ledger *processcontrol.SupervisorDispatchLedger) error {
+	if ledger == nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return processcontrol.ErrSupervisorDispatchLedgerUnavailable
+	}
+	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, true, ledger)
+}
+
 // ServeSupervisorM8ScopedMCPCallPrototype extends the authenticated, scoped
 // prototype with a mandatory MAC-bound M8 Allow claim. It remains source-only
 // until the real Next Core admission path and principal provider are wired.
 func ServeSupervisorM8ScopedMCPCallPrototype(ctx context.Context, conn *net.UnixConn,
 	handoff *processcontrol.ReadOnlySupervisorHandoff,
 	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}) error {
-	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, true)
+	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, true, nil)
 }
 
 // ServeSupervisorScopedMCPCallPrototype is a ONE-REQUEST Unix socket endpoint
@@ -43,12 +60,13 @@ func ServeSupervisorM8ScopedMCPCallPrototype(ctx context.Context, conn *net.Unix
 func ServeSupervisorScopedMCPCallPrototype(ctx context.Context, conn *net.UnixConn,
 	handoff *processcontrol.ReadOnlySupervisorHandoff,
 	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}) error {
-	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, false)
+	return serveSupervisorScopedMCPCall(ctx, conn, handoff, session, allowedTools, false, nil)
 }
 
 func serveSupervisorScopedMCPCall(ctx context.Context, conn *net.UnixConn,
 	handoff *processcontrol.ReadOnlySupervisorHandoff,
-	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}, requireM8 bool) error {
+	session *SupervisorOwnedMCPSession, allowedTools map[string]struct{}, requireM8 bool,
+	ledger *processcontrol.SupervisorDispatchLedger) error {
 	if ctx == nil || ctx.Err() != nil || conn == nil || handoff == nil || session == nil ||
 		len(allowedTools) == 0 || !handoff.MatchesSupervisorOwnedWorker(session.workerBirth) {
 		return processcontrol.ErrSupervisorHandoffUnavailable
@@ -73,15 +91,28 @@ func serveSupervisorScopedMCPCall(ctx context.Context, conn *net.UnixConn,
 	}
 	// Before a tool can run, bind the same socket to the actual kernel Core
 	// UID/PID/birth AND consume exactly one signed, locally scoped sequence.
-	if err := processcontrol.AcceptVerifiedSupervisorToolCallPrototype(ctx, conn, handoff, frame, allowedTools); err != nil {
+	var ticket *processcontrol.SupervisorDispatchTicket
+	var admitErr error
+	if ledger != nil {
+		ticket, admitErr = processcontrol.AcceptVerifiedSupervisorToolCallDurablePrototype(ctx, conn, handoff, frame, allowedTools, ledger)
+	} else {
+		admitErr = processcontrol.AcceptVerifiedSupervisorToolCallPrototype(ctx, conn, handoff, frame, allowedTools)
+	}
+	if admitErr != nil {
 		// A denial is not an MCP tool result. Never include auth/key/argv details.
 		_ = writeSupervisorToolReply(conn, SupervisorToolCallReply{
 			Version: 1, Sequence: frame.Sequence, OK: false, Error: "denied",
 		})
 		return processcontrol.ErrSupervisorHandoffUnavailable
 	}
+	if ticket != nil {
+		defer ticket.Close()
+	}
 	var args map[string]any
 	if err := json.Unmarshal(frame.Arguments, &args); err != nil || args == nil {
+		if ticket != nil {
+			handoff.MarkUncertain()
+		}
 		return processcontrol.ErrSupervisorHandoffUnavailable
 	}
 	result, err := session.Call(ctx, frame.Tool, args)
@@ -91,7 +122,31 @@ func serveSupervisorScopedMCPCall(ctx context.Context, conn *net.UnixConn,
 	} else {
 		response.Result = result
 	}
-	return writeSupervisorToolReply(conn, response)
+	if ticket != nil {
+		raw, marshalErr := json.Marshal(response)
+		if marshalErr != nil || len(raw) > supervisorToolIPCMaxReply {
+			_ = ticket.Finish("unknown", nil)
+			handoff.MarkUncertain()
+			return processcontrol.ErrSupervisorDispatchLedgerUnavailable
+		}
+		outcome := "succeeded"
+		if err != nil {
+			outcome = "failed"
+		}
+		if finishErr := ticket.Finish(outcome, raw); finishErr != nil {
+			handoff.MarkUncertain()
+			return processcontrol.ErrSupervisorDispatchLedgerUnavailable
+		}
+	}
+	if replyErr := writeSupervisorToolReply(conn, response); replyErr != nil {
+		// Supervisor's SDK outcome may be durable while Core has not ACKed.
+		// Never mark this disconnected attempt as safe to retry.
+		if ticket != nil {
+			handoff.MarkUncertain()
+		}
+		return replyErr
+	}
+	return nil
 }
 func writeSupervisorToolReply(conn *net.UnixConn, response SupervisorToolCallReply) error {
 	raw, err := json.Marshal(response)

@@ -30,6 +30,7 @@ type supervisorToolIPCTestEnvelope struct {
 	Secret     string                                    `json:"secret"`
 	Socket     string                                    `json:"socket"`
 	M8         bool                                      `json:"m8"`
+	Durable    bool                                      `json:"durable"`
 }
 
 func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
@@ -144,20 +145,35 @@ func TestSupervisorToolIPCCoreLikeHelper(t *testing.T) {
 	second := signed(2, "echo", "second-from-core")
 	call(second, true, "second-from-core")
 	fmt.Fprintln(os.Stdout, "IPC_CORE_DONE")
+	if env.Durable {
+		rawFirst, err := json.Marshal(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rawSecond, err := json.Marshal(second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintln(os.Stdout, string(rawFirst))
+		fmt.Fprintln(os.Stdout, string(rawSecond))
+	}
 	// Owned Core test process intentionally exits ONLY when its parent kills
 	// this exact Go helper; the independent Supervisor retains the MCP SDK.
 	select {}
 }
 
 func TestSupervisorScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
-	runSupervisorScopedIPCTest(t, false)
+	runSupervisorScopedIPCTest(t, false, false)
 }
 
 func TestSupervisorM8ScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
-	runSupervisorScopedIPCTest(t, true)
+	runSupervisorScopedIPCTest(t, true, false)
 }
 
-func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
+func TestSupervisorM8DurableScopedIPCActualKernelPeerAndMCPTool(t *testing.T) {
+	runSupervisorScopedIPCTest(t, true, true)
+}
+func runSupervisorScopedIPCTest(t *testing.T, m8, durable bool) {
 	// ALL processes are private copies of this Go test executable.
 	ctx, cancel := context.WithTimeout(context.Background(), 17*time.Second)
 	defer cancel()
@@ -170,6 +186,19 @@ func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(root, "tool.sock")
+	var ledger *processcontrol.SupervisorDispatchLedger
+	if durable {
+		privateDir := filepath.Join(root, "dispatch")
+		if err := os.Mkdir(privateDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		var openErr error
+		ledger, openErr = processcontrol.OpenSupervisorDispatchLedger(privateDir)
+		if openErr != nil {
+			t.Fatal(openErr)
+		}
+		defer ledger.Close()
+	}
 	server, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +280,7 @@ func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 	defer coreExit.Close()
 	env := supervisorToolIPCTestEnvelope{
 		Challenge: challenge, Core: core, Supervisor: supervisor, Worker: worker,
-		Secret: hex.EncodeToString(secret), Socket: path, M8: m8,
+		Secret: hex.EncodeToString(secret), Socket: path, M8: m8, Durable: durable,
 	}
 	// Even a valid MAC cannot be used by a different kernel PID / UID.
 	spoof, err := net.Dial("unix", path)
@@ -310,7 +339,9 @@ func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if m8 {
+		if durable {
+			err = ServeSupervisorM8DurableMCPCallPrototype(ctx, conn, handoff, session, scope, ledger)
+		} else if m8 {
 			err = ServeSupervisorM8ScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
 		} else {
 			err = ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
@@ -347,6 +378,29 @@ func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Core fixture did not verify tool call results")
 	}
+	if durable {
+		for _, sequence := range []uint64{1, 2} {
+			if !scanned.Scan() {
+				t.Fatal("Core did not return signed frame for durable test")
+			}
+			var frame processcontrol.SupervisorToolCallFrame
+			if err := json.Unmarshal(scanned.Bytes(), &frame); err != nil {
+				t.Fatal(err)
+			}
+			if frame.Sequence != sequence {
+				t.Fatal("wrong signed Core sequence")
+			}
+			snapshot, err := processcontrol.InspectSupervisorDispatchReceipt(filepath.Join(root, "dispatch"), frame)
+			if err != nil || snapshot.State != "settled" || snapshot.Outcome != "succeeded" ||
+				snapshot.Core != core || snapshot.Worker != worker || len(snapshot.ReplySHA256) != 64 {
+				t.Fatalf("successful Core IPC did not durably settle before reply: %+v %v", snapshot, err)
+			}
+		}
+		entries, err := os.ReadDir(filepath.Join(root, "dispatch"))
+		if err != nil || len(entries) != 2 {
+			t.Fatalf("rejected calls incorrectly persisted or receipts missing: %d %v", len(entries), err)
+		}
+	}
 	if err := coreCmd.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +430,9 @@ func runSupervisorScopedIPCTest(t *testing.T, m8 bool) {
 		spoofDone <- err
 	}()
 	var refusedErr error
-	if m8 {
+	if durable {
+		refusedErr = ServeSupervisorM8DurableMCPCallPrototype(ctx, conn, handoff, session, scope, ledger)
+	} else if m8 {
 		refusedErr = ServeSupervisorM8ScopedMCPCallPrototype(ctx, conn, handoff, session, scope)
 	} else {
 		refusedErr = ServeSupervisorScopedMCPCallPrototype(ctx, conn, handoff, session, scope)

@@ -156,8 +156,19 @@ func AttachSupervisorPermissionProof(key []byte, core, supervisor, worker BirthI
 // explicit tool allowlist. Every accepted request consumes its sequence even
 // if the tool later fails, avoiding duplicate side effects on retry.
 func (h *ReadOnlySupervisorHandoff) acceptVerifiedToolCall(peer BirthIdentity, frame SupervisorToolCallFrame, allowedTools map[string]struct{}) error {
+	_, err := h.acceptVerifiedToolCallPrepared(peer, frame, allowedTools, nil)
+	return err
+}
+
+// The write-ahead variant first authenticates the exact Core peer and tool
+// request under the same HMAC+sequence lock, then durably accepts the request
+// BEFORE consuming its sequence and BEFORE exposing execution permission.
+// Missing/failed durable prepare permanently quarantines this generation.
+func (h *ReadOnlySupervisorHandoff) acceptVerifiedToolCallPrepared(peer BirthIdentity,
+	frame SupervisorToolCallFrame, allowedTools map[string]struct{},
+	ledger *SupervisorDispatchLedger) (*SupervisorDispatchTicket, error) {
 	if h == nil {
-		return ErrSupervisorHandoffUnavailable
+		return nil, ErrSupervisorHandoffUnavailable
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -167,25 +178,34 @@ func (h *ReadOnlySupervisorHandoff) acceptVerifiedToolCall(peer BirthIdentity, f
 		!validScopedToolName(frame.Tool) ||
 		frame.WorkerPID != h.worker.PID || frame.WorkerStartSec != h.worker.StartSec ||
 		frame.WorkerStartUsec != h.worker.StartUsec {
-		return ErrSupervisorHandoffUnavailable
+		return nil, ErrSupervisorHandoffUnavailable
 	}
 	if _, ok := allowedTools[frame.Tool]; !ok {
-		return ErrSupervisorHandoffUnavailable
+		return nil, ErrSupervisorHandoffUnavailable
 	}
 	args, err := canonicalToolArgs(frame.Arguments)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	frame.Arguments = args
 	given, err := hex.DecodeString(frame.MAC)
 	if err != nil || len(given) != sha256.Size {
-		return ErrSupervisorHandoffUnavailable
+		return nil, ErrSupervisorHandoffUnavailable
 	}
 	mac := hmac.New(sha256.New, h.key[:])
 	_, _ = mac.Write([]byte(supervisorToolCallPayload(frame, h.core, h.supervisor, h.worker, h.workerParent)))
 	if subtle.ConstantTimeCompare(given, mac.Sum(nil)) != 1 {
-		return ErrSupervisorHandoffUnavailable
+		return nil, ErrSupervisorHandoffUnavailable
+	}
+	if ledger != nil {
+		ticket, err := ledger.BeginVerified(frame, h.core, h.worker)
+		if err != nil {
+			h.phase = SupervisorUncertain
+			return nil, ErrSupervisorHandoffUnavailable
+		}
+		h.lastToolSequence = frame.Sequence
+		return ticket, nil
 	}
 	h.lastToolSequence = frame.Sequence
-	return nil
+	return nil, nil
 }

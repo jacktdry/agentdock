@@ -29,3 +29,8 @@ func ServeSupervisorM8ScopedMCPCallPrototype(context.Context, *net.UnixConn,
 	*processcontrol.ReadOnlySupervisorHandoff, *SupervisorOwnedMCPSession, map[string]struct{}) error {
 	return processcontrol.ErrSupervisorHandoffUnavailable
 }
+
+func ServeSupervisorM8DurableMCPCallPrototype(context.Context, *net.UnixConn,
+	*processcontrol.ReadOnlySupervisorHandoff, *SupervisorOwnedMCPSession, map[string]struct{}, *processcontrol.SupervisorDispatchLedger) error {
+	return processcontrol.ErrSupervisorDispatchLedgerUnavailable
+}
