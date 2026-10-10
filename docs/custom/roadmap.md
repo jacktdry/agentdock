@@ -451,6 +451,8 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 | v1.0.0 原生 macOS/WinUI 重設計 | **只參考流程與易用性**；Next 保留 Wails+Vue Shared UI 與 OS 必要原生 adapters | **P12 後續 UX**；不遷回重複原生業務 UI |
 | **尚未合併的 PR #229** Task Progress 單張即時卡片 | **採用／獨立設計**：`task_create` 建立一張卡、`task_snapshot` 唯讀同 Task ID 更新；`task_manage` checkpoint/final_review/complete 不再新增 Task UI；保留 legacy create 相容 | **非阻塞 UX 支線（P2）**：完成權限/scope/快取/輪詢負載、ChatGPT full/compact/off 真實 UI UAT 才 closeout |
 
+**MCP Apps 卡片降噪（新增非阻塞 UX 項目）**：使用者 ChatGPT iOS 截圖中的 Workspace、Codex Session、Model `X → X`、Reasoning effort `high → high` 卡片**不屬 PR #229**。規劃依 action/scope 設計精簡結果、no-change 不掛大型卡與必要事件完整可見；不可假定 ChatGPT 能跨工具訊息原地合併。詳見 [MCP Apps 卡片降噪規格](mcp-apps-card-noise-reduction.md)，與 Task live-card 一起進行 ChatGPT 真實 UAT，但不得阻塞 P8/AGY/M9。
+
 **PR #229 的產品邊界**：目標是「**同一個 Task ID 的多次操作只維持一張會更新的卡片**」，不是把不同任務合併。ChatGPT 使用者連續說「繼續」時，若仍是同一工作，Orchestrator 應沿用原 `task_id`；每次另外 create 新 Task 仍會產生新卡片，PR 無法自行消除。最新採用與等待佇列另見 [剩餘工作 checkpoint](remaining-work-checkpoint-2026-10-09.md)。
 
 ## M9 — Release Migration

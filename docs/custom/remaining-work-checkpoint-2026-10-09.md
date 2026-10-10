@@ -25,6 +25,8 @@
 | **P2** | **cloudflared Component Manager** | 獨立可信版本、Catalog、原子更新、signed publisher／目錄 owner、舊 Helper 遷移與 Tunnel 不中斷 | M9 後獨立 milestone，詳元件移植文件 |
 | **Deferred** | **真實 Nexus pairing / stable retirement** | 需使用者另行同意/安排；只在 Next 完整驗證與獨立連線後提出 stable retirement 計畫 | 目前不做、不得當成已完成 |
 
+**新增 UX follow-up（2026-10-10）**：ChatGPT iOS 使用者實際遇到重複 Workspace / ACP Session / Model(no-change) / Reasoning(no-change) 卡片，**不等於** PR #229 Task 卡片問題。新增 P14 [MCP Apps 卡片降噪](mcp-apps-card-noise-reduction.md)，與 P13 PR #229 並列非阻塞 UX 工作；原 P8／AGY／M9 順序不動。B2 的最新狀態需以開發 session 的 commit 為準，不沿用本文件 B2k 截止標籤判定進度。
+
 ## 風險與接手規則
 
 1. B2i/j/k 的 focused/race/vet/crossbuild PASS 是 **source evidence**。`NewRoutePlanner(..., nil)`、Edge `UNQUALIFIED`、沒有 live production grant 的 Gate 仍為真；不要拿 fixture/relay socket 建立成功宣稱可用公司 Edge。

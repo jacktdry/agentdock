@@ -18,6 +18,7 @@
 - [upstream-tracking.md](upstream-tracking.md)：AgentDock / Workbench 更新的追蹤與採用流程。
 - [upstream-v101-adoption-plan.md](upstream-v101-adoption-plan.md)：上游 v0.9.1→v1.0.1 的 Next 選擇性採用、M9 release source / recovery gates 與元件化延後策略。
 - [upstream-ports/task-progress-live-card-pr229.md](upstream-ports/task-progress-live-card-pr229.md)：PR #229 任務進度單一卡片 live refresh 的效益、MCP App/Task 安全性、快取與驗收條件。
+- [mcp-apps-card-noise-reduction.md](mcp-apps-card-noise-reduction.md)：ChatGPT 聊天模式 Workspace／ACP Session／no-change 重複卡片降噪，與 PR #229 的 Task Card 改善分開驗收。
 - [remaining-work-checkpoint-2026-10-09.md](remaining-work-checkpoint-2026-10-09.md)：P8 B2k 後的剩餘工作總覽與跨 Session 交接，不宣稱 release 完成。
 - [upstream-ports/cloudflared-component-manager.md](upstream-ports/cloudflared-component-manager.md)：cloudflared Component Manager 的來源分析、Next 簽章／隔離衝突與 staged migration acceptance gates。
 - [workbench-adoption.md](workbench-adoption.md)：Workbench 功能採用、延後與排除清單。

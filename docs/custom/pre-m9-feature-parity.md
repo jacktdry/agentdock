@@ -454,6 +454,10 @@ Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external
 - 需驗證 ChatGPT MCP App bridge、full/compact/off metadata、連線及舊 plugin registration cache 的更新路徑；只跑 Go tests 不代表聊天畫面的原卡片確實原地更新。
 - 隔離於 Browser Broker B2i/B2j/B2k、AGY .14、自動更新／M9 release 工作；不修改 stable connector 或已部署的 Next，於獨立 worktree 實作並由 `$mac-dev` 控制驗證。
 
+### P14 — MCP Apps 卡片降噪（Next UX，與 P13 獨立）
+
+**規劃採用／尚未實作**。P13 PR #229 只處理同一 Task ID 的原卡片更新；使用者 ChatGPT iOS 實際遇到的 `workspace_context`、`acp_session` Codex ready、Model `X→X`、Reasoning effort `high→high` 重複 UI 應由獨立的 MCP Apps action-specific metadata／結果摘要策略處理。先記錄 iOS/桌面基線，再用 no-op 判斷、精簡可展開結果、明確 scope、安全錯誤不隱藏等設計改善；**不假定 ChatGPT Host 允許跨工具訊息合併或刪除歷史卡片**。不得改變工具的資料輸出、M8 授權、或 stable/Next 隔離；實作與 UAT 規格見 [卡片降噪設計](mcp-apps-card-noise-reduction.md)。P13/P14 可平行開發、整合驗收，均不新增 M9 阻塞 gate。
+
 ## Current parity matrix
 
 | Domain / 功能 | Stable native | Next backend | Shared UI | 決策 |

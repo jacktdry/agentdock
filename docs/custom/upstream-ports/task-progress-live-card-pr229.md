@@ -29,6 +29,8 @@ Next 的 `internal/tool/task` 持久化 Task 已存在；`internal/app/specs_tas
 3. `task_manage final_review/complete` → 同一張卡片反映結束狀態，停止輪詢，最終結果留在聊天紀錄。
 4. 錯誤／後端短暫離線／Plugin 仍沿用舊註冊 metadata 時，卡片不得虛構完成進度或要求重建 stable `mac-dev` connector。
 
+**延伸 UX 範圍**：若聊天中出現 Workspace/ACP Status/Model/Reasoning 大量卡片，屬另外的 [MCP Apps 卡片降噪](../mcp-apps-card-noise-reduction.md)，並非 PR #229 本身能解決。兩項將分開開發、一起做 ChatGPT 實機 UI 驗收。
+
 ## 安全與操作必要條件
 
 1. **權限與 Session/Workspace 隔離**：不可只依賴猜不到 `task_id`；同一 MCP Core 多連線或 Nexus delegation 下需驗證 Task 讀取範圍；snapshot 只返回顯示需要的截斷欄位，不能讀回敏感 workflow guidance/私密環境或 `state_dir`。
