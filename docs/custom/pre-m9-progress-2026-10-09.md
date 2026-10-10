@@ -301,3 +301,13 @@
 - Core 端新增接既有 `permission.AdmissionGate.Admit` 的 scoped MCP 工具呼叫簽署：M8 Pending Ask／Deny 不會建立可執行 frame，ApprovedOnce 透過原有 Store 只消耗相符 fingerprint/Worker generation/session 的 retry，支援未知結果保守 settle。專用 Supervisor IPC endpoint 強制核對已 HMAC 綁定的 M8 Allow Proof，拒絕 legacy unsigned-permission frame、改動 proof、錯誤 Core/Worker 身分、重播及本機 tool allowlist 以外操作。Go-only native test 使用真 M8 Store+MCP SDK，不啟動 Chrome/AGY；詳見 P8 §27。尚未 production requestmeta/M8 Runtime/Browser Registry 接線。
 
 - M8 Core admission bridge source-only 完整六模組 Go、focused race、go vet、Linux/Windows no-CGO 交叉編譯 PASS；真 M8 store Ask/ApproveOnce/Deny 與 native Unix socket/MCP SDK 正負測試 PASS，工作未部署／未推送。
+
+
+### 2026-10-11 P8-B Runtime principal binding（SOURCE ONLY）
+
+- 新增 Core-only private context marker：僅可信 `requestmeta.AuthPrincipalFromContext` + live `Runtime.Call` `mcp_tool_call` execution scope 可進入 `Runtime.admitAndSignSupervisorM8FromRuntime`，與本來的 `permission.AdmissionGate` 共用 principal/CallID/Epoch、避免自行構造 M8 binding。公開 tool handler 路由尚未接入 Supervisor。
+- 真 Runtime 測試涵蓋 Allow、fake/missing private scope、來源/身分/Runtime 交換、Call 已結束、unauth principal 與非 MCP 工具拒絕；ApprovedOnce 僅 exact retry 可消耗並 settle Unknown。詳見 P8 `28。
+
+- 回歸補正：原本晚啟動跨群組子孫 native test 在 Race 模式下偶發 `exitUncertain`；此狀態不該被當成乾淨關閉。測試改驗證同一 root NOTE_EXIT 的必要性，且有觀測缺口時 marker 留存／禁止 restart，完整快照才可正常 release；沒有改變 production 保守拒絕。一般模式 10 次 + Race 模式 5 次通過。
+
+- Runtime principal binding 本輪驗證：六模組完整 Go tests、定點 race、go vet 與 Linux/Windows amd64 no-CGO 五模組交叉編譯均 PASS；source-only，沒有 runtime BrowserWorkerRegistry 或實際 Chrome/AGY 接線。

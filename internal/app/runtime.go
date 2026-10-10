@@ -428,6 +428,9 @@ func (r *Runtime) Call(ctx context.Context, name string, args map[string]any) (r
 	defer span.End()
 	ctx = observability.WithExecution(ctx, startedAt)
 	ctx, executionCall := r.execution.Begin(ctx, execution.BeginInput{Tool: executionTool, Source: string(source), InsertionSupported: true})
+	// Private, generation-bound call scope for the source-only Supervisor M8
+	// adapter. Does not change normal tool dispatch or permission evaluation.
+	ctx = r.bindSupervisorM8RuntimeScope(ctx, executionCall)
 	defer func() { r.finishExecutionCall(ctx, executionCall.ID, result, &err) }()
 	defer r.observeToolCall(parentCtx, ctx, name, startedAt, &err)
 

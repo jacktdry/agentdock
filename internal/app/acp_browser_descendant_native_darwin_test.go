@@ -5,6 +5,7 @@ package app
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -322,22 +323,40 @@ func TestSharedBrowserLiveLateSpawnCrossGroupNative(t *testing.T) {
 	}
 	waited = true
 	end := time.Now().Add(3 * time.Second)
+	observed := 0
+	uncertain := false
 	for time.Now().Before(end) {
 		g.mu.Lock()
-		observed, uncertain := g.exitObserved, g.exitUncertain
+		observed, uncertain = g.exitObserved, g.exitUncertain
 		g.mu.Unlock()
-		if uncertain {
-			t.Fatal("live witness became uncertain during natural exit")
-		}
 		if observed > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	if observed == 0 {
+		t.Fatal("owned wrapper kqueue NOTE_EXIT was not observed")
+	}
+	// A complete kernel PPID snapshot is not guaranteed while the live
+	// grandchild and wrapper EXIT concurrently. This is a real, conservative
+	// sampling gap, NOT evidence of a clean shutdown. Never require this
+	// outcome to unlink the sticky marker, even when NOTE_EXIT is valid.
+	if uncertain {
+		if err := g.releaseAfterVerifiedClose(); !errors.Is(err, errSharedBrowserRestartGuard) {
+			t.Fatalf("uncertain descendant witness improperly unlocked marker: %v", err)
+		}
+		if _, err := os.Lstat(journalPath); err != nil {
+			t.Fatalf("uncertain witness failed to preserve restart marker: %v", err)
+		}
+		if _, err := acquireSharedBrowserRestartGuard(root); !errors.Is(err, errSharedBrowserRestartGuard) {
+			t.Fatalf("uncertain witness permitted restart: %v", err)
+		}
+		return
+	}
 	if err := g.releaseAfterVerifiedClose(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(journalPath); !os.IsNotExist(err) {
-		t.Fatalf("owned Go fixtures failed clean guard close: %v", err)
+		t.Fatalf("fully witnessed owned Go fixture failed clean guard close: %v", err)
 	}
 }
