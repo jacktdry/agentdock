@@ -35,6 +35,7 @@ type ACPBridge struct {
 	external  *ExternalLeaseManager
 	lifecycle *browserLifecycleRunner
 	shared    *managedSharedWorkerBackend // Private opt-in; runtime constructor stays exclusive.
+	rotating  *managedSharedRotatingBackend
 	closeOnce sync.Once
 	closeErr  error
 
@@ -46,7 +47,7 @@ type ACPBridge struct {
 }
 
 func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, error) {
-	return newACPBridge(planner, registry, registry, nil)
+	return newACPBridge(planner, registry, registry, nil, nil)
 }
 
 // Source-only spike: one canonical workspace and one terminal pool generation.
@@ -65,10 +66,23 @@ func newACPBridgeSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegis
 		return nil, err
 	}
 	adapter.shared = shared
-	return newACPBridge(planner, registry, shared, shared)
+	return newACPBridge(planner, registry, shared, shared, nil)
 }
 
-func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend) (*ACPBridge, error) {
+// Source-only opt-in: the owner replaces only successfully stopped generations.
+func newACPBridgeRotatingSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string) (*ACPBridge, error) {
+	if planner == nil || registry == nil {
+		return nil, errManagedSharedUnavailable
+	}
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	pool := newManagedSharedRotatingBackend(registry, ManagedWorkerOptions{Cwd: root})
+	return newACPBridge(planner, registry, pool, nil, pool)
+}
+
+func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend, rotating *managedSharedRotatingBackend) (*ACPBridge, error) {
 	if planner == nil || registry == nil {
 		return nil, browserError(ErrPolicyConflict, "ACP browser bridge requires planner and worker registry", "acp", nil, nil)
 	}
@@ -77,7 +91,7 @@ func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend Manag
 		return nil, err
 	}
 	bridge := &ACPBridge{
-		planner: planner, registry: registry, managed: managed, shared: shared, external: NewExternalLeaseManager(registry),
+		planner: planner, registry: registry, managed: managed, shared: shared, rotating: rotating, external: NewExternalLeaseManager(registry),
 		byToken: make(map[string]*acpBrowserOwner), bySession: make(map[string]*acpBrowserOwner),
 	}
 	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
@@ -125,6 +139,9 @@ func (b *ACPBridge) sweepLifecycle(now time.Time) error {
 	)
 	if b.shared != nil {
 		err = errors.Join(err, b.shared.ReapIdle(now))
+	}
+	if b.rotating != nil {
+		err = errors.Join(err, b.rotating.ReapIdle(now))
 	}
 	return err
 }
@@ -194,7 +211,7 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	if b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd {
+	if (b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd) || (b.rotating != nil && owner.scope.CanonicalWorkspaceRoot != b.rotating.options.Cwd) {
 		return LeaseMetadata{}, errManagedSharedUnavailable
 	}
 	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"url": url})
@@ -208,7 +225,7 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	if b.shared != nil && decision.Route != browserpolicy.RouteManaged {
+	if (b.shared != nil || b.rotating != nil) && decision.Route != browserpolicy.RouteManaged {
 		return LeaseMetadata{}, errManagedSharedUnavailable
 	}
 	switch decision.Route {
@@ -375,6 +392,13 @@ func (b *ACPBridge) close() error {
 	if b.shared != nil {
 		failures = append(failures, b.shared.Shutdown(ctx))
 	}
-	failures = append(failures, b.registry.Shutdown(ctx))
+	if b.rotating != nil {
+		failures = append(failures, b.rotating.Shutdown(ctx))
+	}
+	registryErr := b.registry.Shutdown(ctx)
+	if b.rotating != nil && registryErr != nil {
+		registryErr = errManagedSharedUnavailable
+	}
+	failures = append(failures, registryErr)
 	return errors.Join(failures...)
 }
