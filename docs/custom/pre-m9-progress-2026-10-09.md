@@ -256,3 +256,11 @@
 - Worker NOTE_EXIT 與 Core verified close 都會 cancel/join sampler；實際 macOS Go fixture 驗證**Ready 後才產生 Setsid 子程序**仍能持久觀測並正確關閉。依舊 source-only、不調整原版/AGY ACP、不打開使用者 Chrome/Edge。
 
 - 本輪回歸：完整 app/browser/browserpolicy/mcp-client/process Go tests、app/process/browser targeted -race、go vet、Linux/Windows no-CGO crosscompile、gofmt 與 diff 全數 PASS。
+
+
+### 2026-10-10 P8-B independent crash exit observer（SOURCE-ONLY PROTOTYPE）
+
+- 加入 Darwin-only 未安裝的 `cmd/agentdock-next-exit-observer` 原型，stdin JSON 僅接 exact Core+owned worker birth identity；依 kernel 核對其直接父子關係、註冊 `kqueue NOTE_EXIT`，在 private directory/O_EXCL/0600 receipt fsync `armed` 再回報，真正收到 worker 自然退出事件後 fsync `wrapper_exit_observed`。非 Darwin 保守 unavailable；不會 signal 或清理任何 PID。
+- macOS 自行啟動 Go 測試三程序證實獨立 observer 先 armed 後 **Core-like 程序被強制終止**，observer 還能觀測自行啟動的 Worker 最後自然退出並持久記錄。CLI 未打包、未掛到 Next service，也不能證明 detached Chrome descendants 全部退出；預備作為跨 Core supervisor ownership 與 authenticated IPC 合約設計的驗證依據。詳見 P8 §22。
+
+- 本輪 Go 完整測試、定點 Race Detector、go vet 及 Linux／Windows no-CGO 編譯（含新 observer command）通過；receipt inode/dev 再核對與單一 JSON 請求限制已加入。此 prototype 仍非 shipped/runtime-integrated 功能。
