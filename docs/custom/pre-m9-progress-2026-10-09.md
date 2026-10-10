@@ -240,3 +240,11 @@
 - Next shared-only registry 加入 `StartedWitness`，於已擁有 stdio transport process group 的 `cmd.Start/Attach` 之後、MCP handshake 之前持久化帶有 Core 直接親子 birth 身分的 `worker_started_pid`。ready 階段須匹配完整 started 身分；缺少 started／PID reuse／append fsync 失敗皆 fail closed。舊版 ready journal 仍可讀取，沒有自動信任或補足過去的證據。
 - 完整五模組 Go tests、targeted race、go vet、Linux/Windows amd64 no-CGO app/browser/mcp-client/process cross-build 及格式檢查 PASS。跨平台初次發現保守 stub 缺失已修正、再次編譯通過。
 - Crash 後 started-only journal 提供隱私安全狀態 `worker_started_handshake_unverified`，依舊 sticky 阻擋，絕不藉此安全回收、終止 Chrome 或清除 marker。詳見 P8 §19。
+
+
+### 2026-10-10 P8-B detached-group descendant snapshot（SOURCE ONLY）
+
+- macOS Next shared ready 取樣同 UID kernel PPID 祖先鏈（root birth 前後驗證、子孫第二次出生身分核對），可辨識仍有完整父子鏈但已經 `setsid` 脫離 managed MCP 群組的子孫。將 24 筆上限的完整 birth/parent/root 世代資訊連同 ready record 一次 fsync 到原 private sticky journal；strict parser 保護完整鏈與舊紀錄相容。
+- Crash inspection 區分 wrapper root 與 recorded descendant，已記錄的子孫即使後續 PPID／PGID 變動，仍可唯讀比對 PID 出生身分。任何 positive match、負面結果或 marker 缺漏都**不授權自動回收／解鎖／kill**；已 reparent 或退出而不在取樣內的子孫仍不可知。Native tests 只有自行啟動的 Go parent 和不同 PGID 的 grandchild，詳見 P8 §20。
+
+- 本輪收尾（2026-10-10）：完整五模組 Go tests（序列化）PASS；針對 App／Process／Browser 的 race PASS；Go vet 五模組 PASS；Linux／Windows amd64 no-CGO app/process/browser crossbuild PASS。中斷前並行測試時舊有 process fork-boundary stress case 曾逾時一次；串行重新測試已通過，未修改原有清理控制。維持 Source-only，未部署或安裝。\n

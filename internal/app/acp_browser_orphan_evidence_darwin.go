@@ -56,12 +56,22 @@ func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerI
 	if err != nil {
 		return errSharedBrowserEvidence
 	}
+	// Kernel-only, bounded UID-scoped PPID chains also include descendants
+	// that moved to different process groups. An incomplete/unstable read
+	// refuses ready rather than pretending the detached Chrome tree is gone.
+	descendants, err := processcontrol.ObserveDescendantBirths(ctx, identity)
+	if err != nil {
+		_ = watch.Close()
+		return errSharedBrowserEvidence
+	}
 	// The proof has been checked twice and kernel NOTE_EXIT armed.
 	// A persistence or close race must refuse the ready Worker and retain
 	// the sticky restart marker, never publish a lease.
-	if err := g.recordManagedWorkerWithIdentity(info, func(context.Context, int) (processcontrol.BirthIdentity, error) {
-		return identity, nil
-	}); err != nil {
+	if info.State != toolbrowser.WorkerReady || info.Session.PID != identity.PID {
+		_ = watch.Close()
+		return errSharedBrowserEvidence
+	}
+	if err := g.appendSharedBrowserEvidence(identity, sharedEvidenceReady, descendants); err != nil {
 		_ = watch.Close()
 		return err
 	}
@@ -89,12 +99,24 @@ func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbro
 type sharedBrowserEvidenceStage string
 
 const (
-	sharedEvidenceStarted sharedBrowserEvidenceStage = "started"
-	sharedEvidenceReady   sharedBrowserEvidenceStage = "ready"
+	sharedEvidenceStarted    sharedBrowserEvidenceStage = "started"
+	sharedEvidenceReady      sharedBrowserEvidenceStage = "ready"
+	sharedEvidenceDescendant sharedBrowserEvidenceStage = "descendant"
 )
 
 func (g *sharedBrowserRestartGuard) appendSharedBrowserIdentity(identity processcontrol.BirthIdentity, stage sharedBrowserEvidenceStage) error {
-	if g == nil || !validSharedBrowserIdentity(identity) || (stage != sharedEvidenceStarted && stage != sharedEvidenceReady) {
+	return g.appendSharedBrowserEvidence(identity, stage, nil)
+}
+
+// The descendant entries and ready event are a single bounded append.
+// A partial/failing write corrupts the sticky journal and blocks restart,
+// never grants worker readiness or authority over descendant PIDs.
+func (g *sharedBrowserRestartGuard) appendSharedBrowserEvidence(identity processcontrol.BirthIdentity, stage sharedBrowserEvidenceStage, descendants []processcontrol.BirthIdentity) error {
+	if g == nil || !validSharedBrowserIdentity(identity) ||
+		(stage != sharedEvidenceStarted && stage != sharedEvidenceReady) ||
+		len(descendants) > processcontrol.MaxObservedDescendants ||
+		(stage != sharedEvidenceReady && len(descendants) != 0) ||
+		!validateSharedDescendantLineage(identity, descendants) {
 		return errSharedBrowserEvidence
 	}
 	g.mu.Lock()
@@ -122,7 +144,7 @@ func (g *sharedBrowserRestartGuard) appendSharedBrowserIdentity(identity process
 		return errSharedBrowserEvidence
 	}
 	oldPIDs, valid := parseSharedBrowserEvidence(string(buf))
-	if !valid || len(oldPIDs) >= sharedBrowserEvidenceMaxPIDs {
+	if !valid || len(oldPIDs)+len(descendants)+1 > sharedBrowserEvidenceMaxPIDs {
 		return errSharedBrowserEvidence
 	}
 	if stage == sharedEvidenceReady && g.requireStartedEvidence {
@@ -141,8 +163,15 @@ func (g *sharedBrowserRestartGuard) appendSharedBrowserIdentity(identity process
 			return errSharedBrowserEvidence
 		}
 	}
-	line := fmt.Sprintf("worker_%s_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d\n",
+	var lines strings.Builder
+	for _, d := range descendants {
+		fmt.Fprintf(&lines, "worker_descendant_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d,parent_pid=%d,root_pid=%d,root_start_sec=%d,root_start_usec=%d\n",
+			d.PID, d.StartSec, d.StartUsec, d.EffectiveUID, d.ProcessGroupID, d.ParentPID,
+			identity.PID, identity.StartSec, identity.StartUsec)
+	}
+	fmt.Fprintf(&lines, "worker_%s_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d\n",
 		stage, identity.PID, identity.StartSec, identity.StartUsec, identity.EffectiveUID, identity.ProcessGroupID)
+	line := lines.String()
 	// A bounded append-only journal preserves earlier generation observations.
 	// It does not overwrite an orphan PID with the current generation's PID.
 	if stat.Size < int64(len(sharedBrowserEvidencePrefix)) ||
@@ -155,6 +184,49 @@ func (g *sharedBrowserRestartGuard) appendSharedBrowserIdentity(identity process
 		return errSharedBrowserEvidence
 	}
 	return nil
+}
+
+// Pure validation for journal provenance. Birth-time ordering + a complete
+// parent chain to the attested wrapper are necessary, NOT proof after reparent.
+func validateSharedDescendantLineage(root processcontrol.BirthIdentity, members []processcontrol.BirthIdentity) bool {
+	if len(members) > processcontrol.MaxObservedDescendants {
+		return false
+	}
+	byPID := make(map[int]processcontrol.BirthIdentity, len(members)+1)
+	byPID[root.PID] = root
+	for _, m := range members {
+		if !validSharedBrowserIdentity(m) || m.PID == root.PID ||
+			m.ParentPID <= 0 || m.EffectiveUID != root.EffectiveUID {
+			return false
+		}
+		if _, exists := byPID[m.PID]; exists {
+			return false
+		}
+		byPID[m.PID] = m
+	}
+	for _, m := range members {
+		seen := map[int]bool{m.PID: true}
+		current := m
+		valid := false
+		for depth := 0; depth <= len(members); depth++ {
+			parent, ok := byPID[current.ParentPID]
+			if !ok || seen[parent.PID] || parent.EffectiveUID != root.EffectiveUID ||
+				current.StartSec < parent.StartSec ||
+				(current.StartSec == parent.StartSec && current.StartUsec < parent.StartUsec) {
+				break
+			}
+			if parent.PID == root.PID {
+				valid = true
+				break
+			}
+			seen[parent.PID] = true
+			current = parent
+		}
+		if !valid {
+			return false
+		}
+	}
+	return true
 }
 
 // A deliberately small, privacy-safe classification: no PID, path, workspace,
@@ -178,6 +250,8 @@ const (
 	sharedOrphanGroupConflict          = "worker_group_identity_conflict"
 	sharedOrphanPIDAbsent              = "worker_pid_absent_descendants_unverified"
 	sharedOrphanObservationUnavailable = "observation_unavailable"
+	sharedOrphanDescendantVisible      = "recorded_descendant_birth_matches_cleanup_unverified"
+	sharedOrphanDescendantChanged      = "recorded_descendant_identity_changed_cleanup_unverified"
 )
 
 func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observe func(context.Context, int) processcontrol.Snapshot) sharedBrowserOrphanInspection {
@@ -240,13 +314,19 @@ func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root strin
 	if len(pids) == 0 {
 		return sharedBrowserOrphanInspection{Status: sharedOrphanStartupUnknown}
 	}
-	// Startup-only evidence is useful after Core crash before MCP handshake;
-	// do not imply a ready session or attempt PID/Chrome cleanup.
+	// Child birth records are NOT worker roots. Separate these sets so group
+	// observation never mistakes a grandchild PGID for a managed MCP wrapper.
+	workers := make([]sharedBrowserWorkerEvidence, 0, len(pids))
+	children := make([]sharedBrowserWorkerEvidence, 0)
 	onlyStarted := true
 	for _, p := range pids {
+		if p.Stage == sharedEvidenceDescendant {
+			children = append(children, p)
+			continue
+		}
+		workers = append(workers, p)
 		if p.Stage == sharedEvidenceReady {
 			onlyStarted = false
-			break
 		}
 	}
 	if onlyStarted {
@@ -259,8 +339,8 @@ func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root strin
 	}
 	visible, matched, changed := false, false, false
 	unavailable := false
-	seen := make(map[string]bool, len(pids))
-	for _, worker := range pids {
+	seen := make(map[string]bool, len(workers))
+	for _, worker := range workers {
 		// A PID can reappear with another start timestamp (or another group).
 		// Deduplicate only identical evidence, not separate PID generations.
 		key := fmt.Sprintf("%d/%d/%d/%d/%d", worker.PID, worker.StartSec, worker.StartUsec, worker.UID, worker.PGID)
@@ -307,20 +387,29 @@ func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root strin
 	default:
 		result.Status = sharedOrphanPIDAbsent
 	}
-	if result.Status == sharedOrphanPIDAbsent && group != nil {
-		result.Status = classifyMissingWorkerGroups(ctx, pids, group)
+	if result.Status == sharedOrphanPIDAbsent {
+		childStatus := classifyRecordedDescendantSurvival(ctx, children, observe, birth)
+		if childStatus != "" {
+			result.Status = childStatus
+		} else if group != nil {
+			result.Status = classifyMissingWorkerGroups(ctx, workers, group)
+		}
 	}
 	return result
 }
 
 type sharedBrowserWorkerEvidence struct {
-	Stage     sharedBrowserEvidenceStage
-	PID       int
-	HasBirth  bool
-	StartSec  int64
-	StartUsec int64
-	UID       uint32
-	PGID      int
+	Stage         sharedBrowserEvidenceStage
+	PID           int
+	HasBirth      bool
+	StartSec      int64
+	StartUsec     int64
+	UID           uint32
+	PGID          int
+	ParentPID     int
+	RootPID       int
+	RootStartSec  int64
+	RootStartUsec int64
 }
 
 func (w sharedBrowserWorkerEvidence) matches(id processcontrol.BirthIdentity) bool {
@@ -361,7 +450,7 @@ func parseSharedBrowserEvidence(raw string) ([]sharedBrowserWorkerEvidence, bool
 	}
 	for _, line := range lines {
 		fields := strings.Split(line, ",")
-		if len(fields) != 1 && len(fields) != 5 {
+		if len(fields) != 1 && len(fields) != 5 && len(fields) != 9 {
 			return nil, false
 		}
 		rawPID, ok := strings.CutPrefix(fields[0], "worker_ready_pid=")
@@ -369,18 +458,22 @@ func parseSharedBrowserEvidence(raw string) ([]sharedBrowserWorkerEvidence, bool
 		if !ok {
 			rawPID, ok = strings.CutPrefix(fields[0], "worker_started_pid=")
 			stage = sharedEvidenceStarted
-			// Historical journal always used worker_ready_pid. A started
-			// witness MUST include complete birth metadata, never PID-only.
-			if !ok || len(fields) != 5 {
-				return nil, false
+			if !ok {
+				rawPID, ok = strings.CutPrefix(fields[0], "worker_descendant_pid=")
+				stage = sharedEvidenceDescendant
 			}
+		}
+		if !ok || (stage == sharedEvidenceStarted && len(fields) != 5) ||
+			(stage == sharedEvidenceDescendant && len(fields) != 9) ||
+			(stage == sharedEvidenceReady && len(fields) == 9) {
+			return nil, false
 		}
 		pid, ok := parseDigits(rawPID)
 		if !ok || pid == 0 || pid > math.MaxInt32 {
 			return nil, false
 		}
 		e := sharedBrowserWorkerEvidence{Stage: stage, PID: int(pid)}
-		if len(fields) == 5 {
+		if len(fields) >= 5 {
 			prefixes := [4]string{"start_sec=", "start_usec=", "uid=", "pgid="}
 			values := [4]uint64{}
 			for i, prefix := range prefixes {
@@ -408,7 +501,74 @@ func parseSharedBrowserEvidence(raw string) ([]sharedBrowserWorkerEvidence, bool
 				return nil, false
 			}
 		}
+		if stage == sharedEvidenceDescendant {
+			extraPrefixes := [4]string{"parent_pid=", "root_pid=", "root_start_sec=", "root_start_usec="}
+			extra := [4]uint64{}
+			for i, prefix := range extraPrefixes {
+				raw, ok := strings.CutPrefix(fields[i+5], prefix)
+				if !ok {
+					return nil, false
+				}
+				extra[i], ok = parseDigits(raw)
+				if !ok {
+					return nil, false
+				}
+			}
+			if extra[0] == 0 || extra[0] > math.MaxInt32 ||
+				extra[1] == 0 || extra[1] > math.MaxInt32 ||
+				extra[2] == 0 || extra[2] > math.MaxInt64 ||
+				extra[3] >= 1000000 || int(extra[0]) == e.PID ||
+				int(extra[1]) == e.PID {
+				return nil, false
+			}
+			e.ParentPID = int(extra[0])
+			e.RootPID = int(extra[1])
+			e.RootStartSec = int64(extra[2])
+			e.RootStartUsec = int64(extra[3])
+		}
 		entries = append(entries, e)
+	}
+	// A descendant witness must be rooted in a PREVIOUS attested spawn
+	// generation, and all sampled parent links must form a valid chain.
+	// This is forensic evidence, not durable process-control authority.
+	type rootKey struct {
+		pid  int
+		sec  int64
+		usec int64
+	}
+	groups := make(map[rootKey][]processcontrol.BirthIdentity)
+	roots := make(map[rootKey]processcontrol.BirthIdentity)
+	for i, e := range entries {
+		if e.Stage != sharedEvidenceDescendant {
+			continue
+		}
+		key := rootKey{e.RootPID, e.RootStartSec, e.RootStartUsec}
+		attested := false
+		for j := 0; j < i; j++ {
+			start := entries[j]
+			if start.Stage == sharedEvidenceStarted && start.PID == e.RootPID &&
+				start.StartSec == e.RootStartSec && start.StartUsec == e.RootStartUsec &&
+				start.UID == e.UID {
+				roots[key] = processcontrol.BirthIdentity{
+					PID: start.PID, StartSec: start.StartSec, StartUsec: start.StartUsec,
+					EffectiveUID: start.UID, ProcessGroupID: start.PGID,
+				}
+				attested = true
+				break
+			}
+		}
+		if !attested {
+			return nil, false
+		}
+		groups[key] = append(groups[key], processcontrol.BirthIdentity{
+			PID: e.PID, ParentPID: e.ParentPID, StartSec: e.StartSec, StartUsec: e.StartUsec,
+			EffectiveUID: e.UID, ProcessGroupID: e.PGID,
+		})
+	}
+	for key, desc := range groups {
+		if !validateSharedDescendantLineage(roots[key], desc) {
+			return nil, false
+		}
 	}
 	return entries, true
 }
