@@ -29,15 +29,16 @@ type acpBrowserOwner struct {
 // neither chrome-devtools-mcp nor a browser process; they receive only a scoped
 // HTTP MCP capability token for this bridge.
 type ACPBridge struct {
-	planner   *RoutePlanner
-	registry  *WorkerRegistry
-	managed   *managedLeaseCoordinator
-	external  *ExternalLeaseManager
-	lifecycle *browserLifecycleRunner
-	shared    *managedSharedWorkerBackend // Private opt-in; runtime constructor stays exclusive.
-	rotating  *managedSharedRotatingBackend
-	closeOnce sync.Once
-	closeErr  error
+	planner          *RoutePlanner
+	registry         *WorkerRegistry
+	managed          *managedLeaseCoordinator
+	external         *ExternalLeaseManager
+	lifecycle        *browserLifecycleRunner
+	shared           *managedSharedWorkerBackend // Private opt-in; runtime constructor stays exclusive.
+	rotating         *managedSharedRotatingBackend
+	budgetOwnerClaim *managedSharedBudgetOwnerClaim
+	closeOnce        sync.Once
+	closeErr         error
 
 	mu            sync.Mutex
 	byToken       map[string]*acpBrowserOwner
@@ -92,12 +93,21 @@ func newACPBridgeBudgetedRotatingSharedForWorkspace(planner *RoutePlanner, regis
 	if err != nil {
 		return nil, errManagedSharedUnavailable
 	}
-	if err := budget.claim(registry, root); err != nil {
+	claim, err := budget.claim(registry, root)
+	if err != nil {
 		return nil, err
 	}
 	pool := newManagedSharedRotatingBackend(registry, ManagedWorkerOptions{Cwd: root})
 	pool.budget = budget
-	return newACPBridge(planner, registry, pool, nil, pool)
+	bridge, err := newACPBridge(planner, registry, pool, nil, pool)
+	if err != nil {
+		// newACPBridge fails before starting its lifecycle runner or dispatching
+		// worker startup; only this side-effect-free failure permits rollback.
+		budget.releaseOwner(registry, claim)
+		return nil, errManagedSharedUnavailable
+	}
+	bridge.budgetOwnerClaim = claim
+	return bridge, nil
 }
 
 func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend, rotating *managedSharedRotatingBackend) (*ACPBridge, error) {
@@ -418,5 +428,11 @@ func (b *ACPBridge) close() error {
 		registryErr = errManagedSharedUnavailable
 	}
 	failures = append(failures, registryErr)
-	return errors.Join(failures...)
+	err := errors.Join(failures...)
+	if err == nil && b.budgetOwnerClaim != nil {
+		// Registry Shutdown above revokes admission and waits for every owned
+		// worker, including browsers outside the rotating generation.
+		b.rotating.budget.releaseOwner(b.registry, b.budgetOwnerClaim)
+	}
+	return err
 }

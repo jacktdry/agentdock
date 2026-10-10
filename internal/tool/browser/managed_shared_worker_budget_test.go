@@ -39,6 +39,11 @@ func (s *budgetSession) Close() error {
 
 func budgetBridgeFixture(t *testing.T, budget *managedSharedBrowserBudget, processes *budgetProcessFixture, launchFailure bool) (*ACPBridge, *generationFixture, string) {
 	t.Helper()
+	return budgetBridgeFixtureForRoot(t, budget, processes, launchFailure, t.TempDir())
+}
+
+func budgetBridgeFixtureForRoot(t *testing.T, budget *managedSharedBrowserBudget, processes *budgetProcessFixture, launchFailure bool, cwd string) (*ACPBridge, *generationFixture, string) {
+	t.Helper()
 	f := &generationFixture{}
 	base := fakeManagedSession(t, "budget")
 	registry := NewWorkerRegistry(WorkerDependencies{
@@ -74,7 +79,6 @@ func budgetBridgeFixture(t *testing.T, budget *managedSharedBrowserBudget, proce
 	if err != nil {
 		t.Fatal(err)
 	}
-	cwd := t.TempDir()
 	b, err := newACPBridgeBudgetedRotatingSharedForWorkspace(planner, registry, cwd, budget)
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +86,191 @@ func budgetBridgeFixture(t *testing.T, budget *managedSharedBrowserBudget, proce
 	b.lifecycle.Close()
 	t.Cleanup(func() { _ = b.Close() })
 	return b, f, cwd
+}
+
+func assertBudgetOwners(t *testing.T, budget *managedSharedBrowserBudget, count int) {
+	t.Helper()
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if len(budget.owners) != count {
+		t.Fatalf("owners=%d, want %d", len(budget.owners), count)
+	}
+}
+
+func assertBudgetReplacementDenied(t *testing.T, b *ACPBridge, cwd string) {
+	t.Helper()
+	for _, registry := range []*WorkerRegistry{b.registry, NewWorkerRegistry(WorkerDependencies{})} {
+		if replacement, err := newACPBridgeBudgetedRotatingSharedForWorkspace(b.planner, registry, cwd, b.rotating.budget); err != errManagedSharedUnavailable {
+			if replacement != nil {
+				_ = replacement.Close()
+			}
+			t.Fatalf("replacement error=%v", err)
+		}
+	}
+}
+
+func TestACPBridgeSharedBudgetOwnerSequentialReplacement(t *testing.T) {
+	budget, p, cwd := testBrowserBudget(t), &budgetProcessFixture{}, t.TempDir()
+	var previous *ACPBridge
+	var oldToken string
+	var oldMeta LeaseMetadata
+	for i := range 75 {
+		b, f, _ := budgetBridgeFixtureForRoot(t, budget, p, false, cwd)
+		assertBudgetOwners(t, budget, 1)
+		assertBudgetReplacementDenied(t, b, cwd)
+		if previous != nil && previous.registry == b.registry {
+			t.Fatal("replacement reused registry")
+		}
+		token, meta := sharedBridgeAcquire(t, b, "same-session", cwd)
+		if previous != nil {
+			ctx := context.Background()
+			if _, err := b.Acquire(ctx, oldToken, ""); err == nil {
+				t.Fatal("old session token accepted by replacement")
+			}
+			if _, err := previous.Acquire(ctx, oldToken, ""); err == nil {
+				t.Fatal("closed bridge accepted old session")
+			}
+			if _, err := b.rotating.Call(ctx, oldMeta.WorkerID, "click", nil); err == nil {
+				t.Fatal("old worker borrow routed to replacement")
+			}
+			// A stale claim/duplicate Close cannot delete the new root claimant.
+			budget.releaseOwner(previous.registry, previous.budgetOwnerClaim)
+			if err := previous.Close(); err != nil {
+				t.Fatal(err)
+			}
+			assertBudgetOwners(t, budget, 1)
+		}
+		for range 2 {
+			if err := b.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertBudgetOwners(t, budget, 0)
+		assertBudget(t, budget, p, 0, i+1, 0)
+		f.check(t, 1, 1, 0)
+		previous, oldToken, oldMeta = b, token, meta
+	}
+}
+
+func TestACPBridgeSharedBudgetOwnerClaimIdentity(t *testing.T) {
+	budget := testBrowserBudget(t)
+	registry := NewWorkerRegistry(WorkerDependencies{})
+	root := t.TempDir()
+	old, err := budget.claim(registry, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget.releaseOwner(registry, old)
+	current, err := budget.claim(registry, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget.releaseOwner(registry, old)
+	budget.releaseOwner(registry, &managedSharedBudgetOwnerClaim{root: root})
+	assertBudgetOwners(t, budget, 1)
+	budget.releaseOwner(registry, current)
+	budget.releaseOwner(registry, current)
+	assertBudgetOwners(t, budget, 0)
+}
+
+func TestACPBridgeSharedBudgetOwnerFailedClose(t *testing.T) {
+	for _, uncertain := range []bool{false, true} {
+		t.Run(fmt.Sprint(uncertain), func(t *testing.T) {
+			budget, p := testBrowserBudget(t), &budgetProcessFixture{}
+			b, f, cwd := budgetBridgeFixture(t, budget, p, uncertain)
+			if uncertain {
+				token, err := b.RegisterSession("a", "codex", cwd)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := b.Acquire(context.Background(), token, ""); err == nil {
+					t.Fatal("uncertain launch accepted")
+				}
+			} else {
+				sharedBridgeAcquire(t, b, "a", cwd)
+				f.mu.Lock()
+				f.failStop = true
+				f.mu.Unlock()
+			}
+			for range 2 {
+				if err := b.Close(); err == nil {
+					t.Fatal("failed cleanup reported success")
+				}
+				assertBudgetOwners(t, budget, 1)
+				assertBudget(t, budget, p, 1, 1, 1)
+				assertBudgetReplacementDenied(t, b, cwd)
+			}
+		})
+	}
+}
+
+func TestACPBridgeSharedBudgetOwnerBlockedClose(t *testing.T) {
+	for _, extraWorker := range []bool{false, true} {
+		t.Run(fmt.Sprint(extraWorker), func(t *testing.T) {
+			budget, p := testBrowserBudget(t), &budgetProcessFixture{}
+			b, f, cwd := budgetBridgeFixture(t, budget, p, false)
+			if extraWorker {
+				// No rotating generation: registry Shutdown must still wait for
+				// another live owned browser before releasing the owner claim.
+				if _, err := b.registry.StartManaged(context.Background(), b.rotating.options); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				sharedBridgeAcquire(t, b, "a", cwd)
+			}
+			entered, gate := make(chan struct{}, 1), make(chan struct{})
+			var unblock sync.Once
+			defer unblock.Do(func() { close(gate) })
+			f.mu.Lock()
+			f.stopEntered, f.stopGate = entered, gate
+			f.mu.Unlock()
+			done := make(chan error, 2)
+			go func() { done <- b.Close() }()
+			receive(t, entered)
+			go func() { done <- b.Close() }()
+			var wg sync.WaitGroup
+			for range 12 {
+				wg.Go(func() { assertBudgetReplacementDenied(t, b, cwd) })
+			}
+			wg.Wait()
+			assertBudgetOwners(t, budget, 1)
+			used := 1
+			if extraWorker {
+				used = 0
+			}
+			assertBudget(t, budget, p, used, 1, 1)
+			select {
+			case err := <-done:
+				t.Fatal("Close completed before Stop", err)
+			default:
+			}
+			unblock.Do(func() { close(gate) })
+			for range 2 {
+				if err := receive(t, done); err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertBudgetOwners(t, budget, 0)
+			assertBudget(t, budget, p, 0, 1, 0)
+			replacement, _, _ := budgetBridgeFixtureForRoot(t, budget, p, false, cwd)
+			if err := replacement.Close(); err != nil {
+				t.Fatal(err)
+			}
+			assertBudgetOwners(t, budget, 0)
+		})
+	}
+}
+
+func TestACPBridgeSharedBudgetOwnerInvalidConstruction(t *testing.T) {
+	budget, p := testBrowserBudget(t), &budgetProcessFixture{}
+	b, _, cwd := budgetBridgeFixture(t, budget, p, false)
+	for _, root := range []string{"", filepath.Join(cwd, "missing")} {
+		if _, err := newACPBridgeBudgetedRotatingSharedForWorkspace(b.planner, NewWorkerRegistry(WorkerDependencies{}), root, budget); err != errManagedSharedUnavailable {
+			t.Fatalf("invalid root error=%v", err)
+		}
+		assertBudgetOwners(t, budget, 1)
+	}
+	assertBudget(t, budget, p, 0, 0, 0)
 }
 
 func testBrowserBudget(t *testing.T) *managedSharedBrowserBudget {

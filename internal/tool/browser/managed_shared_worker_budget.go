@@ -7,31 +7,48 @@ import (
 )
 
 // Source-only admission budget, shared explicitly by workspace owners. No
-// product capacity is chosen here. Claims last for the budget's lifetime:
-// neither a registry nor a canonical workspace may be assigned two owners.
+// product capacity is chosen here. Claims remain exclusive until authoritative
+// bridge cleanup succeeds; uncertain cleanup never transfers ownership.
 type managedSharedBrowserBudget struct {
 	mu             sync.Mutex
 	maxSlots, used int
-	owners         map[*WorkerRegistry]string
+	owners         map[*WorkerRegistry]*managedSharedBudgetOwnerClaim
+}
+
+// Nonzero-sized, unique identity prevents a stale release from deleting a later
+// claim, even when the registry and canonical workspace are the same.
+type managedSharedBudgetOwnerClaim struct {
+	root string
 }
 
 func newManagedSharedBrowserBudget(maxSlots int) (*managedSharedBrowserBudget, error) {
 	if maxSlots <= 0 {
 		return nil, errManagedSharedUnavailable
 	}
-	return &managedSharedBrowserBudget{maxSlots: maxSlots, owners: make(map[*WorkerRegistry]string)}, nil
+	return &managedSharedBrowserBudget{maxSlots: maxSlots, owners: make(map[*WorkerRegistry]*managedSharedBudgetOwnerClaim)}, nil
 }
 
-func (b *managedSharedBrowserBudget) claim(registry *WorkerRegistry, root string) error {
+func (b *managedSharedBrowserBudget) claim(registry *WorkerRegistry, root string) (*managedSharedBudgetOwnerClaim, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for r, cwd := range b.owners {
-		if r == registry || cwd == root {
-			return errManagedSharedUnavailable
+	for r, owner := range b.owners {
+		if r == registry || owner.root == root {
+			return nil, errManagedSharedUnavailable
 		}
 	}
-	b.owners[registry] = root
-	return nil
+	claim := &managedSharedBudgetOwnerClaim{root: root}
+	b.owners[registry] = claim
+	return claim, nil
+}
+
+// Caller must prove all bridge/registry cleanup succeeded, or that construction
+// failed before any startup or lifecycle callback could be dispatched.
+func (b *managedSharedBrowserBudget) releaseOwner(registry *WorkerRegistry, claim *managedSharedBudgetOwnerClaim) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if claim != nil && b.owners[registry] == claim {
+		delete(b.owners, registry)
+	}
 }
 
 type managedSharedBudgetReservation struct {
