@@ -43,6 +43,10 @@ type WorkerDependencies struct {
 	// the ready WorkerInfo reaches lease admission. Failure is fail-closed.
 	// This callback does NOT grant OS process ownership or kill authority.
 	ReadyWitness func(WorkerInfo) error
+	// StartedWitness runs on the real owned stdio process immediately after
+	// cmd.Start/Attach and before the MCP handshake. Only Next shared opts in.
+	// Failure denies the session and cleans up its existing owned tree.
+	StartedWitness func(context.Context, int) error
 }
 type ManagedWorkerOptions struct{ Cwd string }
 
@@ -75,7 +79,7 @@ func NewWorkerRegistry(deps WorkerDependencies) *WorkerRegistry {
 	}
 	if deps.Open == nil {
 		deps.Open = func(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerSession, error) {
-			session, err := mcpclient.OpenStdioSession(ctx, cfg)
+			session, err := mcpclient.OpenStdioSessionWithStartedWitness(ctx, cfg, deps.StartedWitness)
 			if session == nil {
 				return nil, err
 			}

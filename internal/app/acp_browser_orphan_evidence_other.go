@@ -16,6 +16,9 @@ type sharedBrowserOrphanInspection struct {
 	WorkerObservations int
 }
 
+func (*sharedBrowserRestartGuard) recordStartedWorker(context.Context, int) error {
+	return errSharedBrowserEvidence
+}
 func (*sharedBrowserRestartGuard) recordManagedWorker(toolbrowser.WorkerInfo) error {
 	return errSharedBrowserEvidence
 }

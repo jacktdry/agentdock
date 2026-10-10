@@ -30,6 +30,9 @@ type sharedBrowserRestartGuard struct {
 	exitWatches   []sharedExitWatch
 	exitObserved  int
 	exitUncertain bool
+	// Set only by the Next opted-in source constructor before workers run.
+	// Ready may not publish unless matching durable spawn evidence exists.
+	requireStartedEvidence bool
 }
 
 type sharedExitWatch struct {

@@ -4,7 +4,7 @@ package app
 
 import "errors"
 
-type sharedBrowserRestartGuard struct{}
+type sharedBrowserRestartGuard struct{ requireStartedEvidence bool }
 
 func acquireSharedBrowserRestartGuard(string) (*sharedBrowserRestartGuard, error) {
 	return nil, errors.New("Next shared browser restart guard unavailable")

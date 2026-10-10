@@ -62,6 +62,9 @@ type sdkProtocolClient struct {
 	httpClient *http.Client
 	closeOnce  sync.Once
 	closeErr   error
+	// Ephemeral-only post-Start, pre-handshake witness. Never persisted in
+	// ServerConfig or used by general Manager sessions.
+	startedWitness func(context.Context, int) error
 }
 
 func newStreamableHTTPClient(cfg ServerConfig, oauth sdkauth.OAuthHandler) *sdkProtocolClient {
@@ -186,6 +189,13 @@ func (c *sdkProtocolClient) startStdioTransport() (mcpsdk.Transport, error) {
 	c.command = cmd
 	c.stdin = stdin
 	c.controller = controller
+	if c.startedWitness != nil {
+		if err := c.startedWitness(context.Background(), cmd.Process.Pid); err != nil {
+			// OpenStdioSessionWithStartedWitness will close this exact owned
+			// transport and its process group; no connection is published.
+			return nil, newError("MCP_START_FAILED", "owned MCP stdio child witness unavailable", false, map[string]any{"server": c.cfg.Name}, err)
+		}
+	}
 	return &mcpsdk.IOTransport{Reader: stdout, Writer: stdin}, nil
 }
 

@@ -24,6 +24,20 @@ const (
 
 var errSharedBrowserEvidence = errors.New("Next shared browser worker evidence unavailable")
 
+// recordStartedWorker is invoked at the owned stdio process Start/Attach
+// boundary before MCP negotiation. The sticky guard already exists on disk.
+// Failure closes only the just-launched owned child via the stdio transport.
+func (g *sharedBrowserRestartGuard) recordStartedWorker(ctx context.Context, pid int) error {
+	if g == nil || ctx == nil || ctx.Err() != nil {
+		return errSharedBrowserEvidence
+	}
+	identity, err := processcontrol.ObserveDirectChildBirth(ctx, os.Getpid(), pid)
+	if err != nil {
+		return errSharedBrowserEvidence
+	}
+	return g.appendSharedBrowserIdentity(identity, sharedEvidenceStarted)
+}
+
 // recordManagedWorker is invoked by the ONLY Next-shared WorkerRegistry after
 // the handshake/schema checks, before WorkerInfo can reach the lease layer.
 // PID is recorded for future human/forensic observation, NOT to authorize kill,
@@ -69,6 +83,20 @@ func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbro
 	if identityErr != nil || !validSharedBrowserIdentity(identity) || identity.PID != info.Session.PID {
 		return errSharedBrowserEvidence
 	}
+	return g.appendSharedBrowserIdentity(identity, sharedEvidenceReady)
+}
+
+type sharedBrowserEvidenceStage string
+
+const (
+	sharedEvidenceStarted sharedBrowserEvidenceStage = "started"
+	sharedEvidenceReady   sharedBrowserEvidenceStage = "ready"
+)
+
+func (g *sharedBrowserRestartGuard) appendSharedBrowserIdentity(identity processcontrol.BirthIdentity, stage sharedBrowserEvidenceStage) error {
+	if g == nil || !validSharedBrowserIdentity(identity) || (stage != sharedEvidenceStarted && stage != sharedEvidenceReady) {
+		return errSharedBrowserEvidence
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.released || g.closing {
@@ -97,8 +125,24 @@ func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbro
 	if !valid || len(oldPIDs) >= sharedBrowserEvidenceMaxPIDs {
 		return errSharedBrowserEvidence
 	}
-	line := fmt.Sprintf("worker_ready_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d\n",
-		identity.PID, identity.StartSec, identity.StartUsec, identity.EffectiveUID, identity.ProcessGroupID)
+	if stage == sharedEvidenceReady && g.requireStartedEvidence {
+		found := false
+		for _, prior := range oldPIDs {
+			if prior.PID != identity.PID || prior.Stage != sharedEvidenceStarted {
+				continue
+			}
+			// PID reuse or a changed worker identity is not an attested ready.
+			if !prior.matches(identity) {
+				return errSharedBrowserEvidence
+			}
+			found = true
+		}
+		if !found {
+			return errSharedBrowserEvidence
+		}
+	}
+	line := fmt.Sprintf("worker_%s_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d\n",
+		stage, identity.PID, identity.StartSec, identity.StartUsec, identity.EffectiveUID, identity.ProcessGroupID)
 	// A bounded append-only journal preserves earlier generation observations.
 	// It does not overwrite an orphan PID with the current generation's PID.
 	if stat.Size < int64(len(sharedBrowserEvidencePrefix)) ||
@@ -125,6 +169,7 @@ const (
 	sharedOrphanNoMarker               = "no_pending_marker"
 	sharedOrphanUntrusted              = "untrusted_marker"
 	sharedOrphanStartupUnknown         = "startup_unknown"
+	sharedOrphanPreHandshakeObserved   = "worker_started_handshake_unverified"
 	sharedOrphanPIDVisible             = "pid_present_identity_unverified"
 	sharedOrphanBirthMatched           = "worker_birth_matches_descendants_unverified"
 	sharedOrphanBirthChanged           = "worker_pid_reused_or_changed_descendants_unverified"
@@ -195,6 +240,18 @@ func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root strin
 	if len(pids) == 0 {
 		return sharedBrowserOrphanInspection{Status: sharedOrphanStartupUnknown}
 	}
+	// Startup-only evidence is useful after Core crash before MCP handshake;
+	// do not imply a ready session or attempt PID/Chrome cleanup.
+	onlyStarted := true
+	for _, p := range pids {
+		if p.Stage == sharedEvidenceReady {
+			onlyStarted = false
+			break
+		}
+	}
+	if onlyStarted {
+		return sharedBrowserOrphanInspection{Status: sharedOrphanPreHandshakeObserved, WorkerObservations: len(pids)}
+	}
 	result := sharedBrowserOrphanInspection{WorkerObservations: len(pids)}
 	if len(pids) > sharedBrowserEvidenceMaxPIDs {
 		result.Status = sharedOrphanObservationUnavailable
@@ -257,6 +314,7 @@ func inspectSharedBrowserOrphanEvidenceWithGroup(ctx context.Context, root strin
 }
 
 type sharedBrowserWorkerEvidence struct {
+	Stage     sharedBrowserEvidenceStage
 	PID       int
 	HasBirth  bool
 	StartSec  int64
@@ -307,14 +365,21 @@ func parseSharedBrowserEvidence(raw string) ([]sharedBrowserWorkerEvidence, bool
 			return nil, false
 		}
 		rawPID, ok := strings.CutPrefix(fields[0], "worker_ready_pid=")
+		stage := sharedEvidenceReady
 		if !ok {
-			return nil, false
+			rawPID, ok = strings.CutPrefix(fields[0], "worker_started_pid=")
+			stage = sharedEvidenceStarted
+			// Historical journal always used worker_ready_pid. A started
+			// witness MUST include complete birth metadata, never PID-only.
+			if !ok || len(fields) != 5 {
+				return nil, false
+			}
 		}
 		pid, ok := parseDigits(rawPID)
 		if !ok || pid == 0 || pid > math.MaxInt32 {
 			return nil, false
 		}
-		e := sharedBrowserWorkerEvidence{PID: int(pid)}
+		e := sharedBrowserWorkerEvidence{Stage: stage, PID: int(pid)}
 		if len(fields) == 5 {
 			prefixes := [4]string{"start_sec=", "start_usec=", "uid=", "pgid="}
 			values := [4]uint64{}

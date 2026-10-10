@@ -47,10 +47,15 @@ func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePla
 		// Do not include PID, command line, workspace, or filesystem paths.
 		return nil, nil, fmt.Errorf("Next shared ACP browser restart blocked (%s): %w", inspection.Status, err)
 	}
-	// Only the opted-in Next registry writes advisory worker-start evidence.
-	// An evidence persistence failure blocks lease publication and preserves
-	// the sticky marker; stable/exclusive registries have no witness callback.
-	registry = toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{ReadyWitness: guard.recordManagedWorker})
+	// The explicit Next-only registry persists a direct-child birth witness
+	// immediately after cmd.Start, before MCP handshake, and requires an exact
+	// matching started record before ready can publish a browser lease.
+	// No stable/exclusive registry receives these hooks.
+	guard.requireStartedEvidence = true
+	registry = toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{
+		StartedWitness: guard.recordStartedWorker,
+		ReadyWitness:   guard.recordManagedWorker,
+	})
 	bridge, err := toolbrowser.NewNextSingleWorkspaceSharedACPBridge(planner, registry, root)
 	if err != nil {
 		// This constructor never dispatches a worker. It is safe to clear a

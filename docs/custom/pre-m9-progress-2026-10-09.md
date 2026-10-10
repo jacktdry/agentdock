@@ -233,3 +233,10 @@
 - macOS Next shared Worker 於 ready 准入前新增 birth 身分雙次核對包夾的唯讀 kqueue NOTE_EXIT 事件監看。監看資源於 Runtime verified close 前取消並 join，監看異常阻止解除 guard，不會導致自動 kill/unlink/recovery；其它路徑保持現況。
 - 全面 Go tests、定點 race、vet、Linux/Windows no-CGO crossbuild 與格式檢查 PASS。初次同時交叉編譯時有既有 Browser queue 3 秒逾時測試失敗 1 次；停止資源競爭後單獨連跑 3 次與 Browser full suite 都 PASS，未修改 Browser 佇列邏輯。
 - 使用自建 Go test child（非 Chrome/Edge/npx）測試正常 EOF 退出、kernel NOTE_EXIT 事件、監看取消／關閉、PID 身分不符拒絕；文件見 P8 §18。仍缺跨 Core 存活的所有權把手與 detached Chrome descendants 清理證據。
+
+
+### 2026-10-10 P8-B early spawn witness（SOURCE ONLY）
+
+- Next shared-only registry 加入 `StartedWitness`，於已擁有 stdio transport process group 的 `cmd.Start/Attach` 之後、MCP handshake 之前持久化帶有 Core 直接親子 birth 身分的 `worker_started_pid`。ready 階段須匹配完整 started 身分；缺少 started／PID reuse／append fsync 失敗皆 fail closed。舊版 ready journal 仍可讀取，沒有自動信任或補足過去的證據。
+- 完整五模組 Go tests、targeted race、go vet、Linux/Windows amd64 no-CGO app/browser/mcp-client/process cross-build 及格式檢查 PASS。跨平台初次發現保守 stub 缺失已修正、再次編譯通過。
+- Crash 後 started-only journal 提供隱私安全狀態 `worker_started_handshake_unverified`，依舊 sticky 阻擋，絕不藉此安全回收、終止 Chrome 或清除 marker。詳見 P8 §19。
