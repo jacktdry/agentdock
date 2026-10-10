@@ -441,3 +441,16 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 
 
 - 本輪驗證 PASS：Go 完整六模組 `process/permission/app/tool/browser/browserpolicy/mcpclient`；定點 `process/app/mcpclient/permission` Race Detector；六模組 `go vet`；Linux/Windows amd64 no-CGO `process/permission/mcpclient/app/tool/browser` test cross-build；source-only private scope Go tests；gofmt/diff。`TestSharedBrowserLiveLateSpawnCrossGroupNative` 一般 10 次、Race Detector 5 次皆 PASS。沒有修改 Supervisor production daemon/launchd、實際 Browser/Chrome 啟動路徑或 ACP/AGY 使用者程序。
+
+
+## 29. 2026-10-11 P8-B Supervisor Core-generation rotation guard（SOURCE ONLY；ambiguous dispatch 一律凍結）
+
+- `23–`28 已有 kernel birth、Unix peer 和 M8 call MAC，但 Core 重啟後不能沿用上一代 PID、Session、nonce、secret、sequence 或待回覆中的工具呼叫。本輪新增 Darwin-only `process.SupervisorCoreRotation`（source-only；無 Runtime 接線）：只有目前實際 Supervisor OS PID/出生身分持有的直接 Worker 子程序仍完整匹配、Core 仍活著時，才先註冊 Core 的 kernel `NOTE_EXIT`，然後發出第一代交接。
+- 過渡須經兩道驗證：`WitnessCoreExit` 只以已預註冊的 kernel NOTE_EXIT 確定上一代 Core 退出；`AdmitSuccessor` 重新查證 Supervisor/Worker/新 Core 的 live kernel births，為新 Core 建立獨立 Session/nonce 和新 32-byte secret，不能重用之前任何一代 key、Core birth、MAC 或 Session。所有交接仍必須通過真實 Unix peer PID/UID/birth。最多允許 16 個世代，避免無界持有鍵指紋；Linux/Windows fail closed。
+- **關鍵保守原則**：上一代如果哪怕有一筆工具請求已通過 `acceptVerifiedToolCall`（即 sequence 已消耗），由於目前**沒有持久化的 MCP dispatch/outcome 記錄**，就不能推論 Core 崩潰時工具是否已執行或能否重送；此情況 manager 永久進入 uncertain、拒絕新的 Core reauth/IPC，**即使舊 Core NOTE_EXIT 和 Worker OS 身分都成功驗證**。所以只允許「上一代從未接受工具請求」的情境重新認證。OS witness 取消／錯誤、伪造 birth、重複 secret、未知狀態同樣 fail closed；不會刪除 sticky restart marker、kill Chrome 或重播 MCP side-effect。
+- kqueue Core exit 可能需長時間等待，`WitnessCoreExit` 在 kernel wait 期間釋放 manager mutex，維持 CurrentHandoff health-check 可用；只允許單一 wait owner，取消／失敗後永久隔離。此 in-memory 16-generation gate **僅 Supervisor 程序存活期間成立**，不是 Supervisor 自身 crash 後的 durable recovery。
+- macOS native Go-only test：Test Supervisor 自己直接啟動 Go Worker，分別建立 Core A 和 Core B 兩個 Go child，使用私人 0700 Unix socket / 0600 endpoint 和私人 stdin secret pipe，完成兩代真實 OS peer+HMAC attach；Core A 被**測試自己**強制終止且 NOTE_EXIT 證實、未接過工具時 Core B 用全新 key/session 交接成功；舊 MAC 和舊簽工具請求被拒。另一情境 Core A 先接受一個可能執行過的工具 call 再被終止，即使有 NOTE_EXIT 仍不能重接。測試包含 forged Supervisor/Worker birth、取消的 NOTE_EXIT，以及持續監督不阻塞 live Core 的 mutex。沒有 Chrome/Edge/AGY、正式 Next、系統程序控制或部署。
+- 尚缺：保護性 secret provisioning（測試 pipe 不等於 production）、Supervisor launchd runtime、受核准 MCP 工具 dispatch/response durable ledger、跨 Supervisor restart 的持久 crash fence、Chrome double-fork 子孫完整 owned OS handles 與三代理真實無焦點 UAT。這一輪不得視作生產級自動恢復、不能啟用任意 Core crash reattach 或解除原 Next sticky marker。
+
+
+- 驗證 checkpoint：macOS native 自建 Supervisor+Worker+Core A/B 可信交接與 Core NOTE_EXIT、重放拒絕、ambiguous dispatch permanent freeze、假 birth、取消 witness、長等候不阻塞 live Core，都已多次通過。完整六模組 Go tests、process/app/mcp-client targeted Race Detector、六模組 go vet、Linux/Windows amd64 no-CGO process/permission/mcpclient/app/browser test crosscompile、gofmt/diff check PASS。未安裝、部署、推送，未觸及 Chrome/Edge/AGY。

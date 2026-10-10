@@ -311,3 +311,11 @@
 - 回歸補正：原本晚啟動跨群組子孫 native test 在 Race 模式下偶發 `exitUncertain`；此狀態不該被當成乾淨關閉。測試改驗證同一 root NOTE_EXIT 的必要性，且有觀測缺口時 marker 留存／禁止 restart，完整快照才可正常 release；沒有改變 production 保守拒絕。一般模式 10 次 + Race 模式 5 次通過。
 
 - Runtime principal binding 本輪驗證：六模組完整 Go tests、定點 race、go vet 與 Linux/Windows amd64 no-CGO 五模組交叉編譯均 PASS；source-only，沒有 runtime BrowserWorkerRegistry 或實際 Chrome/AGY 接線。
+
+
+### 2026-10-11 P8-B Core-generation rotation（SOURCE ONLY）
+
+- 新增 Darwin-only `SupervisorCoreRotation`：只有真正 Supervisor PID/birth + 直接受控 Worker birth 與原 Core NOTE_EXIT 都獲核實，且上一代沒有接受過任何 MCP 工具呼叫，才能為新的 Core birth 發出全新 Session、nonce、secret 重新交接。Core A 曾接收工具請求或 kernel witness 不確定則 permanent fail-closed，避免工具被重做或誤判已安全完成。最多 16 代，Linux/Windows stub unavailable。
+- 使用本機私有 Go Core A/Core B/Worker 實際 kernel unix peer reattach 測試，包含老 Session/key/MAC 拒絕、若舊工具 dispatch 不明則 reauth 拒絕、取消 watcher、假的 Supervisor/Worker birth 與 watcher wait 不阻塞活動 Core。仍無 production Supervisor runtime、Chrome、AGY 或安全自動回收；參閱 P8 `29。
+
+- 世代切換驗證：完整六模組 Go、targeted process/app/mcpclient Race Detector、go vet、Linux/Windows amd64 no-CGO 交叉編譯均 PASS；未部署 Next。跨 Supervisor 事故與工具請求持久記錄仍是 blocking gate。
