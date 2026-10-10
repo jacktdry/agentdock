@@ -75,7 +75,7 @@ func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerI
 		_ = watch.Close()
 		return err
 	}
-	if err := g.watchReadyExit(watch); err != nil {
+	if err := g.watchReadyExit(watch, identity); err != nil {
 		_ = watch.Close()
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	processcontrol "github.com/uvwt/agentdock/internal/process"
 
@@ -33,12 +34,19 @@ type sharedBrowserRestartGuard struct {
 	// Set only by the Next opted-in source constructor before workers run.
 	// Ready may not publish unless matching durable spawn evidence exists.
 	requireStartedEvidence bool
+	// Private test seam; production 0 uses 15s. Only configured prior to Ready.
+	descendantRefreshInterval time.Duration
 }
 
 type sharedExitWatch struct {
-	cancel context.CancelFunc
-	done   <-chan struct{}
+	cancel      context.CancelFunc
+	done        <-chan struct{}
+	monitorDone <-chan struct{}
 }
+
+// A fixed conservative interval avoids busy process enumeration or expensive
+// polling when no Chrome descendants change.
+const sharedDescendantRefreshInterval = 15 * time.Second
 
 var errSharedBrowserRestartGuard = errors.New("Next shared browser restart reconciliation required")
 
@@ -153,8 +161,8 @@ func (g *sharedBrowserRestartGuard) releaseAfterVerifiedClose() (err error) {
 // watchReadyExit attaches a live, identity-checked kqueue registration after
 // journal persistence but before WorkerInfo publication. It never grants
 // cleanup authority. Caller keeps ownership on attachment failure.
-func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWitness) error {
-	if g == nil || watch == nil {
+func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWitness, root processcontrol.BirthIdentity) error {
+	if g == nil || watch == nil || !validSharedBrowserIdentity(root) {
 		return errSharedBrowserEvidence
 	}
 	g.mu.Lock()
@@ -164,7 +172,8 @@ func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWit
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	g.exitWatches = append(g.exitWatches, sharedExitWatch{cancel: cancel, done: done})
+	monitorDone := make(chan struct{})
+	g.exitWatches = append(g.exitWatches, sharedExitWatch{cancel: cancel, done: done, monitorDone: monitorDone})
 	g.mu.Unlock()
 	go func() {
 		defer close(done)
@@ -178,6 +187,33 @@ func (g *sharedBrowserRestartGuard) watchReadyExit(watch *processcontrol.ExitWit
 			g.exitUncertain = true
 		}
 		g.mu.Unlock()
+		// Wrapper exit also ends this worker's periodic witness sampler.
+		cancel()
+	}()
+	go func() {
+		defer close(monitorDone)
+		interval := g.descendantRefreshInterval
+		if interval <= 0 {
+			interval = sharedDescendantRefreshInterval
+		}
+		tick := time.NewTicker(interval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				if ctx.Err() != nil {
+					return
+				}
+				if err := g.refreshReadyDescendants(ctx, root); err != nil && ctx.Err() == nil {
+					g.mu.Lock()
+					g.exitUncertain = true // A durable observation gap blocks clean auto-unlink.
+					g.mu.Unlock()
+					return
+				}
+			}
+		}
 	}()
 	return nil
 }
@@ -195,5 +231,8 @@ func (g *sharedBrowserRestartGuard) stopExitWatches() {
 	g.mu.Unlock()
 	for _, w := range watches {
 		<-w.done
+		if w.monitorDone != nil {
+			<-w.monitorDone
+		}
 	}
 }

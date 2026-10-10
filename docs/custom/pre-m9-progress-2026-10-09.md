@@ -247,4 +247,12 @@
 - macOS Next shared ready 取樣同 UID kernel PPID 祖先鏈（root birth 前後驗證、子孫第二次出生身分核對），可辨識仍有完整父子鏈但已經 `setsid` 脫離 managed MCP 群組的子孫。將 24 筆上限的完整 birth/parent/root 世代資訊連同 ready record 一次 fsync 到原 private sticky journal；strict parser 保護完整鏈與舊紀錄相容。
 - Crash inspection 區分 wrapper root 與 recorded descendant，已記錄的子孫即使後續 PPID／PGID 變動，仍可唯讀比對 PID 出生身分。任何 positive match、負面結果或 marker 缺漏都**不授權自動回收／解鎖／kill**；已 reparent 或退出而不在取樣內的子孫仍不可知。Native tests 只有自行啟動的 Go parent 和不同 PGID 的 grandchild，詳見 P8 §20。
 
-- 本輪收尾（2026-10-10）：完整五模組 Go tests（序列化）PASS；針對 App／Process／Browser 的 race PASS；Go vet 五模組 PASS；Linux／Windows amd64 no-CGO app/process/browser crossbuild PASS。中斷前並行測試時舊有 process fork-boundary stress case 曾逾時一次；串行重新測試已通過，未修改原有清理控制。維持 Source-only，未部署或安裝。\n
+- 本輪收尾（2026-10-10）：完整五模組 Go tests（序列化）PASS；針對 App／Process／Browser 的 race PASS；Go vet 五模組 PASS；Linux／Windows amd64 no-CGO app/process/browser crossbuild PASS。中斷前並行測試時舊有 process fork-boundary stress case 曾逾時一次；串行重新測試已通過，未修改原有清理控制。維持 Source-only，未部署或安裝。
+
+
+### 2026-10-10 P8-B live descendant refresh（SOURCE ONLY）
+
+- 在既有 macOS Next-shared `kqueue NOTE_EXIT` watcher 的 Core-lifetime 下新增 15 秒低頻 kernel PPID 取樣，辨識 Worker Ready 後才啟動、雖已換 PGID 但仍有完整祖先鏈的後代；private journal 僅追加新的 birth identity（完全重複時不寫），strict parser 在 append 前驗證全 journal，64 entries / 16KiB 硬上限。任何取樣/追加不確定都保留 crash fence、不做自動清理。
+- Worker NOTE_EXIT 與 Core verified close 都會 cancel/join sampler；實際 macOS Go fixture 驗證**Ready 後才產生 Setsid 子程序**仍能持久觀測並正確關閉。依舊 source-only、不調整原版/AGY ACP、不打開使用者 Chrome/Edge。
+
+- 本輪回歸：完整 app/browser/browserpolicy/mcp-client/process Go tests、app/process/browser targeted -race、go vet、Linux/Windows no-CGO crosscompile、gofmt 與 diff 全數 PASS。
