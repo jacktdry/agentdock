@@ -17,3 +17,6 @@ func (*SupervisorOwnedStdio) Birth() BirthIdentity       { return BirthIdentity{
 func (*SupervisorOwnedStdio) Stdin() io.WriteCloser      { return nil }
 func (*SupervisorOwnedStdio) Stdout() io.ReadCloser      { return nil }
 func (*SupervisorOwnedStdio) Wait(context.Context) error { return ErrSupervisorHandoffUnavailable }
+func (*SupervisorOwnedStdio) ClaimMCPTransport() (io.ReadCloser, io.WriteCloser, error) {
+	return nil, nil, ErrSupervisorHandoffUnavailable
+}

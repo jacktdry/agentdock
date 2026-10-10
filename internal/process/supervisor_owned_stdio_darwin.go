@@ -17,15 +17,16 @@ import (
 // No browser, installed Next runtime, or user profile uses this implementation.
 // Its public API deliberately provides NO termination or group kill operation.
 type SupervisorOwnedStdio struct {
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	birth    BirthIdentity
-	stdin    io.WriteCloser
-	stdout   io.ReadCloser
-	exit     *ExitWitness
-	waiting  bool
-	finished bool
-	waitErr  error
+	mu               sync.Mutex
+	cmd              *exec.Cmd
+	birth            BirthIdentity
+	stdin            io.WriteCloser
+	stdout           io.ReadCloser
+	exit             *ExitWitness
+	waiting          bool
+	finished         bool
+	transportClaimed bool
+	waitErr          error
 }
 
 // StartSupervisorOwnedStdio starts ONLY the command supplied by its local
@@ -86,13 +87,41 @@ func (s *SupervisorOwnedStdio) Stdin() io.WriteCloser {
 	if s == nil {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transportClaimed || s.waiting || s.finished {
+		return nil
+	}
 	return s.stdin
 }
 func (s *SupervisorOwnedStdio) Stdout() io.ReadCloser {
 	if s == nil {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transportClaimed || s.waiting || s.finished {
+		return nil
+	}
 	return s.stdout
+}
+
+// ClaimMCPTransport returns the Supervisor's OS pipe handles exactly once.
+// It performs no spawning or PID lookup. The caller MUST own this wrapper in
+// the Supervisor process; Core never receives these pipes or this object.
+// After a claim, SDK owns the pipe usage; wrapper Wait still owns reaping.
+func (s *SupervisorOwnedStdio) ClaimMCPTransport() (io.ReadCloser, io.WriteCloser, error) {
+	if s == nil {
+		return nil, nil, ErrSupervisorHandoffUnavailable
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transportClaimed || s.waiting || s.finished ||
+		s.stdin == nil || s.stdout == nil || s.cmd == nil || s.cmd.Process == nil {
+		return nil, nil, ErrSupervisorHandoffUnavailable
+	}
+	s.transportClaimed = true
+	return s.stdout, s.stdin, nil
 }
 
 // Wait witnesses this exact owned wrapper's kernel NOTE_EXIT then calls

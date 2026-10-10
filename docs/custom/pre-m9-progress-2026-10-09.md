@@ -280,3 +280,11 @@
 - Supervisor-owned HMAC handoff 和既有 Core-owned 模式嚴格分離（owner + PID/PPID/birth/UID/PGID 綁定），測試 Core 意外退出後，自有 Supervisor 仍能向 Worker 發出指令、接收回覆、等待其自然退出。仍無真實 MCP WorkerRegistry 整合或 Chrome 完整回收授權；參閱 P8 §24。
 
 - 回歸補強：晚啟動 Setsid fixture 改待子程序進入執行期再確認 PGID，並讓背景取樣與**同一 Worker** kqueue NOTE_EXIT 有界協調，防止正常退出時保守誤報。任何沒有核實退出證據的失敗仍 fail-closed；晚啟動用例 10 次 PASS。
+
+
+### 2026-10-10 P8-B Supervisor-owned MCP SDK transport（SOURCE ONLY）
+
+- 在 Supervisor-owned kernel attested Go Worker 的 stdin/stdout 上接入既有 Go MCP SDK IOTransport，實測正常 initialize／tools/list／tools/call(echo)；Core-like 測試程序被強制終止後 Supervisor SDK **同一 session**仍可 echo。SDK 只在 Supervisor 內使用、Close 只關閉 transport，Supervisor 自己等 NOTE_EXIT 並 cmd.Wait；exclusive pipe claim，握手失敗 fail-closed，不執行 kill/auto cleanup。
+- 無 production Core-to-Supervisor RPC relay、auth call admission、真實 ACP BrowserRegistry、Chrome process lifetime control。原版 AgentDock/AGY/已安裝 Next 未修改。詳細安全界線參照 P8 §25。
+
+- 本輪源碼驗證：完整 Go 五模組、targeted race、go vet、Linux/Windows no-CGO 四模組交叉編譯全數 PASS；保留 source-only，無部署／推送／正式 BrowserRegistry 接線。
