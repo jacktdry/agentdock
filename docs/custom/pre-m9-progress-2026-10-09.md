@@ -1,5 +1,11 @@
 # AgentDock Next — Pre-M9 最新進度（2026-10-09）
 
+## 2026-10-10 P8-B ACPBridge 三 Session 真實 Headless 整合（SOURCE-ONLY）
+
+- 最新 `TestACPBridgeSharedRealHeadless` **真實 PASS（46.76s）**：獨立 Headless Chrome＋cached MCP 1.7.0 由 budgeted rotating ACPBridge 連線，三個 Session Token 共用單一 MCP/Chrome，交錯操作隔離，最後一租約釋放後先完全回收，第二世代才重新建立。全程 peak Chrome main=1、兩個 generation、舊租約拒絕、test-owned 程序無殘留、budget slot/owner claims=0；未接管使用者 Chrome/Edge。先前 `list_pages` 傳 nil 造成 MCP schema 錯誤，已改為空 JSON object，未放寬驗證。
+- 主 Session Browser／BrowserPolicy 完整 Go tests、共享池 Race Detector、go vet、gofmt/diff 與 Linux／Windows amd64、macOS arm64 no-CGO 跨平台編譯皆 PASS。正式 `NewACPBridge` 仍使用獨占模式；此為 opt-in 測試，不是 Next runtime 切換、實際三個 Agent 的端對端 UAT 或零打擾保證。
+- 決策與限制見 [Browser noninterrupting routing §10](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
+
 ## 2026-10-10 P8-B shared Headless Chrome 真實隔離 PoC（SOURCE-ONLY）
 
 - 對 `ffd67c08` 的 private opt-in shared managed backend 增加 MCP pool-owned `about:blank` keeper；關閉租約 page 前以內部 `select_page({pageId: keeper, bringToFront: false})` 避免 MCP 1.7.0 回傳 `The selected page has been closed`，但不改用戶視窗焦點。Keeper 不分配給 Agent；原有 Managed runtime 尚未切換共享。
