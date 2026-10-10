@@ -20,7 +20,9 @@ type managedSharedRotatingBackend struct {
 	borrows    map[string]string
 	// Only the most recently retired generation's bounded tokens are kept for
 	// cleanup recovery. Older/unknown tokens fail closed, never touch a worker.
-	retired map[string]string
+	retired     map[string]string
+	budget      *managedSharedBrowserBudget
+	reservation *managedSharedBudgetReservation
 }
 
 var _ ManagedLeaseBackend = (*managedSharedRotatingBackend)(nil)
@@ -69,6 +71,9 @@ func (b *managedSharedRotatingBackend) StartManaged(ctx context.Context, options
 				if failed {
 					return WorkerInfo{}, errManagedSharedUnavailable
 				}
+				if !b.releaseBudget() {
+					return WorkerInfo{}, errManagedSharedUnavailable
+				}
 				b.retired, b.borrows, b.generation = b.borrows, nil, nil
 			default:
 				return WorkerInfo{}, errManagedSharedUnavailable
@@ -80,8 +85,18 @@ func (b *managedSharedRotatingBackend) StartManaged(ctx context.Context, options
 			return WorkerInfo{}, errManagedSharedUnavailable
 		}
 		adapter := &sharedRegistryBackend{WorkerRegistry: b.registry}
-		g, err := newManagedSharedWorkerBackend(adapter, b.options)
+		var backend ManagedLeaseBackend = adapter
+		if b.budget != nil {
+			reservation, err := b.budget.reserve()
+			if err != nil {
+				return WorkerInfo{}, errManagedSharedUnavailable
+			}
+			b.reservation = reservation
+			backend = &managedSharedBudgetBackend{ManagedLeaseBackend: adapter, reservation: reservation}
+		}
+		g, err := newManagedSharedWorkerBackend(backend, b.options)
 		if err != nil {
+			b.releaseBudget() // No StartManaged has been dispatched.
 			return WorkerInfo{}, errManagedSharedUnavailable
 		}
 		adapter.shared = g
@@ -148,6 +163,13 @@ func (b *managedSharedRotatingBackend) ReapIdle(now time.Time) error {
 		if err := b.generation.ReapIdle(now); err != nil {
 			return errManagedSharedUnavailable
 		}
+		select {
+		case <-b.generation.done:
+			if !b.releaseBudget() {
+				return errManagedSharedUnavailable
+			}
+		default:
+		}
 	}
 	return nil
 }
@@ -162,6 +184,22 @@ func (b *managedSharedRotatingBackend) Shutdown(ctx context.Context) error {
 		if err := b.generation.Shutdown(ctx); err != nil {
 			return errManagedSharedUnavailable
 		}
+		if !b.releaseBudget() {
+			return errManagedSharedUnavailable
+		}
 	}
 	return nil
+}
+
+// Owner gate held; call only after authoritative successful terminal Stop,
+// or before startup has been dispatched at all.
+func (b *managedSharedRotatingBackend) releaseBudget() bool {
+	if b.reservation == nil {
+		return true
+	}
+	if !b.reservation.release() {
+		return false
+	}
+	b.reservation = nil
+	return true
 }

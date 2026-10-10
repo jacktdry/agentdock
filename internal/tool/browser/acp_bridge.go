@@ -82,6 +82,24 @@ func newACPBridgeRotatingSharedForWorkspace(planner *RoutePlanner, registry *Wor
 	return newACPBridge(planner, registry, pool, nil, pool)
 }
 
+// Each owner gets a distinct registry lifecycle; only process admission is
+// shared. The caller must supply one common budget for all participating roots.
+func newACPBridgeBudgetedRotatingSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string, budget *managedSharedBrowserBudget) (*ACPBridge, error) {
+	if planner == nil || registry == nil || budget == nil {
+		return nil, errManagedSharedUnavailable
+	}
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	if err := budget.claim(registry, root); err != nil {
+		return nil, err
+	}
+	pool := newManagedSharedRotatingBackend(registry, ManagedWorkerOptions{Cwd: root})
+	pool.budget = budget
+	return newACPBridge(planner, registry, pool, nil, pool)
+}
+
 func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend, rotating *managedSharedRotatingBackend) (*ACPBridge, error) {
 	if planner == nil || registry == nil {
 		return nil, browserError(ErrPolicyConflict, "ACP browser bridge requires planner and worker registry", "acp", nil, nil)
