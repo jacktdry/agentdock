@@ -29,7 +29,18 @@ var errSharedBrowserEvidence = errors.New("Next shared browser worker evidence u
 // PID is recorded for future human/forensic observation, NOT to authorize kill,
 // signal, unlink, profile control or automatic crash recovery.
 func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerInfo) error {
-	if g == nil || info.State != toolbrowser.WorkerReady || info.Session.PID <= 0 || info.Session.PID > math.MaxInt32 {
+	return g.recordManagedWorkerWithIdentity(info, processcontrol.ObserveBirthIdentity)
+}
+
+func (g *sharedBrowserRestartGuard) recordManagedWorkerWithIdentity(info toolbrowser.WorkerInfo, observe func(context.Context, int) (processcontrol.BirthIdentity, error)) error {
+	if g == nil || observe == nil || info.State != toolbrowser.WorkerReady || info.Session.PID <= 0 || info.Session.PID > math.MaxInt32 {
+		return errSharedBrowserEvidence
+	}
+	// Kernel birth timestamp and credentials must be observed while the
+	// validated worker is still alive, BEFORE its lease becomes usable.
+	// No inference from PID alone and never an authority for SIGKILL.
+	identity, identityErr := observe(context.Background(), info.Session.PID)
+	if identityErr != nil || !validSharedBrowserIdentity(identity) || identity.PID != info.Session.PID {
 		return errSharedBrowserEvidence
 	}
 	g.mu.Lock()
@@ -60,7 +71,8 @@ func (g *sharedBrowserRestartGuard) recordManagedWorker(info toolbrowser.WorkerI
 	if !valid || len(oldPIDs) >= sharedBrowserEvidenceMaxPIDs {
 		return errSharedBrowserEvidence
 	}
-	line := fmt.Sprintf("worker_ready_pid=%d\n", info.Session.PID)
+	line := fmt.Sprintf("worker_ready_pid=%d,start_sec=%d,start_usec=%d,uid=%d,pgid=%d\n",
+		identity.PID, identity.StartSec, identity.StartUsec, identity.EffectiveUID, identity.ProcessGroupID)
 	// A bounded append-only journal preserves earlier generation observations.
 	// It does not overwrite an orphan PID with the current generation's PID.
 	if stat.Size < int64(len(sharedBrowserEvidencePrefix)) ||
@@ -88,13 +100,22 @@ const (
 	sharedOrphanUntrusted              = "untrusted_marker"
 	sharedOrphanStartupUnknown         = "startup_unknown"
 	sharedOrphanPIDVisible             = "pid_present_identity_unverified"
+	sharedOrphanBirthMatched           = "worker_birth_matches_descendants_unverified"
+	sharedOrphanBirthChanged           = "worker_pid_reused_or_changed_descendants_unverified"
 	sharedOrphanPIDAbsent              = "worker_pid_absent_descendants_unverified"
 	sharedOrphanObservationUnavailable = "observation_unavailable"
 )
 
 func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observe func(context.Context, int) processcontrol.Snapshot) sharedBrowserOrphanInspection {
+	return inspectSharedBrowserOrphanEvidenceWithIdentity(ctx, root, observe, processcontrol.ObserveBirthIdentity)
+}
+
+func inspectSharedBrowserOrphanEvidenceWithIdentity(ctx context.Context, root string,
+	observe func(context.Context, int) processcontrol.Snapshot,
+	birth func(context.Context, int) (processcontrol.BirthIdentity, error),
+) sharedBrowserOrphanInspection {
 	untrusted := sharedBrowserOrphanInspection{Status: sharedOrphanUntrusted}
-	if ctx == nil || ctx.Err() != nil || observe == nil {
+	if ctx == nil || ctx.Err() != nil || observe == nil || birth == nil {
 		return sharedBrowserOrphanInspection{Status: sharedOrphanObservationUnavailable}
 	}
 	state, err := os.Lstat(root)
@@ -142,22 +163,37 @@ func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observ
 		result.Status = sharedOrphanObservationUnavailable
 		return result
 	}
-	visible := false
+	visible, matched, changed := false, false, false
 	unavailable := false
-	seen := make(map[int]bool, len(pids))
-	for _, pid := range pids {
-		if seen[pid] {
+	seen := make(map[string]bool, len(pids))
+	for _, worker := range pids {
+		// A PID can reappear with another start timestamp (or another group).
+		// Deduplicate only identical evidence, not separate PID generations.
+		key := fmt.Sprintf("%d/%d/%d/%d/%d", worker.PID, worker.StartSec, worker.StartUsec, worker.UID, worker.PGID)
+		if seen[key] {
 			continue
 		}
-		seen[pid] = true
-		snap := observe(ctx, pid)
-		// PID reuse cannot be excluded with this observation. Even an alive PID
-		// is NOT a claim that the process is the originally recorded worker.
+		seen[key] = true
+		snap := observe(ctx, worker.PID)
 		switch snap.State {
 		case "alive":
-			visible = true
+			if !worker.HasBirth {
+				visible = true // Legacy PID-only observation cannot be attested.
+				continue
+			}
+			current, err := birth(ctx, worker.PID)
+			if err != nil || !validSharedBrowserIdentity(current) {
+				unavailable = true
+				continue
+			}
+			if worker.matches(current) {
+				matched = true
+			} else {
+				// Identity mismatch can indicate PID reuse, not ownership.
+				changed = true
+			}
 		case "zombie", "not_found":
-			// Absent wrapper does NOT prove Chrome descendants are absent.
+			// Neither wrapper absence nor zombie proves descendant exit.
 		default:
 			unavailable = true
 		}
@@ -168,6 +204,10 @@ func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observ
 	switch {
 	case unavailable:
 		result.Status = sharedOrphanObservationUnavailable
+	case matched:
+		result.Status = sharedOrphanBirthMatched
+	case changed:
+		result.Status = sharedOrphanBirthChanged
 	case visible:
 		result.Status = sharedOrphanPIDVisible
 	default:
@@ -176,7 +216,29 @@ func inspectSharedBrowserOrphanEvidence(ctx context.Context, root string, observ
 	return result
 }
 
-func parseSharedBrowserEvidence(raw string) ([]int, bool) {
+type sharedBrowserWorkerEvidence struct {
+	PID       int
+	HasBirth  bool
+	StartSec  int64
+	StartUsec int64
+	UID       uint32
+	PGID      int
+}
+
+func (w sharedBrowserWorkerEvidence) matches(id processcontrol.BirthIdentity) bool {
+	return w.HasBirth && w.PID == id.PID && w.StartSec == id.StartSec &&
+		w.StartUsec == id.StartUsec && w.UID == id.EffectiveUID && w.PGID == id.ProcessGroupID
+}
+
+func validSharedBrowserIdentity(id processcontrol.BirthIdentity) bool {
+	return id.PID > 0 && id.PID <= math.MaxInt32 && id.StartSec > 0 &&
+		id.StartUsec >= 0 && id.StartUsec < 1000000 &&
+		id.ProcessGroupID > 0 && id.ProcessGroupID <= math.MaxInt32
+}
+
+// Historic v1 PID-only entries remain parseable but cannot prove identity.
+// New entries require the full birth fingerprint, no permissive extra fields.
+func parseSharedBrowserEvidence(raw string) ([]sharedBrowserWorkerEvidence, bool) {
 	if !strings.HasPrefix(raw, sharedBrowserEvidencePrefix) {
 		return nil, false
 	}
@@ -191,17 +253,57 @@ func parseSharedBrowserEvidence(raw string) ([]int, bool) {
 	if len(lines) > sharedBrowserEvidenceMaxPIDs {
 		return nil, false
 	}
-	pids := make([]int, 0, len(lines))
-	for _, line := range lines {
-		value, ok := strings.CutPrefix(line, "worker_ready_pid=")
-		if !ok || len(value) == 0 || strings.Trim(value, "0123456789") != "" {
-			return nil, false
+	entries := make([]sharedBrowserWorkerEvidence, 0, len(lines))
+	parseDigits := func(raw string) (uint64, bool) {
+		if raw == "" || strings.Trim(raw, "0123456789") != "" {
+			return 0, false
 		}
-		pid, err := strconv.Atoi(value)
-		if err != nil || pid <= 0 || pid > math.MaxInt32 {
-			return nil, false
-		}
-		pids = append(pids, pid)
+		value, err := strconv.ParseUint(raw, 10, 64)
+		return value, err == nil
 	}
-	return pids, true
+	for _, line := range lines {
+		fields := strings.Split(line, ",")
+		if len(fields) != 1 && len(fields) != 5 {
+			return nil, false
+		}
+		rawPID, ok := strings.CutPrefix(fields[0], "worker_ready_pid=")
+		if !ok {
+			return nil, false
+		}
+		pid, ok := parseDigits(rawPID)
+		if !ok || pid == 0 || pid > math.MaxInt32 {
+			return nil, false
+		}
+		e := sharedBrowserWorkerEvidence{PID: int(pid)}
+		if len(fields) == 5 {
+			prefixes := [4]string{"start_sec=", "start_usec=", "uid=", "pgid="}
+			values := [4]uint64{}
+			for i, prefix := range prefixes {
+				raw, ok := strings.CutPrefix(fields[i+1], prefix)
+				if !ok {
+					return nil, false
+				}
+				values[i], ok = parseDigits(raw)
+				if !ok {
+					return nil, false
+				}
+			}
+			if values[0] > math.MaxInt64 || values[1] >= 1000000 || values[2] > math.MaxUint32 || values[3] > math.MaxInt32 {
+				return nil, false
+			}
+			e.HasBirth = true
+			e.StartSec = int64(values[0])
+			e.StartUsec = int64(values[1])
+			e.UID = uint32(values[2])
+			e.PGID = int(values[3])
+			if !validSharedBrowserIdentity(processcontrol.BirthIdentity{
+				PID: e.PID, StartSec: e.StartSec, StartUsec: e.StartUsec,
+				EffectiveUID: e.UID, ProcessGroupID: e.PGID,
+			}) {
+				return nil, false
+			}
+		}
+		entries = append(entries, e)
+	}
+	return entries, true
 }

@@ -205,3 +205,10 @@
 - Next-only 共享 Worker 在 validated ready 時 append+fsync wrapper PID 觀測值至 §13 restart marker；異常或不完整持久化直接 fail-closed。Runtime 因 sticky marker 拒絕重啟時，從私有 marker + OS 唯讀 snapshot 輸出**不含 PID/路徑**的安全分類；PID 存在或已消失都不構成解除 marker／終止程序授權。
 - 完整 app/browser/browserpolicy/mcp-client/process Go tests、app/browser targeted race、go vet、Linux/Windows amd64 no-CGO app/browser crossbuild、gofmt/diff check 全部 PASS。
 - 新增假的 Worker、並行寫入、corrupt/symlink、失敗注入與 startup unknown 的 deterministic tests。**這不是 orphan cleanup**：可靠 process start identity、detached Chrome 子程序驗證、可證明 ownership 的 terminate/cancel 與 GUI recovery 尚未完成；source-only，沒有改動安裝版 Next、stable、AGY 或真實瀏覽器。詳見 [P8 §14](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
+
+
+### 2026-10-10 P8-B process birth identity fingerprint（SOURCE ONLY）
+
+- 在 §14 wrapper PID 唯讀 journal 基礎上，加入 Darwin kern.proc.pid kernel start sec/usec＋UID＋PGID birth fingerprint。Next-only ready witness 缺任何指紋證據就 fail-closed，重啟時僅將匹配、PID 被重用、舊版 PID-only、缺 PID／OS 觀測失敗等**安全分類**回報，不發送 signal、沒有解除 crash marker。
+- 完整 app/browser/browserpolicy/mcp-client/process Go tests、定點 app/browser/process race、go vet、Linux/Windows amd64 process/app/browser no-CGO crossbuild 與格式檢查全部 PASS。
+- 真實觀測僅自己的測試程序（不啟動 Chrome/Edge），合成 PID/時間/權限失效測試另行隔離；仍**不是**正式 OS orphan cleanup 或 Next native UAT。詳見 [P8 §15](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
