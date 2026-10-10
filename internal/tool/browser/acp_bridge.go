@@ -70,6 +70,21 @@ func newACPBridgeSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegis
 	return newACPBridge(planner, registry, shared, shared, nil)
 }
 
+// NewNextSingleWorkspaceSharedACPBridge is the bounded, Next-only source
+// integration point for the existing private budgeted rotating pool.
+// It does not select a workspace, authorize a browser profile, or turn on a
+// product flag; the Runtime caller MUST separately enforce explicit Next
+// ownership and exact workspace selection before invoking this constructor.
+// Other workspaces and non-managed routes remain fail-closed on Acquire.
+// This deliberately caps a single Core at one pool-owned Chrome generation.
+func NewNextSingleWorkspaceSharedACPBridge(planner *RoutePlanner, registry *WorkerRegistry, workspace string) (*ACPBridge, error) {
+	budget, err := newManagedSharedBrowserBudget(1)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	return newACPBridgeBudgetedRotatingSharedForWorkspace(planner, registry, workspace, budget)
+}
+
 // Source-only opt-in: the owner replaces only successfully stopped generations.
 func newACPBridgeRotatingSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string) (*ACPBridge, error) {
 	if planner == nil || registry == nil {

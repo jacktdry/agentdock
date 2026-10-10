@@ -183,3 +183,11 @@
 - 私有 budgeted rotating ACPBridge 新增安全數值 `shared_budget` diagnostics（capacity／used／available／claims／uncertain）；only opt-in shared，預設 exclusive 不變，沒有可識別 Workspace／PID／Profile／token，沒有 runtime switch。
 - Reservation／uncertain latch／release 均在同一 budget mutex 同步；unknown launch／failed Stop 不退 slot。Focused／full Browser+BrowserPolicy、focused race、go vet、gofmt／diff 均 PASS；僅 synthetic、沒有真實 Browser UAT／部署／push。詳見 [P8 §11](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#11-2026-10-10-p8-b-shared-budget-observability-checkpointsource-only)。
 - 後續需 Next-only runtime wiring、權威 orphan／crash reconciliation 與實際 ChatGPT+2 ACP native UAT；不能因安全數字監測就視 P8/M9 已結案。
+
+
+### 2026-10-10 P8-B Next Runtime opt-in wiring（SOURCE ONLY）
+
+- ACP Browser Runtime 初始化可在 **明確 Next-only 單 Workspace opt-in** 後使用 private budgeted rotating shared worker（單 Core budget=1）。環境變數 `AGENTDOCK_NEXT_SHARED_BROWSER_WORKSPACE` 必須是絕對 canonical 現存目錄，並通過 Darwin Next variant、專屬 `~/.agentdock-next`、ACP+Browser enabled、非 stdio checks；未設定完全維持 exclusive，設定錯誤明確 fail-closed。
+- 其他 Workspace ACP session 的 coding 功能不因此被拒絕，但該 Browser Acquire 在啟動前拒絕；RequiredExternal/ExplicitExternal 不 fallback 至 managed。NewRuntime 現在呼叫新 selector，預設 production path 未換。詳見 [P8 §12](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#12-2026-10-10-p8-b-next-runtime-single-workspace-opt-insource-only)。
+- 主 Session 獨立執行完整 app/browser/browserpolicy Go tests、selector/budget 定點 `-race`、go vet、Linux/Windows amd64 無 CGO 交叉編譯及 diff/gofmt，全部 PASS。
+- 本次 runtime wiring／拒絕矩陣為離線測試，沒有 App build/install、Native UAT、使用者 Edge/Profile 操作或 AGY repo 修改。真實多程序 ACP、使用者焦點/彈窗、trusted Core identity 和 crash reconciliation 仍是 release gate。

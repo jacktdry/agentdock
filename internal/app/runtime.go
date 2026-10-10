@@ -220,7 +220,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser route planner: %w", plannerErr)
 		}
-		bridge, bridgeErr := toolbrowser.NewACPBridge(planner, toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{}))
+		bridge, bridgeErr := newRuntimeACPBrowserBridge(cfg, planner)
 		if bridgeErr != nil {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser bridge: %w", bridgeErr)
