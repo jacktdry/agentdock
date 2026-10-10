@@ -26,8 +26,10 @@ func TestRuntimeACPBrowserNextSharedWorkspaceOptIn(t *testing.T) {
 	})
 	_ = os.Unsetenv(nextSharedBrowserWorkspaceEnv)
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
-	home, err := os.UserHomeDir()
-	if err != nil {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	nextState := filepath.Join(home, ".agentdock-next")
+	if err := os.Mkdir(nextState, 0700); err != nil {
 		t.Fatal(err)
 	}
 	tmp := t.TempDir()
@@ -50,9 +52,12 @@ func TestRuntimeACPBrowserNextSharedWorkspaceOptIn(t *testing.T) {
 	}
 
 	// No opt-in in a Next Core must preserve the original exclusive behavior.
-	baseline, err := newRuntimeACPBrowserBridge(cfg, planner)
+	baseline, defaultGuard, err := newRuntimeACPBrowserBridge(cfg, planner)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if defaultGuard != nil {
+		t.Fatal("exclusive unexpectedly took a restart guard")
 	}
 	if baseline.Diagnostics().SharedBudget != nil {
 		t.Fatal("default ACPBridge unexpectedly shared")
@@ -63,18 +68,24 @@ func TestRuntimeACPBrowserNextSharedWorkspaceOptIn(t *testing.T) {
 
 	t.Setenv(nextSharedBrowserWorkspaceEnv, root)
 	if runtime.GOOS != "darwin" {
-		if _, err := newRuntimeACPBrowserBridge(cfg, planner); err == nil {
+		if _, _, err := newRuntimeACPBrowserBridge(cfg, planner); err == nil {
 			t.Fatal("non-macOS host enabled Next shared browser")
 		}
 		return
 	}
-	bridge, err := newRuntimeACPBrowserBridge(cfg, planner)
+	bridge, restartGuard, err := newRuntimeACPBrowserBridge(cfg, planner)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if restartGuard == nil {
+		t.Fatal("Next shared bridge omitted durable restart guard")
+	}
 	defer func() {
-		if err := bridge.Close(); err != nil {
+		if err := (&Runtime{acpBrowser: bridge, acpSharedRestartGuard: restartGuard}).Close(); err != nil {
 			t.Error(err)
+		}
+		if _, err := os.Lstat(filepath.Join(cfg.AgentDockHome, sharedBrowserRestartMarker)); !os.IsNotExist(err) {
+			t.Errorf("clean bridge left startup marker: %v", err)
 		}
 	}()
 	snapshot := bridge.Diagnostics().SharedBudget
@@ -118,10 +129,8 @@ func TestRuntimeACPBrowserNextSharedWorkspaceOptIn(t *testing.T) {
 }
 
 func TestRuntimeACPBrowserNextSharedOptInDenials(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	root, err := browserpolicy.CanonicalWorkspaceRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -156,8 +165,11 @@ func TestRuntimeACPBrowserNextSharedOptInDenials(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(&cfg)
 			}
-			if b, err := newRuntimeACPBrowserBridge(cfg, planner); err == nil {
+			if b, g, err := newRuntimeACPBrowserBridge(cfg, planner); err == nil {
 				_ = b.Close()
+				if g != nil {
+					_ = g.releaseAfterVerifiedClose()
+				}
 				t.Fatal("invalid explicit opt-in silently accepted")
 			}
 		})
@@ -170,15 +182,18 @@ func TestRuntimeACPBrowserNextSharedOptInDenials(t *testing.T) {
 		}
 		t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
 		t.Setenv(nextSharedBrowserWorkspaceEnv, alias)
-		if b, err := newRuntimeACPBrowserBridge(base, planner); err == nil {
+		if b, g, err := newRuntimeACPBrowserBridge(base, planner); err == nil {
 			_ = b.Close()
+			if g != nil {
+				_ = g.releaseAfterVerifiedClose()
+			}
 			t.Fatal("symlink workspace alias accepted")
 		}
 	}
 	// An explicit but invalid opt-in must not degrade into an exclusive pool.
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "stable")
 	t.Setenv(nextSharedBrowserWorkspaceEnv, root)
-	if _, err := newRuntimeACPBrowserBridge(base, planner); err == nil || !strings.Contains(err.Error(), "Next shared ACP browser") {
+	if _, _, err := newRuntimeACPBrowserBridge(base, planner); err == nil || !strings.Contains(err.Error(), "Next shared ACP browser") {
 		t.Fatalf("invalid selection incorrectly fell back: %v", err)
 	}
 }

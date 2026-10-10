@@ -20,19 +20,35 @@ import (
 // consent attestor, or protection against malicious same-user OS processes.
 const nextSharedBrowserWorkspaceEnv = "AGENTDOCK_NEXT_SHARED_BROWSER_WORKSPACE"
 
-func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePlanner) (*toolbrowser.ACPBridge, error) {
+const sharedBrowserRestartMarker = ".shared-browser-restart-pending.v1"
+
+func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePlanner) (*toolbrowser.ACPBridge, *sharedBrowserRestartGuard, error) {
 	registry := toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{})
 	workspace, selected := os.LookupEnv(nextSharedBrowserWorkspaceEnv)
 	if !selected {
-		return toolbrowser.NewACPBridge(planner, registry)
+		bridge, err := toolbrowser.NewACPBridge(planner, registry)
+		return bridge, nil, err
 	}
 	root, err := nextSharedBrowserWorkspace(cfg, workspace)
 	if err != nil {
 		// Do not silently switch to exclusive: an invalid explicit opt-in
 		// must not start unintended Chrome processes or attach a user profile.
-		return nil, fmt.Errorf("Next shared ACP browser admission unavailable: %w", err)
+		return nil, nil, fmt.Errorf("Next shared ACP browser admission unavailable: %w", err)
 	}
-	return toolbrowser.NewNextSingleWorkspaceSharedACPBridge(planner, registry, root)
+	guard, err := acquireSharedBrowserRestartGuard(cfg.AgentDockHome)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Next shared ACP browser restart blocked: %w", err)
+	}
+	bridge, err := toolbrowser.NewNextSingleWorkspaceSharedACPBridge(planner, registry, root)
+	if err != nil {
+		// This constructor never dispatches a worker. It is safe to clear a
+		// marker only at this before-start boundary.
+		if cleanupErr := guard.releaseAfterVerifiedClose(); cleanupErr != nil {
+			return nil, nil, fmt.Errorf("Next shared ACP browser construction and rollback unavailable: %w", cleanupErr)
+		}
+		return nil, nil, err
+	}
+	return bridge, guard, nil
 }
 
 func nextSharedBrowserWorkspace(cfg config.Config, selected string) (string, error) {

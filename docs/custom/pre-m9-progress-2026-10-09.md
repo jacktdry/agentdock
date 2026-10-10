@@ -191,3 +191,10 @@
 - 其他 Workspace ACP session 的 coding 功能不因此被拒絕，但該 Browser Acquire 在啟動前拒絕；RequiredExternal/ExplicitExternal 不 fallback 至 managed。NewRuntime 現在呼叫新 selector，預設 production path 未換。詳見 [P8 §12](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#12-2026-10-10-p8-b-next-runtime-single-workspace-opt-insource-only)。
 - 主 Session 獨立執行完整 app/browser/browserpolicy Go tests、selector/budget 定點 `-race`、go vet、Linux/Windows amd64 無 CGO 交叉編譯及 diff/gofmt，全部 PASS。
 - 本次 runtime wiring／拒絕矩陣為離線測試，沒有 App build/install、Native UAT、使用者 Edge/Profile 操作或 AGY repo 修改。真實多程序 ACP、使用者焦點/彈窗、trusted Core identity 和 crash reconciliation 仍是 release gate。
+
+
+### 2026-10-10 P8-B durable restart denial（SOURCE ONLY）
+
+- 新增 Next-only shared Browser sticky marker，於共享 ACPBridge 建立前 O_EXCL/O_NOFOLLOW + fsync。僅 ACP 與 Bridge 均 clean Close 且 marker inode/owner 一致才 unlink；Core hard crash、舊 marker、篡改與不安全目錄一律拒絕下一次 shared startup。普通 exclusive 模式不變，沒有 OS PID kill。
+- 主 Session 已獨立驗證 app/browser/browserpolicy/mcp-client/process 五模組全量測試、Restart Guard/Next opt-in 專項 race、go vet，以及 Linux/Windows amd64 app/browser 無 CGO 編譯均 PASS；diff/gofmt check PASS。
+- 只有 test-only TMP/HOME marker 與自己建立的測試子程序 SIGKILL，沒有啟動 Chrome/Edge/npx。完整 orphan ownership/reconciliation、使用者可安全解除與真實多 Agent UAT 尚未完成。詳見 [P8 §13](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#13-2026-10-10-p8-b-sticky-core-restart-fencesource-only非-orphan-自動回收)。

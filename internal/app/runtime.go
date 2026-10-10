@@ -53,6 +53,7 @@ type Runtime struct {
 	media                    *toolmedia.Service
 	browser                  *toolbrowser.Service
 	acpBrowser               *toolbrowser.ACPBridge
+	acpSharedRestartGuard    *sharedBrowserRestartGuard
 	computer                 *toolcomputer.Service
 	acpComputer              *toolcomputer.ACPBridge
 	recall                   *toolrecall.Service
@@ -220,13 +221,14 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser route planner: %w", plannerErr)
 		}
-		bridge, bridgeErr := newRuntimeACPBrowserBridge(cfg, planner)
+		bridge, guard, bridgeErr := newRuntimeACPBrowserBridge(cfg, planner)
 		if bridgeErr != nil {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser bridge: %w", bridgeErr)
 		}
 		bridge.SetAdmissionHook(runtime.admitHostOperation)
 		runtime.acpBrowser = bridge
+		runtime.acpSharedRestartGuard = guard
 	}
 	if cfg.ACPEnabled && !cfg.Stdio && runtime.computer != nil && runtime.computer.Broker() != nil {
 		computerBridge, computerBridgeErr := toolcomputer.NewACPBridge(runtime.computer.Broker())
@@ -329,14 +331,22 @@ func (r *Runtime) Close() error {
 		if commandCancel != nil {
 			commandCancel()
 		}
+		acpClosed := true
 		if r.acp != nil {
 			if err := r.acp.Close(); err != nil {
+				acpClosed = false
 				closeErrors = append(closeErrors, fmt.Errorf("close ACP runtime: %w", err))
 			}
 		}
 		if r.acpBrowser != nil {
 			if err := r.acpBrowser.Close(); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close ACP browser bridge: %w", err))
+			} else if acpClosed && r.acpSharedRestartGuard != nil {
+				// Never clear the cross-Core crash marker if ACP or its
+				// browser bridge failed to close authoritatively.
+				if err := r.acpSharedRestartGuard.releaseAfterVerifiedClose(); err != nil {
+					closeErrors = append(closeErrors, fmt.Errorf("release Next shared browser restart guard: %w", err))
+				}
 			}
 		}
 		if r.acpComputer != nil {

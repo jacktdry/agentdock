@@ -271,3 +271,13 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 - `internal/app/acp_browser_runtime_mode_test.go` 僅建構 source-only bridge：驗證 default exclusive、Next opt-in metrics capacity=1、三個不同 Session scopes、foreign Workspace 拒絕且未啟動 Worker，以及 stable variant／錯誤 HOME／功能關閉／stdio／不正規 Workspace／symlink path 的拒絕矩陣。沿用先前 §10 真實 Headless Chrome 的離線證據，**本次未啟動 Chrome、Edge、npx 或 ACP backend**；實際三個獨立 Agent concurrent UAT 仍未完成。
 - 實際 source-only 驗證：`GOPROXY=off GOSUMDB=off GOMAXPROCS=2 go test -p 2 ./internal/app ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=180s` PASS；Next selector／shared budget 專項 `-race` PASS；`go vet -p 2` 三 package PASS；Linux／Windows amd64 無 CGO 的 app/browser test cross-build PASS；`gofmt`／`git diff --check` PASS。
 - **並未部署或切換已安裝 Next**，也未新增 GUI toggle、公開的 Runtime 設定 API、持久化自動啟用或 Windows/Linux 啟用。Production release gate 仍須可信 process/consent authority、Native GUI 無焦點／零彈窗 UAT、權威 Crash/Orphan recovery、跨 Workspace dynamic broker、選定 User Profile 安全路由與回退控制；不能把單 workspace opt-in 視為 P8/M9 完成。
+
+
+## 13. 2026-10-10 P8-B sticky Core restart fence（SOURCE ONLY；非 Orphan 自動回收）
+
+- 問題：上一輪 private shared budget 只在同一 Core 記憶體生命週期限制 Worker 數量。Core 異常終止後重啟可能將計數歸零，無法證明舊 MCP/Chrome 已退出；既有 process group/Job cleanup 及 real headless proof 無法證明所有 detached/未觀測程序已退出。
+- Next-only opt-in 在 *建立* shared Bridge 前以 O_EXCL/O_NOFOLLOW 建立 `<Next AgentDockHome>/.shared-browser-restart-pending.v1`，檢查 private directory owner/mode、regular 0600 owned marker，並 fsync marker 與 directory。存活的另一個 Core 或異常留下的 marker 一律拒絕 shared startup；不依賴 PID、計時器或新的 memory budget 判斷。**未設定 opt-in 的 exclusive 路徑不建立此檔案。**
+- Runtime 持有 pinned directory descriptor 與 marker device/inode；**只有 ACP runtime Close 與 ACP Browser Bridge Close 都成功**才會對比原 inode 再 unlink + fsync directory。Close 失敗、marker replacement、symlink、目錄權限錯誤及持久化失敗均 fail-closed；同一次 release 結果冪等，避免重複刪除。沒有 OS PID kill／猜測 orphan 的操作。
+- deterministic fixtures 在 test-only private HOME 覆蓋併發競爭、inode replacement、安全目錄、正常 close 與受控子程序 hard kill 後 marker 存留。**此 marker 僅防止意外重啟後再啟動另一個 shared Chrome；並非 OS orphan observer、ownership ledger 或 detached-process 自動回收。** 即使沒有殘留 Chrome 也會保守拒絕，還需後續有權威身分證據的 reconciliation 與使用者可安全解除流程，不能以手動刪檔或 PS PID 猜測取代。
+- 驗證：完整 `go test -p 2 ./internal/app ./internal/tool/browser ./internal/browserpolicy ./internal/mcp/client ./internal/process -count=1 -timeout=180s` PASS；Restart Guard／Next opt-in 專項 `-race` PASS；`go vet` 五個模組 PASS；Linux/Windows amd64 無 CGO app/browser test cross-build PASS；`gofmt`、`git diff --check` PASS。一般測試沒有 real headless browser opt-in。
+- macOS Next source-only opt-in，未安裝／部署至 Next 或 stable，未操作 Chrome/Edge/npx/AGY；真實多 Agent 原生 UAT、Profile 權限及零搶焦點仍是 P8/M9 gate。
