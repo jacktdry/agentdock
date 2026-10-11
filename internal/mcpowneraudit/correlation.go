@@ -84,7 +84,7 @@ type nativeDiagnosticSource interface {
 	nativeSnapshot(context.Context, diagnosticRequest) (nativeEvidence, error)
 }
 type kernelPipeSource interface {
-	pipeSnapshot(context.Context, diagnosticRequest) (pipeEvidence, error)
+	pipeSnapshot(context.Context, diagnosticRequest, []transportChild) (pipeEvidence, error)
 }
 
 type diagnosticCorrelation struct {
@@ -119,7 +119,7 @@ func correlate(ctx context.Context, binding adapterBinding, records []managedThr
 	if err != nil || !validStamp(n.stamp, req, now(), authenticatedAdapterDiagnostic) || len(n.loaded) > maxCorrelationRows || len(n.children) > maxCorrelationRows {
 		return fail
 	}
-	p, err := pipes.pipeSnapshot(ctx, req)
+	p, err := pipes.pipeSnapshot(ctx, req, n.children)
 	if err != nil || !validStamp(p.stamp, req, now(), kernelStdioPipeObservation) || len(p.children) > maxCorrelationRows || len(p.children) != len(n.children) {
 		return fail
 	}

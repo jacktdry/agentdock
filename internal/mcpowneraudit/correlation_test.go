@@ -19,7 +19,7 @@ func (f nativeFixture) nativeSnapshot(ctx context.Context, r diagnosticRequest) 
 
 type pipeFixture func(context.Context, diagnosticRequest) (pipeEvidence, error)
 
-func (f pipeFixture) pipeSnapshot(ctx context.Context, r diagnosticRequest) (pipeEvidence, error) {
+func (f pipeFixture) pipeSnapshot(ctx context.Context, r diagnosticRequest, _ []transportChild) (pipeEvidence, error) {
 	return f(ctx, r)
 }
 

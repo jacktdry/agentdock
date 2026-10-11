@@ -93,6 +93,14 @@ Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／bir
 
 本 slice 本機驗證：`gofmt`、`go test ./internal/mcpowneraudit ./cmd/agentdock-next-mcp-owner-audit`、`go test -race ./internal/mcpowneraudit`、`go vet ./internal/mcpowneraudit ./cmd/agentdock-next-mcp-owner-audit` 與 `git diff --check` 通過。兩個套件分別在 Linux／Windows `CGO_ENABLED=0 GOARCH=amd64 go test -c` 編譯通過，未執行跨平台 binary；既有 macOS kernel self-test 在 sandbox 受限，外部重跑通過。無 live Adapter integration／native ownership UAT，最終整合、測試與 commit 由 orchestrator 負責。
 
+#### HIGH-0 第三個安全診斷 checkpoint：Darwin kernel stdio Pipe 觀測器（source-only，未接通）
+
+- `internal/mcpowneraudit/pipe_observer_darwin_cgo.go` 新增 **macOS + cgo 限定**、套件私有的唯讀 `darwinKernelPipeObserver`，以系統 `libproc` 的 `PROC_PIDLISTFDS`／`PROC_PIDFDPIPEINFO` 擷取 kernel `pipe_handle` 和 `pipe_peerhandle`；不使用 `ps`、shell、argv、路徑、環境或工具參數，亦不新增 CLI、HTTP、ACP、程序控制及任何現有 AgentDock/Next runtime wiring。其他平台與 `CGO_ENABLED=0` 僅回 unavailable。
+- 檢查 Adapter/native/child PID、PPID、UID、kernel birth，且 child **必須是 native direct child**。子程序 FD 0（stdin）及 FD 1（stdout）必須是兩條不同的 pipe，native 已開啟 FD 表中各自恰有一個相反 handle/peerhandle 端點。拒絕同端持有、別名 FD、重複 child、缺失 pipe、子程序與父程序相同端點、變更的 process birth 與前後 FD snapshot；**沒有部分證據輸出**。
+- 每次完整觀察固定最多 **1,024 children／每程序 4,096 FDs**，要求同一個本次 challenge、incarnation、五秒內完整採樣，拒絕容量／時間／權限／任一 FD 消失或無法讀取，不會改採不完整的部分集合。Native snapshot 由呼叫端提交完整的 child 列表；**任何超量都不會被當作「全數已查」**。macOS kernel handle 僅作為短時取樣內的 object hint，非長期權限 token。
+- 測試專用 Go helper 建立實際 adapter(test) → native(helper) → child(helper) 的 stdin/stdout pipes：正向 native kernel object identity、身分篡改、重複／空／超限子程序、future／expired／cancelled，以及子程序 stdout 由 test parent 而非 native 持有的**實際錯誤 Pipe 拓樸**均受驗證；重複 FD snapshot 假資料也必須 fail closed。只使用測試自行建立的程序，未碰使用者 live app-server、其他 ACP Session 或 MCP daemon。
+- 此項僅替上一個 typed contract 提供 **可信 OS 端實作候選**，仍非 live authorization：尚缺獨立經 Adapter 驗證的 `native loaded thread → MCP transport → child` 完整診斷擴充、實際協定 handshake/provenance、Manager generation/read-lock fencing，以及「所有 FD/transport 的獨佔性與缺失拓樸」證明。即便 `verified_diagnostic_correlation`，owner 仍固定 `owner_unverified`，不得 kill、close、quarantine 真實程序或判定 orphan。此觀測器也不會證明其他 PID 沒有複製 pipe descriptor，外部共享 daemon／grandchild／reparent 路徑均須另行驗證；符合不了一律不合格。
+
 #### 2026-10-11 HIGH-0 原始碼核對與唯讀實測
 
 - AgentDock `internal/acp/sessions.go` 對 `session/close` 收到確認後清除本地 loaded/projection，再呼叫 `releaseSessionMCP`。現行 `internal/app/acp_browser.go` 的 Host MCP provider 只釋放 AgentDock 自身 Browser／Computer HTTP token/lease，**不持有** Codex app-server 自行啟動的 stdio MCP 子程序。

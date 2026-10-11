@@ -343,3 +343,10 @@
 - 依使用者明確要求，正式 `acp_session close` 關閉 5 個 9 月初已結束的 Codex ACP `ready` 審查 Session（不刪除 transcript），全部變 `closed`；`ready` 294→289、`closed` 146→151。
 - 關閉前後 MCP 數量不變：CBM 65（含 daemon）、DevTools npm 124、server 124、Python MCP 合計 132。故**不繼續關閉其餘 52 個 >30 天候選**；時間長不等於可安全回收的 MCP ownership。Native ACP list 為分頁（每頁 25），不可用第一頁判定其他 Session unloaded。
 - 改優先 HIGH-0：Codex app-server 原生 thread → stdio MCP child mapping／Adapter unload-close 效果的唯讀診斷與安全 fixture 驗證；不 kill、重啟／替換 Codex app-server、Browser、CBM daemon 或 Next。詳細見 [MCP 生命週期規則](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。
+
+
+### 2026-10-11 HIGH-0 Darwin Pipe Observer（Source-only）
+
+- 延續 `187931f6` 原生 correlation contract，新增 Darwin+cgo 私有 `libproc` kernel pipe-endpoint observer，要求 native/child birth identity、direct parent、stdin/stdout opposite kernel handle、完整 FD 對照與 bounded 5-second fresh evidence；其他平台或 noCGO 僅 unavailable。
+- 使用測試建立的 Go native/child helper 驗證正向及物理上錯誤的 parent/child stdout topology（native 沒持有 child stdout 的 peer）必拒絕；另涵蓋身分、重複、資料不完整、時效、取消及 FD replay/mutation。**非 production integration，絕不等於管理者擁有或有權終止該 PID。**
+- HIGH-0 仍待：由可信 Codex ACP Adapter 原生介面提供完整 loaded-thread/stdio transport/child mapping，Manager generation read-lock fence，與 20-cycle baseline；本次沒有關閉、重啟、部署或觸碰 stable/Next/ChatGPT/Codex/Chrome/AGY/CBM 的現有 Session。
