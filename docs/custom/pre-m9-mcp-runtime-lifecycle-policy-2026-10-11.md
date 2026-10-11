@@ -78,6 +78,21 @@ macOS opt-in CLI：`go run ./cmd/agentdock-next-mcp-owner-audit --root-pid <已�
 
 成功只證明**非原子時間窗內觀察到的 PID/PPID 祖先關係**，所有 owner 固定 `owner_unverified`。已知 MCP family 計數排除 root，僅是 kernel executable basename 的 allowlist 名稱提示；basename 可能截斷，Node／Python／npm launcher 無法辨識其 MCP payload，仍為 unknown，因此 0 不是不存在，client 也不是 indexing job。缺失 parent、已 reparent/detach 的程序無法歸因；後續 identity 仍可能改變。不得推論 native thread/session、transport、managed_next/external authority、健康、orphan 或清理資格。Browser／Computer host `ReleaseSession` 不擁有 Codex app-server stdio children。下一 gate 仍是 adapter/native instrumenting 真實的 `Session → native thread → stdio transport → PID/birth` 映射；本 checkpoint 不改變第五節第一批 close probe 或停止擴大的結論。
 
+#### HIGH-0 第二個安全診斷 checkpoint（source-only，未接通）
+
+`internal/mcpowneraudit/correlation.go` 新增套件私有、程序內的 typed evidence contract；**沒有 production caller、可信 Adapter diagnostic 實作或 kernel pipe observer，也沒有部署 native ownership**。CLI schema／行為保持第一個 checkpoint；不新增 CLI／HTTP／ACP 輸入、registry、controller、任何 cleanup 或 close/kill 權限。
+
+- Managed mapping 僅保留 AgentDock record 的 local ID／remote native thread ID 與 adapter incarnation；不收集 title、cwd、argv、env、URL。只有 pinned Adapter 明確保證 remote ID 就是 native thread ID 才可填入，persisted／ready record 或標準 `session/list` **不證明 loaded**。
+- 每次新 256-bit challenge、固定 Next/Codex/stdio scope、相同 incarnation 與 adapter/native PID＋kernel birth，要求完整 loaded-thread／transport-child snapshot 與獨立完整 kernel pipe snapshot；回應須在本次 request 起算 5 秒內完成採樣及發布。每類上限 1,024 rows、ID 上限 128 bytes，duplicate／conflict、missing／partial、stale／future／replay 一律無部分關聯輸出。
+- 重用既有唯讀 kernel collector 的 birth／PPID／UID／PGID 重查；要求 native 是 pinned adapter 的 exact direct child，transport child 是 native 的 exact direct child，且 adapter 與 kernel 觀察的 stdin/stdout pipe object identities 完全一致。此 slice 刻意不推論 npm launcher 孫程序或 shared/reparented transport；那些拓樸在額外證據契約完成前不合格。
+- 正向 fixture 只得到 `verified_diagnostic_correlation`、mapping 數及 correlated PID；owner **仍為 `owner_unverified`**。不代表 Next-owned、健康、orphan、授權或可終止；kernel 採樣仍非原子。所有證據 input 欄位私有，普通 JSON 不輸出 raw local/thread/transport ID 或 arbitrary executable name；失敗僅 `not_qualified`，不回傳來源錯誤。
+
+**Live integration gate：**未來需 Adapter-owned、已驗證 peer 的 diagnostic extension，在 AgentDock pinned adapter incarnation 下提供完整 loaded-thread→stdio transport→child PID/birth 與 pipe identity；由 Manager read lock 擷取 record mapping，generation fence 必須涵蓋採樣直到發布。另一個 OS 唯讀 observer 必須證明 native 與 child 分別持有同一 stdin/stdout pipe 的相對 endpoint，且 transport exclusive binding 完整可核對；不能以 FD 數字、名稱、parent PID 或 peer 自報 `authenticated=true` 代替。私有 interface 只是可信整合邊界，**不是 authentication 實作**。今日標準 ACP 不暴露 `thread/loaded/list`／`mcpServerStatus/list`，既有 kernel table 也沒有 pipe ownership；不得直接共用 live app-server stdio。任何 gate 缺失保持未接通、不合格，無 automatic cleanup。
+
+Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／birth／reparent／pipe mismatch、重播、容量、duplicate／partial、取消與 redaction，並以共享 immutable fixtures 驗證並行唯讀。此 checkpoint 不變更第五節停止擴大 Session close 的結論。
+
+本 slice 本機驗證：`gofmt`、`go test ./internal/mcpowneraudit ./cmd/agentdock-next-mcp-owner-audit`、`go test -race ./internal/mcpowneraudit`、`go vet ./internal/mcpowneraudit ./cmd/agentdock-next-mcp-owner-audit` 與 `git diff --check` 通過。兩個套件分別在 Linux／Windows `CGO_ENABLED=0 GOARCH=amd64 go test -c` 編譯通過，未執行跨平台 binary；既有 macOS kernel self-test 在 sandbox 受限，外部重跑通過。無 live Adapter integration／native ownership UAT，最終整合、測試與 commit 由 orchestrator 負責。
+
 #### 2026-10-11 HIGH-0 原始碼核對與唯讀實測
 
 - AgentDock `internal/acp/sessions.go` 對 `session/close` 收到確認後清除本地 loaded/projection，再呼叫 `releaseSessionMCP`。現行 `internal/app/acp_browser.go` 的 Host MCP provider 只釋放 AgentDock 自身 Browser／Computer HTTP token/lease，**不持有** Codex app-server 自行啟動的 stdio MCP 子程序。
