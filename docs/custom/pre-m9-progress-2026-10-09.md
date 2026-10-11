@@ -393,3 +393,7 @@
 ### 2026-10-11 Codex ACP B0 首輪 source-only 實作（尚未部署）
 
 已加入 `AGENTDOCK_NEXT_CODEX_MCP_REPORT=source-only` 的 private Next-only Codex ACP 新 Run prompt decorator：上游仍可使用原本多段文字／其他 modality，純文字在真正 ACP `session/prompt` 被送出前會附上「回報本輪使用的 MCP 與安全收尾；不得 kill 未證實 owner」的指令；Steering 不重新注入，接近 8 MiB 邊界不擴增。Wrapper/Kernel 註冊與真正資源回收仍未實作，模型自述不可作為終止權。這是 **source-only + test-only Adapter**，沒有改動使用者全域 Codex CLI MCP 設定與已安裝 Next。
+
+### 2026-10-11 B1 source-only：Codex ACP 專用 stdio MCP launch registrar
+
+`internal/mcp/launchregistry`、`cmd/agentdock-next-mcp-launch` 新增獨立 source-only wrapper + macOS Unix kernel peer-verified registrar。Preflight 核對預期 AppServer birth/UID、wrapper direct parent 以及 server/config digest；獲單次 nonce 後才啟動 bottom MCP，started phase 驗證 wrapper-owned child kernel birth/parent；MCP stdio 透明、child 私有 launcher env 移除、超時／偽造／重播 fail closed。**只有 AppServer→wrapper→child diagnostic，不代表 native Thread/Session owner，也沒有自動 kill/reclaim**。無 Core listener/wiring、無生產 configuration 或部署；只由 test-owned fixtures 驗證。詳細 [ACP MCP cooperative design](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#e-b1-checkpointmacos-test-owned-mcp-stdio-launch-registry2026-10-11-source-only)。

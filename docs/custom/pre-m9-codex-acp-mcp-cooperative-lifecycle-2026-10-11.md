@@ -53,3 +53,15 @@ AgentDock 最終給上層 ChatGPT 的結構化摘要預計為：
 本決議以 **ACP-driven cooperative observability** 取代「先 Fork Codex CLI 修改 Rust，再能完成 P0」的工程策略。`docs/custom/p0-native-codex-rust-owner-2026-10-11.md` 和原 `readNextNativeMCPPartialEvidence` 是**歷史 read-only provenance 紀錄**，不得因此推論已驗證真正 native Thread ownership；不再對本 P0 施加自行編譯 Rust 的前置條件。
 
 新的 P0 驗收定義是：**可以安全列出和驗證 AgentDock/Adapter 擁有的 MCP 資源、可信且如實回報 unknown、不做未授權 close、在可證明的 scope 釋放資源**。對原生 Codex 所管理且不可驗證的 per-Thread MCP，保持保護狀態並追蹤官方修正；不得用「全部自動殺掉」作為 P0 的替代驗收。
+
+## E. B1 checkpoint：macOS test-owned MCP stdio launch registry（2026-10-11 source-only）
+
+本輪已在 **不動官方 Codex CLI、Codex ACP fork、現有全域 `~/.codex/config.toml` 或運行中的 MCP** 前提下完成第一階段 wrapper + registrar 獨立原型：
+
+- `internal/mcp/launchregistry/protocol.go`：最長 2 KiB 單行、只允許已知欄位且拒絕重複鍵的 JSON 控制協定。`intent`（server ID + opaque SHA-256 config digest）→ registrar 隨機單次 nonce → `started`（child kernel birth）→ `recorded`；診斷內容只通過私有 Unix socket，不出現在 MCP stdout。密鑰與 owner 權限**不由此協定產生**。
+- `internal/mcp/launchregistry/registrar_darwin.go`：只有已知 **AppServer 完整 OS PID/birth/eUID** 和明確核准 logical server/config digest 的 Registrar 才允許進入 preflight。Kernel `LOCAL_PEERPID` / `LOCAL_PEERCRED` 和 `ObserveBirthIdentity` 再次驗證 wrapper 是該 AppServer 的直接 child；`started` 需與同一 socket 的 nonce 相同，child PID/birth/eUID/PPID 再核對為 wrapper 的直接 child。發送 `recorded` 前重取 AppServer、wrapper、child 身分。超時／不符 fail closed；macOS 以外直接 unavailable。
+- `internal/mcp/launchregistry/runner.go` + `cmd/agentdock-next-mcp-launch/main.go`：執行程式是**尚未安裝的獨立原始碼 CLI**，必須有私有 launcher metadata `AGENTDOCK_NEXT_MCP_LAUNCH_CORE_IDENTITY`（Registrar Core kernel birth）及明確指定的 socket、server/config、underlying MCP command 才能啟動。Preflight 未成功 **不啟動** underlying child；啟動後核對自有 direct-child PID/birth，再回報同一 socket。MCP stdin/stdout/stderr 透傳、等待**自己**的 child `Wait`，不污染 JSON-RPC；所有 `AGENTDOCK_NEXT_MCP_LAUNCH_*` env 在傳給 child 前移除；不得由提示詞自行設定 launch parameters。
+- 這是 **read-only provenance 原型**：即使 `Observation` 成功也只有 `app-server → wrapper → direct child`，沒有 native Codex Thread → transport 的完整證據，沒有 per-Session exclusive lease、process signal、reclaim API、Core runtime binding、shared/Next install 或自動 retry。**不得因此解除 HIGH-0 的其他 safety gate，或對 PID 進行自動清理**。當 MCP child 在 spawn 成功後回報失敗時，wrapper 只等待自己已啟動的 child，向 Codex 回傳失敗，不根據名字或 PID 做 kill；未清楚關閉 transport 時仍需額外生命周期治理。
+- 下一段 integration 須先證明 Codex ACP 有**獨立 profile config scope** 能只對 Next 受控 server 配置 wrapper；Core Registrar 需綁定實際 Next-owned Adapter → dedicated app-server 生存週期，安全建立 Unix listener、管理 config fingerprint 和世代、處理 audit 完整性，並提供唯讀 operator inventory；未驗證 native Thread／共享 borrower 時所有 `cleanup_allowed=false`。
+
+這輪僅用 test binary 模擬 *owned parent app-server → wrapper → echo MCP*；不是對官方 Codex runtime 實際取得 Thread owner 的驗證。對進程數倍增的既有 MCP（CBM、Chrome DevTools、search-console）**沒有動作或承諾會自動回收**。
