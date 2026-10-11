@@ -220,3 +220,25 @@ func TestMCPDiagnosticScopeLostTransportOrExpiredContext(t *testing.T) {
 		}
 	})
 }
+
+func TestNextEarlyMCPDiagnosticRequiresLiveAdapterButNotLoadedSession(t *testing.T) {
+	manager, _ := newMCPDiagnosticTestManager(t)
+	manager.mu.Lock()
+	originallyLoaded := manager.loaded
+	manager.loaded = make(map[string]sessionLifecycleResponse)
+	manager.mu.Unlock()
+	t.Cleanup(func() { manager.mu.Lock(); manager.loaded = originallyLoaded; manager.mu.Unlock() })
+	called := 0
+	if err := manager.withMCPDiagnosticScope(context.Background(), func(context.Context, diagnosticManagerScope) error { called++; return nil }); err == nil || called != 0 {
+		t.Fatalf("regular scope accepted empty loaded Session: err=%v called=%d", err, called)
+	}
+	if err := manager.withMCPDiagnosticScopePolicy(context.Background(), true, func(_ context.Context, scope diagnosticManagerScope) error {
+		called++
+		if scope.adapter.PID <= 0 || len(scope.loaded) != 0 {
+			t.Fatalf("invalid early signed Adapter scope: %+v", scope)
+		}
+		return nil
+	}); err != nil || called != 1 {
+		t.Fatalf("early scoped adapter evidence unavailable: err=%v called=%d", err, called)
+	}
+}

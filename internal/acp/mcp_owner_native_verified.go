@@ -129,12 +129,16 @@ func decodeNextNativeSigned(key []byte, nonce string, signed nextNativeSigned) (
 // Even a valid MAC + OS adapter→native birth does NOT prove native Thread→MCP
 // stdio pipe→child PID. We *always* return ChildProcessProof=unavailable.
 func (m *Manager) readNextNativeMCPPartialEvidence(ctx context.Context, key []byte) (nativeMCPPartialEvidence, error) {
+	return m.readNextNativeMCPPartialEvidenceQualified(ctx, key, false)
+}
+
+func (m *Manager) readNextNativeMCPPartialEvidenceQualified(ctx context.Context, key []byte, allowEmpty bool) (nativeMCPPartialEvidence, error) {
 	fail := nativeMCPPartialEvidence{}
 	if len(key) != 32 || m == nil {
 		return fail, errMCPDiagnosticNotQualified
 	}
 	var report nativeMCPPartialEvidence
-	err := m.withMCPDiagnosticScope(ctx, func(ctx context.Context, scope diagnosticManagerScope) error {
+	err := m.withMCPDiagnosticScopePolicy(ctx, allowEmpty, func(ctx context.Context, scope diagnosticManagerScope) error {
 		// This is a read-only ACP diagnostic on the locally pinned Adapter. Do not
 		// call back into Manager methods requiring mu.Lock while the scope is held.
 		stored := m.process.spec.Environment["AGENTDOCK_NEXT_MCP_OWNER_DIAGNOSTIC_KEY"]
@@ -205,7 +209,7 @@ type NextCodexAppServerBirths struct {
 }
 
 func (m *Manager) NextCodexAppServerBirths(ctx context.Context, key []byte) (NextCodexAppServerBirths, error) {
-	report, err := m.readNextNativeMCPPartialEvidence(ctx, key)
+	report, err := m.readNextNativeMCPPartialEvidenceQualified(ctx, key, true)
 	if err != nil || report.ChildProcessProof != "unavailable" || report.ReclaimAllowed {
 		return NextCodexAppServerBirths{}, errMCPDiagnosticNotQualified
 	}

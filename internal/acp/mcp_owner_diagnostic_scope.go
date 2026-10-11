@@ -39,6 +39,13 @@ type diagnosticManagerScope struct {
 // (close/resume/rebind/adapter replacement) during evidence capture/publication.
 // This is not native thread/stdio ownership proof and authorizes no cleanup.
 func (m *Manager) withMCPDiagnosticScope(ctx context.Context, callback func(context.Context, diagnosticManagerScope) error) error {
+	return m.withMCPDiagnosticScopePolicy(ctx, false, callback)
+}
+
+// allowEmpty only relaxes the requirement for at least one *loaded* ACP
+// Session. It never creates an Adapter, bypasses transport/OS birth checks,
+// or grants native MCP child ownership. Used by the Next B3 early diagnostic.
+func (m *Manager) withMCPDiagnosticScopePolicy(ctx context.Context, allowEmpty bool, callback func(context.Context, diagnosticManagerScope) error) error {
 	if m == nil || ctx == nil || callback == nil || ctx.Err() != nil {
 		return errMCPDiagnosticNotQualified
 	}
@@ -47,7 +54,7 @@ func (m *Manager) withMCPDiagnosticScope(ctx context.Context, callback func(cont
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.closed || m.process == nil || m.process.pid <= 0 || m.process.connection == nil || m.process.command == nil || m.process.command.Process == nil || m.process.command.Process.Pid != m.process.pid || len(m.loaded) == 0 || len(m.loaded) > diagnosticScopeMaxLoaded {
+	if m.closed || m.process == nil || m.process.pid <= 0 || m.process.connection == nil || m.process.command == nil || m.process.command.Process == nil || m.process.command.Process.Pid != m.process.pid || (len(m.loaded) == 0 && !allowEmpty) || len(m.loaded) > diagnosticScopeMaxLoaded {
 		return errMCPDiagnosticNotQualified
 	}
 	connection := m.process.connection

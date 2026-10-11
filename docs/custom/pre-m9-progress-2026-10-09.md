@@ -401,3 +401,7 @@
 ### 2026-10-11 Codex ACP MCP B2：Private Core registrar source-only
 
 獨立 Go `launchregistry.PrivateCoreListener` + HMAC-attested ACP Adapter→native birth bridge 已完成：私人不覆寫 socket、四連線/64 列上限、完整 Core→Adapter→Codex app-server→wrapper→MCP kernel 來源、唯讀 snapshot、僅回收自己建立的 socket。已有 test helper 執行五階段程序鏈，沒有 native Codex CLI 操作。`runtime_next_codex_mcp_registration.go` 僅 source-only opt-in 且不會自動開啟 listener。發現 Codex ACP `createSessionConfig` 的 request-scoped `mcp_servers` 會受全域設定合併與同名 dedup 影響；仍須處理 app-server 初始啟動時的可信通知以及 P5/M8 allowlist 才能正式接線。詳見 [B2 設計與限制](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#f-b2-checkpointprivate-core-listener--acp-signed-ownership-bridge2026-10-11source-only)。
+
+### 2026-10-11 B3 Codex ACP early lifecycle（source-only）
+
+在獨立 `codex-acp` fork 實作 pre-app-server source-only `CODEX_HOME` 防止沿用全域 MCP 的保守隔離；Session Config 遇 native effective/project MCP server（含無 requested MCP 的情況）就拒絕，不能 silently dedup。同時擴充 Next Go 原 HMAC 診斷允許 Adapter 已啟動但 loaded Session 為空，仍須 OS adapter→app-server birth 核驗。正式隔離資料夾與 auth 不自動建立／搬移，尚未打通 B2 Core listener 的 production wiring，native Thread→child ownership 仍 unknown，不能自動清理。詳見 [B3 checkpoint](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#g-b3-checkpointcodex-acp-啟動前的保守隔離與零-loaded-session-診斷2026-10-11source-only)。

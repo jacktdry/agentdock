@@ -100,3 +100,17 @@ func TestNextNativeCodexTypeScriptHMACInterop(t *testing.T) {
 		t.Fatalf("Codex TS wire incompatible: %+v %v", report, err)
 	}
 }
+
+func TestNextNativeSignedPreSessionEmptyIsDiagnosticOnly(t *testing.T) {
+	key := make([]byte, 32)
+	nonce := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	signed := makeNativeSignedFixture(t, key, nonce, func(p *nextNativePayload) {
+		p.ActiveACPThreadIDs = []string{}
+		p.LoadedThreadIDs = []string{}
+		p.MCPByThread = []nextNativeThreadStatus{}
+	})
+	report, err := decodeNextNativeSigned(key, nonce, signed)
+	if err != nil || len(report.LoadedThreadIDs) != 0 || report.ReclaimPermission || report.MCPChildPIDAndTransport != "unavailable" {
+		t.Fatalf("pre-session signed inventory rejected or granted ownership: %+v %v", report, err)
+	}
+}
