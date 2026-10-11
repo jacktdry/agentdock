@@ -337,3 +337,9 @@
 
 - 唯讀觀察：CBM 64 Clients + 1 daemon、DevTools 約 123–124 servers + 約 124 npm launcher、`mcp-search-console` 約 130 Python 子程序；多數上層為同一 Codex ACP app-server，但尚未確認有效 loaded thread 或 orphan。Memory shared HTTP/legacy stdio 與 GitHub/GitLab 並未觀察到同級程序數量。
 - 已於 roadmap 新增 Pre-M9 cross-cutting HIGH：先唯讀 owner/session/child mapping，再為 Next-owned MCP 建立 lease/generation/close/quarantine，最後以 Next-only macOS/Windows stress 驗收。此為未實作待辦，無 live cleanup、無 stable/Next/ChatGPT/Codex/Chrome/Edge/AGY 變更。詳見 [共用契約](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。
+
+### 2026-10-11 09:36 Codex ACP 舊 Session 第一批清理驗證（停止擴大）
+
+- 依使用者明確要求，正式 `acp_session close` 關閉 5 個 9 月初已結束的 Codex ACP `ready` 審查 Session（不刪除 transcript），全部變 `closed`；`ready` 294→289、`closed` 146→151。
+- 關閉前後 MCP 數量不變：CBM 65（含 daemon）、DevTools npm 124、server 124、Python MCP 合計 132。故**不繼續關閉其餘 52 個 >30 天候選**；時間長不等於可安全回收的 MCP ownership。Native ACP list 為分頁（每頁 25），不可用第一頁判定其他 Session unloaded。
+- 改優先 HIGH-0：Codex app-server 原生 thread → stdio MCP child mapping／Adapter unload-close 效果的唯讀診斷與安全 fixture 驗證；不 kill、重啟／替換 Codex app-server、Browser、CBM daemon 或 Next。詳細見 [MCP 生命週期規則](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。

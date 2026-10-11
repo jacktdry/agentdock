@@ -85,3 +85,24 @@
 ### 對目前 live 系統的約束
 
 本案是**新增改進計畫，不是授權清理現有 PID**。禁止對原版 AgentDock、已安裝 Next、Codex ACP/ChatGPT Desktop、GitHub/GitLab、Chrome/Edge 或 CBM shared daemon 進行 live restart/kill/disable。P8 `31 ACK 與 WAL 尚是 source-only prototype，也不能因這項規則解除 Browser sticky marker 或啟用 auto restart。
+
+## 五、2026-10-11 09:36 第一批人工 Session Close 檢查點（已執行）
+
+依本輪使用者明確授權，透過現行 AgentDock Codex ACP **正式 `acp_session action=close`**，選取 2026-09-02～03 最後更新、`status=ready`、`last_stop_reason=end_turn` 的 **5 個唯讀審查型 managed Session** 做第一批正常 close。事先用 `acp_session inspect` 確認；5 個回應全數 `status=closed`。**沒有 `session/delete`、kill、restart、sign-out 或修改 adapter app-server/MCP daemon。**
+
+| 標準化程序／Session 計數 | 關閉前 | 關閉後 | 變化 |
+|---|---:|---:|---:|
+| Codex ACP managed ready | 294 | 289 | -5 |
+| Codex ACP managed closed | 146 | 151 | +5 |
+| CBM Client + daemon | 65 | 65 | 0 |
+| Chrome DevTools npm launcher | 124 | 124 | 0 |
+| Chrome DevTools server | 124 | 124 | 0 |
+| Python MCP/Memory | 132 | 132 | 0 |
+
+**結果：五個 ACP Session 邏輯關閉成功，但 MCP 子程序沒有下降。** 無法確認其原因是 Session 原本沒擁有目前 PID、或 Adapter/native thread 尚未 unload。此時 Codex ACP app-server 已啟動約 3 天 17 小時，與 9 月初 Session 的最後更新時間不同；不能直接以 Session age 推論目前 MCP age。
+
+特別更正：`acp_session list` 的原生 `remote_count=25` 是**分頁**，有 `next_cursor`；未出現在第一頁不代表沒有被載入。此輪唯讀核對前 5 頁 125 筆，不是完整 native thread owner map。
+
+依已宣布停止門檻（關閉有效而 MCP count 無下降），**停止擴大其餘 52 個 >30 天候選**。這次是獲使用者明確授權的五筆 managed Session close，不表示授權批量 kill Codex/Browser/CBM。
+
+HIGH-0 下一步必須先建立 `Codex app-server → native thread/session → MCP stdio transport → child PID/birth` 的真實映射；確認 adapter 的 `session/close` 是否導致 thread unload/stdio EOF/process Wait；僅在**已證明由 Next 擁有**且沒有使用者工作時研究可安全清理的項目。對未知 owner 保守不動。
