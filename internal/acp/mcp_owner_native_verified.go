@@ -171,10 +171,16 @@ func (m *Manager) readNextNativeMCPPartialEvidence(ctx context.Context, key []by
 				return errMCPDiagnosticNotQualified
 			}
 		}
-		// OS source independently checks direct parent + UID + fresh birth. Native
-		// child PID is observed-only and never mapped to any MCP child PID here.
-		native, err := process.ObserveDirectChildBirth(ctx, scope.adapter.PID, payload.AppServerPID)
-		if err != nil || native.EffectiveUID != scope.adapter.EffectiveUID {
+		// A Codex app-server spawned by Node need not create its OWN process
+		// group. Do not impose the managed Go stdio child PGID=PID contract
+		// here: verify its direct PPID, UID, exact kernel birth and re-sample.
+		// No native Thread/transport/MCP-child ownership follows from this.
+		native, err := process.ObserveBirthIdentity(ctx, payload.AppServerPID)
+		if err != nil || native.ParentPID != scope.adapter.PID || native.EffectiveUID != scope.adapter.EffectiveUID || native.PID == scope.adapter.PID {
+			return errMCPDiagnosticNotQualified
+		}
+		native2, err := process.ObserveBirthIdentity(ctx, payload.AppServerPID)
+		if err != nil || native2 != native {
 			return errMCPDiagnosticNotQualified
 		}
 		rows := 0
@@ -188,4 +194,20 @@ func (m *Manager) readNextNativeMCPPartialEvidence(ctx context.Context, key []by
 		return fail, errMCPDiagnosticNotQualified
 	}
 	return report, nil
+}
+
+// NextCodexAppServerBirths exposes a strict read-only slice of the existing
+// authenticated Adapter diagnostic to the private Next Core registrar. It
+// must not be used as native per-thread proof or process-control authority.
+type NextCodexAppServerBirths struct {
+	Adapter   process.BirthIdentity
+	AppServer process.BirthIdentity
+}
+
+func (m *Manager) NextCodexAppServerBirths(ctx context.Context, key []byte) (NextCodexAppServerBirths, error) {
+	report, err := m.readNextNativeMCPPartialEvidence(ctx, key)
+	if err != nil || report.ChildProcessProof != "unavailable" || report.ReclaimAllowed {
+		return NextCodexAppServerBirths{}, errMCPDiagnosticNotQualified
+	}
+	return NextCodexAppServerBirths{Adapter: report.Adapter, AppServer: report.Native}, nil
 }

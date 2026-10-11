@@ -397,3 +397,7 @@
 ### 2026-10-11 B1 source-only：Codex ACP 專用 stdio MCP launch registrar
 
 `internal/mcp/launchregistry`、`cmd/agentdock-next-mcp-launch` 新增獨立 source-only wrapper + macOS Unix kernel peer-verified registrar。Preflight 核對預期 AppServer birth/UID、wrapper direct parent 以及 server/config digest；獲單次 nonce 後才啟動 bottom MCP，started phase 驗證 wrapper-owned child kernel birth/parent；MCP stdio 透明、child 私有 launcher env 移除、超時／偽造／重播 fail closed。**只有 AppServer→wrapper→child diagnostic，不代表 native Thread/Session owner，也沒有自動 kill/reclaim**。無 Core listener/wiring、無生產 configuration 或部署；只由 test-owned fixtures 驗證。詳細 [ACP MCP cooperative design](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#e-b1-checkpointmacos-test-owned-mcp-stdio-launch-registry2026-10-11-source-only)。
+
+### 2026-10-11 Codex ACP MCP B2：Private Core registrar source-only
+
+獨立 Go `launchregistry.PrivateCoreListener` + HMAC-attested ACP Adapter→native birth bridge 已完成：私人不覆寫 socket、四連線/64 列上限、完整 Core→Adapter→Codex app-server→wrapper→MCP kernel 來源、唯讀 snapshot、僅回收自己建立的 socket。已有 test helper 執行五階段程序鏈，沒有 native Codex CLI 操作。`runtime_next_codex_mcp_registration.go` 僅 source-only opt-in 且不會自動開啟 listener。發現 Codex ACP `createSessionConfig` 的 request-scoped `mcp_servers` 會受全域設定合併與同名 dedup 影響；仍須處理 app-server 初始啟動時的可信通知以及 P5/M8 allowlist 才能正式接線。詳見 [B2 設計與限制](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#f-b2-checkpointprivate-core-listener--acp-signed-ownership-bridge2026-10-11source-only)。

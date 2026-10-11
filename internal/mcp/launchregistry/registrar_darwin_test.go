@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/uvwt/agentdock/internal/process"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +48,11 @@ func TestLaunchRegistryHelperProcess(t *testing.T) {
 		if err != nil {
 			os.Exit(23)
 		}
+		if coreJSON := os.Getenv("LAUNCH_TEST_CORE_IDENTITY"); coreJSON != "" {
+			if err := json.Unmarshal([]byte(coreJSON), &parent); err != nil {
+				os.Exit(31)
+			}
+		}
 		opts := RunOptions{Socket: os.Getenv("AGENTDOCK_NEXT_MCP_LAUNCH_SOCKET"), Server: os.Getenv("LAUNCH_TEST_SERVER"), ConfigDigest: os.Getenv("LAUNCH_TEST_DIGEST"),
 			Program: os.Args[0], Args: []string{"-test.run=^TestLaunchRegistryHelperProcess$"},
 			Env: append(os.Environ(), "LAUNCH_REG_HELPER=mcp"), Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, ExpectedRegistrar: parent}
@@ -53,6 +60,40 @@ func TestLaunchRegistryHelperProcess(t *testing.T) {
 			os.Exit(24)
 		}
 		os.Exit(0) // Wrapper fixture likewise cannot write Go test PASS to MCP stdout.
+	case "adapter":
+		cmd := exec.Command(os.Args[0], "-test.run=^TestLaunchRegistryHelperProcess$")
+		cmd.Env = append(os.Environ(), "LAUNCH_REG_HELPER=appserver")
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Start(); err != nil {
+			os.Exit(32)
+		}
+		if err := os.WriteFile(os.Getenv("LAUNCH_TEST_APP_PID_FILE"), []byte(strconv.Itoa(cmd.Process.Pid)), 0600); err != nil {
+			os.Exit(33)
+		}
+		if err := cmd.Wait(); err != nil {
+			os.Exit(34)
+		}
+		os.Exit(0)
+	case "appserver":
+		// Hold native app-server until Core explicitly publishes its expected
+		// Adapter/native scope, then create our dedicated stdio wrapper.
+		if !waitFixtureFile(os.Getenv("LAUNCH_TEST_GO_FILE"), 5*time.Second) {
+			os.Exit(35)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestLaunchRegistryHelperProcess$")
+		cmd.Env = append(os.Environ(), "LAUNCH_REG_HELPER=wrapper")
+		cmd.Stdin = strings.NewReader("hello\n")
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			os.Exit(36)
+		}
+		if err := os.WriteFile(os.Getenv("LAUNCH_TEST_DONE_FILE"), []byte("done"), 0600); err != nil {
+			os.Exit(37)
+		}
+		if !waitFixtureFile(os.Getenv("LAUNCH_TEST_RELEASE_FILE"), 5*time.Second) {
+			os.Exit(38)
+		}
+		os.Exit(0)
 	case "forge":
 		raw, err := net.Dial("unix", os.Getenv("AGENTDOCK_NEXT_MCP_LAUNCH_SOCKET"))
 		if err != nil {
@@ -223,4 +264,15 @@ func TestLaunchProtocolStrictFraming(t *testing.T) {
 	if got := strippedChildEnv([]string{"SAFE=1", "AGENTDOCK_NEXT_MCP_LAUNCH_SOCKET=secret", "AGENTDOCK_NEXT_MCP_LAUNCH_KEY=secret"}); len(got) != 1 || got[0] != "SAFE=1" {
 		t.Fatalf("leaked env: %q", got)
 	}
+}
+
+func waitFixtureFile(path string, timeout time.Duration) bool {
+	end := time.Now().Add(timeout)
+	for time.Now().Before(end) {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
 }

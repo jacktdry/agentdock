@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -66,4 +67,18 @@ func (s *Service) IsLiveManagedSession(profileID, localID string) bool {
 	}
 	manager, _, err := s.managerFor(profileID)
 	return err == nil && manager.IsLiveManagedSession(localID)
+}
+
+// NextCodexAppServerBirths requires the exact Codex profile and a private
+// authenticated Adapter challenge; never activate an absent ACP process.
+// A kernel-correlated app-server does not prove per-thread MCP ownership.
+func (s *Service) NextCodexAppServerBirths(ctx context.Context, key []byte) (acpruntime.NextCodexAppServerBirths, error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || len(key) != 32 {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex MCP app-server evidence unavailable")
+	}
+	manager, profileID, err := s.managerFor("codex")
+	if err != nil || profileID != "codex" {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex MCP app-server evidence unavailable")
+	}
+	return manager.NextCodexAppServerBirths(ctx, key)
 }

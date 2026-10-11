@@ -65,3 +65,19 @@ AgentDock 最終給上層 ChatGPT 的結構化摘要預計為：
 - 下一段 integration 須先證明 Codex ACP 有**獨立 profile config scope** 能只對 Next 受控 server 配置 wrapper；Core Registrar 需綁定實際 Next-owned Adapter → dedicated app-server 生存週期，安全建立 Unix listener、管理 config fingerprint 和世代、處理 audit 完整性，並提供唯讀 operator inventory；未驗證 native Thread／共享 borrower 時所有 `cleanup_allowed=false`。
 
 這輪僅用 test binary 模擬 *owned parent app-server → wrapper → echo MCP*；不是對官方 Codex runtime 實際取得 Thread owner 的驗證。對進程數倍增的既有 MCP（CBM、Chrome DevTools、search-console）**沒有動作或承諾會自動回收**。
+
+## F. B2 checkpoint：Private Core listener + ACP signed ownership bridge（2026-10-11，source-only）
+
+**已新增程式碼，尚未接入正式啟動路徑**：
+
+- `internal/mcp/launchregistry/core_listener_darwin.go` 實作 **private Core Unix socket registrar**：要求已存在、由本 UID 擁有且權限僅 owner 可存取（不可 symlink）的 root，以原子化私有目錄建立**唯一新 socket**（mode 0600），不覆蓋或刪除其他既存 socket；最長 4 個並行連線、最多 64 筆有界唯讀診斷，Close 只釋放本服務建立的 socket/暫存目錄，從不向 MCP 發送 signal 或觸發 app-server 回收。Linux/Windows 是 unavailable stub。正式 Core 只有取得可信 `ScopeProvider` 才能建構此服務；預設完全不開 socket。
+- `TrustedScope{Adapter,AppServer}` 的安全條件：Registrar 在每個 IPC handshake **之前及之後**核對實際 kernel `Core → Adapter（直接子程序）→ app-server（直接子程序）` 的 PID、出生時間、PPID、eUID，不接受自己冒充 Adapter、換代、PID reuse、非授權 UID；既有 B1 Registrar 再以同一個 socket 的 `LOCAL_PEERPID`／nonce 與 kernel birth 核對 `app-server → wrapper → MCP`。所有核對**僅建立 read-only app-server-owned native MCP startup provenance**；不證明各個 Codex Thread/Session 的引用或獨佔性。
+- `internal/acp/mcp_owner_native_verified.go` 增加 `NextCodexAppServerBirths`，以既有一次性 HMAC 的 Adapter diagnostics + Manager read-lock/loaded Session snapshot 取得原生 app-server OS identity，**不啟動不存在的 Adapter**。修正之前 `ObserveDirectChildBirth` 過度要求 app-server `PGID=PID` 的錯誤前提；Codex native app-server 並不一定自成 process group，現在改以 kernel direct PPID/birth/UID 的雙次取樣，仍是唯讀，不提供程序控制權限。`internal/tool/acp/service.go` 僅 Codex Profile 暴露 Go 內部 typed 讀取路徑。
+- `internal/app/runtime_next_codex_mcp_registration.go` 建立 **private Core 的 source-only** scope provider：必須 macOS、Next desktop variant、`~/.agentdock-next`、非 stdio、Codex-enabled profile `id=codex/kind=codex`、明確 `AGENTDOCK_NEXT_CODEX_MCP_REGISTRATION=source-only`、32-byte Adapter challenge key，才會向 ACP Management 取得已簽章診斷。它不啟動 listener、不建立 Session、不自動配置 MCP command；沒有在 `NewRuntime` 或 `Runtime.Close` 接入任何 production 行為。
+- 完整隔離流程 test：**Core 測試程序 → Adapter helper → native app-server helper → wrapper helper → echo MCP helper**，先回報 helper PID/取得可信出生身分，Core 認可後才啟動 underlying MCP，最後只存一筆 provenance、驗證 `mcp:hello` 透明 stdout。未驗證父程序／錯誤 Socket root／已存在的不同 socket 均不得接受或刪除；真實測試 helper 完畢後回收，**未連線已安裝的 Codex CLI**。
+
+**真正部署前仍有硬性 blocker：**
+
+1. 此 `ScopeProvider` 經原 HMAC 診斷核實 **已存在且已載入的** Session，Codex app-server 啟動之初 MCP 可能已 auto-start。故不能用 B2 宣稱「每個 MCP 都在 spawn 前成功登記」。必須先由 Next-owned Codex ACP Adapter 提供 app-server generation 的初始可信啟動宣告、或延後/隔離 MCP 啟動直到 Core 規則就緒。
+2. 檢查 Codex ACP fork：`src/CodexAcpClient.ts` 的 `createSessionConfig` 用 `request.mcpServers` 將伺服器加入 `mcp_servers`，可能與使用者全域 Codex 設定合併，且 `shouldDeduplicateMcpConflicts` 可能**跳過同名 server**。因此 **per-session MCP 設定並不足以保證真正 MCP 走 wrapper**，不得覆寫 `~/.codex/config.toml` 或重啟 Codex Desktop 的 native server。必須進一步建立真正隔離的 Codex ACP 啟動設定與 allowlist 驗證，且不可破壞原本登入認證。
+3. 仍須由 P5/M8 綁定實際允許的 server digest、generation、credential/redaction、permission admission 與 cross-process dispatch fence；現在 `PrivateCoreListener` 尚未與正式 P5/M8 授權或 Core Runtime 啟動連結，不對 MCP 使用者提供自動回收功能。即使已驗證全鏈，也只是 **app-server provenance，不是 Thread/Session cleanup authority**。
