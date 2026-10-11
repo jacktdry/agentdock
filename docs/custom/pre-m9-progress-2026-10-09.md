@@ -377,3 +377,11 @@
 
 
 安全補強：Next-only raw stdio acquire/call/drain/idle 與 P5 checked acquire/call 已全部限制為 `internal/mcp/client` package-private；其他 package 必須使用 `AcquireAdmitted` 與 `CallAdmitted` 的 M8 檢查。這不是 Runtime UI endpoint 或真正的 P5/M8 cross-process atomic fence。
+
+### 2026-10-11 P0 Core pinned ACP Session + immutable M8 arguments（下一輪 source-only checkpoint）
+
+- Native Codex tag `rust-v0.160.0` 已被 sparse clone 到獨立的 `/Users/wei/sideProject/codex-native-mcp-owner`；可直接追蹤 `rmcp-client/stdio_server_launcher.rs` 的 local child process handle 與 `codex_mcp` runtime/thread snapshot 間缺少的連線。未改動正在使用的 Codex binary、Codex ACP 安裝，**Native Rust 無編譯/UAT，PID/pipe owner 尚未解決**。詳細：`docs/custom/p0-native-codex-rust-owner-2026-10-11.md`。
+- `NextStdioRegistryGate.CallAdmitted` 的請求在 M8 fingerprint 之前做 JSON detached snapshot，後續 MCP SDK 呼叫使用同一份快照；避免上游更新 nested map/list/number 後發出不同副作用。拒絕外部 JSON 建構 `NextStdioM8Context`，nil args normalize `{}`，無原始 args/token 落地。
+- `ACP.Manager.IsLiveManagedSession` + `tool/acp.Service.IsLiveManagedSession` 在 process-local `m.loaded`/reverse mapping/Terminal state/closed connection 下只做 read-only lookup，不把 persist-only session 或 native orphan 視為 owner。
+- `app.Runtime.nextM8ContextForLoadedACP/nextM8AcquireFromRuntime/nextM8CallFromRuntime` 是來源鎖定的 private Core hook：僅 macOS Next variant、`~/.agentdock-next` state、明確 `AGENTDOCK_NEXT_STDIO_MCP_ADMISSION=source-only`、真實 Runtime.Call 執行中 `mcp_tool_call` scope + stable verified principal + 相同 ACP Profile/已載入 Session 和 M8 Gate/epoch 才可組成 M8 binding。原本 Stable / ACP/AGY/Next 正式工具路由 **沒有新增使用入口**。新測試使用 temp HOME、真實測試 ACP helper 驗證 Session、偽造 owner/principal/call/provenance、關掉 opt-in、已完成 call 的 fail-closed 行為。
+- **剩餘阻塞**：Native Rust PID/pipe 身分證據、P5/M8 跨程序 atomic dispatch write fence、Runtime 正式工具派發/安全 Shutdown lifecycle、macOS/Windows native live UAT。因此 P0 仍為 Blocked，不啟用 auto cleanup。

@@ -181,3 +181,12 @@ HIGH-0 下一步必須先建立 `Codex app-server → native thread/session → 
 
 
 **M8 呼叫入口隔離補充：**未經 M8 的 `NextStdioLeaseController.acquire/call/drainOwned/reapIdle` 和 P5 `NextStdioRegistryGate.acquireChecked/callChecked` 皆改為 Go `client` package-private，避免任何 Core/HTTP/ACP caller 直接呼叫未授權 raw spawn/call。對其他 package 唯一可呼叫的新增啟動與工具派發路徑是 `AcquireAdmitted`、`CallAdmitted`；Release 仍需不可猜測的 lease token。這些型別目前沒有 Runtime/HTTP 註冊或機器操作權，正式 Core 端 principal binding 与跨程序兩個 Store 的原子排程仍為阻塞，維持 source-only。
+
+### 2026-10-11 追加：Core source-lock 與 native baseline
+
+- `internal/acp/session_live_check.go` 在 private ACP Manager 的 loaded + local/remote reverse mapping、terminal transition、connection-open 與 session ready/running 狀態檢查，同步確認 local session 仍屬該 Adapter。它只是 **read-only session presence**，不是 native child PID/birth attestation；不能拿來關閉外部 MCP。
+- `internal/app/runtime_next_mcp_m8_scope.go` 的 `nextM8ContextForLoadedACP/nextM8AcquireFromRuntime/nextM8CallFromRuntime` 由原本的 `Runtime.Call` execution scope / `requestmeta` authenticated stable principal 衍生 M8 Gate binding。必須同時符合 macOS、Next desktop variant、預期的 `~/.agentdock-next` root、明確 `AGENTDOCK_NEXT_STDIO_MCP_ADMISSION=source-only`、ACPRuntime profile + process-local loaded session、同一個 running `mcp_tool_call` CallID 與 source；所有入口都 **package-private**，沒有掛載 HTTP/外部 tool 或啟用 production routing。即使 session 在 tool call 期間關閉，只能拒絕回傳，**不能撤銷已執行的副作用**。
+- M8 參數 fingerprint 與真正 SDK 派發現在同時使用一次不可變的 detached JSON snapshot；`nil` request 會規一化成 `{}`，nested map/list、large `json.Number` 均保持相同語意。`NextStdioM8Context` 的 JSON decode/encode 均拒絕，外部不能靠 JSON 構造 Core 權限。
+- Rust 原生啟動點已在獨立 pinned `rust-v0.160.0` sparse repo 中定位；repo `/Users/wei/sideProject/codex-native-mcp-owner`、branch `feature/agentdock-next-mcp-owner-evidence`，baseline doc commit `ecd6588`。參考 `docs/custom/p0-native-codex-rust-owner-2026-10-11.md`，不代表 Native PID/pipe owner 已取得或 Rust build 已通過。
+
+**P0 production gate 依然不合格**：缺原生可信 child birth/transport-pipe mapping、跨程序 M8/P5 mutation/dispatch 鎖、真正 Core route 和 native/UAT。禁止宣告「P0 完成」或啟用 orphan auto-clean。

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,6 +24,31 @@ type NextStdioM8Context struct {
 }
 
 func (NextStdioM8Context) MarshalJSON() ([]byte, error) { return nil, ErrNextM8NotAllowed }
+func (*NextStdioM8Context) UnmarshalJSON([]byte) error  { return ErrNextM8NotAllowed }
+
+// nextM8SnapshotArgs provides one immutable detached JSON-compatible request
+// for BOTH approval fingerprinting and the actual MCP SDK call. Otherwise a
+// concurrent caller could mutate a shared map after admission and dispatch
+// a different side effect than the one it fingerprinted. Never log raw input.
+func nextM8SnapshotArgs(args map[string]any) ([]byte, map[string]any, error) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	raw, err := json.Marshal(args)
+	if err != nil || len(raw) > 64<<10 {
+		return nil, nil, ErrNextM8NotAllowed
+	}
+	var copied map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&copied); err != nil {
+		return nil, nil, ErrNextM8NotAllowed
+	}
+	if copied == nil {
+		copied = map[string]any{}
+	}
+	return raw, copied, nil
+}
 
 // CallAdmitted requires an exact M8 Allow BEFORE dispatch and binds a proposed
 // side effect to the P5 Registry revision, lease capability, tool and canonical
@@ -39,8 +65,8 @@ func (g *NextStdioRegistryGate) CallAdmitted(ctx context.Context, auth NextStdio
 	if !ok || !validNextID(owner) || owner != auth.Binding.ACPSessionID || server != lease.cfg.Name || lease.lease.generation != lease.cfg.Generation {
 		return nil, permission.Admission{}, ErrNextM8NotAllowed
 	}
-	canonical, marshalErr := json.Marshal(args)
-	if marshalErr != nil || len(canonical) > 64<<10 {
+	canonical, detachedArgs, marshalErr := nextM8SnapshotArgs(args)
+	if marshalErr != nil {
 		return nil, permission.Admission{}, ErrNextM8NotAllowed
 	}
 	// Never pass raw args, tokens, environment or executable into permissions.
@@ -71,7 +97,7 @@ func (g *NextStdioRegistryGate) CallAdmitted(ctx context.Context, auth NextStdio
 	if ctx.Err() != nil || auth.Gate.Store().RuntimeEpoch() != auth.Binding.RuntimeEpoch || auth.Gate.Store().Policy().Revision != policyRevision {
 		return nil, admitted, ErrNextM8NotAllowed
 	}
-	result, callErr := g.callChecked(ctx, lease, tool, args)
+	result, callErr := g.callChecked(ctx, lease, tool, detachedArgs)
 	// A delayed policy revocation is a failure to disclose a valid result.
 	// It is not a process-control permission and is NOT an atomic dispatch
 	// fence; see P0 gate documentation.

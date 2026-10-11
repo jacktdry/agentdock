@@ -56,3 +56,14 @@ func (s *Service) managerFor(profileID string) (*acpruntime.Manager, string, err
 	}
 	return manager, profileID, nil
 }
+
+// IsLiveManagedSession validates a known local ACP session against the exact
+// configured profile without opening/loading a persisted session. This is
+// advisory (not a native child ownership or dispatch capability).
+func (s *Service) IsLiveManagedSession(profileID, localID string) bool {
+	if s == nil || profileID == "" || localID == "" {
+		return false
+	}
+	manager, _, err := s.managerFor(profileID)
+	return err == nil && manager.IsLiveManagedSession(localID)
+}
