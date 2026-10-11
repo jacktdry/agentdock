@@ -170,3 +170,14 @@ Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／bir
 依已宣布停止門檻（關閉有效而 MCP count 無下降），**停止擴大其餘 52 個 >30 天候選**。這次是獲使用者明確授權的五筆 managed Session close，不表示授權批量 kill Codex/Browser/CBM。
 
 HIGH-0 下一步必須先建立 `Codex app-server → native thread/session → MCP stdio transport → child PID/birth` 的真實映射；確認 adapter 的 `session/close` 是否導致 thread unload/stdio EOF/process Wait；僅在**已證明由 Next 擁有**且沒有使用者工作時研究可安全清理的項目。對未知 owner 保守不動。
+
+
+### 2026-10-11 P0 M8 主動授權與 Codex ACP native partial evidence（兩者皆未通過最終 production gate）
+
+- `internal/mcp/client/next_lifecycle_m8.go`：新增 `AcquireAdmitted` 與 `CallAdmitted`，由 Trusted Next Core `NextStdioM8Context` 提供 Authenticated/Stable principal、ACP Session ID、M8 runtime epoch、Audit CallID；M8 `AdmissionGate` 若不是精確 `Allow`，既不允許啟動 stdio child 也不允許派發工具。對 Ask 可保留 Approval、Approved Once 消耗並在派發後 settle outcome，對 Deny／錯誤／舊 epoch 均 fail closed。指紋綁定 P5 Revision、Generation、Session、Lease token 雜湊、工具與 canonical JSON args，不保存原始 Lease token / args。實際測試使用**私有 P5 Registry + M8 Store + 測試 helper process**，驗證 Ask/Once/Deny/Allowed 與 Session/epoch mismatch。
+- 這是 **source-only Gate**，沒有接到正式 Next Core `Runtime.Call`／Desktop 控制 API。M8 PolicyStore 與 P5 Registry 仍是各自獨立持久化權限來源；一次工具已派發後才撤銷權限，最後 recheck 僅能拒絕回傳與隔離自有資源，**無法回滾原先副作用**。跨程序 atomic P5+M8 dispatch fence 尚未完成，因此正式 P0 不可宣告結束。
+- Codex ACP fork `fix/session-lifecycle-recycle` 增加只在 Next-own 32-byte opt-in key 存在時可用的 `_agentdock_next/mcp_owner/diagnostic_v1`，具一次性 nonce + 雙向 HMAC、complete bounded native loaded threads/per-thread MCP runtime status，secret 在 spawn native Codex 之前移出 Adapter environment；Go 端 `internal/acp/mcp_owner_native_verified.go` 僅在 ACP Manager 同一個 live read-lock scope 且 kernel `Adapter -> native app-server` birth/PPID/UID 可信時接受對應資訊。**沒有 MCP stdio child PID/transport identity 原生來源，仍固定 `reclaimPermission=false`、`ChildProcessProof=unavailable`，不可兌現 `mcpowneraudit.correlate` 的完整 children list**。詳細見 codex-acp repo `docs/next/mcp-owner-diagnostic.md`。
+- 最終阻塞仍是 native Codex app-server MCP 啟動端補上 `Thread -> stdio transport -> PID/birth/pipe`，Go native kernel correlation 和 M8/P5/Next Runtime 的真正原子派發圍欄。兩個 fork Repo 程式碼層的里程碑不等於 live 安全回收完成；不部署、不清理既有 PID。
+
+
+**M8 呼叫入口隔離補充：**未經 M8 的 `NextStdioLeaseController.acquire/call/drainOwned/reapIdle` 和 P5 `NextStdioRegistryGate.acquireChecked/callChecked` 皆改為 Go `client` package-private，避免任何 Core/HTTP/ACP caller 直接呼叫未授權 raw spawn/call。對其他 package 唯一可呼叫的新增啟動與工具派發路徑是 `AcquireAdmitted`、`CallAdmitted`；Release 仍需不可猜測的 lease token。這些型別目前沒有 Runtime/HTTP 註冊或機器操作權，正式 Core 端 principal binding 与跨程序兩個 Store 的原子排程仍為阻塞，維持 source-only。

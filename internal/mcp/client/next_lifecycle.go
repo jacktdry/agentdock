@@ -104,7 +104,7 @@ func validNextPolicy(p NextLeasePolicy, ttl time.Duration) bool {
 // logical Session owner, not an external process PID or executable name.
 // Only a byte-identical ServerConfig bound to a pinned registry Generation is
 // reused. A change in generation is denied until the old lease drains.
-func (c *NextStdioLeaseController) Acquire(ctx context.Context, owner string, cfg ServerConfig, policy NextLeasePolicy, ttl time.Duration) (NextStdioLease, error) {
+func (c *NextStdioLeaseController) acquire(ctx context.Context, owner string, cfg ServerConfig, policy NextLeasePolicy, ttl time.Duration) (NextStdioLease, error) {
 	if c == nil || ctx == nil || ctx.Err() != nil || !validNextID(owner) || !validNextID(cfg.Name) || !validNextID(cfg.Generation) || !validNextPolicy(policy, ttl) || cfg.SourceType != "standalone" || cfg.PluginName != "" || !cfg.Enabled || cfg.Transport != TransportStdio || strings.TrimSpace(cfg.Command) == "" {
 		return NextStdioLease{}, errNextLeaseDenied
 	}
@@ -195,7 +195,7 @@ func sameNextConfig(a, b ServerConfig) bool {
 
 // Call is bounded by StdioSession's existing timeout; no new requests may
 // start once draining or cleanup-required. Each matching token admits one call.
-func (c *NextStdioLeaseController) Call(ctx context.Context, lease NextStdioLease, tool string, args map[string]any) (map[string]any, error) {
+func (c *NextStdioLeaseController) call(ctx context.Context, lease NextStdioLease, tool string, args map[string]any) (map[string]any, error) {
 	if c == nil || ctx == nil || ctx.Err() != nil {
 		return nil, errNextLeaseDenied
 	}
@@ -258,7 +258,7 @@ func (c *NextStdioLeaseController) Release(ctx context.Context, lease NextStdioL
 // Drain is explicitly generation-fenced, refuses outstanding borrowers, and
 // provides no process PID kill/close primitive. Timeout marks cleanup_required
 // and prevents any new Call/Acquire; retry may only close this owned session.
-func (c *NextStdioLeaseController) Drain(ctx context.Context, owner, server, generation string) error {
+func (c *NextStdioLeaseController) drainOwned(ctx context.Context, owner, server, generation string) error {
 	if !validNextID(owner) || !validNextID(server) || !validNextID(generation) {
 		return errNextLeaseDenied
 	}
@@ -336,7 +336,7 @@ func (c *NextStdioLeaseController) finishDrain(ctx context.Context, r *nextResou
 	return nil
 }
 
-func (c *NextStdioLeaseController) ReapIdle(ctx context.Context, now time.Time) int {
+func (c *NextStdioLeaseController) reapIdle(ctx context.Context, now time.Time) int {
 	if c == nil || ctx == nil || ctx.Err() != nil || now.IsZero() {
 		return 0
 	}

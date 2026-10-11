@@ -59,7 +59,7 @@ func (g *NextStdioRegistryGate) checkedConfig(name, revision, generation string)
 // REVALIDATES after the handshake. No caller-supplied argv/env/command is used.
 // Stale or failed post-validation consumes its own borrower token and closes
 // only the session actually spawned by the candidate controller.
-func (g *NextStdioRegistryGate) AcquireChecked(ctx context.Context, owner, server, revision, generation string, policy NextLeasePolicy, ttl time.Duration) (NextRegistryLease, error) {
+func (g *NextStdioRegistryGate) acquireChecked(ctx context.Context, owner, server, revision, generation string, policy NextLeasePolicy, ttl time.Duration) (NextRegistryLease, error) {
 	if ctx == nil || ctx.Err() != nil {
 		return NextRegistryLease{}, errNextLeaseDenied
 	}
@@ -67,7 +67,7 @@ func (g *NextStdioRegistryGate) AcquireChecked(ctx context.Context, owner, serve
 	if err != nil {
 		return NextRegistryLease{}, errNextLeaseDenied
 	}
-	lease, err := g.leases.Acquire(ctx, owner, cfg, policy, ttl)
+	lease, err := g.leases.acquire(ctx, owner, cfg, policy, ttl)
 	if err != nil {
 		return NextRegistryLease{}, errNextLeaseDenied
 	}
@@ -85,7 +85,7 @@ func (g *NextStdioRegistryGate) AcquireChecked(ctx context.Context, owner, serve
 	return NextRegistryLease{lease: lease, revision: revision, cfg: cfg}, nil
 }
 
-func (g *NextStdioRegistryGate) CallChecked(ctx context.Context, lease NextRegistryLease, tool string, args map[string]any) (map[string]any, error) {
+func (g *NextStdioRegistryGate) callChecked(ctx context.Context, lease NextRegistryLease, tool string, args map[string]any) (map[string]any, error) {
 	if g == nil || ctx == nil || ctx.Err() != nil || lease.lease.id == "" || lease.revision == "" {
 		return nil, errNextLeaseDenied
 	}
@@ -98,7 +98,7 @@ func (g *NextStdioRegistryGate) CallChecked(ctx context.Context, lease NextRegis
 		g.leases.invalidate(lease.lease)
 		return nil, errNextLeaseDenied
 	}
-	result, err := g.leases.Call(ctx, lease.lease, tool, args)
+	result, err := g.leases.call(ctx, lease.lease, tool, args)
 	if err != nil {
 		return nil, err
 	}

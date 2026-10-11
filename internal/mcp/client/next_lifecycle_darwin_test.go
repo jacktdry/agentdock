@@ -31,7 +31,7 @@ func TestNextStdioLifecycleTwentyOwnedCycles(t *testing.T) {
 	c := nextCtl(t, 2)
 	for i := 0; i < 20; i++ {
 		cfg := ownedNextFixture(fmt.Sprintf("registry-generation-%d", i))
-		lease, err := c.Acquire(context.Background(), "next-managed-session-1", cfg, NextLeaseEphemeral, 0)
+		lease, err := c.acquire(context.Background(), "next-managed-session-1", cfg, NextLeaseEphemeral, 0)
 		if err != nil {
 			t.Fatalf("cycle %d: open denied: %v", i, err)
 		}
@@ -43,7 +43,7 @@ func TestNextStdioLifecycleTwentyOwnedCycles(t *testing.T) {
 		owned := c.resources[lease.key]
 		cmd := owned.session.client.command
 		c.mu.Unlock()
-		got, err := c.Call(context.Background(), lease, "echo", map[string]any{"text": "hello"})
+		got, err := c.call(context.Background(), lease, "echo", map[string]any{"text": "hello"})
 		if err != nil || got["structuredContent"].(map[string]any)["echo"] != "hello" {
 			t.Fatalf("call: %+v %v", got, err)
 		}
@@ -57,7 +57,7 @@ func TestNextStdioLifecycleTwentyOwnedCycles(t *testing.T) {
 		if after.Managed != 0 || after.Ready != 0 || after.Borrowers != 0 || after.Inflight != 0 || after.CleanupRequired != 0 {
 			t.Fatalf("cycle %d leaked: %+v", i, after)
 		}
-		if _, err := c.Call(context.Background(), lease, "echo", nil); !errors.Is(err, errNextLeaseDenied) {
+		if _, err := c.call(context.Background(), lease, "echo", nil); !errors.Is(err, errNextLeaseDenied) {
 			t.Fatal("released token accepted")
 		}
 		if err := c.Release(context.Background(), lease); !errors.Is(err, errNextLeaseDenied) {
@@ -69,11 +69,11 @@ func TestNextStdioLifecycleTwentyOwnedCycles(t *testing.T) {
 func TestNextStdioLeaseBorrowPolicyGenerationAndCapacity(t *testing.T) {
 	c := nextCtl(t, 1)
 	cfg := ownedNextFixture("rev-one")
-	first, err := c.Acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
+	first, err := c.acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := c.Acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
+	second, err := c.acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,11 +97,11 @@ func TestNextStdioLeaseBorrowPolicyGenerationAndCapacity(t *testing.T) {
 		{"session-a", cfg, NextLeasePersistent, time.Second},
 	}
 	for _, x := range attempts {
-		if _, err := c.Acquire(context.Background(), x.owner, x.cfg, x.policy, x.ttl); !errors.Is(err, errNextLeaseDenied) {
+		if _, err := c.acquire(context.Background(), x.owner, x.cfg, x.policy, x.ttl); !errors.Is(err, errNextLeaseDenied) {
 			t.Fatalf("bad acquire allowed: %+v", x)
 		}
 	}
-	if err := c.Drain(context.Background(), "session-a", cfg.Name, cfg.Generation); !errors.Is(err, errNextLeaseDenied) {
+	if err := c.drainOwned(context.Background(), "session-a", cfg.Name, cfg.Generation); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("drained borrowed resource")
 	}
 	if err := c.Release(context.Background(), first); err != nil {
@@ -110,7 +110,7 @@ func TestNextStdioLeaseBorrowPolicyGenerationAndCapacity(t *testing.T) {
 	if c.Snapshot().Managed != 1 || c.Snapshot().Borrowers != 1 {
 		t.Fatal(c.Snapshot())
 	}
-	if _, err := c.Call(context.Background(), first, "echo", nil); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.call(context.Background(), first, "echo", nil); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("released token called")
 	}
 	if err := c.Release(context.Background(), second); err != nil {
@@ -119,19 +119,19 @@ func TestNextStdioLeaseBorrowPolicyGenerationAndCapacity(t *testing.T) {
 	if c.Snapshot().Ready != 1 || c.Snapshot().Borrowers != 0 {
 		t.Fatal("persistent ended on prompt terminal")
 	}
-	if _, err := c.Acquire(context.Background(), "session-a", mutated, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "session-a", mutated, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("stale-generation reused session")
 	}
-	if err := c.Drain(context.Background(), "session-a", cfg.Name, "wrong-generation"); !errors.Is(err, errNextLeaseDenied) {
+	if err := c.drainOwned(context.Background(), "session-a", cfg.Name, "wrong-generation"); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("wrong-generation drained")
 	}
-	if err := c.Drain(context.Background(), "session-a", cfg.Name, cfg.Generation); err != nil {
+	if err := c.drainOwned(context.Background(), "session-a", cfg.Name, cfg.Generation); err != nil {
 		t.Fatal(err)
 	}
 	if c.Snapshot().Managed != 0 {
 		t.Fatal(c.Snapshot())
 	}
-	next, err := c.Acquire(context.Background(), "session-a", mutated, NextLeaseEphemeral, 0)
+	next, err := c.acquire(context.Background(), "session-a", mutated, NextLeaseEphemeral, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,20 +143,20 @@ func TestNextStdioLeaseBorrowPolicyGenerationAndCapacity(t *testing.T) {
 func TestNextStdioLeaseIdleManagedAndCloseFence(t *testing.T) {
 	c := nextCtl(t, 1)
 	cfg := ownedNextFixture("idle-rev")
-	lease, err := c.Acquire(context.Background(), "session-a", cfg, NextLeaseIdleManaged, time.Second)
+	lease, err := c.acquire(context.Background(), "session-a", cfg, NextLeaseIdleManaged, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count := c.ReapIdle(context.Background(), time.Now().Add(48*time.Hour)); count != 0 {
+	if count := c.reapIdle(context.Background(), time.Now().Add(48*time.Hour)); count != 0 {
 		t.Fatal("borrower reaped")
 	}
 	if err := c.Release(context.Background(), lease); err != nil {
 		t.Fatal(err)
 	}
-	if count := c.ReapIdle(context.Background(), time.Now()); count != 0 {
+	if count := c.reapIdle(context.Background(), time.Now()); count != 0 {
 		t.Fatal("TTL not expired but reaped")
 	}
-	if count := c.ReapIdle(context.Background(), time.Now().Add(2*time.Second)); count != 1 {
+	if count := c.reapIdle(context.Background(), time.Now().Add(2*time.Second)); count != 1 {
 		t.Fatalf("reaped = %d", count)
 	}
 	if c.Snapshot().Managed != 0 {
@@ -164,7 +164,7 @@ func TestNextStdioLeaseIdleManagedAndCloseFence(t *testing.T) {
 	}
 	// Inflight tool work must settle before drain. Close is exclusive; new work
 	// and new borrowers are fenced even when a drain is waiting.
-	lease, err = c.Acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
+	lease, err = c.acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestNextStdioLeaseIdleManagedAndCloseFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- c.Drain(context.Background(), "session-a", cfg.Name, cfg.Generation) }()
+	go func() { done <- c.drainOwned(context.Background(), "session-a", cfg.Name, cfg.Generation) }()
 	deadline := time.Now().Add(time.Second)
 	for c.Snapshot().Draining == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
@@ -185,7 +185,7 @@ func TestNextStdioLeaseIdleManagedAndCloseFence(t *testing.T) {
 	if c.Snapshot().Draining != 1 {
 		t.Fatal("drain not entered")
 	}
-	if _, err := c.Acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("borrow during drain")
 	}
 	select {
@@ -220,25 +220,25 @@ func TestNextStdioLeaseInvalidAuthorityAndRecovery(t *testing.T) {
 	candidates[4].Enabled = false
 	candidates[5].Transport = TransportStreamableHTTP
 	for i, wrong := range candidates[1:] {
-		if _, err := c.Acquire(context.Background(), "next-tenant", wrong, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+		if _, err := c.acquire(context.Background(), "next-tenant", wrong, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 			t.Fatalf("invalid authority %d accepted", i)
 		}
 	}
-	if _, err := c.Acquire(context.Background(), "next-tenant", cfg, NextLeaseIdleManaged, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "next-tenant", cfg, NextLeaseIdleManaged, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("idle no TTL accepted")
 	}
-	if _, err := c.Acquire(context.Background(), "next-tenant", cfg, NextLeaseEphemeral, time.Second); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "next-tenant", cfg, NextLeaseEphemeral, time.Second); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("ephemeral nonzero TTL accepted")
 	}
-	if _, err := c.Acquire(context.Background(), "", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("unknown owner accepted")
 	}
-	if _, err := c.Acquire(context.Background(), "bad\x00owner", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "bad\x00owner", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("nonportable owner accepted")
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := c.Acquire(canceled, "next-tenant", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(canceled, "next-tenant", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("canceled owner accepted")
 	}
 	if c.Snapshot().Managed != 0 {
@@ -259,7 +259,7 @@ func TestNextStdioLeaseParallelBoundedCapacity(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			lease, err := c.Acquire(context.Background(), fmt.Sprintf("owner-%d", i), cfg, NextLeasePersistent, 0)
+			lease, err := c.acquire(context.Background(), fmt.Sprintf("owner-%d", i), cfg, NextLeasePersistent, 0)
 			if err != nil {
 				failures <- err
 				return
@@ -291,7 +291,7 @@ func TestNextStdioLeaseParallelBoundedCapacity(t *testing.T) {
 		if !found {
 			t.Fatal("bad test key")
 		}
-		if err := c.Drain(context.Background(), owner, server, lease.generation); err != nil {
+		if err := c.drainOwned(context.Background(), owner, server, lease.generation); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -316,17 +316,17 @@ func TestNextStdioFailedHandshakeQuarantinesObservedSpawn(t *testing.T) {
 	cfg := ownedNextFixture("broken-rev")
 	cfg.Args = []string{"-test.run=^TestNextBrokenMCPHelper$"}
 	cfg.StaticEnv = map[string]string{"GO_WANT_NEXT_BROKEN": "1"}
-	lease, err := c.Acquire(context.Background(), "session-a", cfg, NextLeaseEphemeral, 0)
+	lease, err := c.acquire(context.Background(), "session-a", cfg, NextLeaseEphemeral, 0)
 	if !errors.Is(err, errNextLeaseDenied) || lease != (NextStdioLease{}) {
 		t.Fatalf("invalid handshake admitted: %+v %v", lease, err)
 	}
 	if c.Snapshot().CleanupRequired != 1 || c.Snapshot().Managed != 1 {
 		t.Fatalf("ambiguous started child not quarantined: %+v", c.Snapshot())
 	}
-	if _, err := c.Acquire(context.Background(), "session-a", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := c.acquire(context.Background(), "session-a", cfg, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("retry spawned second process")
 	}
-	if err := c.Drain(context.Background(), "session-a", cfg.Name, cfg.Generation); !errors.Is(err, errNextLeaseDenied) {
+	if err := c.drainOwned(context.Background(), "session-a", cfg.Name, cfg.Generation); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("unknown cleanup owner falsely reaped")
 	}
 }
@@ -335,11 +335,11 @@ func TestNextStdioTwentyPersistentCloseResumeCycles(t *testing.T) {
 	c := nextCtl(t, 2)
 	cfg := ownedNextFixture("same-registry-revision")
 	for i := 0; i < 20; i++ {
-		lease, err := c.Acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
+		lease, err := c.acquire(context.Background(), "session-a", cfg, NextLeasePersistent, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := c.Call(context.Background(), lease, "echo", map[string]any{"text": "resume"}); err != nil {
+		if _, err := c.call(context.Background(), lease, "echo", map[string]any{"text": "resume"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := c.Release(context.Background(), lease); err != nil {
@@ -348,7 +348,7 @@ func TestNextStdioTwentyPersistentCloseResumeCycles(t *testing.T) {
 		if c.Snapshot().Managed != 1 || c.Snapshot().Ready != 1 {
 			t.Fatal("persistent terminated early")
 		}
-		if err := c.Drain(context.Background(), "session-a", cfg.Name, cfg.Generation); err != nil {
+		if err := c.drainOwned(context.Background(), "session-a", cfg.Name, cfg.Generation); err != nil {
 			t.Fatal(err)
 		}
 		if c.Snapshot().Managed != 0 || c.Snapshot().CleanupRequired != 0 {

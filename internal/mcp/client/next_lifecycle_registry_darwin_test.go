@@ -43,11 +43,11 @@ func p5NextGateFixture(t *testing.T) (*Manager, *NextStdioLeaseController, *Next
 func TestNextRegistryGateAuthoritativeTwentyCycles(t *testing.T) {
 	_, ctrl, g, rev, gen := p5NextGateFixture(t)
 	for n := 0; n < 20; n++ {
-		lease, err := g.AcquireChecked(context.Background(), "next-session-one", "next-p5-echo", rev, gen, NextLeaseEphemeral, 0)
+		lease, err := g.acquireChecked(context.Background(), "next-session-one", "next-p5-echo", rev, gen, NextLeaseEphemeral, 0)
 		if err != nil {
 			t.Fatalf("cycle %d: %v", n, err)
 		}
-		got, err := g.CallChecked(context.Background(), lease, "echo", map[string]any{"text": "ok"})
+		got, err := g.callChecked(context.Background(), lease, "echo", map[string]any{"text": "ok"})
 		if err != nil || got["structuredContent"].(map[string]any)["echo"] != "ok" {
 			t.Fatalf("cycle %d call: %#v %v", n, got, err)
 		}
@@ -66,14 +66,14 @@ func TestNextRegistryGateBlocksForgedAndRevokedAuthority(t *testing.T) {
 		{"not-found", rev, gen}, {"next-p5-echo", "false-revision", gen}, {"next-p5-echo", rev, "false-generation"},
 	}
 	for _, tc := range cases {
-		if _, err := g.AcquireChecked(context.Background(), "owner", tc.name, tc.rev, tc.gen, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
+		if _, err := g.acquireChecked(context.Background(), "owner", tc.name, tc.rev, tc.gen, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
 			t.Fatalf("forged registry case allowed %+v", tc)
 		}
 	}
 	if ctrl.Snapshot().Managed != 0 {
 		t.Fatal("invalid authority launched MCP")
 	}
-	lease, err := g.AcquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
+	lease, err := g.acquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestNextRegistryGateBlocksForgedAndRevokedAuthority(t *testing.T) {
 	if err != nil || !change.Persisted {
 		t.Fatalf("disable P5 failed: %+v %v", change, err)
 	}
-	if result, err := g.CallChecked(context.Background(), lease, "echo", map[string]any{"text": "must-not-call"}); !errors.Is(err, errNextLeaseDenied) || result != nil {
+	if result, err := g.callChecked(context.Background(), lease, "echo", map[string]any{"text": "must-not-call"}); !errors.Is(err, errNextLeaseDenied) || result != nil {
 		t.Fatalf("disabled tool dispatched: %v %+v", err, result)
 	}
 	if ctrl.Snapshot().CleanupRequired != 1 {
@@ -93,14 +93,14 @@ func TestNextRegistryGateBlocksForgedAndRevokedAuthority(t *testing.T) {
 	if ctrl.Snapshot().Managed != 0 {
 		t.Fatalf("revoked process not reaped: %+v", ctrl.Snapshot())
 	}
-	if _, err := g.AcquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := g.acquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("old revision created a new child")
 	}
 	latest, err := manager.Registry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.AcquireChecked(context.Background(), "owner", "next-p5-echo", latest.Revision, latest.Servers["next-p5-echo"].Generation, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := g.acquireChecked(context.Background(), "owner", "next-p5-echo", latest.Revision, latest.Servers["next-p5-echo"].Generation, NextLeaseEphemeral, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("disabled latest revision created child")
 	}
 }
@@ -115,10 +115,10 @@ func TestNextRegistryGateDisallowsNonStdioOrPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.AcquireChecked(context.Background(), "owner", "http-only", updated.Revision, updated.Servers["http-only"].Generation, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := g.acquireChecked(context.Background(), "owner", "http-only", updated.Revision, updated.Servers["http-only"].Generation, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("HTTP converted into owned stdio")
 	}
-	if _, err := g.AcquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := g.acquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("old revision accepted after unrelated P5 mutation")
 	}
 	if ctrl.Snapshot().Managed != 0 {
@@ -137,7 +137,7 @@ func TestNextRegistryGateParallelNoDuplicateOwnedServer(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			lease, err := g.AcquireChecked(context.Background(), "same-owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
+			lease, err := g.acquireChecked(context.Background(), "same-owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
 			if err == nil {
 				acquired <- lease
 			}
@@ -161,7 +161,7 @@ func TestNextRegistryGateParallelNoDuplicateOwnedServer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := ctrl.Drain(context.Background(), "same-owner", "next-p5-echo", gen); err != nil {
+	if err := ctrl.drainOwned(context.Background(), "same-owner", "next-p5-echo", gen); err != nil {
 		t.Fatal(err)
 	}
 	if ctrl.Snapshot().Managed != 0 {
@@ -171,7 +171,7 @@ func TestNextRegistryGateParallelNoDuplicateOwnedServer(t *testing.T) {
 
 func TestNextRegistryGateRealConfigRevocation(t *testing.T) {
 	mgr, ctrl, g, rev, gen := p5NextGateFixture(t)
-	lease, err := g.AcquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
+	lease, err := g.acquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestNextRegistryGateRealConfigRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CallChecked(context.Background(), lease, "echo", map[string]any{"text": "denied"}); !errors.Is(err, errNextLeaseDenied) {
+	if _, err := g.callChecked(context.Background(), lease, "echo", map[string]any{"text": "denied"}); !errors.Is(err, errNextLeaseDenied) {
 		t.Fatal("old generation executed")
 	}
 	if err := g.Release(context.Background(), lease); err != nil {
@@ -228,7 +228,7 @@ func TestNextRegistryGateRevocationDuringHandshakePublication(t *testing.T) {
 	}
 	result := make(chan acquireResult, 1)
 	go func() {
-		lease, err := gate.AcquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
+		lease, err := gate.acquireChecked(context.Background(), "owner", "next-p5-echo", rev, gen, NextLeasePersistent, 0)
 		result <- acquireResult{lease, err}
 	}()
 	select {

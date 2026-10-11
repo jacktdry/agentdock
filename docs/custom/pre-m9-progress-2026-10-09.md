@@ -369,3 +369,11 @@
 
 - `internal/mcp/client/next_lifecycle_registry.go` 將 prototype `NextStdioLeaseController` 與真實 P5 Manager 的 persisted Registry + Plugin ownership overlay / dynamic environment 讀取結合。`AcquireChecked` 要求 exact P5 revision / generation、standalone + enabled stdio；完成 handshake 後再次查核，不吻合立即隔離並 EOF/Wait 本次所擁有的子程序，不會回傳 lease。`CallChecked` 前後檢查過期設定，不會發布 stale reply；不再依賴任意呼叫者提供的 command/env/擬造 standalone 設定。
 - Test-owned MCP + 私有 P5 伺服器 Registry 實測 20 sequential cycles、8 並行同 owner、不同 Transport／disable／stale revision／config update／handshake-publish revocation；無操作 stable/Next 的 live MCP。**仍未有 M8 Auth/Core admission、正式 Runtime、跨程序原子 dispatch fence、Codex native Thread→MCP PID 證據**；維持 Source-only／不部署／P0 Blocked。
+
+
+### 2026-10-11 P0 M8 + Codex Adapter Native Diagnostics（source-only）
+
+新增 `NextStdioRegistryGate.AcquireAdmitted/CallAdmitted` 接既有 M8 Store（啟動與工具呼叫分別授權，Ask / Allow / Deny／Approved Once、身份／Epoch／Generation/Lease fingerprint、settlement），以及 Codex ACP fork opt-in 對稱 HMAC authenticated diagnostic extension。Go ACP Manager 只接受有 key + pinned Adapter PID、read-lock session map + native direct-child birth 的 partial evidence，**不認定任何 MCP child PID owner**。P0 HIGH-0/HIGH-1 正式 production gate 尚缺 native launcher Thread/MCP child pipes 和跨程序 M8/P5 atomic dispatch fence。未部署或影響 live AgentDock/ACP/MCP。
+
+
+安全補強：Next-only raw stdio acquire/call/drain/idle 與 P5 checked acquire/call 已全部限制為 `internal/mcp/client` package-private；其他 package 必須使用 `AcquireAdmitted` 與 `CallAdmitted` 的 M8 檢查。這不是 Runtime UI endpoint 或真正的 P5/M8 cross-process atomic fence。
