@@ -350,3 +350,9 @@
 - 延續 `187931f6` 原生 correlation contract，新增 Darwin+cgo 私有 `libproc` kernel pipe-endpoint observer，要求 native/child birth identity、direct parent、stdin/stdout opposite kernel handle、完整 FD 對照與 bounded 5-second fresh evidence；其他平台或 noCGO 僅 unavailable。
 - 使用測試建立的 Go native/child helper 驗證正向及物理上錯誤的 parent/child stdout topology（native 沒持有 child stdout 的 peer）必拒絕；另涵蓋身分、重複、資料不完整、時效、取消及 FD replay/mutation。**非 production integration，絕不等於管理者擁有或有權終止該 PID。**
 - HIGH-0 仍待：由可信 Codex ACP Adapter 原生介面提供完整 loaded-thread/stdio transport/child mapping，Manager generation read-lock fence，與 20-cycle baseline；本次沒有關閉、重啟、部署或觸碰 stable/Next/ChatGPT/Codex/Chrome/AGY/CBM 的現有 Session。
+
+
+### 2026-10-11 HIGH-0 ACP Manager Diagnostic Fence（Source-only）
+
+- `internal/acp/mcp_owner_diagnostic_scope.go` 新增 read-lock 覆蓋本機 loaded cache snapshot 到可信 callback 完成的 package-private guard；要求真正 Manager-owned `exec.Cmd.Process.Pid` 與 kernel birth、transport live、remote↔local 反向映射及 bounded 5-second cooperative context，僅提供 process-local opaque record 複本。產出的是 **local loaded Session mapping，不是 Codex native thread / MCP owner attestation**。
+- Test-only ACP helper 驗證 read-lock 可阻擋同時修改 loaded map，錯誤 PID／重複 RemoteSessionID／terminal／stale／cancel／expired／斷線一律不產出成功，callback 原始錯誤不洩漏。沒有 production hook/HTTP/CLI、沒有啟用程序回收或重啟。後續仍需真正可信 Adapter-native 完整診斷資料及與 kernel pipe observer 的 OS witness 整合。

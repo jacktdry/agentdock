@@ -101,6 +101,14 @@ Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／bir
 - 測試專用 Go helper 建立實際 adapter(test) → native(helper) → child(helper) 的 stdin/stdout pipes：正向 native kernel object identity、身分篡改、重複／空／超限子程序、future／expired／cancelled，以及子程序 stdout 由 test parent 而非 native 持有的**實際錯誤 Pipe 拓樸**均受驗證；重複 FD snapshot 假資料也必須 fail closed。只使用測試自行建立的程序，未碰使用者 live app-server、其他 ACP Session 或 MCP daemon。
 - 此項僅替上一個 typed contract 提供 **可信 OS 端實作候選**，仍非 live authorization：尚缺獨立經 Adapter 驗證的 `native loaded thread → MCP transport → child` 完整診斷擴充、實際協定 handshake/provenance、Manager generation/read-lock fencing，以及「所有 FD/transport 的獨佔性與缺失拓樸」證明。即便 `verified_diagnostic_correlation`，owner 仍固定 `owner_unverified`，不得 kill、close、quarantine 真實程序或判定 orphan。此觀測器也不會證明其他 PID 沒有複製 pipe descriptor，外部共享 daemon／grandchild／reparent 路徑均須另行驗證；符合不了一律不合格。
 
+#### HIGH-0 第四個安全診斷 checkpoint：ACP Manager read-lock 世代隔離（source-only）
+
+- `internal/acp/mcp_owner_diagnostic_scope.go` 新增**套件私有且沒有 production caller** 的 `withMCPDiagnosticScope`，以同一個 `Manager.mu.RLock` 覆蓋本機已載入 Session 的取樣、未來可信證據回呼與完成前驗證。期間 `session/close`、resume/rebind/loaded map 更新及 Manager 的 Adapter 替換無法在鎖內更改映射；呼叫端 callback 必須是**內部可信、同步、唯讀、遵循 context**，不得遞迴請求寫鎖或進行新 MCP 工具工作。五秒 deadline 為**合作式取消**，若 callback 不遵循 context，鎖仍可能遭長時間占用，因此 production wiring 之前必須先有獨立的有界 Adapter 診斷實作。
+- 讀取的只有 `m.loaded`（**Manager local cache，不能當成 native loaded thread**）與對應 `SessionRecord.ID / RemoteSessionID`。逐筆核對 `remoteToLocal` 反向映射、重複 remote ID、session 狀態、正在 close/delete 的 transition、remote response mismatch，最多 1,024 筆；排除純 persisted/ready 但未在本機載入的 Session。只將 opaque ID 在 callback 的 process-local snapshot 暫時傳遞，不記錄 title、cwd、tool argument、credential 或 transcript；回呼錯誤永遠固定 `not qualified`（不暴露回呼的原始錯誤或部分映射）。
+- Adapter 身分必須是 Manager 目前握有的 `exec.Cmd.Process.Pid`，不能只要 PID 存在就宣稱是自己的 Adapter；kernel PID/birth/UID/PPID/PGID 在回呼前後重查，ACP transport 需仍存活，任何取消、程式／session 不一致或連線中斷均 fail closed。**這只證明該時間窗 Manager snapshot 未變且其 Adapter PID 身分仍符合，不能證明 RemoteSessionID 就是 Codex native Thread ID，更不能從 PID／PPID 推導 MCP owner。**
+- 用 Repo 原有 test-only ACP helper 完成合法取樣、純 persisted 不誤列、11 種錯誤 mapping/PID/transition/容量拒絕、同步回呼錯誤去識別化、取消/逾時與 adapter transport 關閉、並行 Manager 寫入被 fence 的回歸測試。沒有新增 operator endpoint、實際 Adapter native diagnostics、`mcpowneraudit` 連接、production Session close/kill/recycle 或授權 UI。
+- 下一個真正 HIGH-0 blocker **不變**：只有 pinned Codex ACP Adapter 的可信協定擴充、可證明 native loaded Thread 與 stdio child 完整對應、管理員授權與跨 Manager/Adapter 的封裝邊界一致，才可將此 Manager scope 與 Darwin Pipe observer 接上；目前的兩個候選 source-only component 不是完整活體歸因系統。除非能保證 complete + exclusive mapping（包括其他 FD 複本與 grandchild），所有結果固定 `owner_unverified`。
+
 #### 2026-10-11 HIGH-0 原始碼核對與唯讀實測
 
 - AgentDock `internal/acp/sessions.go` 對 `session/close` 收到確認後清除本地 loaded/projection，再呼叫 `releaseSessionMCP`。現行 `internal/app/acp_browser.go` 的 Host MCP provider 只釋放 AgentDock 自身 Browser／Computer HTTP token/lease，**不持有** Codex app-server 自行啟動的 stdio MCP 子程序。
