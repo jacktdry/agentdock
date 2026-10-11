@@ -5,6 +5,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -137,5 +138,42 @@ func TestNextCodexConfigDigestBindsAllLaunchInputs(t *testing.T) {
 		if digest == other {
 			t.Fatal("launch input omitted from digest")
 		}
+	}
+}
+
+func TestNextCodexStartupCrashFenceNeverAutoReclaimsOrphan(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireNextCodexStartupLock(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.markBootstrapAttempt(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.close(); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(root, nextCodexStartupLockName)
+	original, err := os.ReadFile(marker)
+	if err != nil || !strings.Contains(string(original), "unresolved-v1") {
+		t.Fatalf("unresolved marker missing: %q %v", original, err)
+	}
+	if other, err := acquireNextCodexStartupLock(root); err == nil {
+		_ = other.close()
+		t.Fatal("crashed generation was silently reclaimed")
+	}
+	truncated := original[:3]
+	if err := os.WriteFile(marker, truncated, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if other, err := acquireNextCodexStartupLock(root); err == nil {
+		_ = other.close()
+		t.Fatal("partial crash marker was silently reclaimed")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatal("foreign crash record was unlinked: ", err)
 	}
 }

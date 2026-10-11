@@ -171,6 +171,34 @@ func (s *Store) readState() (State, error) {
 	return state, nil
 }
 
+// VerifyDiskState is a conservative, read-only cross-Core drift detector.
+// The in-memory M8 approval/policy view must still match the authoritative
+// on-disk state exactly. It is NOT an atomic transaction or a cross-process
+// policy mutation lock; another Core may mutate after this check.
+// Source-only Next uses this to fail closed when multiple Core runtimes load
+// the same root with independent epochs or stale policy approvals.
+func (s *Store) VerifyDiskState() error {
+	if s == nil {
+		return ErrState
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	info, err := os.Lstat(s.statePath)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0600 {
+		return ErrStateCorrupt
+	}
+	disk, err := s.readState()
+	if err != nil {
+		return err
+	}
+	memoryBytes, mErr := json.Marshal(s.state)
+	diskBytes, dErr := json.Marshal(disk)
+	if mErr != nil || dErr != nil || !bytes.Equal(memoryBytes, diskBytes) {
+		return ErrRevision
+	}
+	return nil
+}
+
 func ensureJSONEOF(decoder *json.Decoder) error {
 	var extra any
 	if err := decoder.Decode(&extra); errors.Is(err, io.EOF) {

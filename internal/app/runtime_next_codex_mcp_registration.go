@@ -89,7 +89,7 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 	key, _ := hex.DecodeString(keyHex)
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
-	if r.closing || r.nextCodexStartupLock != nil || r.nextCodexRegistry != nil || ctx.Err() != nil || r.permissions.Policy().Revision != revision {
+	if r.closing || r.nextCodexStartupLock != nil || r.nextCodexRegistry != nil || ctx.Err() != nil || r.permissions.Policy().Revision != revision || r.permissions.VerifyDiskState() != nil {
 		return "", errNextCodexRegistryUnavailable
 	}
 	lock, err := acquireNextCodexStartupLock(r.cfg.AgentDockHome)
@@ -99,7 +99,13 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 	// Retain even on uncertain bootstrap failure; never allow another Core to
 	// start a replacement before this Runtime tears down its owned ACP service.
 	r.nextCodexStartupLock = lock
-	if ctx.Err() != nil || r.permissions.Policy().Revision != revision || !validNextCodexMCPConfig(c) {
+	if ctx.Err() != nil || r.permissions.Policy().Revision != revision || r.permissions.VerifyDiskState() != nil || !validNextCodexMCPConfig(c) {
+		return "", errNextCodexRegistryUnavailable
+	}
+	// Create the crash fence durably while owning the generation lock. If
+	// this Core dies at any point after this line, another Core cannot
+	// mistake flock release for proof that native MCP children are gone.
+	if err := lock.markBootstrapAttempt(); err != nil {
 		return "", errNextCodexRegistryUnavailable
 	}
 	births, err := r.acp.BootstrapNextCodexAppServerBirths(ctx, key)
@@ -112,7 +118,7 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 	}
 	// Policy changes revoke observation authority without signaling any PID.
 	scope := func(ctx context.Context) (launchregistry.TrustedScope, error) {
-		if r.permissions.Policy().Revision != revision || lock.validate() != nil {
+		if r.permissions.Policy().Revision != revision || r.permissions.VerifyDiskState() != nil || lock.validate() != nil {
 			return launchregistry.TrustedScope{}, errNextCodexRegistryUnavailable
 		}
 		return pin.Scope(ctx)
@@ -122,7 +128,7 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 		pin.Revoke()
 		return "", errNextCodexRegistryUnavailable
 	}
-	if ctx.Err() != nil || r.permissions.Policy().Revision != revision || lock.validate() != nil {
+	if ctx.Err() != nil || r.permissions.Policy().Revision != revision || r.permissions.VerifyDiskState() != nil || lock.validate() != nil {
 		pin.Revoke()
 		_ = svc.Close()
 		return "", errNextCodexRegistryUnavailable
@@ -227,7 +233,7 @@ func (r *Runtime) attachNextCodexInstrumentedMCP(ctx context.Context, c nextCode
 	defer func() { finish(retErr) }()
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
-	if r.closing || ctx.Err() != nil || r.nextCodexRegistry == nil || r.nextCodexPin == nil || r.nextCodexStartupLock == nil || r.nextCodexStartupLock.validate() != nil || r.nextCodexPrincipal != principal || r.nextCodexPolicyRevision != revision || r.permissions.Policy().Revision != revision || r.nextCodexRegisteredID != c.ServerID || r.nextCodexRegisteredDigest != c.ConfigDigest {
+	if r.closing || ctx.Err() != nil || r.permissions.VerifyDiskState() != nil || r.nextCodexRegistry == nil || r.nextCodexPin == nil || r.nextCodexStartupLock == nil || r.nextCodexStartupLock.validate() != nil || r.nextCodexPrincipal != principal || r.nextCodexPolicyRevision != revision || r.permissions.Policy().Revision != revision || r.nextCodexRegisteredID != c.ServerID || r.nextCodexRegisteredDigest != c.ConfigDigest {
 		return errNextCodexRegistryUnavailable
 	}
 	if !validNextCodexMCPConfig(c) {

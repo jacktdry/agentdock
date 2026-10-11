@@ -9,3 +9,5 @@ func acquireNextCodexStartupLock(string) (*nextCodexStartupLock, error) {
 }
 func (*nextCodexStartupLock) validate() error { return errNextCodexRegistryUnavailable }
 func (*nextCodexStartupLock) close() error    { return nil }
+
+func (*nextCodexStartupLock) markBootstrapAttempt() error { return errNextCodexRegistryUnavailable }

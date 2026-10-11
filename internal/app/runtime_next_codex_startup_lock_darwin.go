@@ -4,6 +4,7 @@ package app
 
 import (
 	"errors"
+	"io"
 	"os"
 	"sync"
 
@@ -42,7 +43,51 @@ func acquireNextCodexStartupLock(root string) (*nextCodexStartupLock, error) {
 		_ = g.close()
 		return nil, errNextCodexRegistryUnavailable
 	}
+	// A previous Core may have crashed after starting its native app-server.
+	// flock alone is not evidence that any surviving child MCPs have exited.
+	// Nonempty journal is an unresolved generation, including a truncated or
+	// corrupt record. Never auto-delete it or start a replacement native Core.
+	var state unix.Stat_t
+	if unix.Fstat(fd, &state) != nil || state.Size != 0 {
+		_ = g.close()
+		return nil, errNextCodexRegistryUnavailable
+	}
 	return g, nil
+}
+
+// markBootstrapAttempt is durable BEFORE any native Adapter process starts.
+// The marker intentionally contains no PID, credential, path or MCP args.
+// Even a partial write after a crash leaves a nonempty fail-closed sentinel.
+// The source-only Core deliberately has NO method to clear this marker:
+// reconciling possible orphan native children needs separate operator proof.
+func (g *nextCodexStartupLock) markBootstrapAttempt() error {
+	if g == nil || g.validate() != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		return errNextCodexRegistryUnavailable
+	}
+	const marker = "agentdock-next-codex-native-bootstrap-unresolved-v1\n"
+	if err := unix.Ftruncate(g.fd, 0); err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	if _, err := unix.Seek(g.fd, 0, io.SeekStart); err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	if n, err := unix.Write(g.fd, []byte(marker)); err != nil || n != len(marker) {
+		return errNextCodexRegistryUnavailable
+	}
+	if err := unix.Fsync(g.fd); err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	// Also persist the directory entry for a newly created lock file.
+	// Otherwise a sudden crash can lose the pathname but not its journal.
+	if err := unix.Fsync(g.dirfd); err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	return nil
 }
 
 func (g *nextCodexStartupLock) validate() error {

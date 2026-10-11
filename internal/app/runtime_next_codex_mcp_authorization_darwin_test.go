@@ -193,31 +193,38 @@ func TestNextCodexMCPApprovalBindsWrapperAndPrincipal(t *testing.T) {
 
 func TestNextCodexMCPReservationAcrossCoreInstancesAndClose(t *testing.T) {
 	rt, profile, c, ctx := nextCodexAuthorizationFixture(t)
+	replaceRuntimePermissionPolicy(t, rt, func(p *permission.Policy) { p.GlobalMode = permission.Full })
+	_, err := rt.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
+	if err == nil || rt.nextCodexStartupLock == nil {
+		t.Fatalf("failed bootstrap must retain a durable reservation: %v", err)
+	}
+	path := filepath.Join(rt.cfg.AgentDockHome, nextCodexStartupLockName)
+	state, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(state), "unresolved-v1") {
+		t.Fatalf("missing durable crash sentinel: %q %v", state, err)
+	}
 	other, err := NewRuntime(rt.cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = other.Close() })
-	_, err = rt.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
-	if err == nil || rt.nextCodexStartupLock == nil {
-		t.Fatal("failed bootstrap must retain reservation")
-	}
 	_, err = other.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
 	if err == nil || other.nextCodexStartupLock != nil {
-		t.Fatal("second Core acquired same native generation")
+		t.Fatal("another Core acquired unresolved native generation")
 	}
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := rt.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// Even after flock released by clean ACP Close, bootstrap outcome remains
+	// unverified; an orphan MCP may survive. Deny reacquisition until an
+	// independent operator-authorized kernel inventory reconciles it.
 	_, err = other.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
-	if err == nil || other.nextCodexStartupLock == nil {
-		t.Fatal("Close did not release flock")
+	if err == nil || other.nextCodexStartupLock != nil {
+		t.Fatal("restarted Core bypassed unresolved crash marker")
 	}
-	if _, err := os.Lstat(filepath.Join(rt.cfg.AgentDockHome, nextCodexStartupLockName)); err != nil {
-		t.Fatal("Close unlinked persistent lock inode")
+	after, err := os.ReadFile(path)
+	if err != nil || string(state) != string(after) {
+		t.Fatal("Runtime.Close cleared or modified unresolved marker")
 	}
 }
 
