@@ -17,6 +17,7 @@ import (
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
 	"github.com/uvwt/agentdock/internal/execution"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/mcp/launchregistry"
 	"github.com/uvwt/agentdock/internal/observability"
@@ -62,6 +63,9 @@ type Runtime struct {
 	taskTools             *tooltask.Service
 	acp                   *toolacp.Service
 	// Core-only, Next opt-in, never installed or activated by NewRuntime.
+	nextCodexStartupLock      *nextCodexStartupLock
+	nextCodexPrincipal        requestmeta.AuthPrincipal
+	nextCodexPolicyRevision   uint64
 	nextCodexRegistry         *launchregistry.PrivateCoreListener
 	nextCodexPin              *launchregistry.GenerationPin
 	nextCodexRegisteredID     string
@@ -355,6 +359,13 @@ func (r *Runtime) Close() error {
 				closeErrors = append(closeErrors, fmt.Errorf("close ACP runtime: %w", err))
 			}
 		}
+		if r.nextCodexStartupLock != nil && acpClosed {
+			if err := r.nextCodexStartupLock.close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		// Failed ACP Close retains the reservation: native teardown is uncertain.
+
 		if r.acpBrowser != nil {
 			if err := r.acpBrowser.Close(); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close ACP browser bridge: %w", err))

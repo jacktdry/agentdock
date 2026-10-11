@@ -78,11 +78,11 @@ func TestB4SourceOnlyCoreConfigDigestAndNoRuntimeAutoRegistrar(t *testing.T) {
 	if rt.nextCodexRegistry != nil || len(rt.NextCodexMCPRegistrationSnapshot()) != 0 || len(rt.NextCodexMCPReconciliation(context.Background())) != 0 {
 		t.Fatal("unapproved MCP listener or observation created by normal runtime")
 	}
-	digest := NextCodexMCPConfigDigest("fixture", "/bin/echo", []string{"hello"})
-	if len(digest) != 64 || digest == NextCodexMCPConfigDigest("fixture", "/bin/echo", []string{"goodbye"}) || digest == NextCodexMCPConfigDigest("other", "/bin/echo", []string{"hello"}) {
+	digest := nextCodexMCPConfigDigest("fixture", "/bin/echo", "/bin/echo", []string{"hello"})
+	if len(digest) != 64 || digest == nextCodexMCPConfigDigest("fixture", "/bin/echo", "/bin/echo", []string{"goodbye"}) || digest == nextCodexMCPConfigDigest("other", "/bin/echo", "/bin/echo", []string{"hello"}) {
 		t.Fatal("config digest did not bind server and executable arguments")
 	}
-	if err := rt.AttachNextCodexInstrumentedMCP(context.Background(), ApprovedNextCodexMCPConfig{ServerID: "fixture", WrapperExecutable: "/bin/echo", BackendExecutable: "/bin/echo", BackendArgs: []string{"hello"}, ConfigDigest: digest}); err == nil {
+	if err := rt.attachNextCodexInstrumentedMCP(context.Background(), nextCodexMCPConfig{ServerID: "fixture", WrapperExecutable: "/bin/echo", BackendExecutable: "/bin/echo", BackendArgs: []string{"hello"}, ConfigDigest: digest}); err == nil {
 		t.Fatal("MCP wrapper installed without authenticated generation or M8 fence")
 	}
 }

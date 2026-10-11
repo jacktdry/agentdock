@@ -585,6 +585,15 @@ func (r *Runtime) hostOperationFacts(ctx context.Context, op permission.HostOper
 		facts.Other = true
 		facts.OneShotEligible = true
 		facts.Reason = "Desktop Plugin management changes Plugin state or credentials"
+	case "next_codex_mcp":
+		facts.EffectsKnown = false
+		facts.OpaqueProviderExecution = true
+		facts.Management = true
+		facts.MCP = true
+		facts.Commands = true
+		facts.Network = true
+		facts.OneShotEligible = true
+		facts.Reason = "Next Codex MCP bootstrap or wrapper configuration changes opaque native provider execution"
 	case "runtime_mcp":
 		facts.Management = true
 		facts.MCP = true
