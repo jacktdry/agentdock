@@ -213,6 +213,21 @@ func (c *NextStdioLeaseController) Call(ctx context.Context, lease NextStdioLeas
 	return s.Call(ctx, tool, args)
 }
 
+// invalidate is invoked only by the authoritative P5 read gate after its
+// authority changes. It never infers owner from a system PID, and never kills.
+func (c *NextStdioLeaseController) invalidate(lease NextStdioLease) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.resources[lease.key]
+	if r != nil && r.generation == lease.generation && r.borrowers[lease.id] && r.state == "ready" {
+		r.state = "cleanup_required"
+		r.signal()
+	}
+}
+
 // Release consumes exactly one borrower token. Ephemeral final release drains
 // synchronously; persistent/idle-managed do not close while idle merely because
 // a caller returned from a prompt. A token cannot be replayed after release.
@@ -228,7 +243,7 @@ func (c *NextStdioLeaseController) Release(ctx context.Context, lease NextStdioL
 	}
 	delete(r.borrowers, lease.id)
 	r.lastUsed = time.Now()
-	drain := len(r.borrowers) == 0 && r.policy == NextLeaseEphemeral
+	drain := len(r.borrowers) == 0 && (r.policy == NextLeaseEphemeral || r.state == "cleanup_required")
 	if drain { // Claim final release under lock, before another Acquire.
 		r.state = "draining"
 	}

@@ -363,3 +363,9 @@
 - 查核已安裝 Codex ACP 2.1.1 與本機 fork：`thread/loaded/list` 有 threadId，但 `mcpServerStatus/list` 無每個 stdio child PID/transport，沒有可靠 `Thread -> transport -> PID` 映射；所以不得把 PPID/FD/elapsed 當 orphan/cleanup authority；現有最後 Session 關閉後 app-server recycle 已是既有緩解，而非 HIGH-0 完成。
 - Next-only `internal/mcp/client/next_lifecycle.go` 可針對**自己直接啟動且 birth 驗證**的 stdio child 管理加密 token borrowing、per owner/generation 限制、容量上限、drain/inflight fence、ephemeral/persistent/idle-managed、quarantine/no-auto-restart，安全 DTO 不輸出 credential/argv/tool data。現有 Stable/Next runtime 未接線。
 - Test-owned macOS MCP helper 覆蓋 sequential 20 ephemeral + persistent 20 close/reopen、4/8 capacity、stale generation、auth rejection、bad handshake quarantine 與 secret projection；其餘 browser/remote HTTP/Plugin、ACP native attribution、Windows Job Object/原生 UAT、UI 仍未驗收。目標下一步：先補可信 Adapter native evidence，再由 M8/P5 admission 安全接線，不允許拿原型做 automatic cleanup。
+
+
+### 2026-10-11 P0 P5 Authoritative Next Stdio Registry Gate（source-only）
+
+- `internal/mcp/client/next_lifecycle_registry.go` 將 prototype `NextStdioLeaseController` 與真實 P5 Manager 的 persisted Registry + Plugin ownership overlay / dynamic environment 讀取結合。`AcquireChecked` 要求 exact P5 revision / generation、standalone + enabled stdio；完成 handshake 後再次查核，不吻合立即隔離並 EOF/Wait 本次所擁有的子程序，不會回傳 lease。`CallChecked` 前後檢查過期設定，不會發布 stale reply；不再依賴任意呼叫者提供的 command/env/擬造 standalone 設定。
+- Test-owned MCP + 私有 P5 伺服器 Registry 實測 20 sequential cycles、8 並行同 owner、不同 Transport／disable／stale revision／config update／handshake-publish revocation；無操作 stable/Next 的 live MCP。**仍未有 M8 Auth/Core admission、正式 Runtime、跨程序原子 dispatch fence、Codex native Thread→MCP PID 證據**；維持 Source-only／不部署／P0 Blocked。

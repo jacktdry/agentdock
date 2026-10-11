@@ -127,6 +127,11 @@ Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／bir
 - 真實 native fork helper 測試 20 個 sequential ephemeral 建立／發工具／EOF+Wait，以及 20 個 persistent close/open cycles、8 個平行競逐上限 4、borrow、generation mismatch、drain fence、idle TTL、失敗握手 child quarantine。發生已觀測 child 卻未確認成功 cleanup 時保留 `cleanup_required` slot，防止 retry 重啟第二個可能仍在執行的 child。其他 OS `ObserveBirthIdentity` 不提供可驗證 child 身分，因而採 fail closed（Linux/Windows 暫不開啟此 Next-only 原型）。
 - `Snapshot` 與 `ResourceSnapshot` 是僅有固定欄位的 Next-only read-only process-local DTO（owner local Session ID、server ID、policy、lease/borrow/inflight/status/counts），不輸出 argv/env/secret/token/tool content/kernel PID；**不是已連接使用者 UI**。它不能宣稱 observed_external owner；未實作任何資料庫、P5 ACL 或 Next UI 寫入入口。
 
+**P5 Registry 可信讀取閘門（下一個 source-only checkpoint）：**`internal/mcp/client/next_lifecycle_registry.go` 的 `NextStdioRegistryGate` 不接受使用者提供的 `ServerConfig`／argv/env 作為啟動權限；每次建立均向**真實 P5 `Manager.Registry()`（磁碟 Registry + Plugin ownership overlay）**讀取並核對呼叫者事先持有的完整 `Revision` + server `Generation`，限定 `Enabled=true`、`SourceType=standalone`、stdio、有明確 command；透過原有 `Manager.runtimeConfig` 讀取 MCP 的 scoped environment。Plugin、HTTP、停用、revision 或 generation 過期，以及相同名稱刪除重建一律拒絕。
+
+- 建立 MCP 前／完成 handshake 後重新核對同一份 Registry incarnation 與環境，**若中途撤銷權限**，只能撤回自身剛啟動的 Lease：標成 `cleanup_required`、停止新 borrower/tool、使用原 `StdioSession.Close` 的 owned EOF/Wait 回收；callback 實測在 handshake 成功後立即 Disable 仍未發布有效 lease，也沒有重複啟動。工具執行前後也重新驗證；失效時不發布 reply 並標記 quarantine。**工具已派發後才看到 revocation 無法逆轉可能的副作用**；這不等同跨程序原子權限 fence 或可靠 M8 authorization。
+- 使用 test-owned 真實 P5 private registry + 真實 MCP echo 子程序進行 20 次 ephemeral、8 個同 owner 競逐、HTTP/disable/generation/config revocation、啟動完成與發佈之間的精確競態；Legacy P5 Manager/Registry 沒有被改寫或重建第二份 registry。此閘門未在正式 Runtime 或 M8 Gate 注入，**不得將 Source-only Gate 作為允許執行工具的 operator API**。跨程序 Registry/Env 變更需要在下一個整合階段用 P5 state lock + M8 atomic admission / dispatch fence 再解決。
+
 **尚未完成的正式 P0 驗收：**可信 Adapter 原生 `loaded thread → MCP stdio transport → child PID/birth` 擴充，跨 Manager 與 Adapter PID/incarnation 的真實端到端 attestation、全部 native transport exclusivity，對現行 62/121/128 家族的 20-cycle baseline；Registry/Plugin/OAuth/M8 權限與 Next Supervisor/Broker 的授權接線、Windows native owner fence、Next UI 及未來 live Next-only UAT。**P0 仍為 blocked/in progress；不准啟用 auto-clean。**
 
 ### HIGH-1：Next 專用共通 MCP lifecycle controller
