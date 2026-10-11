@@ -519,3 +519,5 @@ Shared UI parity confirmed → duplicated native business UI deprecation
 ACP Manager、Browser Routing 與 Activity Center 都不應在 Desktop foundation 尚未確定前新增大量 AppKit / WPF UI，避免之後重做。
 
 其中 Activity / insertion / truthful state 刻意排在 ACP Manager 前面，因為它們更能提早暴露 Desktop API、streaming、backpressure 與 accessibility 架構問題；ACP CRUD 相對屬於可延後的低風險管理介面。
+
+**2026-10-12 Codex ACP MCP B0–B6 固定收斂**：見 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。B4 source-only pre-Session signed native app-server bootstrap + nonblocking Core GenerationPin + digest-bound stdio MCP injection、B5 logical multi-Session leases + atomic pre-ACK Core registry commit + read-only reconciliation、B6 20-owned-fixture + 8-concurrency + native auth-free isolated Codex app-server smoke 已做。**B6 production gate 未放行**：因尚缺 Next isolated auth、真正 P5/M8 cross-Core admission/lease、已登入 real Next-only Codex ACP instrumented session + recycle UAT；不得描述成已部署或自動回收現有 MCP，也不得為此 fork 官方 CLI 或任意 `kill`。

@@ -82,3 +82,28 @@ func (s *Service) NextCodexAppServerBirths(ctx context.Context, key []byte) (acp
 	}
 	return manager.NextCodexAppServerBirths(ctx, key)
 }
+
+// BootstrapNextCodexAppServerBirths is an explicit Next-only pre-Session
+// operation. It never injects MCP configurations or grants cleanup rights.
+func (s *Service) BootstrapNextCodexAppServerBirths(ctx context.Context, key []byte) (acpruntime.NextCodexAppServerBirths, error) {
+	manager, profileID, err := s.managerFor("codex")
+	if err != nil || profileID != "codex" || ctx == nil || ctx.Err() != nil || len(key) != 32 {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex bootstrap unavailable")
+	}
+	return manager.BootstrapNextCodexAppServerBirths(ctx, key)
+}
+
+func (s *Service) InstallNextCodexInstrumentedSessionMCP(server acpruntime.SessionMCPServer) error {
+	m, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return errors.New("Next Codex MCP installation unavailable")
+	}
+	return m.InstallInstrumentedSessionMCP(server)
+}
+func (s *Service) NextCodexMCPBorrowers() int {
+	m, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return -1
+	}
+	return m.InstrumentedSessionMCPBorrowers()
+}

@@ -24,6 +24,13 @@ type Registrar struct {
 }
 
 func (r Registrar) Accept(ctx context.Context, conn *net.UnixConn) (Observation, error) {
+	return r.AcceptWithCommit(ctx, conn, nil)
+}
+
+// AcceptWithCommit calls a Core-only callback AFTER kernel checks but BEFORE
+// acknowledging registration to the wrapper. A failed dispatch/close fence
+// must never be followed by a misleading "recorded" acknowledgement.
+func (r Registrar) AcceptWithCommit(ctx context.Context, conn *net.UnixConn, commit func(Observation) error) (Observation, error) {
 	if ctx == nil || conn == nil || ctx.Err() != nil || !validServer(r.Server) || !validDigest(r.ConfigDigest) {
 		return Observation{}, ErrUnavailable
 	}
@@ -78,10 +85,14 @@ func (r Registrar) Accept(ctx context.Context, conn *net.UnixConn) (Observation,
 	if err != nil || child2 != verified || ctx.Err() != nil {
 		return Observation{}, ErrUnavailable
 	}
+	record := Observation{Server: r.Server, ConfigDigest: r.ConfigDigest, AppServer: app, Wrapper: peer, Child: verified}
+	if commit != nil && commit(record) != nil {
+		return Observation{}, ErrUnavailable
+	}
 	if writeFrame(conn, frame{Stage: "recorded", Nonce: nonce}) != nil {
 		return Observation{}, ErrUnavailable
 	}
-	return Observation{Server: r.Server, ConfigDigest: r.ConfigDigest, AppServer: app, Wrapper: peer, Child: verified}, nil
+	return record, nil
 }
 
 func observePeer(ctx context.Context, conn *net.UnixConn) (process.BirthIdentity, error) {

@@ -59,3 +59,30 @@ func TestNextCodexRegistrarSourceOnlyGuardAndNoImplicitACPStart(t *testing.T) {
 		})
 	}
 }
+
+func TestB4SourceOnlyCoreConfigDigestAndNoRuntimeAutoRegistrar(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	t.Setenv(nextCodexMCPRegistrationEnv, "source-only")
+	work := filepath.Join(root, "work")
+	if err := os.MkdirAll(work, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{AgentDockHome: filepath.Join(root, ".agentdock-next"), AgentDockDefaultDir: work, ACPEnabled: false}
+	rt, err := NewRuntime(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rt.Close() }()
+	if rt.nextCodexRegistry != nil || len(rt.NextCodexMCPRegistrationSnapshot()) != 0 || len(rt.NextCodexMCPReconciliation(context.Background())) != 0 {
+		t.Fatal("unapproved MCP listener or observation created by normal runtime")
+	}
+	digest := NextCodexMCPConfigDigest("fixture", "/bin/echo", []string{"hello"})
+	if len(digest) != 64 || digest == NextCodexMCPConfigDigest("fixture", "/bin/echo", []string{"goodbye"}) || digest == NextCodexMCPConfigDigest("other", "/bin/echo", []string{"hello"}) {
+		t.Fatal("config digest did not bind server and executable arguments")
+	}
+	if err := rt.AttachNextCodexInstrumentedMCP(context.Background(), ApprovedNextCodexMCPConfig{ServerID: "fixture", WrapperExecutable: "/bin/echo", BackendExecutable: "/bin/echo", BackendArgs: []string{"hello"}, ConfigDigest: digest}); err == nil {
+		t.Fatal("MCP wrapper installed without authenticated generation or M8 fence")
+	}
+}

@@ -3,10 +3,13 @@ package acp
 import "context"
 
 func (m *Manager) sessionMCPServers(ctx context.Context, sessionID, cwd string, additional []string) ([]SessionMCPServer, error) {
-	if m.opts.SessionMCPProvider == nil {
+	m.mu.RLock()
+	provider := m.opts.SessionMCPProvider
+	m.mu.RUnlock()
+	if provider == nil {
 		return []SessionMCPServer{}, nil
 	}
-	servers, err := m.opts.SessionMCPProvider.Servers(ctx, sessionID, cwd, append([]string(nil), additional...))
+	servers, err := provider.Servers(ctx, sessionID, cwd, append([]string(nil), additional...))
 	if err != nil {
 		return nil, newError("ACP_SESSION_MCP_FAILED", "prepare host-owned ACP MCP capabilities", false, map[string]any{"session_id": sessionID}, err)
 	}
@@ -39,7 +42,10 @@ func (m *Manager) sessionActivationParams(ctx context.Context, record SessionRec
 }
 
 func (m *Manager) releaseSessionMCP(ctx context.Context, sessionID string) error {
-	if m.opts.SessionMCPProvider == nil {
+	m.mu.RLock()
+	provider := m.opts.SessionMCPProvider
+	m.mu.RUnlock()
+	if provider == nil {
 		return nil
 	}
 	m.sessionMCPMu.Lock()
@@ -49,7 +55,7 @@ func (m *Manager) releaseSessionMCP(ctx context.Context, sessionID string) error
 	}
 	m.sessionMCPReleased[sessionID] = struct{}{}
 	m.sessionMCPMu.Unlock()
-	if err := m.opts.SessionMCPProvider.ReleaseSession(ctx, sessionID); err != nil {
+	if err := provider.ReleaseSession(ctx, sessionID); err != nil {
 		m.sessionMCPMu.Lock()
 		delete(m.sessionMCPReleased, sessionID)
 		m.sessionMCPMu.Unlock()

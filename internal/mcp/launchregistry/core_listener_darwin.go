@@ -124,25 +124,24 @@ func (s *PrivateCoreListener) register(conn *net.UnixConn) {
 	if err != nil {
 		return
 	}
-	record, err := (Registrar{AppServer: before.AppServer, Server: s.server, ConfigDigest: s.digest}).Accept(ctx, conn)
-	if err != nil || ctx.Err() != nil {
-		return
-	}
-	after, err := s.verifiedScope(ctx)
-	if err != nil || after != before || record.AppServer != before.AppServer {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return
-	}
-	if len(s.records) >= maxCoreRegistrationRows {
-		copy(s.records, s.records[1:])
-		s.records[len(s.records)-1] = record
-	} else {
-		s.records = append(s.records, record)
-	}
+	_, _ = (Registrar{AppServer: before.AppServer, Server: s.server, ConfigDigest: s.digest}).AcceptWithCommit(ctx, conn, func(record Observation) error {
+		after, err := s.verifiedScope(ctx)
+		if err != nil || after != before || record.AppServer != before.AppServer {
+			return ErrUnavailable
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.closed || ctx.Err() != nil {
+			return ErrUnavailable
+		}
+		if len(s.records) >= maxCoreRegistrationRows {
+			copy(s.records, s.records[1:])
+			s.records[len(s.records)-1] = record
+		} else {
+			s.records = append(s.records, record)
+		}
+		return nil
+	})
 }
 
 func (s *PrivateCoreListener) verifiedScope(ctx context.Context) (TrustedScope, error) {

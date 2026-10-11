@@ -18,6 +18,7 @@ import (
 	"github.com/uvwt/agentdock/internal/evolution"
 	"github.com/uvwt/agentdock/internal/execution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
+	"github.com/uvwt/agentdock/internal/mcp/launchregistry"
 	"github.com/uvwt/agentdock/internal/observability"
 	"github.com/uvwt/agentdock/internal/permission"
 	pluginruntime "github.com/uvwt/agentdock/internal/plugin"
@@ -41,42 +42,47 @@ import (
 type Result = toolcore.Result
 
 type Runtime struct {
-	cfg                      config.Config
-	toolNames                []string
-	toolValidators           map[string]*toolcontract.InputValidator
-	ws                       *workspace.Workspace
-	skills                   *toolskill.Service
-	command                  *toolcommand.Service
-	files                    *toolfile.Service
-	dynamicMCP               *toolmcp.Service
-	plugins                  *toolplugin.Service
-	media                    *toolmedia.Service
-	browser                  *toolbrowser.Service
-	acpBrowser               *toolbrowser.ACPBridge
-	acpSharedRestartGuard    *sharedBrowserRestartGuard
-	computer                 *toolcomputer.Service
-	acpComputer              *toolcomputer.ACPBridge
-	recall                   *toolrecall.Service
-	evolution                *evolution.Service
-	taskTools                *tooltask.Service
-	acp                      *toolacp.Service
-	observer                 *observability.Recorder
-	execution                *execution.Store
-	permissions              *permission.Store
-	admission                *permission.AdmissionGate
-	permissionCtl            *permission.ControlAuthority
-	tracing                  *observability.Tracing
-	lifecycleMu              sync.RWMutex
-	pluginDesktopOpsMu       sync.Mutex
-	pluginDesktopOps         map[string]desktopPluginOperationRecord
-	mcpDesktopOpsMu          sync.Mutex
-	mcpDesktopOps            map[string]desktopMCPOperationRecord
-	mcpDesktopFingerprintKey [32]byte
-	commandCtx               context.Context
-	commandCancel            context.CancelFunc
-	closing                  bool
-	closeOnce                sync.Once
-	closeErr                 error
+	cfg                   config.Config
+	toolNames             []string
+	toolValidators        map[string]*toolcontract.InputValidator
+	ws                    *workspace.Workspace
+	skills                *toolskill.Service
+	command               *toolcommand.Service
+	files                 *toolfile.Service
+	dynamicMCP            *toolmcp.Service
+	plugins               *toolplugin.Service
+	media                 *toolmedia.Service
+	browser               *toolbrowser.Service
+	acpBrowser            *toolbrowser.ACPBridge
+	acpSharedRestartGuard *sharedBrowserRestartGuard
+	computer              *toolcomputer.Service
+	acpComputer           *toolcomputer.ACPBridge
+	recall                *toolrecall.Service
+	evolution             *evolution.Service
+	taskTools             *tooltask.Service
+	acp                   *toolacp.Service
+	// Core-only, Next opt-in, never installed or activated by NewRuntime.
+	nextCodexRegistry         *launchregistry.PrivateCoreListener
+	nextCodexPin              *launchregistry.GenerationPin
+	nextCodexRegisteredID     string
+	nextCodexRegisteredDigest string
+	observer                  *observability.Recorder
+	execution                 *execution.Store
+	permissions               *permission.Store
+	admission                 *permission.AdmissionGate
+	permissionCtl             *permission.ControlAuthority
+	tracing                   *observability.Tracing
+	lifecycleMu               sync.RWMutex
+	pluginDesktopOpsMu        sync.Mutex
+	pluginDesktopOps          map[string]desktopPluginOperationRecord
+	mcpDesktopOpsMu           sync.Mutex
+	mcpDesktopOps             map[string]desktopMCPOperationRecord
+	mcpDesktopFingerprintKey  [32]byte
+	commandCtx                context.Context
+	commandCancel             context.CancelFunc
+	closing                   bool
+	closeOnce                 sync.Once
+	closeErr                  error
 }
 
 func NewRuntime(cfg config.Config) (*Runtime, error) {
@@ -331,6 +337,16 @@ func (r *Runtime) Close() error {
 		}
 		if commandCancel != nil {
 			commandCancel()
+		}
+		// Revoke Core-only registration before any ACP process teardown.
+		// This affects only our own uniquely created socket, not native MCPs.
+		if r.nextCodexPin != nil {
+			r.nextCodexPin.Revoke()
+		}
+		if r.nextCodexRegistry != nil {
+			if err := r.nextCodexRegistry.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close private Next Codex MCP registrar: %w", err))
+			}
 		}
 		acpClosed := true
 		if r.acp != nil {

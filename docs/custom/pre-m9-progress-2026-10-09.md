@@ -405,3 +405,7 @@
 ### 2026-10-11 B3 Codex ACP early lifecycle（source-only）
 
 在獨立 `codex-acp` fork 實作 pre-app-server source-only `CODEX_HOME` 防止沿用全域 MCP 的保守隔離；Session Config 遇 native effective/project MCP server（含無 requested MCP 的情況）就拒絕，不能 silently dedup。同時擴充 Next Go 原 HMAC 診斷允許 Adapter 已啟動但 loaded Session 為空，仍須 OS adapter→app-server birth 核驗。正式隔離資料夾與 auth 不自動建立／搬移，尚未打通 B2 Core listener 的 production wiring，native Thread→child ownership 仍 unknown，不能自動清理。詳見 [B3 checkpoint](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md#g-b3-checkpointcodex-acp-啟動前的保守隔離與零-loaded-session-診斷2026-10-11source-only)。
+
+### 2026-10-12 Codex ACP MCP B4–B6 source-only integration / release gate
+
+B4 已有 Core-only explicit bootstrap API（從本機 Next 受控 ACP Adapter 取得 HMAC signed native PID/birth before Session）、GenerationPin nonblocking listener、immutable logical server digest 與 Next-owned stdio MCP session injection；無 production Runtime 自動啟用。B5 保留 host HTTP MCP、跨本地多 Session reference count、Core registry record-before-ACK fence、read-only kernel reconciliation，**任何原生 PID cleanup_allowed=false**。B6 已做真實測試 helper 20 輪正常啟動／8 並行/取消與錯誤證據拒絕，及使用暫存空 CODEX_HOME 的原生 Codex app-server initialize/config-read smoke；需以本輪回歸/race/vet/跨編譯為驗收。仍缺 isolated auth、P5/M8 cross-process admission/lease、使用者 real Next-only authenticated session/new/prompt/close UAT；**B6 正式啟用 gate NOT RELEASED**。詳見 [固定 B0–B6 驗收](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。

@@ -32,9 +32,14 @@ type AgentSpec struct {
 // session. Agent adapters may connect to it, but they never own its backend.
 type SessionMCPServer struct {
 	Name    string             `json:"name"`
-	Type    string             `json:"type"`
-	URL     string             `json:"url"`
-	Headers []SessionMCPHeader `json:"headers"`
+	Type    string             `json:"type,omitempty"`
+	URL     string             `json:"url,omitempty"`
+	Headers []SessionMCPHeader `json:"headers,omitempty"`
+	// Stdio is only supplied by an explicitly admitted, Core-owned Next MCP
+	// wrapper. Host HTTP MCPs remain unchanged.
+	Command string             `json:"command,omitempty"`
+	Args    []string           `json:"args,omitempty"`
+	Env     []SessionMCPHeader `json:"env,omitempty"`
 }
 
 type SessionMCPHeader struct {

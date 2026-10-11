@@ -125,6 +125,7 @@ func (m *Manager) Close() error {
 			}
 		}
 		process := m.process
+		hasMCPProvider := m.opts.SessionMCPProvider != nil
 		sessionIDs := make([]string, 0, len(m.sessions))
 		for sessionID := range m.sessions {
 			sessionIDs = append(sessionIDs, sessionID)
@@ -151,7 +152,7 @@ func (m *Manager) Close() error {
 		if process != nil {
 			m.closeErr = process.Close()
 		}
-		if m.opts.SessionMCPProvider != nil {
+		if hasMCPProvider {
 			for _, sessionID := range sessionIDs {
 				ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 				m.closeErr = errors.Join(m.closeErr, m.releaseSessionMCP(ctx, sessionID))
