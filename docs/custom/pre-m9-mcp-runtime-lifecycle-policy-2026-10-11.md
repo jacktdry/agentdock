@@ -70,6 +70,21 @@
 - 確認 `mcp-search-console` 是 stateful stdio 或支援共享 transport，再決定是否能改為 shared service。CBM 的 watcher/manual-index 衝突需比較 project + branch/commit + options 和 worker lifecycle，不把「64 Clients」當「64 indexing jobs」。
 - 對各 family 建立 20-cycle baseline、穩定後計數、RSS 趨勢、session close failure；先 **warning only**，不啟用 auto-clean。
 
+#### HIGH-0 第一個安全診斷 checkpoint（source-only）
+
+macOS opt-in CLI：`go run ./cmd/agentdock-next-mcp-owner-audit --root-pid <已確認的 Codex app-server 或 adapter PID> --max-nodes 1024 --max-depth 16 --timeout 10s`。必須明示 root PID；不自動找程序、不接入 live adapter、不關閉 Session、不提供 process-control/action flags。JSON 僅送 stdout，預設不寫檔；Linux／Windows 回報 `platform_unavailable`（exit 1），參數錯誤 exit 2，`--help` 回傳 JSON 說明。CLI 不驗證 root 是 Codex 或屬於 Next，操作者必須先確認其來源。
+
+唯讀固定容量 Darwin kernel metadata table（上限 16,384 rows，單次 syscall）搭配既有 `process.ObserveBirthIdentity`：採樣前確認 root，採樣後重新比對所有輸出 PID 的 kernel birth、PPID、UID、PGID，最後重新確認 root。node/depth/deadline 或任何採樣／identity 錯誤皆 fail closed，無部分 nodes/counts。截止時間不取消已在執行的 kernel call，但不再發布其結果；沒有 shell、argv/env、路徑、RSS、Session/thread ID 或原始 OS 錯誤輸出。
+
+成功只證明**非原子時間窗內觀察到的 PID/PPID 祖先關係**，所有 owner 固定 `owner_unverified`。已知 MCP family 計數排除 root，僅是 kernel executable basename 的 allowlist 名稱提示；basename 可能截斷，Node／Python／npm launcher 無法辨識其 MCP payload，仍為 unknown，因此 0 不是不存在，client 也不是 indexing job。缺失 parent、已 reparent/detach 的程序無法歸因；後續 identity 仍可能改變。不得推論 native thread/session、transport、managed_next/external authority、健康、orphan 或清理資格。Browser／Computer host `ReleaseSession` 不擁有 Codex app-server stdio children。下一 gate 仍是 adapter/native instrumenting 真實的 `Session → native thread → stdio transport → PID/birth` 映射；本 checkpoint 不改變第五節第一批 close probe 或停止擴大的結論。
+
+#### 2026-10-11 HIGH-0 原始碼核對與唯讀實測
+
+- AgentDock `internal/acp/sessions.go` 對 `session/close` 收到確認後清除本地 loaded/projection，再呼叫 `releaseSessionMCP`。現行 `internal/app/acp_browser.go` 的 Host MCP provider 只釋放 AgentDock 自身 Browser／Computer HTTP token/lease，**不持有** Codex app-server 自行啟動的 stdio MCP 子程序。
+- 本機安裝的 `@agentclientprotocol/codex-acp@2.1.1`（`dist/index.js`）之 `closeSession` 會呼叫 `thread/unsubscribe`、清理 adapter 的 session-local bookkeeping，再呼叫 `recycleAppServerIfIdle()`。原始碼註解明確說明已 unsubscribe 的 Thread 與 stdio MCP 會保留一段 grace period；只有 adapter `sessions.size === 0` 且具有有效 app-server process/state，才安全 recycle **該 Adapter 擁有的 dedicated app-server**。因此關閉五個 Session 後 MCP 數量不變，**與已知設計一致，但不能證明各 PID 目前的 native Thread owner、是否仍活躍或有無洩漏**。不得推論可以 recycle 其他 owner（Codex Desktop/ChatGPT）的 app-server。
+- 新 CLI 實際唯讀觀察 PID `55205`（當次 Codex ACP dedicated app-server）所得：`status=observed`、**959 個當次 PID/PPID 觀察節點**（包含 root）、`codebase_memory` 名稱提示 63 個；`chrome_devtools` / `search_console` 名稱提示為 0 **不代表沒有**，因 macOS 的 kernel `p_comm` 截短及 Node/Python/npm 啟動器名稱無法識別原始 MCP family。所有節點固定為 `owner_unverified`，無 cleanup eligibility。數據僅是這次時間窗的樣本，不作穩態 SLA。
+- 下一個 HIGH-0 gate 仍是**真實** `managed ACP Session ↔ Codex native Thread ↔ MCP transport ↔ OS PID/birth` 對照；需 Adapter/native 額外提供 loaded/unsubscribe/transport-close 事件或等價可驗證介面。此 CLI 不支持按 age/CPU/RSS 清理或推斷 orphan。
+
 ### HIGH-1：Next 專用共通 MCP lifecycle controller
 
 - 將 `MCPResourceLease` 對接現有 M7 ACP policy、P5 MCP registry、M8 Permission、P8 Broker；統一 ready/borrowed/inflight/draining/uncertain、inflight-close fence、bounded concurrency/reconnect budget。
