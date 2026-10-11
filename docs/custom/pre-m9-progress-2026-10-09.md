@@ -331,3 +331,9 @@
 
 - 在 `30 private SupervisorDispatchLedger 增加 MAC-bound Core post-response `ACK`：由相同 live Core OS kernel peer 新開 Unix socket，把 session/seq/request SHA/reply SHA+完整出生世代簽章，Supervisor 核對私有 journal 已持久 `accepted+settled`、結果非 unknown 才 fsync 追加第三行 `acknowledged`。另外的 PID、不同請求序號／reply digest、未完成紀錄、重複或損毀 ACK 都拒絕；不存在持久化 Core inbox 或授權自動恢復。
 - Go-only 真實 MCP echo + Core ACK native fixture 支援兩次 separate-socket ACK 並確認兩筆 receipt 皆三行；收到相同 MAC 但非 Core PID 的 ACK 必拒絕。Unit negative 包含 concurrent/replay/unknown/torn/file mode。核心原 `29 rotation` gate 仍一律禁止曾接受工具呼叫的 Core crash 自動重接。詳見 P8 `31。
+
+
+### 2026-10-11 MCP Runtime lifecycle 橫向改善項目（僅盤點／未實作）
+
+- 唯讀觀察：CBM 64 Clients + 1 daemon、DevTools 約 123–124 servers + 約 124 npm launcher、`mcp-search-console` 約 130 Python 子程序；多數上層為同一 Codex ACP app-server，但尚未確認有效 loaded thread 或 orphan。Memory shared HTTP/legacy stdio 與 GitHub/GitLab 並未觀察到同級程序數量。
+- 已於 roadmap 新增 Pre-M9 cross-cutting HIGH：先唯讀 owner/session/child mapping，再為 Next-owned MCP 建立 lease/generation/close/quarantine，最後以 Next-only macOS/Windows stress 驗收。此為未實作待辦，無 live cleanup、無 stable/Next/ChatGPT/Codex/Chrome/Edge/AGY 變更。詳見 [共用契約](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。

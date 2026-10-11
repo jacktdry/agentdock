@@ -264,3 +264,10 @@ running daemon 永遠從自己的 build path spawn worker；新 client / daemon 
 在正式改善前，維持以下 operational rule：
 
 > 若遇到 `worker executable build conflicts with its supervisor`，先確認是否存在更新前啟動的 CBM daemon / sessions。不要為了單一 re-index 直接終止所有 CBM process；讓 active work drain，之後再安全 restart 並補做 re-index。
+
+
+## 2026-10-11 補充：index options 競爭與跨 MCP client 數量
+
+唯讀 CBM daemon log 顯示 `watcher.changed … strategy=git`、`active_jobs=1`、`index.supervisor.reap outcome=clean`，且期間 `index_repository` 因不同 options 而衝突。此現象**不同於**本文件 2026-10-03 的 binary/worker build mismatch；不能把另一項正在索引自動解讀成另一個 ChatGPT Session 正在主動使用。
+
+macOS 観察 64 個 CBM Clients（其中 62 個是 Codex ACP app-server 子程序）及 1 個 shared daemon：64 Clients 不代表 64 個活躍 indexing workers。長期需 project+commit+options coalescing 和 bounded retry/queue，以及 daemon/client per-session lifecycle；不為解決此問題直接 kill daemon 或其他 Session。見 [MCP Runtime 共用生命週期](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。

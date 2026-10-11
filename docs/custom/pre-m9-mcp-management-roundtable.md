@@ -664,3 +664,8 @@ P5 Desktop bridge live UAT：
 - `macbook-air-m3` read-only connector validation回報 `AGENTDOCK_HOME=/Users/wei/.agentdock-next`、default dir `/Users/wei/AgentDock Next`、Codex / Antigravity profiles正常；`mcp_manage list`最後只看到原本 `memory` standalone server。
 
 P5 closeout不宣稱 release-native signed updater / visual GUI UAT完成；這些仍屬後續 release-candidate native UAT gate。P5 domain gate本身已通過，下一個 Wave 3 domain為 **Plugin Management**。
+
+
+## 22. 2026-10-11 Cross-cutting MCP Runtime Lifecycle follow-up
+
+P5 的 standalone/plugin authority、credential/OAuth、safe edit/reconnect 及 Shared UI closeout **維持完成**。本次 macOS 唯讀盤點發現 Codebase Memory Clients、Chrome DevTools npm/server 成對實例、Python search-console MCP 的大量長駐程序，需新增跨 M7 ACP lifecycle / P5 MCP runtime / P8 Broker 的 owner+lease/generation/drain 改善項目。對 external Codex Desktop/CLI owner 只做診斷，不得 kill；不得將有 state 的 stdio tool session 直接全局 pool。完整現場證據、規則、HIGH-0/1/2 實作順序與 DoD 見 [共用生命週期規則](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。此為新增待辦，不代表已處理 live MCP child。

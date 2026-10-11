@@ -411,6 +411,16 @@ M7 / diagnostics 規劃時需一併評估 installed-vs-running build 偵測、re
 
 Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeout 不含 push、merge、release、production 部署或 stable migration。原生 Windows 外部證據與既有 governance debt 持續依 [M8 文件](m8-permission-approval.md) 追蹤。
 
+## Pre-M9 Cross-cutting HIGH — MCP Runtime Lifecycle / Process Ownership（2026-10-11 新增）
+
+**新增後續改進項目，尚未實作共用 controller**；不重開已完成的 M7/P4/P5 closeout。以 [MCP Runtime 生命週期規則與程序盤點](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md) 為此工作線的設計與驗收依據。
+
+- **現場證據**：單一 Codex ACP app-server 直接持有 62 個 CBM Clients、121 個 Chrome DevTools npm launcher（其下另有 server）、128 個 Python search-console MCP 程序。存活時間／CPU 閒置 **不能證明是 orphan**；禁止直接終止現有程序。
+- **HIGH-0 先唯讀**：Next Diagnostics 關聯 Adapter → loaded ACP thread → stdio MCP child / HTTP client → lease/generation/owner，區分外部 Codex Desktop 與 Next-owned；查證三個大量程序家族何時應 unload/close、Codebase Memory Git watcher/manual indexing options conflict。
+- **HIGH-1 統一管理**：沿用 M7 ACP session policy、P5 MCP/Plugin authority、P8 Browser Broker 實作 MCP owner-bound lease、bounded capacity、inflight-close fence、drain/quarantine 和 generation fencing。CBM 優先 shared daemon；DevTools 必須 per Browser Broker lease 隔離 selected-page；一般 stdio 不可無條件跨不同 ACP owner 共用 stdin/out；Codex adapter app-server 依其真正 thread unload/close authority 管理。
+- **HIGH-2 驗收**：20 次 ephemeral／close/resume、4–8 parallel、persistent 保留、Browser 4 active/16 queue，macOS/Windows process birth/ownership UAT；可證實 Next-owned child 才允許 bounded graceful close，unknown 則 cleanup_required，不開 auto kill/restart。
+- **安全限制**：禁止 `pkill`、按 PID 名稱或年齡回收、修改 stable、干擾 Codex Desktop／AGY／已安裝 Next、Edge/Chrome、或以本議題解鎖 P8 sticky marker。
+
 ## Pre-M9 — Feature Parity / Connection Readiness
 
 **最新核對（2026-10-09 約 03:12）：** P4/P5 closeout；P6/P7 native GUI UAT 待補，實際 Nexus pairing 依使用者要求延後。P8 C2b-B2c macOS Edge 唯讀程序預檢已提交 `a1d364e5`，真實 Edge Auth/Profile/no-focus 與 CDP 原子傳輸仍未完成。Next 部署與 Core/Tunnel Registrar 實機驗證通過；Next 8767 loopback 逾時已恢復 HTTP 200，完整 Browser/Policy Go 測試最新 PASS，根因待觀察。**AGY-ACP .14 候選版 456 tests pass，尚未部署，等待 Next 開發／介面就緒後整合測試。** 詳見 [Pre-M9 最新進度與交接](pre-m9-progress-2026-10-09.md)。
