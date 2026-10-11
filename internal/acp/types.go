@@ -77,6 +77,10 @@ type Options struct {
 	InteractionTimeout              time.Duration
 	SessionMCPProvider              SessionMCPProvider
 	PermissionContinuationAdmission PermissionContinuationAdmission
+	// PromptDecorator is Core-provided opt-in guidance attached only to a new
+	// ACP Run, not to a steer of an already running turn. It is not an MCP
+	// lifecycle authority and cannot grant permission to stop child processes.
+	PromptDecorator func(localSessionID string, blocks []ContentBlock) ([]ContentBlock, error)
 }
 
 type Error struct {

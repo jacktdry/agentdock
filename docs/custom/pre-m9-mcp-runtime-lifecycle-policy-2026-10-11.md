@@ -190,3 +190,9 @@ HIGH-0 下一步必須先建立 `Codex app-server → native thread/session → 
 - Rust 原生啟動點已在獨立 pinned `rust-v0.160.0` sparse repo 中定位；repo `/Users/wei/sideProject/codex-native-mcp-owner`、branch `feature/agentdock-next-mcp-owner-evidence`，baseline doc commit `ecd6588`。參考 `docs/custom/p0-native-codex-rust-owner-2026-10-11.md`，不代表 Native PID/pipe owner 已取得或 Rust build 已通過。
 
 **P0 production gate 依然不合格**：缺原生可信 child birth/transport-pipe mapping、跨程序 M8/P5 mutation/dispatch 鎖、真正 Core route 和 native/UAT。禁止宣告「P0 完成」或啟用 orphan auto-clean。
+
+### 2026-10-11 使用者決策：P0 限定 Codex ACP，不再要求修改 Codex CLI Rust（後續覆蓋前述 native blocker 排程）
+
+使用者已確認 **直接使用 Codex CLI 的 MCP 程序生命週期交由官方**；AgentDock 必須處理的是 **自己透過 ACP 呼叫 Codex 的專屬 Adapter/app-server 與可歸屬 MCP**。Codex 收尾 prompt 要求回報本次 MCP 使用、釋放已驗證的 task-owned 資源；若需要真正「啟動前」登記，改研究 AgentDock Next-owned **per-server launch wrapper** 在啟動底層 stdio MCP 前向 Core 註冊，spawn 後由 Core 再核對 kernel birth/pipe。詳見 [Codex ACP 協作式 MCP 生命週期決策](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md)。
+
+此決議明確 **撤回 native Codex CLI source patch 作為 P0 的硬性前置條件**，不否定前面的 read-only 工具和測試。Prompt 自述和 wrapper 觀察不等同 per-Thread owner（共享同一 app-server 的多個 Session 尤其如此），不能直接據此 kill。不修改 stable 或已安裝的 Codex CLI、不自動清理現有未知 PID。Next ACP Prompt 注入 **B0 已有 source-only opt-in 實作與測試**，但目前未部署；wrapper 與可核對的任務後資源上報 API 仍待實作。

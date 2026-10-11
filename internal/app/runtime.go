@@ -273,6 +273,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 				MaxConcurrentRuns:  cfg.ACPMaxPrompts,
 				InteractionTimeout: time.Duration(cfg.ACPInteractionMS) * time.Millisecond,
 				SessionMCPProvider: sessionMCP,
+				PromptDecorator:    nextCodexMCPReportDecorator(cfg, profile),
 				PermissionContinuationAdmission: func(ctx context.Context, continuation acpruntime.PermissionContinuation) (acpruntime.PermissionContinuationFinish, error) {
 					finish, admissionErr := runtime.admitHostOperation(ctx, permission.HostOperation{
 						Tool:          "acp_provider_continuation",

@@ -94,6 +94,19 @@ func (m *Manager) StartPromptBlocks(ctx context.Context, sessionID string, block
 	if err != nil {
 		return PromptStartResult{}, err
 	}
+	// The decoration boundary occurs only on a fresh Run, never in SubmitPrompt
+	// steering. A second validation prevents a callback from enlarging or
+	// mutating the request beyond the exact ACP protocol capability envelope.
+	if m.opts.PromptDecorator != nil {
+		blocks, err = m.opts.PromptDecorator(sessionID, blocks)
+		if err != nil {
+			return PromptStartResult{}, err
+		}
+		blocks, err = validatePromptBlocks(process, blocks)
+		if err != nil {
+			return PromptStartResult{}, err
+		}
+	}
 	if _, err := m.EnsureSessionActive(ctx, sessionID); err != nil {
 		return PromptStartResult{}, err
 	}

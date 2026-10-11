@@ -31,9 +31,16 @@ func TestNextM8ACPHelperProcess(t *testing.T) {
 		var call struct {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 		}
 		if json.Unmarshal(input.Bytes(), &call) != nil {
 			os.Exit(2)
+		}
+		// Only isolated test-owned Adapter requests use this optional trace.
+		if call.Method == "session/prompt" && os.Getenv("NEXT_M8_TEST_PROMPT_TRACE") != "" {
+			if os.WriteFile(os.Getenv("NEXT_M8_TEST_PROMPT_TRACE"), call.Params, 0600) != nil {
+				os.Exit(12)
+			}
 		}
 		var response any
 		switch call.Method {

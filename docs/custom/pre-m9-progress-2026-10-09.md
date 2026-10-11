@@ -385,3 +385,11 @@
 - `ACP.Manager.IsLiveManagedSession` + `tool/acp.Service.IsLiveManagedSession` 在 process-local `m.loaded`/reverse mapping/Terminal state/closed connection 下只做 read-only lookup，不把 persist-only session 或 native orphan 視為 owner。
 - `app.Runtime.nextM8ContextForLoadedACP/nextM8AcquireFromRuntime/nextM8CallFromRuntime` 是來源鎖定的 private Core hook：僅 macOS Next variant、`~/.agentdock-next` state、明確 `AGENTDOCK_NEXT_STDIO_MCP_ADMISSION=source-only`、真實 Runtime.Call 執行中 `mcp_tool_call` scope + stable verified principal + 相同 ACP Profile/已載入 Session 和 M8 Gate/epoch 才可組成 M8 binding。原本 Stable / ACP/AGY/Next 正式工具路由 **沒有新增使用入口**。新測試使用 temp HOME、真實測試 ACP helper 驗證 Session、偽造 owner/principal/call/provenance、關掉 opt-in、已完成 call 的 fail-closed 行為。
 - **剩餘阻塞**：Native Rust PID/pipe 身分證據、P5/M8 跨程序 atomic dispatch write fence、Runtime 正式工具派發/安全 Shutdown lifecycle、macOS/Windows native live UAT。因此 P0 仍為 Blocked，不啟用 auto cleanup。
+
+### 2026-10-11 決策調整：P0 Codex ACP 提示詞收尾 + MCP launch registry，不 Fork Codex CLI
+
+使用者要求將 Codex CLI 自身的 MCP retention/bug 交給官方處理，AgentDock Next 應只管理自己透過 Codex ACP 啟動的資源。Codex 必須在任務結束時回報 MCP 使用和有據可查的 cleanup；啟動前如需發現實際 MCP，由 Next-only stdio launch wrapper 在 underlying MCP spawn **前**主動登記，spawn **後**用 OS kernel 再確認 PID/birth。Prompt 不能保證在 MCP auto-start 前執行，也無法自行取得不存在的 PID；兩者都不得自行殺不明進程或推論 per-Thread ownership。Codex Rust fork 改為非 P0 必要的研究備案。方案詳見 [ACP MCP cooperative design](pre-m9-codex-acp-mcp-cooperative-lifecycle-2026-10-11.md)；wrapper 尚未實作／測試／部署；prompt hook B0 已有 source-only 實作與測試，但未部署，無 live MCP cleanup。
+
+### 2026-10-11 Codex ACP B0 首輪 source-only 實作（尚未部署）
+
+已加入 `AGENTDOCK_NEXT_CODEX_MCP_REPORT=source-only` 的 private Next-only Codex ACP 新 Run prompt decorator：上游仍可使用原本多段文字／其他 modality，純文字在真正 ACP `session/prompt` 被送出前會附上「回報本輪使用的 MCP 與安全收尾；不得 kill 未證實 owner」的指令；Steering 不重新注入，接近 8 MiB 邊界不擴增。Wrapper/Kernel 註冊與真正資源回收仍未實作，模型自述不可作為終止權。這是 **source-only + test-only Adapter**，沒有改動使用者全域 Codex CLI MCP 設定與已安裝 Next。
