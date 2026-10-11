@@ -116,6 +116,19 @@ Deterministic fixtures 涵蓋 positive、unloaded／unmanaged、generation／bir
 - 新 CLI 實際唯讀觀察 PID `55205`（當次 Codex ACP dedicated app-server）所得：`status=observed`、**959 個當次 PID/PPID 觀察節點**（包含 root）、`codebase_memory` 名稱提示 63 個；`chrome_devtools` / `search_console` 名稱提示為 0 **不代表沒有**，因 macOS 的 kernel `p_comm` 截短及 Node/Python/npm 啟動器名稱無法識別原始 MCP family。所有節點固定為 `owner_unverified`，無 cleanup eligibility。數據僅是這次時間窗的樣本，不作穩態 SLA。
 - 下一個 HIGH-0 gate 仍是**真實** `managed ACP Session ↔ Codex native Thread ↔ MCP transport ↔ OS PID/birth` 對照；需 Adapter/native 額外提供 loaded/unsubscribe/transport-close 事件或等價可驗證介面。此 CLI 不支持按 age/CPU/RSS 清理或推斷 orphan。
 
+#### 2026-10-11 P0 Gate 重新核對（不可將 Source-only 視為完成）
+
+**Native Codex 協定核對：**目前本機 Codex ACP fork `fix/session-lifecycle-recycle`（`630d7c6`）與已安裝 `@agentclientprotocol/codex-acp@2.1.1` 的 native app-server method `thread/loaded/list` 只回已載入的 `threadId` 集合與分頁；`mcpServerStatus/list` 雖回 server 名稱、runtime status、插件資訊與能力，**不包含該 stdio MCP child 的 OS PID／完整傳輸端點或 per-thread 可靠的 child 關聯**。`session/close` 的 `thread/unsubscribe` 及最後 ACP 本機 Session 歸零時的 dedicated app-server recycle 已存在（`recycleAppServerIfIdle`），不能把這個緩解作法當成「所有持久 Session 的子程序都已回收」，也不能跨到 ChatGPT/Codex Desktop 所擁有的另一個 app-server。沒有上述原生證據，僅用 FD、PPID、時間差或 server name 逆推 thread→PID 將誤導 orphan 判斷，**HIGH-0 未過 gate**。
+
+**HIGH-1 Next 自有 stdio Source-only slice：**新增 `internal/mcp/client/next_lifecycle.go` 的 `NextStdioLeaseController`，沒有接入正式 Runtime、P5 Registry、M8 Admission 或 Desktop API，**只能管理經本 Controller 新啟動且 Mac Darwin kernel birth/parent/UID 驗證的直接 child**。使用既有 `OpenStdioSessionWithStartedWitness`／Go MCP SDK、`StdioSession.Close` 和 owned `process.Controller`，不建立第二份永久 MCP registry，也不接入／終止 Codex/AGY/ChatGPT/Chrome/Edge/CBM 的外部 process。
+
+- `namespace=next`、per-session `owner+server`、Registry generation + 整份 config identity、crypto borrower token、最多 1–32 個 starting/ready 總容量。重複同 owner 相同 config 可 borrow 同一 stdio，**不同 owner 從不共用 stdio pipe**；超量 fail fast，不在背景無限重試。
+- `ephemeral` 最後 release 在鎖內原子切到 `draining`，等待 `inflight=0` 再 close；`persistent` 保持 ready，`idle-managed` 在明確 TTL 且沒有 borrower/inflight 才從單次 `ReapIdle` 清理。變動的 config/generation、invalid/Plugin/HTTP/external owner、重複 token、drain 期間新 request 都 fail closed。**不提供 global cleanup / kill API**。
+- 真實 native fork helper 測試 20 個 sequential ephemeral 建立／發工具／EOF+Wait，以及 20 個 persistent close/open cycles、8 個平行競逐上限 4、borrow、generation mismatch、drain fence、idle TTL、失敗握手 child quarantine。發生已觀測 child 卻未確認成功 cleanup 時保留 `cleanup_required` slot，防止 retry 重啟第二個可能仍在執行的 child。其他 OS `ObserveBirthIdentity` 不提供可驗證 child 身分，因而採 fail closed（Linux/Windows 暫不開啟此 Next-only 原型）。
+- `Snapshot` 與 `ResourceSnapshot` 是僅有固定欄位的 Next-only read-only process-local DTO（owner local Session ID、server ID、policy、lease/borrow/inflight/status/counts），不輸出 argv/env/secret/token/tool content/kernel PID；**不是已連接使用者 UI**。它不能宣稱 observed_external owner；未實作任何資料庫、P5 ACL 或 Next UI 寫入入口。
+
+**尚未完成的正式 P0 驗收：**可信 Adapter 原生 `loaded thread → MCP stdio transport → child PID/birth` 擴充，跨 Manager 與 Adapter PID/incarnation 的真實端到端 attestation、全部 native transport exclusivity，對現行 62/121/128 家族的 20-cycle baseline；Registry/Plugin/OAuth/M8 權限與 Next Supervisor/Broker 的授權接線、Windows native owner fence、Next UI 及未來 live Next-only UAT。**P0 仍為 blocked/in progress；不准啟用 auto-clean。**
+
 ### HIGH-1：Next 專用共通 MCP lifecycle controller
 
 - 將 `MCPResourceLease` 對接現有 M7 ACP policy、P5 MCP registry、M8 Permission、P8 Broker；統一 ready/borrowed/inflight/draining/uncertain、inflight-close fence、bounded concurrency/reconnect budget。

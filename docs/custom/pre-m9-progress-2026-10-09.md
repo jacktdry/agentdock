@@ -356,3 +356,10 @@
 
 - `internal/acp/mcp_owner_diagnostic_scope.go` 新增 read-lock 覆蓋本機 loaded cache snapshot 到可信 callback 完成的 package-private guard；要求真正 Manager-owned `exec.Cmd.Process.Pid` 與 kernel birth、transport live、remote↔local 反向映射及 bounded 5-second cooperative context，僅提供 process-local opaque record 複本。產出的是 **local loaded Session mapping，不是 Codex native thread / MCP owner attestation**。
 - Test-only ACP helper 驗證 read-lock 可阻擋同時修改 loaded map，錯誤 PID／重複 RemoteSessionID／terminal／stale／cancel／expired／斷線一律不產出成功，callback 原始錯誤不洩漏。沒有 production hook/HTTP/CLI、沒有啟用程序回收或重啟。後續仍需真正可信 Adapter-native 完整診斷資料及與 kernel pipe observer 的 OS witness 整合。
+
+
+### 2026-10-11 P0 Native Gate + Next-owned MCP Lease Controller（未宣告 P0 完成）
+
+- 查核已安裝 Codex ACP 2.1.1 與本機 fork：`thread/loaded/list` 有 threadId，但 `mcpServerStatus/list` 無每個 stdio child PID/transport，沒有可靠 `Thread -> transport -> PID` 映射；所以不得把 PPID/FD/elapsed 當 orphan/cleanup authority；現有最後 Session 關閉後 app-server recycle 已是既有緩解，而非 HIGH-0 完成。
+- Next-only `internal/mcp/client/next_lifecycle.go` 可針對**自己直接啟動且 birth 驗證**的 stdio child 管理加密 token borrowing、per owner/generation 限制、容量上限、drain/inflight fence、ephemeral/persistent/idle-managed、quarantine/no-auto-restart，安全 DTO 不輸出 credential/argv/tool data。現有 Stable/Next runtime 未接線。
+- Test-owned macOS MCP helper 覆蓋 sequential 20 ephemeral + persistent 20 close/reopen、4/8 capacity、stale generation、auth rejection、bad handshake quarantine 與 secret projection；其餘 browser/remote HTTP/Plugin、ACP native attribution、Windows Job Object/原生 UAT、UI 仍未驗收。目標下一步：先補可信 Adapter native evidence，再由 M8/P5 admission 安全接線，不允許拿原型做 automatic cleanup。
