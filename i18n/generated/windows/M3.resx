@@ -1945,6 +1945,9 @@
   <data name="nexus.identity_saved" xml:space="preserve">
     <value>Identity saved; this alone does not prove a connection.</value>
   </data>
+  <data name="nexus.in_development" xml:space="preserve">
+    <value>In development</value>
+  </data>
   <data name="nexus.invalid" xml:space="preserve">
     <value>Identity invalid; pairing is unavailable.</value>
   </data>

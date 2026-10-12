@@ -647,6 +647,7 @@
 "nexus.endpoint_invalid" = "請使用允許的 HTTPS 伺服器網址或本機回環 HTTP 開發端點，勿含帳密、查詢參數或片段。";
 "nexus.help" = "NexusDock 將此 Next 裝置連結至 Nexus。配對與 ChatGPT MCP、通道及 OAuth 存取分開；已配對不代表已連線。";
 "nexus.identity_saved" = "身分資料已儲存，這本身不代表已連線。";
+"nexus.in_development" = "開發中";
 "nexus.invalid" = "身分資料無效，無法配對。";
 "nexus.name" = "易辨識名稱（選填）";
 "nexus.navigation" = "連線檢視";

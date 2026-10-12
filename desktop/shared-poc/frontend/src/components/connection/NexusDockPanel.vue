@@ -22,7 +22,7 @@ onBeforeUnmount(dispose)
 <template>
   <section class="panel nexus-panel" aria-labelledby="nexus-title">
     <div class="section-heading">
-      <h2 id="nexus-title">{{ t('nexus.title') }}</h2>
+      <h2 id="nexus-title">{{ t('nexus.title') }} <span class="state-pill nexus-development">{{ t('nexus.in_development') }}</span></h2>
       <button type="button" :disabled="busy" @click="refresh">{{ t('common.refresh') }}</button>
     </div>
     <p class="hint">{{ t('nexus.help') }}</p>
@@ -56,6 +56,7 @@ onBeforeUnmount(dispose)
 </template>
 <style scoped>
 .nexus-panel { min-width: 0; overflow-wrap: anywhere; }
+.nexus-development { display: inline-block; vertical-align: middle; font-weight: 400; white-space: nowrap; }
 .nexus-panel .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 560px) { .nexus-panel .status-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

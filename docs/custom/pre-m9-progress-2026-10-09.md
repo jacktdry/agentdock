@@ -434,3 +434,7 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 ## 2026-10-12 P7 native read-only GUI probe (not closeout)
 
 已透過 stable Mac-Dev + Orca 恢復 Next 原生視窗，驗證 NexusDock 與 Diagnostics read-only UI。Nexus 顯示「未知／服務無法使用」，不可視為未配對已驗收；Diagnostics 固定 Next 路徑、機密警告與原生操作按鈕呈現正常，但 Finder 實際開啟受到工具安全限制，未執行。Go Nexus/desktopapi/desktopruntime 回歸 PASS，Vue typecheck 及 139/139 測試 PASS。P7 尚未 closeout，無 live Nexus pairing，未部署或修改 stable。詳細記錄見 [P7 原生 GUI 起始檢查](pre-m9-platform-essentials-roundtable.md#2026-10-12-p7-native-read-only-gui-probe-not-closeout)。
+
+## 2026-10-12 P7 user acceptance adjustment: folders PASS, NexusDock deferred
+
+使用者確認 macOS 開啟 Logs/Config 原生操作手動測試 OK；更新為 user-reported native PASS。NexusDock 明確延後開發／除錯／live 配對驗收，僅以三語系「開發中」標記現有分頁。此決策解除 P8 對 Nexus live UAT 的非必要等待，但不豁免 P7 跨平台與 M9 release gate。見 [P7 調整](pre-m9-platform-essentials-roundtable.md#2026-10-12-p7-user-acceptance-adjustment-folders-pass-nexusdock-deferred)。

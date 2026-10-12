@@ -1945,6 +1945,9 @@
   <data name="nexus.identity_saved" xml:space="preserve">
     <value>身分資料已儲存，這本身不代表已連線。</value>
   </data>
+  <data name="nexus.in_development" xml:space="preserve">
+    <value>開發中</value>
+  </data>
   <data name="nexus.invalid" xml:space="preserve">
     <value>身分資料無效，無法配對。</value>
   </data>

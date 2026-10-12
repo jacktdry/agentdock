@@ -209,3 +209,11 @@ Validation on the development Mac: Wails beta.27 typed bindings regenerated usin
 - `系統 → 診斷` 原生可見、顯示 macOS arm64 與固定 Next App Support 目錄，載入結束後 `重新整理`、`開啟記錄資料夾`、`開啟設定資料夾` 啟用；設定機密資訊警示可見。GUI「開啟資料夾」動作受本次工具操作安全限制而未執行，不得冒充 Finder 開啟、焦點回復或安全路徑原生驗收。檢查時 `logs` 尚不存在，沒有建立資料夾。
 - 來源回歸：`go test ./internal/nexusbridge ./internal/desktopapi ./internal/desktopruntime -count=1` PASS；Shared Vue `pnpm typecheck` PASS、Vitest `139/139` PASS（包含 Nexus 8 與 Diagnostics 3）。這些是工程測試，不能取代上述 native GUI 操作。
 - 待辦：確認 `next_identity_unavailable` 的真實主因並只做 Next-safe 修正、完成原生 Logs/Configuration 開啟/焦點/反向路徑邊界測試、鍵盤及狹窄 viewport 視覺驗證、tray 與 side-by-side isolation recheck。Windows/WSL/Linux 原生驗證、A1 `Proxy:nil` enterprise limitation 與全部 Nexus live pairing/connection UAT 仍 pending/deferred；P7 / P8 / P9 / M9 都未宣告 closeout。
+
+
+## 2026-10-12 P7 user acceptance adjustment: folders PASS, NexusDock deferred
+
+- **使用者手動驗收確認**：「開啟 Logs／Config 資料夾」在其原生使用情境中 OK。以使用者回報標記 macOS Native Open Logs / Open Configuration 操作驗收 PASS；這不是先前 Orca 工具實際點擊的驗收，也不聲稱跨平台原生驗證已完成。保留後端對固定 Next 目錄的 no-follow/ownership 檢查；不因手動驗收通過而弱化。
+- **NexusDock 明確延後**：使用者不要求目前修正 `unknown/service unavailable`、配對、重配、登入、連線、後端或 GUI 驗收；僅要求在既有 `Connection → NexusDock` 頁面加入明確「開發中」註記。頁面既有 Backend/API 維持原樣，不新增自動配對／重試／restart 行為。
+- 三語系頁面標記：zh-Hant「開發中」、zh-Hans「开发中」、en「In development」，透過 canonical YAML i18n generator 產出，不硬編碼在 Vue。
+- **Gate 收斂**：macOS P7 非 Nexus 原生資料夾操作依使用者報告接受；NexusDock 功能 workstream 為 deferred，不應阻止 P8 Browser Broker；但 P7 整體跨平台正式 release gate 不藉此宣告通過，Windows/WSL/Linux native、企業 Proxy 設計與其餘 M9 release gates 仍須獨立驗證。

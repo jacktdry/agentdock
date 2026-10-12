@@ -647,6 +647,7 @@
 "nexus.endpoint_invalid" = "请使用允许的 HTTPS 服务器网址或本机回环 HTTP 开发端点，勿含账号密码、查询参数或片段。";
 "nexus.help" = "NexusDock 将此 Next 设备连接至 Nexus。配对与 ChatGPT MCP、隧道及 OAuth 访问分开；已配对不代表已连接。";
 "nexus.identity_saved" = "身份数据已保存，这本身不代表已连接。";
+"nexus.in_development" = "开发中";
 "nexus.invalid" = "身份数据无效，无法配对。";
 "nexus.name" = "易识别名称（选填）";
 "nexus.navigation" = "连接视图";

@@ -647,6 +647,7 @@
 "nexus.endpoint_invalid" = "Use a permitted HTTPS server URL, or a loopback HTTP development endpoint, without credentials, query or fragment.";
 "nexus.help" = "NexusDock links this Next device to Nexus. Pairing is separate from ChatGPT MCP, tunnel and OAuth access. Paired does not mean connected.";
 "nexus.identity_saved" = "Identity saved; this alone does not prove a connection.";
+"nexus.in_development" = "In development";
 "nexus.invalid" = "Identity invalid; pairing is unavailable.";
 "nexus.name" = "Friendly name (optional)";
 "nexus.navigation" = "Connection views";
