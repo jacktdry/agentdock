@@ -125,6 +125,7 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 		t.Fatal(err)
 	}
 	var bridge *ACPBridge
+	bridgeClosed := false
 	registry := NewWorkerRegistry(WorkerDependencies{
 		// The real handshake independently checks this exact version; no probe
 		// subprocess/network access is needed by the test-only dependency.
@@ -167,9 +168,55 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 	checkBudget := func(want int) {
 		t.Helper()
 		budget.mu.Lock()
-		defer budget.mu.Unlock()
-		if budget.used != want || budget.maxSlots != 1 {
-			t.Fatalf("budget used=%d max=%d, want used=%d max=1", budget.used, budget.maxSlots, want)
+		used, maxSlots := budget.used, budget.maxSlots
+		budget.mu.Unlock()
+		if used != want || maxSlots != 1 {
+			t.Fatalf("budget used=%d max=%d, want used=%d max=1", used, maxSlots, want)
+		}
+		if bridge == nil {
+			return
+		}
+		mu.Lock()
+		startsBefore, liveBefore, peakBefore := len(sessions), live, peak
+		mu.Unlock()
+		diagnostic := bridge.Diagnostics().SharedBudget
+		if diagnostic == nil {
+			t.Fatal("shared budget diagnostic missing")
+		}
+		claimedOwners := 1
+		if bridgeClosed {
+			claimedOwners = 0
+		}
+		wantDiagnostic := SharedManagedBudgetDiagnostic{
+			CapacitySlots: 1, OccupiedSlots: want, AvailableSlots: 1 - want,
+			ClaimedOwners: claimedOwners, UncertainSlots: 0,
+		}
+		if *diagnostic != wantDiagnostic {
+			t.Fatalf("diagnostic shared budget=%+v, want %+v", *diagnostic, wantDiagnostic)
+		}
+		payload, err := json.Marshal(diagnostic)
+		if err != nil {
+			t.Fatalf("marshal shared budget diagnostic: %v", err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(payload, &fields); err != nil || len(fields) != 5 {
+			t.Fatalf("shared budget diagnostic must serialize as five numeric aggregates: %s", payload)
+		}
+		for _, key := range []string{"capacity_slots", "occupied_slots", "available_slots", "claimed_owners", "uncertain_slots"} {
+			if _, ok := fields[key].(float64); !ok {
+				t.Fatalf("shared budget diagnostic field %q is not numeric: %s", key, payload)
+			}
+		}
+		for _, sensitive := range []string{cwd, "chatgpt-equivalent", "codex-acp", "agy-acp"} {
+			if sensitive != "" && strings.Contains(string(payload), sensitive) {
+				t.Fatalf("shared budget diagnostic serialized sensitive identifier")
+			}
+		}
+		mu.Lock()
+		startsAfter, liveAfter, peakAfter := len(sessions), live, peak
+		mu.Unlock()
+		if startsAfter != startsBefore || liveAfter != liveBefore || peakAfter != peakBefore {
+			t.Fatal("passive budget diagnostics changed owned worker counters")
 		}
 	}
 	// Register before construction/startup. Failed Close is a blocker: never
@@ -226,6 +273,27 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 		t.Fatal(err)
 	}
 	bridge.lifecycle.Close() // Manual sweep of the real lifecycle, no racing ticks.
+	// The canonical workspace fence accepts a foreign owner registration but
+	// rejects Acquire with the established opaque shared-unavailable error
+	// before planner resolution or any worker startup.
+	foreignSession := "foreign-canonical-workspace"
+	foreignToken, err := bridge.RegisterSession(foreignSession, foreignSession, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bridge.Acquire(ctx, foreignToken, "about:blank"); err != errManagedSharedUnavailable {
+		t.Fatalf("foreign workspace Acquire error=%v, want opaque shared unavailable", err)
+	}
+	mu.Lock()
+	foreignStarts := len(sessions)
+	mu.Unlock()
+	if foreignStarts != 0 || len(registry.Snapshot()) != 0 {
+		t.Fatalf("foreign workspace Acquire started %d owned sessions", foreignStarts)
+	}
+	if err := bridge.ReleaseSession(ctx, foreignSession); err != nil {
+		t.Fatalf("foreign registration cleanup: %s", realSharedDiagnosticText(err.Error()))
+	}
+	checkBudget(0)
 	type owner struct {
 		session, token string
 		meta           LeaseMetadata
@@ -447,6 +515,7 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 	if err := bridge.Close(); err != nil {
 		t.Fatalf("BLOCKER bridge Close: %s", realSharedDiagnosticText(err.Error()))
 	}
+	bridgeClosed = true
 	checkBudget(0)
 	mu.Lock()
 	defer mu.Unlock()

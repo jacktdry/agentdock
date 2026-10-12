@@ -487,3 +487,16 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 
 - 驗證紀錄（source-only）：定點 Go `TestRuntimeBrowserDesktop*` + Desktop Browser PASS；`go vet -p 2 ./internal/app ./internal/browserdesktop ./internal/desktopapi` PASS；Vue `pnpm typecheck` 與全量 Vitest **142/142 PASS**；`pnpm build` PASS（僅既有 >500 KiB chunk 建議）；canonical `go run ./tools/i18n coverage` en/zh-Hant/zh-Hans 均 **867/867**。`go run ./tools/i18n check` 的 freshness 通過，但既有 Permission/ACP 等未修改檔案的 literal scan 仍 FAIL（不宣告 global i18n check PASS）。
 - **Gate**：Next source-only，未安裝／部署／restart／啟動 Chrome／Edge／npx，沒有接觸使用者 Session/Profile；Edge C2b native authority、managed pool process/orphan trust、實際三個真實 Agent 的連續 UAT 與 no-focus/no-modal 仍 open；P8 / P9 / M9 皆未結案。
+
+
+
+## 33. 2026-10-12 P8 real headless shared pool diagnostics/foreign workspace acceptance (SOURCE ONLY)
+
+接續 §32 共享池唯讀診斷。嚴格採用既有 test-only、顯式 `AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1` 的 Darwin/Linux `TestACPBridgeSharedRealHeadless`，使用 cached exact `chrome-devtools-mcp@1.7.0` / npm offline、`--isolated --headless`、測試專屬暫存資料夾及 `about:blank`；**沒有將實驗性 shared runtime 改為預設、沒有使用既有 Edge／Chrome Profile，也未部署 Next**。
+
+- **主管端 real proof baseline PASS（41.98s）**：三個模擬 ChatGPT/Codex/AGY owner tokens 經真實 ACPBridge、MCP 1.7.0 與同世代一個 isolated Headless Chrome，完成交錯 JS 狀態隔離、拒絕跨 owner/page/lease、逐個釋放自己的 page、pool keeper 保留、閒置 reap、第二世代重新取得新 Lease 且舊權杖被拒；最終 owned MCP/Chrome 及 test marker 程序皆歸零。
+- **新增 real harness assertion**（僅 `internal/tool/browser/acp_bridge_shared_real_test.go`）：`checkBudget` 每次同時讀 `ACPBridge.Diagnostics().SharedBudget`，核對 capacity=1、occupied/available、owner claims=1（完整 Bridge Close 後 0）、uncertain=0；JSON 僅五個 numeric fields，不含 Workspace、Session 身分；診斷前後 owned-session 的 starts/live/peak 必須不變。這是 budget 帳務與實際測試觀察的一致性驗證，**不等於 snapshot 自動驗證 OS Chrome PID／使用者授權**。
+- 另用一個隔離的 foreign canonical Workspace 註冊測試 owner，確認 `Acquire` 回傳既有 opaque `errManagedSharedUnavailable`、且尚未啟動 Worker；其註冊隨即安全 Release，不觸碰另一 Workspace 的瀏覽器。
+- **主管端修正後 real rerun PASS（34.91s）**：真實 3 simulated owners / MCP worker / 1 Chrome main per generation；兩個世代 budget capacity=1、owned peak=1；新增診斷及 foreign Workspace deny checks 全數通過；test cleanup 確認 owned MCP/Chrome processes gone、無專用 TMPDIR marker 程序、budget=0。
+- Regression：`go test -race -p 2 ./internal/tool/browser -run '^(TestACPBridgeShared|TestManagedShared)' -count=1 -timeout=160s` PASS；`go test -p 2 ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=150s` PASS；`go vet ./internal/tool/browser ./internal/browserpolicy`、gofmt、`git diff --check` PASS。一般 Go suite 未設定 opt-in，不會意外開 Chrome。
+- **依然待處理**：這三個仍是 test-only *模擬 Session identity*，不是三個真實 ChatGPT+ACP client 同時通過 Next installed Broker 的證據；使用者桌面的 focus/no-modal 沒有經 macOS 觀測驗收，Chrome/Edge 已登入 Profile、consent、安全授權、crash orphan OS authority、跨 workspace pool 與 producer→Next Core→Wails native source parity 尚未 release acceptance；不得藉本結果啟用正式 shared mode。stable Core 8765 與 Next Core 8767 均未 restart，未改用戶瀏覽器、未安裝／推送。
