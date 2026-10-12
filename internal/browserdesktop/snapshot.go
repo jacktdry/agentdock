@@ -4,7 +4,19 @@ package browserdesktop
 // ConnectorHealthNotObserved explicitly excludes live reachability/authentication claims.
 const ConnectorHealthNotObserved = "not_observed"
 
+// SharedPoolBudget is bookkeeping only, not live browser or consent evidence.
+type SharedPoolBudget struct {
+	Capacity  int `json:"capacity"`
+	Occupied  int `json:"occupied"`
+	Available int `json:"available"`
+	Claimed   int `json:"claimed"`
+	Uncertain int `json:"uncertain"`
+}
+
 type Snapshot struct {
+	ManagedPoolMode  string            `json:"managedPoolMode"`
+	SharedPoolBudget *SharedPoolBudget `json:"sharedPoolBudget,omitempty"`
+
 	ConfiguredConnectors                int    `json:"configuredConnectors"`
 	ConfiguredAuthenticatedEdgeProfiles int    `json:"configuredAuthenticatedEdgeProfiles"`
 	ConfiguredRequiredExternalPolicies  int    `json:"configuredRequiredExternalPolicies"`

@@ -238,6 +238,16 @@
 "browser.operations_hint" = "執行中與排隊作業獨立於有效租約。限制表示 Broker 准入容量。";
 "browser.owners" = "擁有者";
 "browser.policy_hint" = "公司必要 Edge 原則僅計算已設定的驗證 Edge 路由；不代表可連線、驗證成功或健康。";
+"browser.pool_available" = "可用槽位";
+"browser.pool_capacity" = "容量槽位";
+"browser.pool_claimed" = "持有權宣告總數";
+"browser.pool_exclusive" = "每個租約獨佔";
+"browser.pool_hint" = "集區帳務計數不等於實際 Chrome 實例數，也不證明 Profile 驗證、無焦點干擾或使用者同意。";
+"browser.pool_mode" = "受管理集區模式";
+"browser.pool_occupied" = "已佔用槽位";
+"browser.pool_shared" = "實驗性共享（僅原始碼選擇性啟用）";
+"browser.pool_uncertain" = "不確定槽位";
+"browser.pool_unknown" = "未知／不可用";
 "browser.queue_capacity" = "佇列容量";
 "browser.queued_operations" = "排隊作業";
 "browser.ready_workers" = "就緒工作程序";

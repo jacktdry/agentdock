@@ -238,6 +238,16 @@
 "browser.operations_hint" = "Active operations and queued operations are separate from active leases. Limits describe broker admission capacity.";
 "browser.owners" = "Owners";
 "browser.policy_hint" = "Company-required Edge policies count configured authenticated Edge routes only; it does not indicate reachability, authentication success or health.";
+"browser.pool_available" = "Available slots";
+"browser.pool_capacity" = "Capacity slots";
+"browser.pool_claimed" = "Owner claims (aggregate)";
+"browser.pool_exclusive" = "Exclusive per lease";
+"browser.pool_hint" = "Pool accounting is not the actual Chrome instance count and does not prove profile authentication, no-focus behavior, or consent.";
+"browser.pool_mode" = "Managed pool mode";
+"browser.pool_occupied" = "Occupied slots";
+"browser.pool_shared" = "Experimental shared (source-only opt-in)";
+"browser.pool_uncertain" = "Uncertain slots";
+"browser.pool_unknown" = "Unknown / unavailable";
 "browser.queue_capacity" = "Queue capacity";
 "browser.queued_operations" = "Queued operations";
 "browser.ready_workers" = "Ready workers";

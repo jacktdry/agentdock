@@ -718,6 +718,36 @@
   <data name="browser.policy_hint" xml:space="preserve">
     <value>Company-required Edge policies count configured authenticated Edge routes only; it does not indicate reachability, authentication success or health.</value>
   </data>
+  <data name="browser.pool_available" xml:space="preserve">
+    <value>Available slots</value>
+  </data>
+  <data name="browser.pool_capacity" xml:space="preserve">
+    <value>Capacity slots</value>
+  </data>
+  <data name="browser.pool_claimed" xml:space="preserve">
+    <value>Owner claims (aggregate)</value>
+  </data>
+  <data name="browser.pool_exclusive" xml:space="preserve">
+    <value>Exclusive per lease</value>
+  </data>
+  <data name="browser.pool_hint" xml:space="preserve">
+    <value>Pool accounting is not the actual Chrome instance count and does not prove profile authentication, no-focus behavior, or consent.</value>
+  </data>
+  <data name="browser.pool_mode" xml:space="preserve">
+    <value>Managed pool mode</value>
+  </data>
+  <data name="browser.pool_occupied" xml:space="preserve">
+    <value>Occupied slots</value>
+  </data>
+  <data name="browser.pool_shared" xml:space="preserve">
+    <value>Experimental shared (source-only opt-in)</value>
+  </data>
+  <data name="browser.pool_uncertain" xml:space="preserve">
+    <value>Uncertain slots</value>
+  </data>
+  <data name="browser.pool_unknown" xml:space="preserve">
+    <value>Unknown / unavailable</value>
+  </data>
   <data name="browser.queue_capacity" xml:space="preserve">
     <value>Queue capacity</value>
   </data>

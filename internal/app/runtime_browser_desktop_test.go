@@ -26,7 +26,7 @@ func TestRuntimeBrowserDesktopAvailability(t *testing.T) {
 		{&Runtime{cfg: config.Config{BrowserEnabled: true, ACPEnabled: true}}, "broker_unavailable"},
 	} {
 		s := test.r.RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot)
-		if s.Availability != test.want || s.State != "unavailable" || s.Leases != 0 || s.ObservedAt == "" {
+		if s.Availability != test.want || s.State != "unavailable" || s.Leases != 0 || s.ObservedAt == "" || s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil {
 			t.Fatalf("snapshot %#v", s)
 		}
 	}
@@ -45,6 +45,7 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 		Workers:            []toolbrowser.BrokerWorkerDiagnostic{{State: toolbrowser.WorkerReady, PID: 99123}, {State: toolbrowser.WorkerFailed, Error: "PRIVATE_CANARY"}},
 		Queue:              toolbrowser.BrokerQueueDiagnostic{Active: 2, Queued: 3, MaxConcurrency: 4, QueueCapacity: 5, ManagedOrphans: 1, ExternalOrphans: 2},
 		LifecycleLastError: "PRIVATE_CANARY",
+		SharedBudget:       &toolbrowser.SharedManagedBudgetDiagnostic{CapacitySlots: 2, OccupiedSlots: 1, AvailableSlots: 1, ClaimedOwners: 3, UncertainSlots: 1},
 	}
 	s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, now)
 	if s.State != "stale" || !s.Stale || s.ActiveLeases != 1 || s.ExpiredLeases != 1 || s.UnownedLeases != 1 || s.ReleasingLeases != 1 || s.FailedLeases != 1 || s.ReadyWorkers != 1 || s.FailedWorkers != 1 || s.QueuedOperations != 3 || !s.LifecycleError {
@@ -53,13 +54,22 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 	data, _ := json.Marshal(s)
 	var keys map[string]any
 	_ = json.Unmarshal(data, &keys)
-	allowed := strings.Fields("configuredConnectors configuredAuthenticatedEdgeProfiles configuredRequiredExternalPolicies connectorHealth managedLeases requiredExternalLeases explicitExternalLeases observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
+	allowed := strings.Fields("managedPoolMode sharedPoolBudget configuredConnectors configuredAuthenticatedEdgeProfiles configuredRequiredExternalPolicies connectorHealth managedLeases requiredExternalLeases explicitExternalLeases observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
 	if len(keys) != len(allowed) {
 		t.Fatalf("DTO keys changed: %s", data)
 	}
 	for _, key := range allowed {
 		if _, ok := keys[key]; !ok {
 			t.Fatalf("missing allowlisted key %s", key)
+		}
+	}
+	budget, ok := keys["sharedPoolBudget"].(map[string]any)
+	if !ok || len(budget) != 5 {
+		t.Fatalf("unsafe budget: %s", data)
+	}
+	for _, key := range []string{"capacity", "occupied", "available", "claimed", "uncertain"} {
+		if _, ok := budget[key].(float64); !ok {
+			t.Fatalf("non-numeric budget: %s", data)
 		}
 	}
 	for _, forbidden := range []string{"PRIVATE_CANARY", "99123", "pid", "page_id", "lease_id", "workspace_id", "connector_id", "token", "cleanup", "endpoint", "url", "payload", "error\""} {
@@ -114,7 +124,7 @@ func TestRuntimeBrowserDesktopGenuineBrokerReadDoesNotOperateWorker(t *testing.T
 	}
 	defer func() { _ = bridge.Close() }()
 	r := &Runtime{cfg: config.Config{BrowserEnabled: true, ACPEnabled: true}, acpBrowser: bridge}
-	if s := r.RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot); s.State != "idle" || s.Availability != "available" {
+	if s := r.RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot); s.State != "idle" || s.Availability != "available" || s.ManagedPoolMode != "exclusive" || s.SharedPoolBudget != nil {
 		t.Fatal(s)
 	}
 	token, err := bridge.RegisterSession("PRIVATE_CANARY", "PRIVATE_CANARY", t.TempDir())
@@ -203,8 +213,121 @@ func TestRuntimeBrowserDesktopInvalidDiagnosticsHideAllRetainedCounts(t *testing
 		{Queue: toolbrowser.BrokerQueueDiagnostic{Active: -1}},
 	} {
 		s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available", ConfiguredConnectors: 2}, d, time.Now())
-		if s.Availability != "broker_unavailable" || s.State != "unavailable" || s.Leases != 0 || s.ManagedLeases != 0 || s.ConfiguredConnectors != 2 || s.ConnectorHealth != "not_observed" {
+		if s.Availability != "broker_unavailable" || s.State != "unavailable" || s.Leases != 0 || s.ManagedLeases != 0 || s.ConfiguredConnectors != 2 || s.ConnectorHealth != "not_observed" || s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil {
 			t.Fatal(s)
 		}
+	}
+}
+
+func TestRuntimeBrowserDesktopSharedPoolBookkeeping(t *testing.T) {
+	valid := toolbrowser.SharedManagedBudgetDiagnostic{CapacitySlots: 2, OccupiedSlots: 1, AvailableSlots: 1, ClaimedOwners: 3, UncertainSlots: 1}
+	tests := []struct {
+		name   string
+		budget toolbrowser.SharedManagedBudgetDiagnostic
+		valid  bool
+	}{
+		{"occupied", valid, true},
+		{"idle claimed", toolbrowser.SharedManagedBudgetDiagnostic{CapacitySlots: 2, AvailableSlots: 2, ClaimedOwners: 1}, true},
+		{"uncertain without owner", toolbrowser.SharedManagedBudgetDiagnostic{CapacitySlots: 1, OccupiedSlots: 1, UncertainSlots: 1}, true},
+		{"zero capacity", toolbrowser.SharedManagedBudgetDiagnostic{}, false},
+	}
+	for _, field := range []string{"capacity", "occupied", "available", "claimed", "uncertain", "over capacity", "over uncertain", "sum"} {
+		b := valid
+		switch field {
+		case "capacity":
+			b.CapacitySlots = -1
+		case "occupied":
+			b.OccupiedSlots = -1
+		case "available":
+			b.AvailableSlots = -1
+		case "claimed":
+			b.ClaimedOwners = -1
+		case "uncertain":
+			b.UncertainSlots = -1
+		case "over capacity":
+			b.OccupiedSlots = 3
+		case "over uncertain":
+			b.UncertainSlots = 2
+		case "sum":
+			b.AvailableSlots = 2
+		}
+		tests = append(tests, struct {
+			name   string
+			budget toolbrowser.SharedManagedBudgetDiagnostic
+			valid  bool
+		}{field, b, false})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := toolbrowser.BrokerDiagnostics{SharedBudget: &tt.budget, Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteManaged, ACPSessionID: "PRIVATE_CANARY"}}}
+			s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, time.Now())
+			if tt.valid {
+				wantState := "leases_present"
+				if tt.budget.UncertainSlots > 0 {
+					wantState = "stale"
+				}
+				if s.ManagedPoolMode != "experimental_shared" || s.SharedPoolBudget == nil || s.ManagedLeases != 1 || s.State != wantState {
+					t.Fatal(s)
+				}
+			} else if s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil || s.State != "unavailable" || s.Availability != "broker_unavailable" || s.ManagedLeases != 0 || s.Leases != 0 {
+				t.Fatal("invalid pool did not fail closed", s)
+			}
+			if tt.valid && *s.SharedPoolBudget != (browserdesktop.SharedPoolBudget{Capacity: tt.budget.CapacitySlots, Occupied: tt.budget.OccupiedSlots, Available: tt.budget.AvailableSlots, Claimed: tt.budget.ClaimedOwners, Uncertain: tt.budget.UncertainSlots}) {
+				t.Fatal(s)
+			}
+			data, _ := json.Marshal(s)
+			if !tt.valid && strings.Contains(string(data), "sharedPoolBudget") {
+				t.Fatal("partial budget leaked")
+			}
+			d.Queue.Active = -1
+			s = aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, time.Now())
+			if s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil {
+				t.Fatal("unavailable broker exposed pool")
+			}
+		})
+	}
+}
+
+func TestRuntimeBrowserDesktopUncertainPoolFlagsStaleWithoutLeases(t *testing.T) {
+	d := toolbrowser.BrokerDiagnostics{SharedBudget: &toolbrowser.SharedManagedBudgetDiagnostic{
+		CapacitySlots: 1, OccupiedSlots: 1, AvailableSlots: 0, ClaimedOwners: 1, UncertainSlots: 1,
+	}}
+	s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, time.Now())
+	if s.ManagedPoolMode != "experimental_shared" || !s.Stale || s.State != "stale" || s.SharedPoolBudget == nil || s.SharedPoolBudget.Uncertain != 1 || s.Leases != 0 {
+		t.Fatal("uncertain pool was misreported as idle", s)
+	}
+}
+
+// Reading shared mode must not create a worker, even for an idle claimed pool.
+func TestRuntimeBrowserDesktopSharedBridgeDoesNotStartWorker(t *testing.T) {
+	catalog, _ := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{})
+	planner, _ := toolbrowser.NewRoutePlanner(nil, catalog, nil)
+	registry := toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{
+		Probe: func(context.Context, mcpclient.ServerConfig) (string, error) {
+			t.Fatal("snapshot probed worker")
+			return "", nil
+		},
+		Open: func(context.Context, mcpclient.ServerConfig) (toolbrowser.WorkerSession, error) {
+			t.Fatal("snapshot opened worker")
+			return nil, nil
+		},
+	})
+	bridge, err := toolbrowser.NewNextSingleWorkspaceSharedACPBridge(planner, registry, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := bridge.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	r := &Runtime{cfg: config.Config{BrowserEnabled: true, ACPEnabled: true}, acpBrowser: bridge}
+	before := bridge.Diagnostics()
+	s := r.RuntimeBrowserDesktop()["snapshot"].(browserdesktop.Snapshot)
+	if s.ManagedPoolMode != "experimental_shared" || s.SharedPoolBudget == nil || *s.SharedPoolBudget != (browserdesktop.SharedPoolBudget{Capacity: 1, Available: 1, Claimed: 1}) || s.Workers != 0 || s.State != "idle" {
+		t.Fatal(s)
+	}
+	if !reflect.DeepEqual(before, bridge.Diagnostics()) {
+		t.Fatal("snapshot mutated shared bridge")
 	}
 }

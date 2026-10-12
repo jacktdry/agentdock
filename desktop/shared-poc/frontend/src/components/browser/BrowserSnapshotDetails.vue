@@ -1,12 +1,34 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Snapshot } from '../../../bindings/github.com/uvwt/agentdock/internal/browserdesktop/models'
+import type { MessageKey } from '../../i18n'
 import { useI18n } from '../../i18n'
-defineProps<{ snapshot: Snapshot }>()
+const props = defineProps<{ snapshot: Snapshot }>()
+const modeKey = computed<MessageKey>(() => {
+  if (props.snapshot.availability !== 'available') return 'browser.pool_unknown'
+  switch (props.snapshot.managedPoolMode) {
+    case 'exclusive': return 'browser.pool_exclusive'
+    case 'experimental_shared': return 'browser.pool_shared'
+    default: return 'browser.pool_unknown'
+  }
+})
 const { t } = useI18n()
 </script>
 
 <template>
   <div>
+    <dl class="status-grid">
+      <div><dt>{{ t('browser.pool_mode') }}</dt><dd>{{ t(modeKey) }}</dd></div>
+    </dl>
+    <p class="hint">{{ t('browser.pool_hint') }}</p>
+    <dl v-if="snapshot.availability === 'available' && snapshot.managedPoolMode === 'experimental_shared' && snapshot.sharedPoolBudget" class="status-grid">
+      <div><dt>{{ t('browser.pool_capacity') }}</dt><dd>{{ snapshot.sharedPoolBudget.capacity }}</dd></div>
+      <div><dt>{{ t('browser.pool_occupied') }}</dt><dd>{{ snapshot.sharedPoolBudget.occupied }}</dd></div>
+      <div><dt>{{ t('browser.pool_available') }}</dt><dd>{{ snapshot.sharedPoolBudget.available }}</dd></div>
+      <div><dt>{{ t('browser.pool_claimed') }}</dt><dd>{{ snapshot.sharedPoolBudget.claimed }}</dd></div>
+      <div><dt>{{ t('browser.pool_uncertain') }}</dt><dd>{{ snapshot.sharedPoolBudget.uncertain }}</dd></div>
+    </dl>
+    <template v-if="snapshot.availability === 'available'">
     <dl class="status-grid">
       <div><dt>{{ t('browser.stale_flag') }}</dt><dd>{{ t(snapshot.stale ? 'common.yes' : 'common.no') }}</dd></div>
     </dl>
@@ -41,5 +63,6 @@ const { t } = useI18n()
       <div><dt>{{ t('browser.external_orphans') }}</dt><dd>{{ snapshot.externalOrphans }}</dd></div>
       <div><dt>{{ t('browser.lifecycle_error') }}</dt><dd>{{ t(snapshot.lifecycleError ? 'common.yes' : 'common.no') }}</dd></div>
     </dl>
+    </template>
   </div>
 </template>

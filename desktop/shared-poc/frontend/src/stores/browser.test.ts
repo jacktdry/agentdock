@@ -6,6 +6,7 @@ vi.mock('../api/desktopApi', () => ({ Domain: { DomainBrowser: 'browser' }, desk
 vi.mock('./contract', () => ({ useContractStore: () => ({ load: mocks.load, canInvoke: mocks.canInvoke, get error() { return mocks.error } }) }))
 import { useBrowserStore } from './browser'
 const idle = (): Snapshot => ({
+  managedPoolMode: 'exclusive',
   observedAt: '2026-10-08T00:00:00Z', availability: 'available', state: 'idle', stale: false,
   browserEnabled: true, acpEnabled: true, companyRequiredEdgePolicies: 1,
   configuredConnectors: 2, configuredAuthenticatedEdgeProfiles: 1, configuredRequiredExternalPolicies: 2,

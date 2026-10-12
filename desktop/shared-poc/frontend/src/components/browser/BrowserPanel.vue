@@ -28,7 +28,7 @@ onMounted(() => { void store.refresh() })
         <div><dt>{{ t('browser.observed_at') }}</dt><dd><time :datetime="store.snapshot.observedAt">{{ new Date(store.snapshot.observedAt).toISOString() }}</time></dd></div>
       </dl>
       <BrowserRouteObservations :snapshot="store.snapshot" />
-      <BrowserSnapshotDetails v-if="store.snapshot.availability === 'available'" :snapshot="store.snapshot" />
+      <BrowserSnapshotDetails :snapshot="store.snapshot" />
     </div>
     <p class="hint">{{ t('browser.routes') }}</p>
   </section>

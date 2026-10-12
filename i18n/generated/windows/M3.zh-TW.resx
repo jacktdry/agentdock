@@ -718,6 +718,36 @@
   <data name="browser.policy_hint" xml:space="preserve">
     <value>公司必要 Edge 原則僅計算已設定的驗證 Edge 路由；不代表可連線、驗證成功或健康。</value>
   </data>
+  <data name="browser.pool_available" xml:space="preserve">
+    <value>可用槽位</value>
+  </data>
+  <data name="browser.pool_capacity" xml:space="preserve">
+    <value>容量槽位</value>
+  </data>
+  <data name="browser.pool_claimed" xml:space="preserve">
+    <value>持有權宣告總數</value>
+  </data>
+  <data name="browser.pool_exclusive" xml:space="preserve">
+    <value>每個租約獨佔</value>
+  </data>
+  <data name="browser.pool_hint" xml:space="preserve">
+    <value>集區帳務計數不等於實際 Chrome 實例數，也不證明 Profile 驗證、無焦點干擾或使用者同意。</value>
+  </data>
+  <data name="browser.pool_mode" xml:space="preserve">
+    <value>受管理集區模式</value>
+  </data>
+  <data name="browser.pool_occupied" xml:space="preserve">
+    <value>已佔用槽位</value>
+  </data>
+  <data name="browser.pool_shared" xml:space="preserve">
+    <value>實驗性共享（僅原始碼選擇性啟用）</value>
+  </data>
+  <data name="browser.pool_uncertain" xml:space="preserve">
+    <value>不確定槽位</value>
+  </data>
+  <data name="browser.pool_unknown" xml:space="preserve">
+    <value>未知／不可用</value>
+  </data>
   <data name="browser.queue_capacity" xml:space="preserve">
     <value>佇列容量</value>
   </data>
