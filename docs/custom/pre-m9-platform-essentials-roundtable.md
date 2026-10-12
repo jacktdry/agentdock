@@ -217,3 +217,7 @@ Validation on the development Mac: Wails beta.27 typed bindings regenerated usin
 - **NexusDock 明確延後**：使用者不要求目前修正 `unknown/service unavailable`、配對、重配、登入、連線、後端或 GUI 驗收；僅要求在既有 `Connection → NexusDock` 頁面加入明確「開發中」註記。頁面既有 Backend/API 維持原樣，不新增自動配對／重試／restart 行為。
 - 三語系頁面標記：zh-Hant「開發中」、zh-Hans「开发中」、en「In development」，透過 canonical YAML i18n generator 產出，不硬編碼在 Vue。
 - **Gate 收斂**：macOS P7 非 Nexus 原生資料夾操作依使用者報告接受；NexusDock 功能 workstream 為 deferred，不應阻止 P8 Browser Broker；但 P7 整體跨平台正式 release gate 不藉此宣告通過，Windows/WSL/Linux native、企業 Proxy 設計與其餘 M9 release gates 仍須獨立驗證。
+
+## 2026-10-12 Next NexusDock label release + registrar pipe fix
+
+已將 NexusDock 三語系「開發中」以 Next-only 安全重建/部署交付安裝版；installed Next Core 8767 與 stable Core 8765 隔離。首次部署遇到 registrar pipe 等待堵塞，在 Next 專屬回復/修復後重建部署成功；詳細程序、SHA、PID 與仍待原生該頁可視檢查見 [Next release checkpoint](agentdock-next-isolation.md#2026-10-12-next-nexusdock-label-release--registrar-pipe-fix)。實際 Nexus 配對依使用者要求 defer。

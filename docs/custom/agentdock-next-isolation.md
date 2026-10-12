@@ -241,3 +241,12 @@ receipt rather than parsing stdout, guard crash/installer timeout after
 atomic swap, and add native failure-injection rollback acceptance using
 Next-only fixtures/explicit recovery. A successful Core health check is not
 a substitute for GUI WebView acceptance or C2b real Edge attestation.
+
+
+## 2026-10-12 Next NexusDock label release + registrar pipe fix
+
+- NexusDock 僅增加原本頁面標題旁三語系「開發中」狀態文字；`NexusService`/實際配對操作維持不變，依使用者指示 defer。使用者已確認 Logs/Config macOS 原生手動操作 PASS。Frontend typecheck、Vitest 139/139、production build、canonical i18n coverage en/zh-Hant/zh-Hans 857/857（100%）PASS。
+- 首次 Next-only build `dist/next-shared-arm64.84ivZc` 之 8/8 bundle verifier PASS，但 `deploy-next-shared.py` 在 macOS Service Registrar 的 `launchctl print` child 等候阻塞並逾時，觸發 rollback；當下 Core 註冊的 Launch Constraint 失效（`78: EX_CONFIG`），安裝檔的舊 Core SHA 已恢復，Next Core 並未隨 Contents rollback 自動恢復。通過**僅對 PID/executable 核對的 Next GUI** 結束後，以 bundle-local Next-only Registrar 重新註冊 Core，原始 Next Core 重新健康（曾觀察 PID `63892`）。
+- 針對上述 registrar stdout Pipe 堵塞風險修復 `desktop/macos/AgentDockServiceRegistrar/main.swift`：先同步 drain `launchctl` 輸出，再 `waitUntilExit`，而非在 child 可能因 Pipe 已滿時先 wait；stderr 丟到 nullDevice 避免未讀取的第二個 Pipe 造成堵塞。Swift `swiftc -typecheck` PASS，commit `c77041ed`。這是現場觀測支持的原因與有界修復；未對所有 macOS 版本的長期穩定性做外推。
+- 修正後重新建置 `dist/next-shared-arm64.QUQAPN/package/AgentDock Next.app`，8/8 bundle verifier、ad-hoc codesign/DMG integrity PASS。**真實 Next-only deploy 成功**：wrapper 回傳 `NEXT_ONLY_DEPLOYED` 與回退保留位置 `~/Applications/.agentdock-next-replacement-jx92aiqc/AgentDock Next.app`；新 Core PID `71025` 監聽 Next 8767 並 `/healthz` HTTP 200；新 Next Tunnel PID `71866`；installed Core SHA256 與 build artifact 相符。Next GUI 由 `open -g -b dev.dropabit.agentdock.next` 背景啟動，PID `72301`，原生 AX 可讀到 Next Overview。原版 stable Core PID `44832` 仍於 8765，未重新啟動／更動。
+- 原生 AX 雖證明更新後 GUI 可以啟動及讀取 Overview，但沒有為驗證 NexusDock 標籤而搶佔使用者焦點；**已安裝標記的最終 NexusDock 原生像素 UAT 未執行**。Nexus real pairing、Nexus unknown 狀態除錯、Windows/Linux native、enterprise proxy、P8/P9/M9 gates 不變。保留所有 Next-only rollback 目錄，絕不自動清理。

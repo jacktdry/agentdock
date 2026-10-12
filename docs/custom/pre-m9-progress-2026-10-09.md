@@ -438,3 +438,7 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 ## 2026-10-12 P7 user acceptance adjustment: folders PASS, NexusDock deferred
 
 使用者確認 macOS 開啟 Logs/Config 原生操作手動測試 OK；更新為 user-reported native PASS。NexusDock 明確延後開發／除錯／live 配對驗收，僅以三語系「開發中」標記現有分頁。此決策解除 P8 對 Nexus live UAT 的非必要等待，但不豁免 P7 跨平台與 M9 release gate。見 [P7 調整](pre-m9-platform-essentials-roundtable.md#2026-10-12-p7-user-acceptance-adjustment-folders-pass-nexusdock-deferred)。
+
+## 2026-10-12 Next NexusDock label release + registrar pipe fix
+
+已完成 NexusDock「開發中」三語系註記並成功安裝 Next 專屬 bundle；原生 Next GUI 背景可啟動，Core 8767 `/healthz` PASS，stable 8765 PID 不變。另修復 registrar `launchctl` 未 drain Pipe 造成原生更新阻塞，首次 Next deploy 失敗後已恢復，第二次 Next-only deploy 成功。Logs/Config 由使用者手動驗收 PASS，Nexus backend/live UAT 繼續 defer。詳 [部署與修復](agentdock-next-isolation.md#2026-10-12-next-nexusdock-label-release--registrar-pipe-fix)。

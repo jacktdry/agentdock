@@ -535,3 +535,5 @@ ACP Manager、Browser Routing 與 Activity Center 都不應在 Desktop foundatio
 **2026-10-12 P7 read-only GUI probe（未結案）**：Next 原生 NexusDock/Diagnostics UI 已確認可見；Nexus 狀態仍為「未知／服務無法使用」，不能冒充未配對驗收；Diagnostics 開啟資料夾原生動作因本次工具安全限制尚未執行。Go 相關 package regression 與 Vue typecheck、139/139 tests PASS，stable/Next Core PID 觀察前後不變；live Nexus 配對維持 deferred。見 [P7 GUI checkpoint](pre-m9-platform-essentials-roundtable.md#2026-10-12-p7-native-read-only-gui-probe-not-closeout)。
 
 **2026-10-12 P7 使用者收斂**：Logs/Config 原生資料夾開啟由使用者手動驗收 PASS；NexusDock 暫停處理，於其頁面顯示三語系「開發中」，不再將 Nexus 身分/配對問題當作 P8 前置。維持既有安全契約與 P7 跨平台原生、P9/M9 gates。詳見 [P7 更新](pre-m9-platform-essentials-roundtable.md#2026-10-12-p7-user-acceptance-adjustment-folders-pass-nexusdock-deferred)。
+
+**2026-10-12 P7 安裝版更新**：NexusDock 三語系「開發中」已透過 Next-only bundle 成功建置部署（Go Core 8767 / stable 8765 分離、兩者健康）；macOS Registrar 的 `launchctl` stdout Pipe 等待問題已修復。使用者手動 Logs/Config PASS；Nexus pairing/unknown 狀態 deferred，原生此頁像素驗證未做；P8/P9/M9 gate 不受此註記放寬。見 [release checkpoint](agentdock-next-isolation.md#2026-10-12-next-nexusdock-label-release--registrar-pipe-fix)。
