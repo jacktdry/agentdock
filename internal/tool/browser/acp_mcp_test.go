@@ -59,6 +59,9 @@ func TestACPBrowserMCPRequiresCapabilityAndOnlyExposesBrokerTools(t *testing.T) 
 		t.Fatal(err)
 	}
 	handler := bridge.MCPHTTPHandler()
+	if bridge.Diagnostics().AuthenticatedMCPRequestOwners != 0 {
+		t.Fatal("registration fabricated transport activity")
+	}
 	unauthorized := acpMCPRequest(t, handler, "", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{}})
 	if unauthorized.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized status = %d", unauthorized.Code)
@@ -70,6 +73,9 @@ func TestACPBrowserMCPRequiresCapabilityAndOnlyExposesBrokerTools(t *testing.T) 
 	})
 	if initialize.Code != http.StatusOK {
 		t.Fatalf("initialize status=%d body=%s", initialize.Code, initialize.Body.String())
+	}
+	if bridge.Diagnostics().AuthenticatedMCPRequestOwners != 1 {
+		t.Fatal("initialize authorization was not observed")
 	}
 	listed := acpMCPRequest(t, handler, token, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{}})
 	if listed.Code != http.StatusOK {
@@ -317,4 +323,93 @@ func TestACPBrowserAdmissionRunsBeforeBackendAndReleaseBypassesPolicy(t *testing
 	if calls != beforeReleaseCalls {
 		t.Fatalf("release invoked admission hook: before=%d after=%d", beforeReleaseCalls, calls)
 	}
+}
+
+// Registration, tool authorization and diagnostic reads must not fabricate HTTP activity.
+func TestACPBrowserAuthenticatedTransportObservation(t *testing.T) {
+	b := newTestACPBridge(t)
+	root := t.TempDir()
+	token, err := b.RegisterSession("one", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := b.MCPHTTPHandler()
+	payload := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{}}
+	check := func(want int) {
+		t.Helper()
+		d := b.Diagnostics()
+		if d.AuthenticatedMCPRequestOwners != want {
+			t.Fatalf("observed=%d want=%d", d.AuthenticatedMCPRequestOwners, want)
+		}
+	}
+	if _, err := b.owner(token); err != nil {
+		t.Fatal(err)
+	}
+	check(0)
+	for _, auth := range []string{"", "Bearer ", "Basic " + token, token, "Bearer forged", "Bearer Bearer " + token} {
+		req := httptest.NewRequest(http.MethodPost, "/internal/acp-browser/mcp", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", auth)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("invalid authorization status=%d", rec.Code)
+		}
+		check(0)
+	}
+	for i := 0; i < 2; i++ {
+		if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusOK {
+			t.Fatalf("tools/list status=%d", rec.Code)
+		}
+		check(1)
+	}
+	second, err := b.RegisterSession("two", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 24; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); acpMCPRequest(t, handler, second, payload); _ = b.Diagnostics() }()
+	}
+	wg.Wait()
+	check(2)
+	if err := b.ReleaseSession(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	check(1)
+	if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked status=%d", rec.Code)
+	}
+	check(1)
+	replacement, err := b.RegisterSession("one", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement == token {
+		t.Fatal("capability reused")
+	}
+	check(1)
+	if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatal("expired generation accepted")
+	}
+	check(1)
+	// HTTP authorization is observable even when the SDK rejects malformed JSON.
+	req := httptest.NewRequest(http.MethodPost, "/internal/acp-browser/mcp", strings.NewReader("invalid JSON"))
+	req.Header.Set("Authorization", "Bearer "+replacement)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	check(2)
+	if err := b.ReleaseSession(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseSession(context.Background(), "two"); err != nil {
+		t.Fatal(err)
+	}
+	check(0)
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if rec := acpMCPRequest(t, handler, second, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatal("closed bridge accepted")
+	}
+	check(0)
 }

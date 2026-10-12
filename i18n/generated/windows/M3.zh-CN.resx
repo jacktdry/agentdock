@@ -616,6 +616,12 @@
   <data name="browser.anomalies_hint" xml:space="preserve">
     <value>异常类别可能重叠。孤立记录与生命周期错误是保留诊断；不执行清理或实时进程检查。</value>
   </data>
+  <data name="browser.authenticated_transport_hint" xml:space="preserve">
+    <value>仅证明已授权的端点访问；不证明 MCP 握手、浏览器会话、浏览器进程、不抢焦点行为、Chrome 配置文件授权或 ChatGPT 连接。</value>
+  </data>
+  <data name="browser.authenticated_transport_owners" xml:space="preserve">
+    <value>已观测有效 token 访问 MCP 端点的所有者</value>
+  </data>
   <data name="browser.availability" xml:space="preserve">
     <value>可用性</value>
   </data>
@@ -713,7 +719,7 @@
     <value>运行中与排队操作独立于有效租约。限制表示 Broker 准入容量。</value>
   </data>
   <data name="browser.owners" xml:space="preserve">
-    <value>所有者</value>
+    <value>已注册 ACP 所有者</value>
   </data>
   <data name="browser.policy_hint" xml:space="preserve">
     <value>公司必需 Edge 策略仅统计已配置的认证 Edge 路由；不代表可连接、认证成功或健康。</value>

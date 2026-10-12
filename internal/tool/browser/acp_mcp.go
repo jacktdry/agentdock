@@ -41,15 +41,28 @@ func (b *ACPBridge) MCPHTTPHandler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		owner, err := b.owner(token)
+		principal, err := b.authorizeMCPRequest(token)
 		if err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		ctx := context.WithValue(r.Context(), acpBrowserTokenContextKey{}, token)
-		ctx = requestmeta.WithAuthPrincipal(ctx, acpBrowserAuthPrincipal(owner))
+		ctx = requestmeta.WithAuthPrincipal(ctx, principal)
 		transport.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// authorizeMCPRequest verifies and records endpoint access atomically with
+// registration/revocation. It does not prove MCP initialization or browser work.
+func (b *ACPBridge) authorizeMCPRequest(token string) (requestmeta.AuthPrincipal, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	owner, err := b.ownerLocked(token)
+	if err != nil {
+		return requestmeta.AuthPrincipal{}, err
+	}
+	owner.authenticatedMCPRequestObserved = true
+	return acpBrowserAuthPrincipal(owner), nil
 }
 
 func acpBrowserAuthPrincipal(owner *acpBrowserOwner) requestmeta.AuthPrincipal {

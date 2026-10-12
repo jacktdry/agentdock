@@ -204,6 +204,8 @@
 "browser.active_operations" = "執行中作業";
 "browser.anomalies" = "租約與生命週期計數";
 "browser.anomalies_hint" = "異常類別可能重疊。孤立紀錄與生命週期錯誤是保留診斷；不執行清理或即時程序檢查。";
+"browser.authenticated_transport_hint" = "僅證明已授權的端點存取；不證明 MCP 握手、瀏覽器工作階段、瀏覽器程序、不搶焦點行為、Chrome 設定檔授權或 ChatGPT 連線。";
+"browser.authenticated_transport_owners" = "已觀測有效 token 存取 MCP 端點的擁有者";
 "browser.availability" = "可用性";
 "browser.available" = "可用 — 橋接存在";
 "browser.broker_unavailable" = "Broker 無法使用";
@@ -236,7 +238,7 @@
 "browser.observed_at" = "觀察時間（UTC）";
 "browser.operations" = "准入佇列";
 "browser.operations_hint" = "執行中與排隊作業獨立於有效租約。限制表示 Broker 准入容量。";
-"browser.owners" = "擁有者";
+"browser.owners" = "已註冊 ACP 擁有者";
 "browser.policy_hint" = "公司必要 Edge 原則僅計算已設定的驗證 Edge 路由；不代表可連線、驗證成功或健康。";
 "browser.pool_available" = "可用槽位";
 "browser.pool_capacity" = "容量槽位";

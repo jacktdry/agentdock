@@ -616,6 +616,12 @@
   <data name="browser.anomalies_hint" xml:space="preserve">
     <value>Anomaly categories may overlap. Orphans and lifecycle errors are retained diagnostics; no cleanup or live process check occurs.</value>
   </data>
+  <data name="browser.authenticated_transport_hint" xml:space="preserve">
+    <value>Only proves authorized endpoint access; does NOT prove an MCP handshake, browser session, browser process, no-focus behavior, Chrome profile authorization, or a ChatGPT connection.</value>
+  </data>
+  <data name="browser.authenticated_transport_owners" xml:space="preserve">
+    <value>Owners with verified-token MCP endpoint access</value>
+  </data>
   <data name="browser.availability" xml:space="preserve">
     <value>Availability</value>
   </data>
@@ -713,7 +719,7 @@
     <value>Active operations and queued operations are separate from active leases. Limits describe broker admission capacity.</value>
   </data>
   <data name="browser.owners" xml:space="preserve">
-    <value>Owners</value>
+    <value>Registered ACP owners</value>
   </data>
   <data name="browser.policy_hint" xml:space="preserve">
     <value>Company-required Edge policies count configured authenticated Edge routes only; it does not indicate reachability, authentication success or health.</value>

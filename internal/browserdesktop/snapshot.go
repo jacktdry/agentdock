@@ -14,8 +14,9 @@ type SharedPoolBudget struct {
 }
 
 type Snapshot struct {
-	ManagedPoolMode  string            `json:"managedPoolMode"`
-	SharedPoolBudget *SharedPoolBudget `json:"sharedPoolBudget,omitempty"`
+	AuthenticatedTransportOwners int               `json:"authenticatedTransportOwners"` // Authorized endpoint access only.
+	ManagedPoolMode              string            `json:"managedPoolMode"`
+	SharedPoolBudget             *SharedPoolBudget `json:"sharedPoolBudget,omitempty"`
 
 	ConfiguredConnectors                int    `json:"configuredConnectors"`
 	ConfiguredAuthenticatedEdgeProfiles int    `json:"configuredAuthenticatedEdgeProfiles"`

@@ -4,8 +4,11 @@ import type { Snapshot } from '../../../bindings/github.com/uvwt/agentdock/inter
 import type { MessageKey } from '../../i18n'
 import { useI18n } from '../../i18n'
 const props = defineProps<{ snapshot: Snapshot }>()
+const brokerAvailable = computed(() => props.snapshot.availability === 'available' &&
+  Number.isInteger(props.snapshot.authenticatedTransportOwners) && props.snapshot.authenticatedTransportOwners >= 0 &&
+  Number.isInteger(props.snapshot.owners) && props.snapshot.owners >= props.snapshot.authenticatedTransportOwners)
 const modeKey = computed<MessageKey>(() => {
-  if (props.snapshot.availability !== 'available') return 'browser.pool_unknown'
+  if (!brokerAvailable.value) return 'browser.pool_unknown'
   switch (props.snapshot.managedPoolMode) {
     case 'exclusive': return 'browser.pool_exclusive'
     case 'experimental_shared': return 'browser.pool_shared'
@@ -21,14 +24,14 @@ const { t } = useI18n()
       <div><dt>{{ t('browser.pool_mode') }}</dt><dd>{{ t(modeKey) }}</dd></div>
     </dl>
     <p class="hint">{{ t('browser.pool_hint') }}</p>
-    <dl v-if="snapshot.availability === 'available' && snapshot.managedPoolMode === 'experimental_shared' && snapshot.sharedPoolBudget" class="status-grid">
+    <dl v-if="brokerAvailable && snapshot.managedPoolMode === 'experimental_shared' && snapshot.sharedPoolBudget" class="status-grid">
       <div><dt>{{ t('browser.pool_capacity') }}</dt><dd>{{ snapshot.sharedPoolBudget.capacity }}</dd></div>
       <div><dt>{{ t('browser.pool_occupied') }}</dt><dd>{{ snapshot.sharedPoolBudget.occupied }}</dd></div>
       <div><dt>{{ t('browser.pool_available') }}</dt><dd>{{ snapshot.sharedPoolBudget.available }}</dd></div>
       <div><dt>{{ t('browser.pool_claimed') }}</dt><dd>{{ snapshot.sharedPoolBudget.claimed }}</dd></div>
       <div><dt>{{ t('browser.pool_uncertain') }}</dt><dd>{{ snapshot.sharedPoolBudget.uncertain }}</dd></div>
     </dl>
-    <template v-if="snapshot.availability === 'available'">
+    <template v-if="brokerAvailable">
     <dl class="status-grid">
       <div><dt>{{ t('browser.stale_flag') }}</dt><dd>{{ t(snapshot.stale ? 'common.yes' : 'common.no') }}</dd></div>
     </dl>
@@ -36,7 +39,9 @@ const { t } = useI18n()
     <p class="hint">{{ t('browser.policy_hint') }}</p>
     <h3>{{ t('browser.retained') }}</h3>
     <p class="hint">{{ t('browser.retained_hint') }}</p>
+    <p class="hint">{{ t('browser.authenticated_transport_hint') }}</p>
     <dl class="status-grid">
+      <div><dt>{{ t('browser.authenticated_transport_owners') }}</dt><dd>{{ snapshot.authenticatedTransportOwners }}</dd></div>
       <div><dt>{{ t('browser.owners') }}</dt><dd>{{ snapshot.owners }}</dd></div>
       <div><dt>{{ t('browser.leases') }}</dt><dd>{{ snapshot.leases }}</dd></div>
       <div><dt>{{ t('browser.workers') }}</dt><dd>{{ snapshot.workers }}</dd></div>

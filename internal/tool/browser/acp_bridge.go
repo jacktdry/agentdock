@@ -18,11 +18,12 @@ type acpBrowserLease struct {
 }
 
 type acpBrowserOwner struct {
-	sessionID string
-	profileID string
-	scope     RequestScope
-	token     string
-	leases    map[string]acpBrowserLease
+	authenticatedMCPRequestObserved bool // Guarded by ACPBridge.mu; endpoint access only.
+	sessionID                       string
+	profileID                       string
+	scope                           RequestScope
+	token                           string
+	leases                          map[string]acpBrowserLease
 }
 
 // ACPBridge is the only ACP-facing browser ownership boundary. ACP adapters own
@@ -239,6 +240,11 @@ func (b *ACPBridge) registerSession(sessionID, profileID, cwd, token string) (st
 func (b *ACPBridge) owner(token string) (*acpBrowserOwner, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.ownerLocked(token)
+}
+
+// ownerLocked requires b.mu and never records transport activity.
+func (b *ACPBridge) ownerLocked(token string) (*acpBrowserOwner, error) {
 	if b.closed {
 		return nil, browserError(ErrEngineUnavailable, "ACP browser bridge is closed", "acp", nil, nil)
 	}

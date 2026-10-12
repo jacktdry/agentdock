@@ -204,6 +204,8 @@
 "browser.active_operations" = "Active operations";
 "browser.anomalies" = "Lease and lifecycle counts";
 "browser.anomalies_hint" = "Anomaly categories may overlap. Orphans and lifecycle errors are retained diagnostics; no cleanup or live process check occurs.";
+"browser.authenticated_transport_hint" = "Only proves authorized endpoint access; does NOT prove an MCP handshake, browser session, browser process, no-focus behavior, Chrome profile authorization, or a ChatGPT connection.";
+"browser.authenticated_transport_owners" = "Owners with verified-token MCP endpoint access";
 "browser.availability" = "Availability";
 "browser.available" = "Available — bridge exists";
 "browser.broker_unavailable" = "Broker unavailable";
@@ -236,7 +238,7 @@
 "browser.observed_at" = "Observed at (UTC)";
 "browser.operations" = "Admission queue";
 "browser.operations_hint" = "Active operations and queued operations are separate from active leases. Limits describe broker admission capacity.";
-"browser.owners" = "Owners";
+"browser.owners" = "Registered ACP owners";
 "browser.policy_hint" = "Company-required Edge policies count configured authenticated Edge routes only; it does not indicate reachability, authentication success or health.";
 "browser.pool_available" = "Available slots";
 "browser.pool_capacity" = "Capacity slots";

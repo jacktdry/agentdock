@@ -35,7 +35,8 @@ func TestRuntimeBrowserDesktopAvailability(t *testing.T) {
 func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 	now := time.Now().UTC()
 	d := toolbrowser.BrokerDiagnostics{
-		Owners: []toolbrowser.BrokerOwnerDiagnostic{{ACPSessionID: "PRIVATE_CANARY", CanonicalWorkspaceRoot: "/PRIVATE_CANARY"}},
+		AuthenticatedMCPRequestOwners: 1,
+		Owners:                        []toolbrowser.BrokerOwnerDiagnostic{{ACPSessionID: "PRIVATE_CANARY", CanonicalWorkspaceRoot: "/PRIVATE_CANARY"}},
 		Leases: []toolbrowser.BrokerLeaseDiagnostic{
 			{Route: browserpolicy.RouteManaged, ACPSessionID: "PRIVATE_CANARY", PageID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now.Add(time.Minute)},
 			{Route: browserpolicy.RouteRequiredExternal, ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupPending, ExpiresAt: now},
@@ -48,13 +49,13 @@ func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 		SharedBudget:       &toolbrowser.SharedManagedBudgetDiagnostic{CapacitySlots: 2, OccupiedSlots: 1, AvailableSlots: 1, ClaimedOwners: 3, UncertainSlots: 1},
 	}
 	s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, now)
-	if s.State != "stale" || !s.Stale || s.ActiveLeases != 1 || s.ExpiredLeases != 1 || s.UnownedLeases != 1 || s.ReleasingLeases != 1 || s.FailedLeases != 1 || s.ReadyWorkers != 1 || s.FailedWorkers != 1 || s.QueuedOperations != 3 || !s.LifecycleError {
+	if s.AuthenticatedTransportOwners != 1 || s.State != "stale" || !s.Stale || s.ActiveLeases != 1 || s.ExpiredLeases != 1 || s.UnownedLeases != 1 || s.ReleasingLeases != 1 || s.FailedLeases != 1 || s.ReadyWorkers != 1 || s.FailedWorkers != 1 || s.QueuedOperations != 3 || !s.LifecycleError {
 		t.Fatalf("snapshot %#v", s)
 	}
 	data, _ := json.Marshal(s)
 	var keys map[string]any
 	_ = json.Unmarshal(data, &keys)
-	allowed := strings.Fields("managedPoolMode sharedPoolBudget configuredConnectors configuredAuthenticatedEdgeProfiles configuredRequiredExternalPolicies connectorHealth managedLeases requiredExternalLeases explicitExternalLeases observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
+	allowed := strings.Fields("managedPoolMode sharedPoolBudget configuredConnectors configuredAuthenticatedEdgeProfiles configuredRequiredExternalPolicies connectorHealth managedLeases requiredExternalLeases explicitExternalLeases observedAt availability state stale browserEnabled acpEnabled companyRequiredEdgePolicies owners authenticatedTransportOwners leases activeLeases expiredLeases releasingLeases failedLeases unownedLeases workers readyWorkers failedWorkers activeOperations queuedOperations maxConcurrency queueCapacity managedOrphans externalOrphans lifecycleError")
 	if len(keys) != len(allowed) {
 		t.Fatalf("DTO keys changed: %s", data)
 	}
@@ -211,9 +212,11 @@ func TestRuntimeBrowserDesktopInvalidDiagnosticsHideAllRetainedCounts(t *testing
 		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteManaged}, {Route: "PRIVATE_CANARY"}}},
 		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: ""}}},
 		{Queue: toolbrowser.BrokerQueueDiagnostic{Active: -1}},
+		{AuthenticatedMCPRequestOwners: -1},
+		{AuthenticatedMCPRequestOwners: 2, Owners: []toolbrowser.BrokerOwnerDiagnostic{{}}},
 	} {
 		s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available", ConfiguredConnectors: 2}, d, time.Now())
-		if s.Availability != "broker_unavailable" || s.State != "unavailable" || s.Leases != 0 || s.ManagedLeases != 0 || s.ConfiguredConnectors != 2 || s.ConnectorHealth != "not_observed" || s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil {
+		if s.Availability != "broker_unavailable" || s.State != "unavailable" || s.AuthenticatedTransportOwners != 0 || s.Owners != 0 || s.Leases != 0 || s.ManagedLeases != 0 || s.ConfiguredConnectors != 2 || s.ConnectorHealth != "not_observed" || s.ManagedPoolMode != "unknown" || s.SharedPoolBudget != nil {
 			t.Fatal(s)
 		}
 	}

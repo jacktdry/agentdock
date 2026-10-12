@@ -11,7 +11,7 @@ const idle = (): Snapshot => ({
   browserEnabled: true, acpEnabled: true, companyRequiredEdgePolicies: 1,
   configuredConnectors: 2, configuredAuthenticatedEdgeProfiles: 1, configuredRequiredExternalPolicies: 2,
   connectorHealth: 'not_observed', managedLeases: 0, requiredExternalLeases: 0, explicitExternalLeases: 0,
-  owners: 0, leases: 0, workers: 0, activeLeases: 0, expiredLeases: 0, releasingLeases: 0,
+  authenticatedTransportOwners: 0, owners: 0, leases: 0, workers: 0, activeLeases: 0, expiredLeases: 0, releasingLeases: 0,
   failedLeases: 0, unownedLeases: 0, readyWorkers: 0, failedWorkers: 0, activeOperations: 0,
   queuedOperations: 0, maxConcurrency: 4, queueCapacity: 8, managedOrphans: 0, externalOrphans: 0, lifecycleError: false,
 })

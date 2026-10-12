@@ -13,6 +13,10 @@ export interface SharedPoolBudget {
 }
 
 export interface Snapshot {
+    /**
+     * Authorized endpoint access only.
+     */
+    "authenticatedTransportOwners": number;
     "managedPoolMode": string;
     "sharedPoolBudget"?: SharedPoolBudget | null;
     "configuredConnectors": number;

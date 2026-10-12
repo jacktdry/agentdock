@@ -48,7 +48,11 @@ func (r *Runtime) RuntimeBrowserDesktop() Result {
 func aggregateBrowserDiagnostics(s browserdesktop.Snapshot, d toolbrowser.BrokerDiagnostics, now time.Time) browserdesktop.Snapshot {
 	s.ConnectorHealth = browserdesktop.ConnectorHealthNotObserved
 	s.ManagedPoolMode, s.SharedPoolBudget = "unknown", nil
-	for _, n := range []int{d.Queue.Active, d.Queue.Queued, d.Queue.MaxConcurrency, d.Queue.QueueCapacity, d.Queue.ManagedOrphans, d.Queue.ExternalOrphans} {
+	if d.AuthenticatedMCPRequestOwners > len(d.Owners) {
+		s.Availability, s.State = "broker_unavailable", "unavailable"
+		return s
+	}
+	for _, n := range []int{d.AuthenticatedMCPRequestOwners, d.Queue.Active, d.Queue.Queued, d.Queue.MaxConcurrency, d.Queue.QueueCapacity, d.Queue.ManagedOrphans, d.Queue.ExternalOrphans} {
 		if n < 0 {
 			s.Availability, s.State = "broker_unavailable", "unavailable"
 			return s
@@ -79,6 +83,7 @@ func aggregateBrowserDiagnostics(s browserdesktop.Snapshot, d toolbrowser.Broker
 		s.SharedPoolBudget = &browserdesktop.SharedPoolBudget{Capacity: b.CapacitySlots, Occupied: b.OccupiedSlots,
 			Available: b.AvailableSlots, Claimed: b.ClaimedOwners, Uncertain: b.UncertainSlots}
 	}
+	s.AuthenticatedTransportOwners = d.AuthenticatedMCPRequestOwners
 	s.Owners, s.Leases, s.Workers = len(d.Owners), len(d.Leases), len(d.Workers)
 	for _, l := range d.Leases {
 		switch l.Route {

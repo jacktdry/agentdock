@@ -204,6 +204,8 @@
 "browser.active_operations" = "运行中操作";
 "browser.anomalies" = "租约与生命周期计数";
 "browser.anomalies_hint" = "异常类别可能重叠。孤立记录与生命周期错误是保留诊断；不执行清理或实时进程检查。";
+"browser.authenticated_transport_hint" = "仅证明已授权的端点访问；不证明 MCP 握手、浏览器会话、浏览器进程、不抢焦点行为、Chrome 配置文件授权或 ChatGPT 连接。";
+"browser.authenticated_transport_owners" = "已观测有效 token 访问 MCP 端点的所有者";
 "browser.availability" = "可用性";
 "browser.available" = "可用 — 桥接存在";
 "browser.broker_unavailable" = "Broker 不可用";
@@ -236,7 +238,7 @@
 "browser.observed_at" = "观察时间（UTC）";
 "browser.operations" = "准入队列";
 "browser.operations_hint" = "运行中与排队操作独立于有效租约。限制表示 Broker 准入容量。";
-"browser.owners" = "所有者";
+"browser.owners" = "已注册 ACP 所有者";
 "browser.policy_hint" = "公司必需 Edge 策略仅统计已配置的认证 Edge 路由；不代表可连接、认证成功或健康。";
 "browser.pool_available" = "可用槽位";
 "browser.pool_capacity" = "容量槽位";

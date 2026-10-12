@@ -63,12 +63,13 @@ type BrokerQueueDiagnostic struct {
 }
 
 type BrokerDiagnostics struct {
-	Owners             []BrokerOwnerDiagnostic        `json:"owners"`
-	Leases             []BrokerLeaseDiagnostic        `json:"leases"`
-	Workers            []BrokerWorkerDiagnostic       `json:"workers"`
-	Queue              BrokerQueueDiagnostic          `json:"queue"`
-	LifecycleLastError string                         `json:"lifecycle_last_error,omitempty"`
-	SharedBudget       *SharedManagedBudgetDiagnostic `json:"shared_budget,omitempty"`
+	AuthenticatedMCPRequestOwners int                            `json:"authenticated_mcp_request_owners"`
+	Owners                        []BrokerOwnerDiagnostic        `json:"owners"`
+	Leases                        []BrokerLeaseDiagnostic        `json:"leases"`
+	Workers                       []BrokerWorkerDiagnostic       `json:"workers"`
+	Queue                         BrokerQueueDiagnostic          `json:"queue"`
+	LifecycleLastError            string                         `json:"lifecycle_last_error,omitempty"`
+	SharedBudget                  *SharedManagedBudgetDiagnostic `json:"shared_budget,omitempty"`
 }
 
 func (r *WorkerRegistry) Snapshot() []BrokerWorkerDiagnostic {
@@ -101,10 +102,14 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 		return BrokerDiagnostics{}
 	}
 	b.mu.Lock()
+	authenticatedOwners := 0
 	owners := make([]BrokerOwnerDiagnostic, 0, len(b.bySession))
 	leaseOwners := make(map[string]BrokerOwnerDiagnostic)
 	leaseRoutes := make(map[string]browserpolicy.RouteKind)
 	for _, owner := range b.bySession {
+		if owner.authenticatedMCPRequestObserved {
+			authenticatedOwners++
+		}
 		d := BrokerOwnerDiagnostic{ACPSessionID: owner.sessionID, ProfileID: owner.profileID, CanonicalWorkspaceRoot: owner.scope.CanonicalWorkspaceRoot}
 		for id, entry := range owner.leases {
 			d.LeaseIDs = append(d.LeaseIDs, id)
@@ -176,7 +181,7 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 		snapshot := b.rotating.budget.snapshot()
 		sharedBudget = &snapshot
 	}
-	return BrokerDiagnostics{Owners: owners, Leases: leases, Workers: b.registry.Snapshot(), Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr, SharedBudget: sharedBudget}
+	return BrokerDiagnostics{AuthenticatedMCPRequestOwners: authenticatedOwners, Owners: owners, Leases: leases, Workers: b.registry.Snapshot(), Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr, SharedBudget: sharedBudget}
 }
 
 func (b *ACPBridge) CleanupStale(now time.Time) error { return b.sweepLifecycle(now.UTC()) }
