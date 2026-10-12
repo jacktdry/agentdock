@@ -73,6 +73,7 @@ func TestB6RealNextCodexAdapterNativeWrapperMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := backendFile.Name()
+	calledMarker := filepath.Join(root, "b6-owned-mcp-called.marker")
 	_ = backendFile.Close()
 	t.Cleanup(func() { _ = os.Remove(backend) })
 	src := `import json,sys
@@ -83,7 +84,9 @@ for line in sys.stdin:
  meth=m.get('method')
  if meth=='initialize': response={'protocolVersion':'2024-11-05','capabilities':{'tools':{}},'serverInfo':{'name':'next-owned-b6','version':'1'}}
  elif meth=='tools/list': response={'tools':[{'name':'ping','description':'Test only','inputSchema':{'type':'object','properties':{}}}]}
- elif meth=='tools/call': response={'content':[{'type':'text','text':'PONG'}]}
+ elif meth=='tools/call':
+  with open(sys.argv[1],'w') as out:out.write('PONG')
+  response={'content':[{'type':'text','text':'PONG'}]}
  else: response={}
  print(json.dumps({'jsonrpc':'2.0','id':m['id'],'result':response}),flush=True)
 `
@@ -123,7 +126,7 @@ for line in sys.stdin:
 	}
 	ctx, cancel := context.WithTimeout(requestmeta.WithAuthPrincipal(context.Background(), requestmeta.AuthPrincipal{Kind: "test", ID: "owned-b6", Authenticated: true, Stable: true}), 105*time.Second)
 	defer cancel()
-	c := nextCodexMCPConfig{ServerID: "owned_b6", WrapperExecutable: launcher, BackendExecutable: "/usr/bin/python3", BackendArgs: []string{"-u", backend}}
+	c := nextCodexMCPConfig{ServerID: "owned_b6", WrapperExecutable: launcher, BackendExecutable: "/usr/bin/python3", BackendArgs: []string{"-u", backend, calledMarker}}
 	c.ConfigDigest = nextCodexMCPConfigDigest(c.ServerID, c.WrapperExecutable, c.BackendExecutable, c.BackendArgs)
 	socket, err := rt.prepareNextCodexMCPRegistry(ctx, profile, secret, c)
 	if err != nil {
@@ -169,6 +172,41 @@ for line in sys.stdin:
 		t.Fatalf("B6 real connected MCP had no kernel verified wrapper chain: %d", len(observed))
 	}
 	t.Logf("B6 native end-to-end kernel provenance: app-server pid=%d wrapper pid=%d child pid=%d", observed[0].AppServer.PID, observed[0].Wrapper.PID, observed[0].Child.PID)
+	if os.Getenv("NEXT_B6_RUN_MODEL_PING") == "1" {
+		prompt, err := rt.acp.Prompt(ctx, toolacp.PromptRequest{ProfileID: "codex", Action: "start", SessionID: session.ID, Prompt: []map[string]any{{"type": "text", "text": "Call the owned_b6 ping MCP tool once, then reply PONG. No other tools."}}})
+		if err != nil {
+			t.Fatalf("authenticated model tool-call start: %v", err)
+		}
+		runID, ok := prompt["run_id"].(string)
+		if !ok || runID == "" {
+			t.Fatalf("model prompt omitted Run ID: %T", prompt["run_id"])
+		}
+		limit, wait := 50, 1500
+		deadline := time.Now().Add(75 * time.Second)
+		called, finished := false, false
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(calledMarker); err == nil {
+				called = true
+			}
+			events, err := rt.acp.Prompt(ctx, toolacp.PromptRequest{ProfileID: "codex", Action: "events", RunID: runID, Limit: &limit, WaitMS: &wait})
+			if err != nil {
+				t.Fatalf("authenticated model events: %v", err)
+			}
+			switch fmt.Sprint(events["status"]) {
+			case "completed":
+				finished = true
+			case "failed", "cancelled", "interrupted":
+				t.Fatalf("authenticated MCP turn ended unexpectedly: %v", events["status"])
+			}
+			if finished {
+				break
+			}
+		}
+		if !finished || !called {
+			t.Fatalf("model tool-call verification incomplete: completed=%t ping=%t", finished, called)
+		}
+		t.Log("B6 authenticated model invoked test MCP exactly through managed Next session")
+	}
 }
 
 func ensureB6PrivateDir(path string) error {
