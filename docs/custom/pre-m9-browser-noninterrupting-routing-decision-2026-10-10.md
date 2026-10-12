@@ -500,3 +500,15 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 - **主管端修正後 real rerun PASS（34.91s）**：真實 3 simulated owners / MCP worker / 1 Chrome main per generation；兩個世代 budget capacity=1、owned peak=1；新增診斷及 foreign Workspace deny checks 全數通過；test cleanup 確認 owned MCP/Chrome processes gone、無專用 TMPDIR marker 程序、budget=0。
 - Regression：`go test -race -p 2 ./internal/tool/browser -run '^(TestACPBridgeShared|TestManagedShared)' -count=1 -timeout=160s` PASS；`go test -p 2 ./internal/tool/browser ./internal/browserpolicy -count=1 -timeout=150s` PASS；`go vet ./internal/tool/browser ./internal/browserpolicy`、gofmt、`git diff --check` PASS。一般 Go suite 未設定 opt-in，不會意外開 Chrome。
 - **依然待處理**：這三個仍是 test-only *模擬 Session identity*，不是三個真實 ChatGPT+ACP client 同時通過 Next installed Broker 的證據；使用者桌面的 focus/no-modal 沒有經 macOS 觀測驗收，Chrome/Edge 已登入 Profile、consent、安全授權、crash orphan OS authority、跨 workspace pool 與 producer→Next Core→Wails native source parity 尚未 release acceptance；不得藉本結果啟用正式 shared mode。stable Core 8765 與 Next Core 8767 均未 restart，未改用戶瀏覽器、未安裝／推送。
+
+
+
+## 34. 2026-10-12 P8 Supervisor durable journal structural audit (SOURCE ONLY)
+
+延續 §29–31 的 Supervisor durable `accepted → settled → acknowledged` receipts，新增 macOS-only `process.AuditSupervisorDispatchJournal(stateDir)`。這是一個 **source-only、唯讀、非認證式、非復原授權** 的有限稽核工具；沒有接線到 Next Core／BrowserRegistry／ACP，沒有新增 daemon、browser process 控制、journal 維護／回放／修復權限。
+
+- 輸出僅為五個整數：`Total`、`AcceptedOnly`、`Settled`（包含 acknowledged）、`Acknowledged`、`UnknownOutcome`（settled 子集合）。不輸出檔名、Principal、Session、PID/birth、HMAC、工具名稱／參數、Profile、完整輸出或記錄路徑。即使 **0 筆或全數 acknowledged**，也**不能**推論 restart、replay、approval settlement、unquarantine、marker unlink 或 Chrome descendants 已清理。
+- 採現有 owner-private `0700`、當前 UID、絕對目錄與 `O_DIRECTORY|O_NOFOLLOW` dirfd；限最多 64 筆、單檔最多 4096 bytes、每筆 pinned `0600` regular、nlink=1 與 path stat/inode/dev；執行前後重新驗證 directory identity、file inode／metadata 與清單一致。`O_NONBLOCK` 避免遭置換為 FIFO 時讀取卡住。缺／多／損壞／截斷／額外 JSON 行、非預期檔名或 mode、symlink／hardlink／被換 inode／過量收據全部 return generic `ErrSupervisorDispatchLedgerUnavailable`，**不回傳部分計數**。既有 signed-frame 單筆 `InspectSupervisorDispatchReceipt` 與 ledger Begin/Finish/ACK 寫入路徑沒有變動。
+- 新收據校驗 accepted、settled、acknowledged 順序與合法欄位／出生識別、session/sequence 檔名對應和 64-hex 摘要；採持久化 `json.Marshal` 完全相同的 canonical bytes 驗證，拒絕重複 JSON key、任意欄位重排／空白造成的結構歧義。**不能**在沒有原始 signed frame、MAC secret 和 trusted live kernel peer 的情況下驗證 digest 或 HMAC 真正對應工具，因此這些數字只能作人工 crash triage，絕不作 Core successor gate。
+- macOS 隔離 fixture（不啟動真實 Worker/Chrome）：空檔、accepted-only、settled-success/failed/unknown、acked，多 session 匯總；不完整／多出行、無效 sequence／digest／birth、替換目錄／inode、符號／硬連結、不安全 mode/UID（合成 stat）、超過 64 筆、大小 >4KiB、一份壞記錄使所有已知計數歸零；非 Darwin stub 明確 fail-closed，Linux/Windows amd64 no-CGO compile。
+- 適用性界線：仍**不能**取得真實 ChatGPT/Codex/AGY 三路 Client → Next installed Browser Broker 的 end-to-end authority；沒有真實桌面 no-focus/zero prompt、Edge/explicit Chrome Profile consent、Chrome double-fork descendant OS 全量歸屬、Supervisor 重啟後金鑰重新驗證、跨 M8 store/journal 原子結算或安全重啟。P8 及 M9 不宣告 closeout。
