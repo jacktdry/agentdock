@@ -40,18 +40,20 @@ private func launchdJobRunning(_ label: String) -> Bool {
     process.arguments = ["print", "gui/\(getuid())/\(label)"]
     let output = Pipe()
     process.standardOutput = output
-    process.standardError = Pipe()
+    process.standardError = FileHandle.nullDevice
     do {
         try process.run()
+        // Drain launchctl before waiting. A full Pipe while waitUntilExit()
+        // runs can deadlock the registrar and leave Core registration unverified.
+        let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return false }
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        return text.split(whereSeparator: \.isNewline).contains {
+            $0.trimmingCharacters(in: .whitespaces) == "state = running"
+        }
     } catch {
         return false
-    }
-    guard process.terminationStatus == 0 else { return false }
-    let data = output.fileHandleForReading.readDataToEndOfFile()
-    guard let text = String(data: data, encoding: .utf8) else { return false }
-    return text.split(whereSeparator: \.isNewline).contains {
-        $0.trimmingCharacters(in: .whitespaces) == "state = running"
     }
 }
 
