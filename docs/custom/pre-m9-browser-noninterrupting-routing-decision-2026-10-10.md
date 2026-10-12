@@ -548,3 +548,16 @@ rtk proxy env AGENTDOCK_TEST_REAL_SHARED_ACP_BRIDGE=1 NPM_CONFIG_OFFLINE=true NP
 - 安全退出：AgentDock ACP Process Controller 對測試擁有的程序組使用 SIGKILL，因此 fake Node 的 JS `exit` event 不能當驗收。改由 fake 寫入私有 PID marker，`rt.Close` 後只用 `kill(pid, 0)` **查詢該測試自己記錄的 PID 是否已不存在**，絕不向使用者程序發送終止訊號。Fake 也包含自身有界 watchdog。
 - 實測：第一次光靠 `process.on('exit')` marker 的測試誤判；修正成 OS-owned PID 存亡檢查後初次 PASS。五次回歸偵測出 adapter 正常會有背景唯讀 `config/read`，依照空合成設定補上；**隔離 source-only 真實 Adapter initialize `-count=5` 全數 PASS**，沒有發現 test fake native 殘留程序。原始失敗是 fixture 設計問題，未歸因於產品。
 - **明確後續 gate**：這只驗證 Adapter ACP 層啟動與最小的 native 只讀握手，**不代表** real Codex/Antigravity SessionNew、真實 Browser MCP 注入與工具呼叫、使用者登入、Chrome Worker 共用、Zero focus／零授權提示、跨 Core 實機故障恢復。下一步須以專屬 fake native protocol 完整模擬 Thread start/config MCP 注入，或在經確認完全隔離且允許的真實 adapter 使用情境下驗證；Antigravity 曾有 Keychain 彈窗風險，此輪不啟動 AGY CLI、只保留隔離研究待驗。沒有安裝／部署／Push／更動 Stable 或 Next Core。
+
+
+
+## 38. 2026-10-12 P8 actual Codex ACP SessionNew to fake native MCP config (SOURCE ONLY)
+
+承接 §37 僅做到實際 `codex-acp` 2.1.1 `initialize`，沿用原先 explicit `AGENTDOCK_TEST_REAL_CODEX_ACP_OFFLINE=1` 的 macOS test-only 私有 HOME / CODEX_HOME / `CODEX_PATH` 測試假 Codex native app-server。新增 `TestACPBrowserCodexAdapterIsolatedOfflineSessionNew` 與舊 initialize-only 路徑並列；**沒有執行真正 Codex native、帳號登入、模型、AGY、Chrome 或 Edge**。
+
+- 真的 installed Codex ACP 在呼叫 AgentDock `acp.Session(Action=new, ProfileID=codex)` 時，與私有 Node fake native 完成 `account/read`（**合成測試帳號**，與使用者無關）、`config/read`（空）、`skills/extraRoots/set`、`thread/start`（**假 thread 與模型**）、`model/list`。Fake 只有明示 allowlist，未知 native methods 全部拒絕；不允許 prompt／turn／實際瀏覽器操作。
+- `thread/start` 的 MCP config 驗證：經 AgentDock `acpHostCapabilityProvider` 送到真實 Adapter 並轉入 fake native 的正好是 `agentdock-browser` + `agentdock-computer` **兩個**名為指定端點的能力；各自為 test-owned `127.0.0.1` URL、具有符合格式的 Bearer header，且兩者權杖相同。第一輪測試誤以為應只有 browser 一個，才拒絕這份正確 config；改為嚴格兩端點白名單後真實 `SessionNew` PASS。
+- Fake native **不執行** MCP handshake；它只在私有 0600 測試暫存檔提供剛剛注入的 Browser Bearer 給**另一個合成 Go MCP SDK Client**。該 SDK 經本機 test-owned HTTP Server 完成真實 MCP `initialize`、`tools/list`（九個固定 Browser tools），以 fabricated lease 執行 `browser_snapshot` 遭 `ErrLeaseOwnerMismatch` 拒絕；真實 Adapter→fake native 並非真實 Codex appserver→MCP 自行 handshake，務必分開宣告。
+- 本機 BrowserDesktop 中 `Owners/AuthTransport` 依序為 `0/0` → SessionNew `1/0` → 合成 SDK 訪問 `1/1` → ReleaseSession `0/0`；同一臨時 token 被撤銷後 HTTP 401，且 `Workers=0 / Leases=0`，沒有 Browser Probe/Open 或 Chrome 啟動。嚴格 `CODEX_HOME` 檢查、fake PID after Close `ESRCH`、私有 auth/config 不存在；private 0600 bearer capture 測試後覆寫零值並刪除，整個臨時 HOME 由測試清除。
+- 驗證：`AGENTDOCK_TEST_REAL_CODEX_ACP_OFFLINE=1 go test -p 2 ./internal/app -run ^TestACPBrowserCodexAdapterIsolatedOffline(Initialize|SessionNew)$ -count=5` **PASS（26.146s）**；同組 `-race -count=1` **PASS（10.346s）**。`go test -p 2 ./internal/app ./internal/tool/browser ./internal/browserpolicy ./internal/desktopapi -count=1` 全部 PASS，`go vet -p 2 ./internal/app ./internal/tool/browser` PASS，`gofmt`／`git diff --check` PASS。非 opt-in 路徑仍明確 SKIP，不會在 CI 或普通 Go suite 意外啟動 adapter。
+- **Gate 不變**：`codex-acp` 實際 SessionNew 與設定注入已被驗證，真實 Codex native app-server **自主執行 MCP initialize/工具**、正式 ChatGPT/AGY 三個 Agent 共用同一 Chrome、無焦點／無 Keychain 授權彈窗、Supervisor cross-core crash recovery 仍未證明。此為 test-only source、未改 production Core／路由、未啟用 shared managed worker、未 install/Push/restart。
