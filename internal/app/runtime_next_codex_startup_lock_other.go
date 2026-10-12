@@ -11,3 +11,12 @@ func (*nextCodexStartupLock) validate() error { return errNextCodexRegistryUnava
 func (*nextCodexStartupLock) close() error    { return nil }
 
 func (*nextCodexStartupLock) markBootstrapAttempt() error { return errNextCodexRegistryUnavailable }
+
+func acquireNextCodexRecoveryLock(string) (*nextCodexStartupLock, error) {
+	return nil, errNextCodexRegistryUnavailable
+}
+func (*nextCodexStartupLock) clearAfterVerifiedReboot() error { return errNextCodexRegistryUnavailable }
+
+func (*nextCodexStartupLock) readRecoveryJournal() ([]byte, error) {
+	return nil, errNextCodexRegistryUnavailable
+}

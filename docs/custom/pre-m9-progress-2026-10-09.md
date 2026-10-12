@@ -415,3 +415,7 @@ B4 已有 Core-only explicit bootstrap API（從本機 Next 受控 ACP Adapter �
 ### 2026-10-12 B6 crash/journal and permission drift fence
 
 Next-owned Codex MCP 啟動前，排他鎖持久化未解決世代標記（file + directory fsync），當 Core 非預期結束、fIock 釋放後，仍禁止其他 Core 擅自接手；短缺/損毀資料也 fail closed。正常 Close 不會冒充 orphan child 已退出，必須先經另行授權的 operator reconciliation 才能重新啟用。M8 Store 另新增 `VerifyDiskState`，比較磁碟中的 epoch／policy／審核歷史與本地快照，拒絕跨 Core 漂移與檔案替換。這只是 source-only safety fence，不是完整跨 Core 原子交易；**B6 正式發布仍 blocked**。詳見 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。
+
+### B6 較新驗證：Next permission writer、native Codex HOME 持久化、原生 ACP UAT
+
+Go Next Core 在建立權限 Store 前取得 owner-private exclusive permission-writer `flock`，雙 Core 同時嘗試時第二個不得覆寫 epoch/Policy。未解決 native generation journal 具 `kern.boottime` 來源，僅 Core-private、M8 Allow + reboot proof 才可受控清除，same-boot 永不猜測。實測 Next Core → Codex ACP → native app-server 已通過 Prepare 與 Attach，`session/new` 正確回報 `Authentication required`，故正式驗收仍未過。另一條真正 native app-server direct thread/start + test MCP connected + unsubscribe 已通過。原生 Codex 即使未登入仍會產生 owner-owned SQLite/WAL/SHM、skills、tmp；Go 與 TypeScript 隔離檢查現加入已知狀態白名單，避免第二次啟動失敗，仍拒絕 `config.toml`、symlink 與繼承全域 MCP。驗收詳 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。

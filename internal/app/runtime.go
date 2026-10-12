@@ -63,6 +63,8 @@ type Runtime struct {
 	taskTools             *tooltask.Service
 	acp                   *toolacp.Service
 	// Core-only, Next opt-in, never installed or activated by NewRuntime.
+	// Source-only Next uses one permission writer across all Core processes.
+	nextPermissionOwner       *nextPermissionOwner
 	nextCodexStartupLock      *nextCodexStartupLock
 	nextCodexPrincipal        requestmeta.AuthPrincipal
 	nextCodexPolicyRevision   uint64
@@ -98,6 +100,21 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	var nextWriter *nextPermissionOwner
+	if nextCodexExclusiveAuthorityEnabled(cfg) {
+		nextWriter, err = acquireNextPermissionOwner(cfg.AgentDockHome)
+		if err != nil {
+			return nil, fmt.Errorf("Next permission writer already owned or unsafe: %w", err)
+		}
+	}
+	// Closing a partially initialized Runtime and this deferred release are both
+	// safe: fd Close is idempotent. The successful Runtime retains ownership.
+	keepWriter := false
+	defer func() {
+		if !keepWriter && nextWriter != nil {
+			_ = nextWriter.close()
+		}
+	}()
 	executionStore := execution.NewStore(execution.DefaultEventCapacity, execution.DefaultCallCapacity)
 	permissionStore, err := permission.NewStore(cfg.AgentDockHome, executionStore.Epoch())
 	if err != nil {
@@ -313,6 +330,8 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		}
 		runtime.acp = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers)
 	}
+	runtime.nextPermissionOwner = nextWriter
+	keepWriter = true
 	return runtime, nil
 }
 
@@ -405,6 +424,12 @@ func (r *Runtime) Close() error {
 		if r.plugins != nil {
 			r.plugins.ReleaseDesktopCandidates()
 			r.plugins.ReleaseMCPLeases()
+		}
+		// Keep permission ownership until all Core services finished teardown.
+		if r.nextPermissionOwner != nil && acpClosed {
+			if err := r.nextPermissionOwner.close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close private Next permission owner: %w", err))
+			}
 		}
 		r.closeErr = errors.Join(closeErrors...)
 	})

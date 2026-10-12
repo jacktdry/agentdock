@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
@@ -92,6 +93,9 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 			if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 				return nil, fmt.Errorf("ACP profile %s CODEX_CONFIG: %w", profile.ID, err)
 			}
+			if env["AGENTDOCK_NEXT_CODEX_MCP_ISOLATION"] == "source-only" && containsNativeMCPConfig(cfg, 0) {
+				return nil, errNextCodexRegistryUnavailable
+			}
 		}
 		if servers, ok := cfg["mcp_servers"].(map[string]any); ok {
 			for _, key := range codexACPBlockedMCPServers {
@@ -143,7 +147,74 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 
 var codexACPBlockedMCPServers = []string{"chrome-devtools", "node_repl", "computer-use"}
 
+// A strict Next-only ACP profile MUST use the already provisioned isolated
+// home, WITHOUT copying global config.toml/auth.json or mutating native MCPs.
+// The native TS adapter performs an additional OS owner/realpath check.
+func containsNativeMCPConfig(value any, depth int) bool {
+	if depth > 12 {
+		return true
+	}
+	obj, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	for key, v := range obj {
+		if key == "mcp_servers" || containsNativeMCPConfig(v, depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+// Mirrored in codex-acp/src/next/NativeMcpIsolation.ts. Only known native
+// cache/state entries are allowed, inside the private Next-owned CODEX_HOME;
+// executable scripts, symlinks, and config.toml remain prohibited.
+var nextCodexNativeSQLite = regexp.MustCompile(`^(state|goals|logs|memories|queue)_[1-9][0-9]*\.sqlite(-wal|-shm)?$`)
+
+func allowedNextCodexNativeEntry(home string, entry os.DirEntry) bool {
+	name := entry.Name()
+	info, err := os.Lstat(filepath.Join(home, name))
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0022 != 0 {
+		return false
+	}
+	if !nativeStateOwnedByCurrentUser(info) {
+		return false
+	}
+	switch name {
+	case "auth.json":
+		return info.Mode().IsRegular() && nativeStateSingleLink(info) && info.Mode().Perm()&0077 == 0
+	case ".tmp", "tmp", "skills", "sessions", "archived_sessions", "shell_snapshots":
+		return info.IsDir()
+	case "installation_id", "history.jsonl", "version.json", "models_cache.json":
+		return info.Mode().IsRegular() && nativeStateSingleLink(info)
+	default:
+		return info.Mode().IsRegular() && nativeStateSingleLink(info) && nextCodexNativeSQLite.MatchString(name)
+	}
+}
+
 func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env map[string]string) (map[string]string, error) {
+	if env["AGENTDOCK_NEXT_CODEX_MCP_ISOLATION"] == "source-only" {
+		home, err := os.UserHomeDir()
+		if err != nil || profile.ID != "codex" || profile.Kind != "codex" || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next" || os.Getenv(nextCodexMCPRegistrationEnv) != "source-only" || agentDockHome != filepath.Join(home, ".agentdock-next") || env["HOME"] != home || env["CODEX_HOME"] != filepath.Join(agentDockHome, "codex-mcp-isolated") {
+			return nil, errNextCodexRegistryUnavailable
+		}
+		for _, dir := range []string{agentDockHome, env["CODEX_HOME"]} {
+			info, err := os.Lstat(dir)
+			if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+				return nil, errNextCodexRegistryUnavailable
+			}
+		}
+		entries, err := os.ReadDir(env["CODEX_HOME"])
+		if err != nil {
+			return nil, errNextCodexRegistryUnavailable
+		}
+		for _, entry := range entries {
+			if !allowedNextCodexNativeEntry(env["CODEX_HOME"], entry) {
+				return nil, errNextCodexRegistryUnavailable
+			}
+		}
+		return env, nil
+	}
 	codexPath, err := resolveCodexCLI(env)
 	if err != nil {
 		return nil, err

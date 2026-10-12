@@ -203,21 +203,24 @@ func TestNextCodexMCPReservationAcrossCoreInstancesAndClose(t *testing.T) {
 	if err != nil || !strings.Contains(string(state), "unresolved-v1") {
 		t.Fatalf("missing durable crash sentinel: %q %v", state, err)
 	}
+	// Source-only Next permits exactly one permission writer, so a competing
+	// Core is rejected at NewRuntime itself, before touching permissions.
 	other, err := NewRuntime(rt.cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = other.Close() })
-	_, err = other.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
-	if err == nil || other.nextCodexStartupLock != nil {
-		t.Fatal("another Core acquired unresolved native generation")
+	if err == nil {
+		_ = other.Close()
+		t.Fatal("concurrent Core unexpectedly loaded permission state")
 	}
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// Even after flock released by clean ACP Close, bootstrap outcome remains
-	// unverified; an orphan MCP may survive. Deny reacquisition until an
-	// independent operator-authorized kernel inventory reconciles it.
+	other, err = NewRuntime(rt.cfg)
+	if err != nil {
+		t.Fatalf("authority lease was not released after Close: %v", err)
+	}
+	t.Cleanup(func() { _ = other.Close() })
+	// Policy admission is allowed in the second Core but native bootstrap
+	// must still reject the unresolved generation marker left by the first.
+	replaceRuntimePermissionPolicy(t, other, func(p *permission.Policy) { p.GlobalMode = permission.Full })
 	_, err = other.prepareNextCodexMCPRegistry(ctx, profile, nextCodexTestKey(), c)
 	if err == nil || other.nextCodexStartupLock != nil {
 		t.Fatal("restarted Core bypassed unresolved crash marker")

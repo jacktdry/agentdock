@@ -68,7 +68,11 @@ func TestNextNativeAuthenticatedDiagnosticStrictAndNoReclaim(t *testing.T) {
 	if _, err := decodeNextNativeSigned(key, nonce, corrupted); !errors.Is(err, errMCPDiagnosticNotQualified) {
 		t.Fatal("changed payload accepted")
 	}
-	if _, err := decodeNextNativeSigned(key, "d"+nonce[1:], valid); !errors.Is(err, errMCPDiagnosticNotQualified) {
+	wrongLeadingHex := "d"
+	if nonce[0] == 'd' {
+		wrongLeadingHex = "e"
+	}
+	if _, err := decodeNextNativeSigned(key, wrongLeadingHex+nonce[1:], valid); !errors.Is(err, errMCPDiagnosticNotQualified) {
 		t.Fatal("wrong nonce accepted")
 	}
 	if _, err := decodeNextNativeSigned(key[:16], nonce, valid); !errors.Is(err, errMCPDiagnosticNotQualified) {

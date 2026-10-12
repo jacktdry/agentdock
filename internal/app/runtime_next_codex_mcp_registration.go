@@ -286,3 +286,61 @@ func (r *Runtime) NextCodexMCPReconciliation(ctx context.Context) []launchregist
 	}
 	return results
 }
+
+// Only a local owner-private Next Desktop with explicit source-only MCP
+// instrumentation participates in the exclusive permission-writer protocol.
+// Stable AgentDock and default/non-NEXT users retain their original policy.
+func nextCodexExclusiveAuthorityEnabled(cfg config.Config) bool {
+	home, err := os.UserHomeDir()
+	return err == nil && runtime.GOOS == "darwin" && !cfg.Stdio && cfg.ACPEnabled && os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && os.Getenv(nextCodexMCPRegistrationEnv) == "source-only" && cfg.AgentDockHome == filepath.Join(home, ".agentdock-next")
+}
+
+// reconcileNextCodexAfterReboot is intentionally Core-private with NO
+// production UI/HTTP route. A new boot is the only OS-level proof that an old
+// native app-server and all descendant processes could not have survived.
+// It never sends a signal, enumerates user processes or copies credentials.
+// Requires an independently authenticated stable principal and M8 Allow.
+func (r *Runtime) reconcileNextCodexAfterReboot(ctx context.Context) (retErr error) {
+	if r == nil || ctx == nil || ctx.Err() != nil || !nextCodexExclusiveAuthorityEnabled(r.cfg) || r.nextPermissionOwner == nil || r.acp == nil || r.permissions == nil || r.admission == nil {
+		return errNextCodexRegistryUnavailable
+	}
+	if _, ok := requestmeta.AuthPrincipalFromContext(ctx); !ok {
+		return errNextCodexRegistryUnavailable
+	}
+	// This shares the original stable generation-lock inode; a concurrent
+	// owner Core or tampered/symlinked file cannot be reconciled.
+	lock, err := acquireNextCodexRecoveryLock(r.cfg.AgentDockHome)
+	if err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	defer lock.close()
+	journal, err := lock.readRecoveryJournal()
+	if err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	digest := sha256.Sum256(journal)
+	payload := map[string]any{"journal_sha256": hex.EncodeToString(digest[:]), "proof": "kernel_reboot"}
+	fingerprint, err := hostOperationFingerprint("next_codex_mcp", "reconcile", payload)
+	if err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	finish, err := r.admitHostOperation(ctx, permission.HostOperation{Tool: "next_codex_mcp", Action: "reconcile", Source: "internal", PreparedFingerprint: fingerprint, Payload: payload})
+	if err != nil {
+		return err
+	}
+	defer func() { finish(retErr) }()
+	revision := r.permissions.Policy().Revision
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	if r.closing || ctx.Err() != nil || r.nextCodexStartupLock != nil || r.nextCodexRegistry != nil || r.nextCodexPin != nil || r.acp.NextCodexAdapterProcessID() != 0 || r.permissions.Policy().Revision != revision || r.permissions.VerifyDiskState() != nil || lock.validate() != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	again, err := lock.readRecoveryJournal()
+	if err != nil || !slices.Equal(journal, again) {
+		return errNextCodexRegistryUnavailable
+	}
+	if err := lock.clearAfterVerifiedReboot(); err != nil {
+		return errNextCodexRegistryUnavailable
+	}
+	return nil
+}

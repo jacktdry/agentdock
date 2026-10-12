@@ -107,3 +107,13 @@ func (s *Service) NextCodexMCPBorrowers() int {
 	}
 	return m.InstrumentedSessionMCPBorrowers()
 }
+
+// NextCodexAdapterProcessID observes the existing manager only; it never
+// starts or attaches a native Adapter. Zero means no owned live Adapter PID.
+func (s *Service) NextCodexAdapterProcessID() int {
+	manager, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return -1
+	}
+	return manager.AdapterProcessID()
+}
