@@ -423,3 +423,9 @@ Go Next Core 在建立權限 Store 前取得 owner-private exclusive permission-
 ### 2026-10-12 B6 authenticated E2E acceptance PASS
 
 使用者已在 B6 專用 Codex HOME 完成官方 device-auth。Go 與 TS 白名單納入官方登入建立的 owner-private `log/`，仍維持嚴格權限與拒絕非原生設定。`go test -tags next_b6_real` 以 `NEXT_B6_RUN_MODEL_PING=1` 的已登入專用 HOME 實測 **PASS (22.30s)**：Next M8 Allow → Codex ACP/native app-server → Core registrar → wrapper/stdio MCP → 模型確實呼叫 `ping`、Run completed → Session/Core Close；kernel 觀察的三個測試 PID 均已退出。B6 source-only 工程與隔離 E2E 驗收完成，**未部署正式 Next App、未 Push、未清空安全 journal**；production/operator UX 另行明確驗收。詳見 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。
+
+### 2026-10-12 P6 native GUI acceptance / closeout
+
+使用 stable `mac-dev` 的 Orca 操作已安裝的 `AgentDock Next` 真正原生可見視窗，通過空狀態／統計、macOS Folder/ZIP picker 及取消、1.0.0 安裝且預設停用、enable/disable 明確確認、Escape 不變更 + 焦點返回、ZIP 1.0.0→2.0.0 diff 與維持停用、P5 MCP deep link、remove keep→重新安裝→purge 二次不可逆確認與 Plugin registry 重回 0。Fixture 無 MCP/可執行檔且已清理，stable 與原有 memory MCP 未操作。App 原生 Wails `MinWidth=760`，因此不能實測 320px 原生視窗；另使用獨立 Headless Chrome CDP 模擬 **320 CSS viewport**，頁面 root/body `scrollWidth=320`，無水平溢出（僅 UI layout，非 native runtime）。先前 P6 Desktop bridge write-only env、fence、recovery 已通過，**P6 Plugin Management GUI UAT 可正式 closeout**；P7/P8/P9 仍維持 M9 前置 gate。詳見 [P6 §17.5](pre-m9-plugin-management-roundtable.md#175-p6-native-gui-uat-closeout--2026-10-12)。
+
+P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139**, production build PASS（既有 chunk >500kB 警告不阻擋）。未變更 Runtime 或重新部署 Next。
