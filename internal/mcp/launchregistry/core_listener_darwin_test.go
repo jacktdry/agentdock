@@ -161,16 +161,23 @@ func TestPrivateCoreListenerVerifiesRealAdapterAppServerWrapperMCPChain(t *testi
 		t.Fatal(err)
 	}
 	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }() // strictly fixture-owned descendant
-	if !waitFixtureFile(appPIDFile, 3*time.Second) {
-		t.Fatalf("no appserver fixture PID: %s", output.String())
+	// The helper creates then writes this file. Existence is not yet a
+	// complete publication of a PID; wait for a valid, parseable nonzero PID.
+	var pid int
+	pidDeadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(pidDeadline) {
+		raw, readErr := os.ReadFile(appPIDFile)
+		if readErr == nil {
+			parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if parseErr == nil && parsed > 0 {
+				pid = parsed
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	rawPID, err := os.ReadFile(appPIDFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(rawPID)))
-	if err != nil {
-		t.Fatal(err)
+	if pid == 0 {
+		t.Fatalf("appserver fixture PID was not fully published: %s", output.String())
 	}
 	adapter, err := process.ObserveBirthIdentity(context.Background(), cmd.Process.Pid)
 	if err != nil {

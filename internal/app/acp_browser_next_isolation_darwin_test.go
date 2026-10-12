@@ -77,7 +77,7 @@ func TestNextSourceOnlyCodexHomeAllowsOnlyOwnedNativeStateOnRestart(t *testing.T
 	}
 	env := map[string]string{"HOME": root, "CODEX_HOME": native, "CODEX_PATH": "/usr/bin/true", "AGENTDOCK_NEXT_CODEX_MCP_ISOLATION": "source-only"}
 	profile := config.ACPProfile{ID: "codex", Kind: "codex", Enabled: true}
-	for _, name := range []string{".tmp", "tmp", "skills"} {
+	for _, name := range []string{".tmp", "tmp", "log", "skills"} {
 		if err := os.Mkdir(filepath.Join(native, name), 0755); err != nil {
 			t.Fatal(err)
 		}

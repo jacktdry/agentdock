@@ -183,7 +183,7 @@ func allowedNextCodexNativeEntry(home string, entry os.DirEntry) bool {
 	switch name {
 	case "auth.json":
 		return info.Mode().IsRegular() && nativeStateSingleLink(info) && info.Mode().Perm()&0077 == 0
-	case ".tmp", "tmp", "skills", "sessions", "archived_sessions", "shell_snapshots":
+	case ".tmp", "tmp", "log", "skills", "sessions", "archived_sessions", "shell_snapshots":
 		return info.IsDir()
 	case "installation_id", "history.jsonl", "version.json", "models_cache.json":
 		return info.Mode().IsRegular() && nativeStateSingleLink(info)

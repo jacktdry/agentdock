@@ -419,3 +419,7 @@ Next-owned Codex MCP 啟動前，排他鎖持久化未解決世代標記（file 
 ### B6 較新驗證：Next permission writer、native Codex HOME 持久化、原生 ACP UAT
 
 Go Next Core 在建立權限 Store 前取得 owner-private exclusive permission-writer `flock`，雙 Core 同時嘗試時第二個不得覆寫 epoch/Policy。未解決 native generation journal 具 `kern.boottime` 來源，僅 Core-private、M8 Allow + reboot proof 才可受控清除，same-boot 永不猜測。實測 Next Core → Codex ACP → native app-server 已通過 Prepare 與 Attach，`session/new` 正確回報 `Authentication required`，故正式驗收仍未過。另一條真正 native app-server direct thread/start + test MCP connected + unsubscribe 已通過。原生 Codex 即使未登入仍會產生 owner-owned SQLite/WAL/SHM、skills、tmp；Go 與 TypeScript 隔離檢查現加入已知狀態白名單，避免第二次啟動失敗，仍拒絕 `config.toml`、symlink 與繼承全域 MCP。驗收詳 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。
+
+### 2026-10-12 B6 authenticated E2E acceptance PASS
+
+使用者已在 B6 專用 Codex HOME 完成官方 device-auth。Go 與 TS 白名單納入官方登入建立的 owner-private `log/`，仍維持嚴格權限與拒絕非原生設定。`go test -tags next_b6_real` 以 `NEXT_B6_RUN_MODEL_PING=1` 的已登入專用 HOME 實測 **PASS (22.30s)**：Next M8 Allow → Codex ACP/native app-server → Core registrar → wrapper/stdio MCP → 模型確實呼叫 `ping`、Run completed → Session/Core Close；kernel 觀察的三個測試 PID 均已退出。B6 source-only 工程與隔離 E2E 驗收完成，**未部署正式 Next App、未 Push、未清空安全 journal**；production/operator UX 另行明確驗收。詳見 [B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md)。
