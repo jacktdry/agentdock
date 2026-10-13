@@ -516,3 +516,10 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 - Next-only 建置＋簽章／bundle 8/8／交易部署 PASS，Next Core PID7749 commit `154f73249671`、stable PID44832、AGY `.14` 未變，保留 Next 專屬 rollback `~/Applications/.agentdock-next-replacement-au6xbffr/AgentDock Next.app/Contents`。
 - **ChatGPT direct about:blank acquire/evaluate/snapshot/release 實機 PASS**；cleanup complete，cleanup_error 無，queue active/queued=0、orphans=0、Worker stopped、Next owned Chrome descendants 0。
 - 既有 `TestACPBridgeSharedRealHeadless` 真 Chrome、三個模擬 direct owners＋兩個 SDK client、單一 Chrome per generation／cleanup PASS；但 **Next 安裝版的 shared opt-in 未啟用，三個真正 ChatGPT/Codex/AGY 共用同一 Chrome 實機驗收尚未完成**。詳見 [P8 §50](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#50-2026-10-13-p8-managed-isolated-cleanup-last-page-diagnostic-fix-next-live-pass)。
+
+## 2026-10-13 P8 live dual-actor one-Chrome PASS; Codex quota blocked
+
+- 以**既有** Next-only protected Core `agentdock.env` 做可撤銷的 `AGENTDOCK_NEXT_SHARED_BROWSER_WORKSPACE` 選用：Next Core 7749→36997，stable 44832 原樣；不改 LaunchAgent／全域環境或使用者 Edge。共享容量 1、實際 1 Worker／1 Chrome main PID38248，同時有兩個真實 actor 租約。下一步不需要再新增一套設定或 Broker。
+- **真實 ChatGPT + AGY `.14` ACP** 同時保持各自 about:blank 頁面，evaluate/snapshot 標記隔離；ChatGPT 對 AGY 租約的 snapshot 被 `BROWSER_LEASE_OWNER_MISMATCH` 拒絕；AGY 先 release／Session Close 後 ChatGPT 的頁面仍存活且可用。兩租約均 cleanup complete／無錯誤，queue active=0、orphan=0、shared slot restored 1/1，Worker stopped。
+- **Codex 第三 actor 未完成**：真實 Next ACP Session/model 在 Browser tool 呼叫前回報 usage limit（提示當地 23:25 再試），Session 已關閉。此前三個模擬 owner 的 headless proof 不可冒稱真實三 Agent PASS。
+- Next-only original env **逐位元組還原**，只重啟 Next Core 回預設 exclusive，PID45044、stable44832，shared_budget absent、sticky guard 已正常消失、Chrome/MCP descendants=0；測試用私有憑證備份檔在內容一致確認後刪除。完整證據與後續界線見 [P8 §51](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#51-2026-10-13-next-only-live-shared-chrome-two-real-actors-pass--third-actor-quota-blocked)。
