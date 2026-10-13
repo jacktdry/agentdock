@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,9 +31,10 @@ const DriverChromeDevToolsMCPWS ConnectorDriver = "chrome-devtools-mcp-ws"
 
 // Definitions describe intent only. Runtime observations belong to the broker.
 type ProfileDefinition struct {
-	ID      string               `json:"id"`
-	Browser BrowserKind          `json:"browser"`
-	Class   ExternalProfileClass `json:"class"`
+	ID          string               `json:"id"`
+	Browser     BrowserKind          `json:"browser"`
+	Class       ExternalProfileClass `json:"class"`
+	UserDataDir string               `json:"user_data_dir,omitempty"`
 }
 
 type ConnectorDefinition struct {
@@ -111,6 +113,9 @@ func NewCatalog(def CatalogDefinition) (Catalog, error) {
 		if _, exists := c.profiles[p.ID]; exists {
 			return Catalog{}, fmt.Errorf("duplicate profile %q", p.ID)
 		}
+		if p.UserDataDir != "" && (strings.ContainsRune(p.UserDataDir, '\x00') || !filepath.IsAbs(p.UserDataDir) || filepath.Clean(p.UserDataDir) != p.UserDataDir || filepath.Dir(p.UserDataDir) == p.UserDataDir) {
+			return Catalog{}, fmt.Errorf("profile %q: user_data_dir must be a canonical absolute non-root path", p.ID)
+		}
 		c.profiles[p.ID] = p
 		c.definition.Profiles = append(c.definition.Profiles, p)
 	}
@@ -165,6 +170,9 @@ func ValidateWorkspacePolicies(policies []WorkspaceRootPolicy, catalog Catalog) 
 		}
 		if p.Class == WorkspaceCompany && (profile.Browser != BrowserEdge || profile.Class != ProfileAuthenticatedExternal) {
 			return fmt.Errorf("workspace policy %d: company requires authenticated external Edge", i)
+		}
+		if p.Class == WorkspaceCompany && profile.UserDataDir == "" {
+			return fmt.Errorf("workspace policy %d: company requires profile user_data_dir", i)
 		}
 	}
 	return nil

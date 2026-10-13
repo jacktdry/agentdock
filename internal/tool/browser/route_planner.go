@@ -18,6 +18,7 @@ type ProfilePlan struct {
 	Route                browserpolicy.RouteKind
 	ProfileTemplate      string
 	ProfileID            string
+	ProfilePath          string
 	ConnectorID          string
 	Browser              Kind
 	ProfileClass         ProfileClass
@@ -162,6 +163,7 @@ func (p *RoutePlanner) plan(scope RequestScope, override *RouteOverride) (Profil
 	}
 	plan.ProfileTemplate = ""
 	plan.ProfileID, plan.ConnectorID, plan.Endpoint = profile.ID, connector.ID, connector.Endpoint
+	plan.ProfilePath = profile.UserDataDir
 	plan.Browser, plan.ProfileClass = Kind(profile.Browser), ProfileClass(profile.Class)
 	plan.Headless = false
 	plan.Ownership = ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}
@@ -250,7 +252,7 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	if !consumeConnectorQualification(status, now) {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector qualification unavailable")
 	}
-	request.Connectors = []ConnectorMetadata{{ID: plan.ConnectorID, Browser: plan.Browser, ProfileID: plan.ProfileID, ProfileClass: plan.ProfileClass, Endpoint: plan.Endpoint, Registered: true, Healthy: status.Healthy, Verified: status.Verified, Authenticated: status.Authenticated, Engine: status.Engine, EngineVersion: status.EngineVersion, Transport: status.Transport, Capabilities: status.Capabilities, Ownership: plan.Ownership}}
+	request.Connectors = []ConnectorMetadata{{ID: plan.ConnectorID, Browser: plan.Browser, ProfileID: plan.ProfileID, ProfileClass: plan.ProfileClass, ProfilePath: plan.ProfilePath, Endpoint: plan.Endpoint, Registered: true, Healthy: status.Healthy, Verified: status.Verified, Authenticated: status.Authenticated, Engine: status.Engine, EngineVersion: status.EngineVersion, Transport: status.Transport, Capabilities: status.Capabilities, Ownership: plan.Ownership}}
 	decision, err := ResolveRoute(request)
 	if err != nil {
 		return RouteDecision{}, err

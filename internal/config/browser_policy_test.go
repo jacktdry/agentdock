@@ -50,7 +50,7 @@ func TestBrowserWorkspacePoliciesConfig(t *testing.T) {
 	}
 }
 
-const validBrowserCatalogJSON = `{"profiles":[{"id":"authenticated-profile","browser":"edge","class":"authenticated-external"}],"connectors":[{"id":"registered-connector","profile_id":"authenticated-profile","driver":"chrome-devtools-mcp-ws","endpoint":"ws://127.0.0.1:9222/devtools/browser"}]}`
+const validBrowserCatalogJSON = `{"profiles":[{"id":"authenticated-profile","browser":"edge","class":"authenticated-external","user_data_dir":"/configured/edge"}],"connectors":[{"id":"registered-connector","profile_id":"authenticated-profile","driver":"chrome-devtools-mcp-ws","endpoint":"ws://127.0.0.1:9222/devtools/browser"}]}`
 
 func TestBrowserCatalogConfig(t *testing.T) {
 	root := t.TempDir()
@@ -59,7 +59,7 @@ func TestBrowserCatalogConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(browserWorkspacePoliciesEnv, string(policies))
-	for _, raw := range []string{"", `null`, `[]`, `{`, `{"healthy":true}`, validBrowserCatalogJSON + ` {}`, strings.Replace(validBrowserCatalogJSON, `"browser":"edge"`, `"browser":"chrome"`, 1), strings.Replace(validBrowserCatalogJSON, `"class":"authenticated-external"`, `"class":"external-persistent"`, 1), strings.Replace(validBrowserCatalogJSON, `"profile_id":"authenticated-profile"`, `"profile_id":"missing"`, 1), strings.Replace(validBrowserCatalogJSON, `127.0.0.1`, `example.com`, 1)} {
+	for _, raw := range []string{"", `null`, `[]`, `{`, `{"healthy":true}`, validBrowserCatalogJSON + ` {}`, strings.Replace(validBrowserCatalogJSON, `,"user_data_dir":"/configured/edge"`, "", 1), strings.Replace(validBrowserCatalogJSON, `"browser":"edge"`, `"browser":"chrome"`, 1), strings.Replace(validBrowserCatalogJSON, `"class":"authenticated-external"`, `"class":"external-persistent"`, 1), strings.Replace(validBrowserCatalogJSON, `"profile_id":"authenticated-profile"`, `"profile_id":"missing"`, 1), strings.Replace(validBrowserCatalogJSON, `127.0.0.1`, `example.com`, 1)} {
 		t.Run(raw, func(t *testing.T) {
 			t.Setenv(browserCatalogEnv, raw)
 			if _, err := FromEnv(); err == nil {

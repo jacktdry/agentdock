@@ -1,12 +1,14 @@
 package browserpolicy
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func catalogFixture() CatalogDefinition {
-	return CatalogDefinition{Profiles: []ProfileDefinition{{ID: "user-edge", Browser: BrowserEdge, Class: ProfileAuthenticatedExternal}}, Connectors: []ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}}}
+	return CatalogDefinition{Profiles: []ProfileDefinition{{ID: "user-edge", Browser: BrowserEdge, Class: ProfileAuthenticatedExternal, UserDataDir: filepath.Join(string(filepath.Separator), "configured", "edge")}}, Connectors: []ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}}}
 }
 
 func TestCatalogValidation(t *testing.T) {
@@ -60,17 +62,20 @@ func TestCatalogCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.Profiles[0].Browser = BrowserChrome
+	d.Profiles[0].UserDataDir = "changed"
 	d.Connectors[0].Endpoint = "unsafe"
 	copy := c.Definition()
 	copy.Profiles[0].Class = ProfileExternalPersistent
+	copy.Profiles[0].UserDataDir = "changed"
 	copy.Connectors[0].ProfileID = "missing"
 	p, _ := c.Profile("user-edge")
 	p.Browser = BrowserChrome
+	p.UserDataDir = "changed"
 	connector, _ := c.Connector("edge-ws")
 	connector.Endpoint = "unsafe"
 	p, _ = c.Profile("user-edge")
 	connector, _ = c.Connector("edge-ws")
-	if p.Browser != BrowserEdge || p.Class != ProfileAuthenticatedExternal || connector.ProfileID != "user-edge" || connector.Endpoint != "ws://localhost:9222/devtools/browser" {
+	if p.UserDataDir != catalogFixture().Profiles[0].UserDataDir || c.Definition().Profiles[0].UserDataDir != p.UserDataDir || p.Browser != BrowserEdge || p.Class != ProfileAuthenticatedExternal || connector.ProfileID != "user-edge" || connector.Endpoint != "ws://localhost:9222/devtools/browser" {
 		t.Fatalf("catalog mutated: %+v %+v", p, connector)
 	}
 }
@@ -82,6 +87,15 @@ func TestCatalogWorkspacePolicies(t *testing.T) {
 		valid  bool
 	}{
 		{name: "company", valid: true},
+		{name: "company missing path", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) { d.Profiles[0].UserDataDir = "" }},
+		{name: "unused external without path", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) {
+			d.Profiles[0].UserDataDir = ""
+			*p = BrowserRoutePolicy{Class: WorkspaceDefault, Route: RouteManaged}
+		}, valid: true},
+		{name: "ordinary required external without path", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) {
+			d.Profiles[0].UserDataDir = ""
+			p.Class = WorkspaceDefault
+		}, valid: true},
 		{name: "missing connector", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) { p.RequiredConnectorID = "missing" }},
 		{name: "missing profile", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) { p.RequiredProfileID = "missing" }},
 		{name: "mismatch", mutate: func(d *CatalogDefinition, p *BrowserRoutePolicy) {
@@ -123,5 +137,40 @@ func TestCatalogRejectsEquivalentCanonicalConnectorEndpoints(t *testing.T) {
 	d.Connectors[0].Endpoint = "ws://localhost:9222/devtools/browser"
 	if _, err := NewCatalog(d); err == nil {
 		t.Fatal("equivalent canonical connector endpoint accepted")
+	}
+}
+
+func TestCatalogUserDataDir(t *testing.T) {
+	for _, path := range []string{"relative", "/", "/configured/../edge", "/configured/./edge", "/configured//edge", "/configured/edge/", "/configured/edge\x00"} {
+		t.Run(path, func(t *testing.T) {
+			d := catalogFixture()
+			d.Profiles[0].UserDataDir = path
+			if _, err := NewCatalog(d); err == nil {
+				t.Fatal("invalid user_data_dir accepted")
+			}
+		})
+	}
+	for _, path := range []string{"", catalogFixture().Profiles[0].UserDataDir} {
+		d := catalogFixture()
+		d.Profiles[0].UserDataDir = path
+		raw, err := json.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if path == "" && strings.Contains(string(raw), "user_data_dir") {
+			t.Fatal("optional field not omitted")
+		}
+		var decoded CatalogDefinition
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		c, err := NewCatalog(decoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		profile, ok := c.Profile("user-edge")
+		if !ok || profile.UserDataDir != path || c.Definition().Profiles[0].UserDataDir != path {
+			t.Fatal("user_data_dir lost in roundtrip")
+		}
 	}
 }
