@@ -491,3 +491,9 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 - Company required-external browser policy 新增 canonical HTTPS `allowed_origins`，未提供／非法來源 fail-closed；一路帶到 RoutePlan/direct CDP dispatcher，初始化僅 `about:blank`，明確 Navigate 僅允許白名單 exact origin，其他目標 URL 在下一次操作前核對，違反即退休 dispatcher。
 - browserpolicy/config/browser 全量測試、focused race×2、vet、Linux/Windows compile-only、diff check PASS。**這不是** JS/redirect/form/popup 的先行阻擋，也不代表登入、同意或 no-focus；production Edge 依舊不可選。下一個實際需求是不可繞過的 navigation/popup enforcement + live auth/profile evidence。
 - 唯讀原生 preflight：現有 Edge PID26060 確有 loopback 9222 listener，但 command line 沒明示 user-data-dir/debug flags；嚴格 B2c profile/argv identity 尚不能通過。stable 8765 與 Next 8767 均未變；不擅自重啟 Edge、開 debug prompt、採用未知 profile 或操作 tabs。
+
+## 2026-10-13 P8 ChatGPT direct Browser Broker 實機驗收診斷（BLOCKED）
+
+- 現行 ChatGPT 對話連接的 Next 工具清單**沒有** `browser_broker`／`browser_session`／`browser_act`／`browser_snapshot`，雖然 Core source registry 定義全部四項；Next 動態 MCP 只有 memory，不能透過 `mcp_tool_call` 冒用 built-in。Next Core 8767 PID44263/commit afab0339 健康，stable 8765 PID44832 未變；Next public MCP 採 OAuth，匿名 `tools/list` 回 401（預期），未冒稱有拿到 authenticated live roster。
+- 更重要：現行 direct `browser_session/act/snapshot` 接 legacy `toolbrowser.Service`，**不是** Codex/AGY 的共享 `ACPBridge` Browser Broker。即使 tool list 刷新，不可把 legacy flow 算 ChatGPT Broker E2E。
+- 真正 closeout：先驗證 ChatGPT 端可用的 authenticated tool catalog／支援的重新整理方式；再將第一方 ChatGPT trusted principal/workspace 安全接到**現有 Broker lease/admission/owned cleanup**，避免另開 Chrome 或假 ACP owner；最後由 ChatGPT 工具本人完成 about:blank acquire/evaluate/snapshot/release 與 no-focus／cleanup 驗收。**尚未執行實機 Browser tool call，也未擅自重連、部署或讀取憑證。**詳見 [P8 §47](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#47-2026-10-13-chatgpt-direct-next-browser-tool-exposure--broker-adoption-diagnostic-blocked)。
