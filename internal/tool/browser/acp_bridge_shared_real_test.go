@@ -137,7 +137,7 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 		Probe: func(context.Context, mcpclient.ServerConfig) (string, error) { return ManagedEngineVersion, nil },
 		Open: func(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerSession, error) {
 			want := []string{"--yes", "chrome-devtools-mcp@1.7.0", "--isolated", "--headless", "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}
-			if cfg.Command != "npx" || cfg.Cwd != cwd || cfg.Name != ManagedEngineServerName || cfg.Transport != mcpclient.TransportStdio || !slices.Equal(cfg.Args, want) {
+			if filepath.Base(cfg.Command) != "npx" || cfg.RuntimeEnv["PATH"] == "" || cfg.Cwd != cwd || cfg.Name != ManagedEngineServerName || cfg.Transport != mcpclient.TransportStdio || !slices.Equal(cfg.Args, want) {
 				return nil, fmt.Errorf("unsafe or unexpected managed launch config")
 			}
 			cfg.Args = append([]string{"--offline"}, cfg.Args...)

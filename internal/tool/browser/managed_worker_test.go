@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/commandpath"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 )
 
@@ -83,8 +87,9 @@ func assertBrowserCode(t *testing.T, err error, code string) {
 
 func TestManagedWorkerPinAndVersionProbe(t *testing.T) {
 	cfg := ManagedWorkerConfig("/workspace")
+	assertBrowserWorkerRuntime(t, cfg)
 	want := []string{"--yes", "chrome-devtools-mcp@1.7.0", "--isolated", "--headless", "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}
-	if cfg.Command != "npx" || cfg.Cwd != "/workspace" || !reflect.DeepEqual(cfg.Args, want) {
+	if cfg.Cwd != "/workspace" || !reflect.DeepEqual(cfg.Args, want) {
 		t.Fatalf("config=%+v", cfg)
 	}
 	if strings.Contains(strings.Join(cfg.Args, " "), "@latest") {
@@ -111,6 +116,74 @@ func TestManagedWorkerPinAndVersionProbe(t *testing.T) {
 	cancel()
 	if _, err := runOwnedVersionProbe(ctx, os.Args[0], []string{"-test.run=TestManagedVersionHelper", "--", "m6-version"}, ""); err == nil {
 		t.Fatal("canceled probe accepted")
+	}
+}
+
+func assertBrowserWorkerRuntime(t *testing.T, cfg mcpclient.ServerConfig) {
+	t.Helper()
+	wantCommand, err := commandpath.LookPath("npx")
+	if err != nil {
+		wantCommand = "npx"
+	} else if !filepath.IsAbs(wantCommand) || filepath.Base(wantCommand) != "npx" {
+		t.Fatal("resolved npx must be an absolute executable named npx")
+	}
+	home, _ := os.UserHomeDir()
+	if cfg.Command != wantCommand || !reflect.DeepEqual(cfg.RuntimeEnv, map[string]string{"PATH": commandpath.Path(os.Getenv("PATH"), home)}) {
+		t.Fatal("worker command or PATH differs from commandpath resolution")
+	}
+}
+
+func TestBrowserWorkerMinimalPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+	for _, cfg := range []mcpclient.ServerConfig{ManagedWorkerConfig(""), externalWorkerConfig(ExternalWorkerOptions{Route: externalRoute(externalStart())})} {
+		assertBrowserWorkerRuntime(t, cfg)
+		if cfg.Command == "npx" {
+			if _, err := exec.LookPath(cfg.Command); err == nil {
+				t.Fatal("unavailable fallback unexpectedly resolves")
+			}
+			continue
+		}
+		if _, err := exec.LookPath(cfg.Command); err != nil {
+			t.Fatal("resolved npx is not executable")
+		}
+		if runtime.GOOS == "darwin" {
+			foundNode := false
+			for _, dir := range filepath.SplitList(cfg.RuntimeEnv["PATH"]) {
+				if _, err := exec.LookPath(filepath.Join(dir, "node")); err == nil {
+					foundNode = true
+					break
+				}
+			}
+			if !foundNode {
+				t.Fatal("npx resolved but its node interpreter is unavailable")
+			}
+		}
+	}
+}
+
+func TestManagedVersionProbeConfiguredCommandAndPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fake executable fixture")
+	}
+	dir := t.TempDir()
+	command := filepath.Join(dir, "fake-probe")
+	// env must find the fixture interpreter using the child PATH; no real npx/node runs.
+	if err := os.WriteFile(command, []byte("#!/usr/bin/env probe-interpreter\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nshift\n[ \"$#\" = 3 ] && [ \"$1\" = --yes ] && [ \"$2\" = chrome-devtools-mcp@1.7.0 ] && [ \"$3\" = --version ] || exit 3\nprintf '1.7.0\\n'\n"
+	if err := os.WriteFile(filepath.Join(dir, "probe-interpreter"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	cfg := mcpclient.ServerConfig{Command: command, Cwd: dir, RuntimeEnv: map[string]string{"PATH": dir}}
+	version, err := ProbeManagedVersion(context.Background(), cfg)
+	if err != nil || version != ManagedEngineVersion {
+		t.Fatal("configured command and child PATH probe failed", err)
+	}
+	cfg.RuntimeEnv["PATH"] = t.TempDir()
+	if _, err := ProbeManagedVersion(context.Background(), cfg); err == nil {
+		t.Fatal("missing interpreter accepted")
 	}
 }
 func TestManagedVersionHelper(t *testing.T) {

@@ -40,7 +40,8 @@ func validateExternalStart(d RouteDecision) error {
 }
 
 func externalWorkerConfig(options ExternalWorkerOptions) mcpclient.ServerConfig {
-	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: "npx", Cwd: options.Cwd, TimeoutMS: 60000,
+	command, runtimeEnv := browserWorkerRuntime()
+	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: command, RuntimeEnv: runtimeEnv, Cwd: options.Cwd, TimeoutMS: 60000,
 		Args: []string{"--yes", ManagedEnginePackageSpec, "--wsEndpoint=" + options.Route.Start.Endpoint, "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}}
 }
 
