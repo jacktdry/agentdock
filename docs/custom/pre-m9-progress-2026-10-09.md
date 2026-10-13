@@ -478,3 +478,10 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 - 新增 private `directCDPRelay`：verified socket → one Core-owned loopback relay → future trusted direct dispatcher。單一 upstream dial、單一下游 claim、多 frame、永不 reconnect；5 秒 attach timeout、30 分鐘 max lifetime，任一 I/O/context loss永久 close。B2j/B2n single-op relay 行為完全不變。
 - focused/race/full Browser、vet、diff check、Linux/Windows compile-only 全 PASS；驗證過程修正 attach 後 context cancel 未完整 close 的 lifecycle bug。測試只用 loopback synthetic WS，未碰 user Edge/browser/profile。
 - **Edge 仍 UNQUALIFIED**：production provider/verifier/authenticated state 仍未啟用。下一步是 Core typed direct CDP dispatcher，顯式 background target + exact-target ownership；login/consent/no-focus 必須保留 native/live UAT gate。
+
+## 2026-10-13 B2p Edge Core direct exact-target dispatcher（Next source-only）
+
+- B2o relay 上新增 private raw-CDP dispatcher，完全避開 chromedp implicit tab/discovery 與 black-box MCP provenance。建立 external target 時固定 `background=true + hidden=true`，只 attach/verify 同一 `targetId`，target-scoped command 一律綁同一 `sessionId`；禁止 user-tab enumeration、discover/autoattach、activate、Browser.close/window 操作與 opener adoption。
+- 新增 MCP-compatible typed operation foundation：evaluate、navigate、AX snapshot、click/fill、press key、PNG screenshot。AX snapshot 每代建立 ephemeral UID→backendDOMNodeId；navigation／新 snapshot／release 清除舊 UID，unknown/stale UID 在 `DOM.resolveNode` 前 fail closed。cancel/timeout 若命令已可能送出即 retire 整條 dispatcher+relay generation，不 reconnect。
+- synthetic loopback focused + `-race` ×3、完整 Browser package、vet、cached diff check、Linux/Windows compile-only 全 PASS；全程沒有真實 Edge/browser/profile 操作，也沒有 stable/Next/AGY restart/deploy。
+- **尚未 production 接線**：沒有 `ExternalLeaseManager`/ACPBridge/Runtime provider、沒有 `ConnectorStatusProvider`、沒有 `Authenticated=true` 或 consent/login proof。company Edge 繼續 `UNQUALIFIED`。下一步只剩可信 auth/consent qualification 與 native live Edge no-focus/login UAT；不能以 configured `authenticated-external` 或安全 `user_data_dir` 冒充已登入／已同意。
