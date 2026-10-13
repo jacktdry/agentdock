@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
@@ -131,6 +132,9 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 		delete(env, "DISABLE_MCP_CONFIG_FILTERING")
 	}
 	if acpProfileUsesAntigravity(profile) {
+		if err := prepareNextAntigravityACPState(agentDockHome, env); err != nil {
+			return nil, err
+		}
 		if brokerAvailable {
 			env["AGENTDOCK_BROWSER_BROKER_REQUIRED"] = "1"
 			delete(env, "AGENTDOCK_BROWSER_BACKENDS_DISABLED")
@@ -143,6 +147,46 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 		}
 	}
 	return env, nil
+}
+
+// Use the existing desktop marker and exact Next home; stable and custom homes
+// retain their adapter configuration. Parent ACP HOME is never changed here.
+func prepareNextAntigravityACPState(agentDockHome string, env map[string]string) error {
+	if runtime.GOOS != "darwin" || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next" {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve Next Antigravity ACP home: %w", err)
+	}
+	if !filepath.IsAbs(home) || agentDockHome != filepath.Join(home, ".agentdock-next") {
+		return nil
+	}
+	state := filepath.Join(agentDockHome, "acp", "antigravity")
+	expected := map[string]string{"AGY_ACP_STATE_DIR": state, "AGY_ACP_CHILD_ISOLATION": "required"}
+	for key, value := range expected {
+		if supplied, exists := env[key]; exists && supplied != value {
+			return fmt.Errorf("conflicting Next Antigravity ACP %s", key)
+		}
+	}
+	for _, dir := range []string{agentDockHome, filepath.Join(agentDockHome, "acp"), state} {
+		info, err := os.Lstat(dir)
+		if os.IsNotExist(err) {
+			// Create one component at a time, never following or repairing an
+			// unsafe existing parent. Revalidate concurrent creation too.
+			if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+				return fmt.Errorf("create Next Antigravity ACP directory: %w", err)
+			}
+			info, err = os.Lstat(dir)
+		}
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !nativeStateOwnedByCurrentUser(info) {
+			return fmt.Errorf("unsafe Next Antigravity ACP directory: %s", dir)
+		}
+	}
+	for key, value := range expected {
+		env[key] = value
+	}
+	return nil
 }
 
 var codexACPBlockedMCPServers = []string{"chrome-devtools", "node_repl", "computer-use"}

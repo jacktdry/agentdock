@@ -13,6 +13,14 @@
 - ACP 整合測試 **456 pass／0 fail（43 files）**，TypeScript、Lint（既有非阻擋提示）及 macOS arm64 build PASS。研究詳見 `docs/research/stream-direct-admission.md` 與 `tests/agy/stream-cross-event-recovery.test.ts`。
 - **仍沒有 `AGY_ACP_STREAM_JSON=direct`，未接到正式 `Adapter.runPrompt`。** 本次只用合成／SQLite 測試，不進行真實 AGY `-p`／OAuth。直接輸出仍需要 Next Core 與 ACP 一起證明真實事件 parity、訊息無法撤回時的恢復策略、工具/圖片/Session/Keychain 結合驗收；Hook/M8 IPC 仍待 Next 整合。不可將這份離線測試當正式部署授權。
 
+## Next `.14` isolation source checkpoint（2026-10-13）
+
+- AgentDock Next 已完成 **Next 端 source-only 整合**：macOS `AGENTDOCK_DESKTOP_VARIANT=next`、且 `AgentDockHome` 精確為 `$HOME/.agentdock-next` 的 Antigravity profile，在 adapter 啟動前由 Core 準備 `AGY_ACP_STATE_DIR=$HOME/.agentdock-next/acp/antigravity` 與 `AGY_ACP_CHILD_ISOLATION=required`。這兩個值是 Runtime 內部契約，不要求使用者填入 profile，也不寫入 stable 設定。
+- Core 只建立／接受目前使用者擁有、非 symlink、group/world 不可存取的 `~/.agentdock-next` → `acp` → `antigravity` 目錄鏈；既有 symlink、dangling symlink、檔案型別、錯誤權限或 owner 判定不符時 fail closed，不 chmod／替換不安全既有路徑。profile 若提供衝突的 `AGY_ACP_STATE_DIR` 或 `AGY_ACP_CHILD_ISOLATION` 也直接拒絕。
+- **刻意不做**：不覆寫 ACP parent `HOME`、不設定 `AGY_ACP_AUTO_APPROVE`、不開 `AGY_ACP_STREAM_JSON=direct`、不指定 `AGY_CONVERSATIONS_DIR`、不注入 native-hook fixture／OAuth／Keychain／credential。既有 Browser Broker required / browser-backends-disabled 行為保留。
+- 驗證：focused Next/Antigravity env + unsafe path + wrong-owner predicate PASS；`go vet ./internal/app`、`git diff --check`、Linux/Windows compile-only PASS。一次完整 `internal/app` regression 僅有既有 `TestRuntimeOutputContractACPOptionalFields` timing failure（看到 prompt `running`）；同一測試獨立重跑 **3/3 PASS**。`.14` worktree 維持乾淨 HEAD `87cff1e`，未修改、未建置／部署到 Next。
+- **仍未完成實機 `.14` 聯合 UAT**：Next 安裝中的 Antigravity adapter 仍為 `1.2.0-agentdock.8`。在 `.14` 真正部署前，仍須決定／完成 native PreToolUse M8 bridge 的可用範圍，並做 Keychain/OAuth、模型/usage、Session、Browser Broker、工具/圖片/取消/Replay、stream/DB parity 驗收；不能把本 checkpoint 當 `.14` production activation。
+
 ## ACP .13 共用文字輸出游標 checkpoint（2026-10-09）
 
 - ACP 原始碼候選版 **`1.2.0-agentdock.13`**；工作樹 `/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`5c49037`**，核心 Commit **`37f53dc`**。本機未推送、未部署；Stable 與 Next 安裝版均維持 `.8`。

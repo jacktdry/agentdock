@@ -43,6 +43,7 @@
 - 獨立 ACP 工作樹 `/Users/wei/sideProject/antigravity-acp-next-integration`，`feature/next-integration-optin`；交接記錄 HEAD `87cff1e`，功能修正 `9381b04`。ACP 本身測試 **456 pass／0 fail（43 files）**、TypeScript、Lint、macOS arm64 build PASS（根據 ACP 工作線交接報告）。
 - .14 加強已 ACK 的 stream / SQLite 跨事件一致性；DB 刪除／回退／重複 Step ID／文字改寫 → fail-closed，避免重播已送出文字。但**尚未推送／部署**，交接文件記錄 stable 及 Next **已安裝 ACP 仍是 .8**。`AGY_ACP_STREAM_JSON=direct` 未接正式 `Adapter.runPrompt`；native M8 Hook/IPC、State/HOME opt-in、Keychain/OAuth、Session/工具／圖片／取消／Replay、stream parity 與跨專案權限驗證**尚未完成**。
 - Next Session 負責 Core-owned Profile/State/M8 權限與 IPC；ACP Session 負責 AGY ACP 自身實作；**不得交叉修改 repo 或誤將 .14 候選版視為 Next 整合完成**。見 [ACP Next 整合交接](agy-acp-next-integration-handoff.md)。
+- **2026-10-13 Next-side source checkpoint**：Next Core 已補上 `.14` 既有 opt-in 的 `AGY_ACP_STATE_DIR=~/.agentdock-next/acp/antigravity` + `AGY_ACP_CHILD_ISOLATION=required`，只對 macOS Next + 精確 Next home 的 Antigravity profile 生效；私有目錄鏈 owner/type/symlink/mode fail-closed，衝突 env 直接拒絕。沒有覆寫 parent HOME、沒有啟用 AUTO_APPROVE/stream direct/native hook/OAuth/Keychain。focused tests/vet/diff/cross-compile PASS；完整 app suite 僅遇既有 ACP output-contract timing flake，單獨 3/3 PASS。**尚未部署 `.14`，安裝版仍是 `.8`，不算聯合 UAT 完成。**
 
 ## Loopback 事故與最新狀況
 
