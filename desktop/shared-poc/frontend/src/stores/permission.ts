@@ -76,7 +76,7 @@ export const usePermissionStore = defineStore('permission', () => {
     fresh.value = false
     error.value = ''
     try {
-      if (!Number.isFinite(Date.parse(challenge.expires_at)) || Date.parse(challenge.expires_at) <= Date.now()) throw new Error('EXPIRED')
+      if (!Number.isFinite(Date.parse(challenge.expires_at)) || Date.parse(challenge.expires_at) <= Date.now()) throw new Error()
       const id = challenge.confirmation_id
       const args = [id, mutation.approval_id ?? '', mutation.approval_version ?? 0, mutation.policy_revision] as const
       let result: PermissionResult

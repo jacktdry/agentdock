@@ -2164,6 +2164,15 @@
   <data name="permission.mode" xml:space="preserve">
     <value>Mode</value>
   </data>
+  <data name="permission.mode_granular" xml:space="preserve">
+    <value>Request approval by category</value>
+  </data>
+  <data name="permission.mode_never" xml:space="preserve">
+    <value>Never request approval</value>
+  </data>
+  <data name="permission.mode_on_request" xml:space="preserve">
+    <value>Request approval when needed</value>
+  </data>
   <data name="permission.network" xml:space="preserve">
     <value>Network</value>
   </data>

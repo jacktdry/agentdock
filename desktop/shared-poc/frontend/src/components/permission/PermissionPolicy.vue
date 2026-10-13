@@ -32,7 +32,11 @@ function save() {
     <form @submit.prevent="save">
       <fieldset :disabled="disabled">
         <legend>{{ t('permission.policy') }}</legend>
-        <label>{{ t('permission.mode') }} <select v-model="mode"><option>on-request</option><option>never</option><option>granular</option></select></label>
+        <label>{{ t('permission.mode') }} <select v-model="mode">
+          <option :value="'on-request'">{{ t('permission.mode_on_request') }}</option>
+          <option :value="'never'">{{ t('permission.mode_never') }}</option>
+          <option :value="'granular'">{{ t('permission.mode_granular') }}</option>
+        </select></label>
         <p>{{ t('permission.never') }}</p>
         <div v-if="mode === 'granular'" class="actions">
           <label v-for="key in keys" :key="key"><input v-model="categories[key]" type="checkbox">{{ t(`permission.${key}`) }}</label>

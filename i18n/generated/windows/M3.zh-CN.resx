@@ -2164,6 +2164,15 @@
   <data name="permission.mode" xml:space="preserve">
     <value>模式</value>
   </data>
+  <data name="permission.mode_granular" xml:space="preserve">
+    <value>按类别请求批准</value>
+  </data>
+  <data name="permission.mode_never" xml:space="preserve">
+    <value>从不请求批准</value>
+  </data>
+  <data name="permission.mode_on_request" xml:space="preserve">
+    <value>需要时请求批准</value>
+  </data>
   <data name="permission.network" xml:space="preserve">
     <value>网络</value>
   </data>

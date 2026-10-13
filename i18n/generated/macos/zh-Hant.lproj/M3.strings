@@ -720,6 +720,9 @@
 "permission.management" = "管理";
 "permission.mcp" = "MCP";
 "permission.mode" = "模式";
+"permission.mode_granular" = "依類別要求批准";
+"permission.mode_never" = "從不要求批准";
+"permission.mode_on_request" = "需要時要求批准";
 "permission.network" = "網路";
 "permission.never" = "never 將 Ask 轉為 Deny，不會自動批准。Granular 類別決定哪些 Ask 可以建立待批准項目。";
 "permission.once" = "批准一次";

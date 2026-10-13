@@ -720,6 +720,9 @@
 "permission.management" = "Management";
 "permission.mcp" = "MCP";
 "permission.mode" = "Mode";
+"permission.mode_granular" = "Request approval by category";
+"permission.mode_never" = "Never request approval";
+"permission.mode_on_request" = "Request approval when needed";
 "permission.network" = "Network";
 "permission.never" = "never turns Ask into Deny; it never auto-approves. Granular categories control which Ask requests can create approvals.";
 "permission.once" = "Approve Once";

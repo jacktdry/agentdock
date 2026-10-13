@@ -3,8 +3,41 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestSharedUIScannerExcludesOnlyTestTS(t *testing.T) {
+	for _, tc := range []struct {
+		name, source string
+		wantIssue    bool
+	}{
+		{"fixture.test.ts", `const label = 'Fixture label'`, false},
+		{"production.ts", `const label = 'Production label'`, true},
+		{"fixture.test.ts.backup.ts", `const label = 'Production label'`, true},
+		{"production.vue", `<template><option>Never approve</option></template>`, true},
+		{"fixture.test.vue", `<template><option>Never approve</option></template>`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, "desktop/shared-poc/frontend/src")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, tc.name), []byte(tc.source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := scanSharedUIHardcoded(root)
+			if tc.wantIssue {
+				if err == nil || !strings.Contains(err.Error(), tc.name) {
+					t.Fatalf("production literal not detected: %v", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
 func TestParseICUSignature(t *testing.T) {
 	message := "{count, plural, =0 {No files} one {{owner} has one file} other {{owner} has # files}}"
