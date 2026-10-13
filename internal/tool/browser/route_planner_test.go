@@ -274,7 +274,9 @@ func TestPlannerRejectsInvalidPolicyCatalog(t *testing.T) {
 }
 
 func TestPlannerRuntimeCancellation(t *testing.T) {
-	for _, mode := range []string{"before", "deadline before", "during", "derived deadline"} {
+	// Deadline-before-invocation is separate from cancellation of a started
+	// provider: a short wall-clock deadline cannot guarantee provider startup.
+	for _, mode := range []string{"before", "deadline before", "during"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -287,30 +289,45 @@ func TestPlannerRuntimeCancellation(t *testing.T) {
 				defer stop()
 			}
 			var calls atomic.Int32
+			started := make(chan bool, 1)
 			returned := make(chan struct{}, 1)
 			provider := testConnectorStatus(func(providerCtx context.Context, _ string) (ConnectorRuntimeStatus, error) {
 				defer func() { returned <- struct{}{} }()
 				calls.Add(1)
 				deadline, ok := providerCtx.Deadline()
-				if !ok || time.Until(deadline) > 2*time.Second {
-					t.Fatal("provider context must have a bounded deadline")
-				}
-				if mode == "derived deadline" {
-					// Deliberately return healthy data after the caller deadline.
-					<-providerCtx.Done()
-				} else {
-					cancel()
-				}
+				started <- ok && time.Until(deadline) <= 2*time.Second
+				// Deliberately return healthy data only after cancellation.
+				<-providerCtx.Done()
 				return validRuntimeStatus(), nil
 			})
 			planner, scope := plannerFixture(t, provider)
-			if mode == "derived deadline" {
-				var stop context.CancelFunc
-				ctx, stop = context.WithTimeout(ctx, 30*time.Millisecond)
-				defer stop()
+			type outcome struct {
+				decision RouteDecision
+				err      error
 			}
-			decision, err := planner.Resolve(ctx, scope, nil)
-			assertRouteCode(t, err, ErrRequiredRouteUnavailable)
+			done := make(chan outcome, 1)
+			go func() {
+				decision, err := planner.Resolve(ctx, scope, nil)
+				done <- outcome{decision, err}
+			}()
+			if mode == "during" {
+				select {
+				case bounded := <-started:
+					if !bounded {
+						t.Fatal("provider context must have a bounded deadline")
+					}
+					cancel()
+				case <-time.After(time.Second):
+					t.Fatal("provider did not start")
+				}
+			}
+			var result outcome
+			select {
+			case result = <-done:
+			case <-time.After(time.Second):
+				t.Fatal("Resolve did not finish after cancellation")
+			}
+			assertRouteCode(t, result.err, ErrRequiredRouteUnavailable)
 			wantCalls := 1
 			if mode == "before" || mode == "deadline before" {
 				wantCalls = 0
@@ -322,8 +339,8 @@ func TestPlannerRuntimeCancellation(t *testing.T) {
 					t.Fatal("provider did not finish after cancellation")
 				}
 			}
-			if calls.Load() != int32(wantCalls) || decision != (RouteDecision{}) {
-				t.Fatalf("calls=%d decision=%+v", calls.Load(), decision)
+			if calls.Load() != int32(wantCalls) || result.decision != (RouteDecision{}) {
+				t.Fatalf("calls=%d decision=%+v", calls.Load(), result.decision)
 			}
 		})
 	}
