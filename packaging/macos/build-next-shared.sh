@@ -21,7 +21,8 @@ mkdir -p -m 700 "$NEXT_GO_CACHE"
 [[ -d "$NEXT_GO_CACHE" && -O "$NEXT_GO_CACHE" && ! -L "$NEXT_GO_CACHE" ]] || exit 1
 chmod 700 "$NEXT_GO_CACHE"
 export GOCACHE="$NEXT_GO_CACHE"
-export TMPDIR="$BUILD_DIR/tmp"
+# Go package walks skip dot directories, keeping generated compiler sources private.
+export TMPDIR="$BUILD_DIR/.tmp"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/clang-cache"
 export SWIFT_MODULECACHE_PATH="$BUILD_DIR/swift-cache"
 mkdir -p "$TMPDIR" "$BUILD_DIR/payload" "$BUILD_DIR/core/bin"
