@@ -13,6 +13,7 @@
 ## 文件索引
 
 - [architecture.md](architecture.md)：整體產品與技術架構。
+- [next-product-first-guardrails.md](next-product-first-guardrails.md)：2026-10-13 重新確認產品初衷、工作優先級與防偏離檢查；repo 根目錄 `AGENTS.md` 提供所有開發 Agent 的強制工作規則。
 - [agentdock-next-isolation.md](agentdock-next-isolation.md)：AgentDock Next side-by-side 隔離、namespace、rollout 與驗收契約。
 - [branching-strategy.md](branching-strategy.md)：`main`、`custom/main`、feature、Workbench port 與 upstream PR 的 Git 規則。
 - [upstream-tracking.md](upstream-tracking.md)：AgentDock / Workbench 更新的追蹤與採用流程。

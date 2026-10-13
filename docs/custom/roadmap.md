@@ -2,6 +2,12 @@
 
 > 狀態：Accepted initial roadmap
 
+## 2026-10-13 — Product-first work-order reset (accepted)
+
+The reason for Next is **ChatGPT + ACP agents coordinating real local work without disturbing the user**, with one accountable Broker/lease lifecycle, truthful shared UI and maintainable macOS/Windows interfaces. Stable/Next side-by-side exists to protect the production Mac-Dev control channel, not to create an indefinitely stricter test environment. Mandatory gate for every task: actual workflow → smallest useful change → observational acceptance + no-interruption check → explicit remaining blocker. Project-wide developer rules: [`AGENTS.md`](../../AGENTS.md), and [product-first decision](next-product-first-guardrails.md).
+
+**Return to actual P8 integration before adding new test-only security layers.** Short-term order: visible Browser operator readiness from existing Core snapshot → one real ChatGPT + two real ACP background shared-headless workflow / cleanup acceptance → consent-grounded Edge/Chrome route proof → close required P6/P7/M9 parity/release evidence. The native Codex Seatbelt `managed preferences` test-only SKIP remains an unresolved fixture fact, **not a mandatory VM/user-identity feature or a general P8 blocker**. Never claim fake-client protocol success equals live Agent UAT; never bypass genuine permissions or jeopardize stable AgentDock.
+
 ## M0 — Repository Governance
 
 ### 目標
