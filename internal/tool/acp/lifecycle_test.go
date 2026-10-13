@@ -36,6 +36,29 @@ func TestSessionLifecycleOptionsFromToolRequest(t *testing.T) {
 	}
 }
 
+func TestServiceNewSessionLifecycleDefaultAndExplicitOverride(t *testing.T) {
+	service, err := NewMultiWithDefaultLifecycle("offline", nil, acpruntime.SessionLifecycleOptions{Policy: acpruntime.LifecycleIdleManaged})
+	if err != nil {
+		t.Fatal(err)
+	}
+	idle, err := service.newSessionLifecycleOptions(SessionRequest{})
+	if err != nil || idle.Policy != acpruntime.LifecycleIdleManaged || idle.IdleCloseAfter != acpruntime.DefaultIdleCloseAfter {
+		t.Fatalf("default lifecycle=%+v err=%v", idle, err)
+	}
+	persistent, err := service.newSessionLifecycleOptions(SessionRequest{LifecyclePolicy: string(acpruntime.LifecyclePersistent)})
+	if err != nil || persistent.Policy != acpruntime.LifecyclePersistent || persistent.IdleCloseAfter != 0 {
+		t.Fatalf("explicit lifecycle=%+v err=%v", persistent, err)
+	}
+}
+
+func TestNewMultiPreservesPersistentDefault(t *testing.T) {
+	service := NewMulti("offline", nil)
+	lifecycle, err := service.newSessionLifecycleOptions(SessionRequest{})
+	if err != nil || lifecycle.Policy != acpruntime.LifecyclePersistent || lifecycle.IdleCloseAfter != 0 {
+		t.Fatalf("stable default lifecycle=%+v err=%v", lifecycle, err)
+	}
+}
+
 func TestLifecycleUpdateDoesNotRequireAdapterProcess(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()

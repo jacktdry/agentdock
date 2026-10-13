@@ -26,6 +26,13 @@ func sessionLifecycleOptions(request SessionRequest) (acpruntime.SessionLifecycl
 	return normalized, nil
 }
 
+func (s *Service) newSessionLifecycleOptions(request SessionRequest) (acpruntime.SessionLifecycleOptions, error) {
+	if strings.TrimSpace(request.LifecyclePolicy) != "" || request.IdleCloseAfterMS != nil || s == nil || s.newSessionLifecycle.Policy == "" {
+		return sessionLifecycleOptions(request)
+	}
+	return s.newSessionLifecycle, nil
+}
+
 func (s *Service) Session(ctx context.Context, request SessionRequest) (response Result, returnErr error) {
 	manager, profileID, err := s.managerFor(request.ProfileID)
 	if err != nil {
@@ -80,7 +87,7 @@ func (s *Service) Session(ctx context.Context, request SessionRequest) (response
 		return result, nil
 
 	case "new":
-		lifecycle, lifecycleErr := sessionLifecycleOptions(request)
+		lifecycle, lifecycleErr := s.newSessionLifecycleOptions(request)
 		if lifecycleErr != nil {
 			return nil, lifecycleErr
 		}

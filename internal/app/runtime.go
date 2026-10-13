@@ -42,6 +42,13 @@ import (
 
 type Result = toolcore.Result
 
+func defaultACPSessionLifecycle(cfg config.Config) acpruntime.SessionLifecycleOptions {
+	if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && !cfg.Stdio {
+		return acpruntime.SessionLifecycleOptions{Policy: acpruntime.LifecycleIdleManaged}
+	}
+	return acpruntime.SessionLifecycleOptions{}
+}
+
 type Runtime struct {
 	cfg                   config.Config
 	toolNames             []string
@@ -328,7 +335,12 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			}
 			managers[profile.ID] = manager
 		}
-		runtime.acp = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers)
+		runtime.acp, err = toolacp.NewMultiWithDefaultLifecycle(cfg.EffectiveACPDefaultProfile(), managers, defaultACPSessionLifecycle(cfg))
+		if err != nil {
+			_ = toolacp.NewMulti(cfg.EffectiveACPDefaultProfile(), managers).Close()
+			_ = runtime.Close()
+			return nil, fmt.Errorf("initialize ACP default lifecycle: %w", err)
+		}
 	}
 	runtime.nextPermissionOwner = nextWriter
 	keepWriter = true

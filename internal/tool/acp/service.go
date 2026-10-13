@@ -11,18 +11,28 @@ import (
 )
 
 type Service struct {
-	managers  map[string]*acpruntime.Manager
-	defaultID string
+	managers            map[string]*acpruntime.Manager
+	defaultID           string
+	newSessionLifecycle acpruntime.SessionLifecycleOptions
 }
 
 func NewMulti(defaultID string, managers map[string]*acpruntime.Manager) *Service {
+	service, _ := NewMultiWithDefaultLifecycle(defaultID, managers, acpruntime.SessionLifecycleOptions{})
+	return service
+}
+
+func NewMultiWithDefaultLifecycle(defaultID string, managers map[string]*acpruntime.Manager, lifecycle acpruntime.SessionLifecycleOptions) (*Service, error) {
+	normalized, err := acpruntime.NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return nil, err
+	}
 	copied := make(map[string]*acpruntime.Manager, len(managers))
 	for id, manager := range managers {
 		if manager != nil {
 			copied[id] = manager
 		}
 	}
-	return &Service{managers: copied, defaultID: strings.TrimSpace(defaultID)}
+	return &Service{managers: copied, defaultID: strings.TrimSpace(defaultID), newSessionLifecycle: normalized}, nil
 }
 
 func (s *Service) Close() error {

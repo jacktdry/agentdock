@@ -35,7 +35,7 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["mode_id"] = stringProp("Agent-advertised session mode id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
 		props["config_id"] = stringProp("Agent-advertised session configuration option id for update. Provide exactly one update family: mode_id, config_id, or lifecycle_policy.")
 		props["config_value"] = map[string]any{"description": "String value id or boolean value when update uses config_id.", "oneOf": []map[string]any{{"type": "string"}, {"type": "boolean"}}}
-		props["lifecycle_policy"] = map[string]any{"type": "string", "enum": []string{"persistent", "ephemeral", "idle-managed"}, "description": "Per-session lifecycle policy for new or update. Defaults to persistent for new/fork. Lifecycle update does not load/resume the Adapter session."}
+		props["lifecycle_policy"] = map[string]any{"type": "string", "enum": []string{"persistent", "ephemeral", "idle-managed"}, "description": "Per-session lifecycle policy for new or update. Stable runtimes default new/fork to persistent; AgentDock Next desktop defaults omitted policy to idle-managed (30 minutes). Use ephemeral for bounded one-run delegated workers; use idle-managed when short-term follow-up context is useful. Explicit policy always wins. Lifecycle update does not load/resume the Adapter session."}
 		props["idle_close_after_ms"] = boundedIntProp("Per-session idle timeout for lifecycle_policy=idle-managed. Omit to use 30 minutes.", int(acpruntime.MinIdleCloseAfter/time.Millisecond), int(acpruntime.MaxIdleCloseAfter/time.Millisecond))
 		required = []string{"action"}
 	case ToolPrompt:
