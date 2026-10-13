@@ -207,7 +207,7 @@ func TestRuntimeBrowserDesktopConfiguredAndRetainedRoutes(t *testing.T) {
 	cfg := config.Config{BrowserEnabled: true, ACPEnabled: true,
 		BrowserCatalog: browserpolicy.CatalogDefinition{
 			Profiles: []browserpolicy.ProfileDefinition{
-				{ID: "private-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal},
+				{ID: "private-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: "/private/profiles/edge"},
 				{ID: "private-unused", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal},
 				{ID: "private-persistent", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileExternalPersistent},
 				{ID: "private-chrome", Browser: browserpolicy.BrowserChrome, Class: browserpolicy.ProfileAuthenticatedExternal},
@@ -215,7 +215,7 @@ func TestRuntimeBrowserDesktopConfiguredAndRetainedRoutes(t *testing.T) {
 			Connectors: []browserpolicy.ConnectorDefinition{{ID: "private-connector", ProfileID: "private-edge", Driver: browserpolicy.DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}},
 		},
 		BrowserWorkspacePolicies: []browserpolicy.WorkspaceRootPolicy{
-			{Root: "/private/company", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
+			{Root: "/private/company", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge", AllowedOrigins: []string{"https://company.example.com"}}},
 			{Root: "/private/default", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
 			{Root: "/private/managed", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}},
 		},

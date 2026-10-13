@@ -65,8 +65,11 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["timeout_ms"] = boundedIntProp("Overall operation timeout in milliseconds. Defaults to 30000 and is capped at 300000.", 1, 300000)
 		required = []string{"session_id", "actions"}
 	case ToolBroker:
-		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_stale", "cleanup_acp_session"}, "description": "Browser Broker control-plane action."}
+		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_stale", "cleanup_acp_session", "direct_acquire", "direct_evaluate", "direct_snapshot", "direct_release"}, "description": "Browser Broker control-plane action."}
 		props["owner_acp_session_id"] = stringProp("ACP session owner to clean up for action=cleanup_acp_session. Only AgentDock-owned leases/connectors/pages are released; external browser/profile processes are preserved.")
+		props["url"] = stringProp("Initial managed page URL for direct_acquire; defaults to about:blank.")
+		props["lease_id"] = stringProp("Exact owned direct lease id.")
+		props["function"] = stringProp("JavaScript function for direct_evaluate; effects require M8 admission.")
 		required = []string{"action"}
 	case ToolSnapshot:
 		props["session_id"] = stringProp("In-memory browser session id.")
@@ -81,7 +84,29 @@ func InputSchema(name string) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return toolcontract.InputObject(props, required...), true
+	schema := toolcontract.InputObject(props, required...)
+	if name == ToolBroker {
+		variant := func(action string, fields ...string) map[string]any {
+			allowed := map[string]any{"action": map[string]any{"type": "string", "const": action}}
+			for _, field := range fields {
+				allowed[field] = props[field]
+			}
+			req := []string{"action"}
+			if action == "direct_evaluate" || action == "direct_snapshot" || action == "direct_release" {
+				req = append(req, "lease_id")
+			}
+			if action == "direct_evaluate" {
+				req = append(req, "function")
+			}
+			return toolcontract.InputObject(allowed, req...)
+		}
+		schema["oneOf"] = []map[string]any{
+			variant("status"), variant("cleanup_stale"), variant("cleanup_acp_session", "owner_acp_session_id"),
+			variant("direct_acquire", "url"), variant("direct_evaluate", "lease_id", "function"),
+			variant("direct_snapshot", "lease_id"), variant("direct_release", "lease_id"),
+		}
+	}
+	return schema, true
 }
 
 func OutputSchema(name string) (map[string]any, bool) {
@@ -103,6 +128,9 @@ func OutputSchema(name string) (map[string]any, bool) {
 	case ToolBroker:
 		props["browser_broker_ok"] = boolProp("Whether the Browser Broker control-plane operation completed without cleanup errors.")
 		props["diagnostics"] = objectProp("Browser Broker ownership/lease/worker/queue lifecycle snapshot. Capability tokens are never included.")
+		props["lease_id"] = stringProp("Exact direct managed lease id.")
+		props["operation_result"] = objectProp("Result from the owned managed page operation.")
+		props["cleanup_state"] = stringProp("Managed lease cleanup state.")
 		props["cleanup_error"] = stringProp("Cleanup error summary when a bounded cleanup operation failed.")
 	case ToolSession:
 		props["pages"] = arrayProp("Current page targets.")

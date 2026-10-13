@@ -436,6 +436,21 @@ func (b *ACPBridge) close() error {
 		failures = append(failures, b.ReleaseSession(ctx, id))
 		cancel()
 	}
+	// Direct leases have no ACP session; release through the same coordinator.
+	b.managed.mu.Lock()
+	direct := make(map[string]RequestScope)
+	for id, entry := range b.managed.active {
+		if entry.scope.Provenance == ScopeUpstream {
+			direct[id] = entry.scope
+		}
+	}
+	b.managed.mu.Unlock()
+	for id, scope := range direct {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		_, err := b.managed.Release(ctx, scope, id)
+		cancel()
+		failures = append(failures, err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
 	if b.shared != nil {

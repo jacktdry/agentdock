@@ -4,11 +4,13 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 func browserToolSpecs() []ToolSpec {
 	return []ToolSpec{
-		{Name: "browser_broker", Contract: browserToolContract, Title: "Browser Broker control plane", Description: "Inspect Browser Broker ownership, leases, workers, queue, TTL and cleanup state, or run bounded AgentDock-owned stale/session cleanup. Capability tokens are never returned and external browser/profile processes are preserved.", Annotations: mutatingToolAnnotations(false, true), Availability: requiresACPBrowser, Handler: func(ctx context.Context, r *Runtime, args map[string]any) (Result, error) {
+		{Name: "browser_broker", Contract: browserToolContract, Title: "Browser Broker control plane", Description: "Acquire, evaluate, snapshot or release an authenticated direct managed lease; inspect Browser Broker ownership, leases, workers, queue, TTL and cleanup state, or run bounded AgentDock-owned stale/session cleanup. Capability tokens are never returned and external browser/profile processes are preserved.", Annotations: mutatingToolAnnotations(false, true), Availability: requiresACPBrowser, Handler: func(ctx context.Context, r *Runtime, args map[string]any) (Result, error) {
 			if r.acpBrowser == nil {
 				return nil, toolError("BROWSER_BROKER_UNAVAILABLE", "Browser Broker is unavailable in this runtime", "runtime")
 			}
@@ -16,6 +18,50 @@ func browserToolSpecs() []ToolSpec {
 			result := Result{"browser_broker_ok": true}
 			var cleanupErr error
 			switch action {
+			case "direct_acquire", "direct_evaluate", "direct_snapshot", "direct_release":
+				root, err := browserpolicy.CanonicalWorkspaceRoot(r.cfg.AgentDockDefaultDir)
+				if err != nil {
+					return nil, toolError("BROWSER_SCOPE_REQUIRED", "configured browser workspace invalid", "validation")
+				}
+				if _, err := nextSharedBrowserWorkspace(r.cfg, root); err != nil {
+					return nil, toolError("BROWSER_BROKER_UNAVAILABLE", "direct browser requires Next runtime", "runtime")
+				}
+				id, _ := args["lease_id"].(string)
+				switch action {
+				case "direct_acquire":
+					url, _ := args["url"].(string)
+					meta, err := r.acpBrowser.DirectAcquire(ctx, root, url)
+					if err != nil {
+						return nil, err
+					}
+					result["lease_id"] = meta.BrowserLeaseID
+					result["cleanup_state"] = string(meta.CleanupState)
+				case "direct_release":
+					meta, err := r.acpBrowser.DirectRelease(ctx, root, id)
+					if meta.BrowserLeaseID == "" {
+						return nil, err
+					}
+					result["lease_id"], result["cleanup_state"] = meta.BrowserLeaseID, string(meta.CleanupState)
+					if meta.CleanupError != "" {
+						result["cleanup_error"] = meta.CleanupError
+					}
+					result["browser_broker_ok"] = err == nil
+					if err != nil {
+						return result, err
+					}
+				default:
+					tool, callArgs := "take_snapshot", map[string]any{}
+					if action == "direct_evaluate" {
+						tool = "evaluate_script"
+						callArgs["function"] = args["function"]
+					}
+					op, err := r.acpBrowser.DirectCall(ctx, root, id, tool, callArgs)
+					if err != nil {
+						return nil, err
+					}
+					result["lease_id"], result["operation_result"] = id, op
+				}
+				return result, nil
 			case "status":
 			case "cleanup_stale":
 				cleanupErr = r.acpBrowser.CleanupStale(time.Now().UTC())

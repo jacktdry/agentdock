@@ -173,6 +173,20 @@ func (r *Runtime) runtimePermissionFacts(ctx context.Context, name, action strin
 	}
 
 	switch name {
+	case "browser_broker":
+		switch action {
+		case "direct_snapshot":
+			facts.ReadOnly, facts.Other, facts.Network = true, false, false
+			facts.OneShotEligible = false
+			facts.Reason = "direct browser snapshot observes the owned target"
+		case "direct_evaluate":
+			facts.ReadOnly, facts.EffectsKnown = false, false
+			facts.OpaqueProviderExecution, facts.Network, facts.Other, facts.OneShotEligible = true, true, true, true
+			facts.Reason = "direct browser JavaScript effects cannot be proven before execution"
+		case "direct_acquire", "direct_release":
+			facts.Management = true
+			facts.Network = action == "direct_acquire" && hostPayloadHasNonBlankString(args, "url")
+		}
 	case "agentdock_context", "workspace_context":
 		facts.EffectsKnown = true
 		facts.ReadOnly = true
