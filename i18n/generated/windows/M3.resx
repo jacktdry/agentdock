@@ -706,6 +706,36 @@
   <data name="browser.max_concurrency" xml:space="preserve">
     <value>Maximum concurrency</value>
   </data>
+  <data name="browser.next_acp" xml:space="preserve">
+    <value>Check that ACP is enabled in Next ACP settings/configuration.</value>
+  </data>
+  <data name="browser.next_broker" xml:space="preserve">
+    <value>Broker isn&#39;t ready; review diagnostics before trying a session.</value>
+  </data>
+  <data name="browser.next_browser" xml:space="preserve">
+    <value>Check that Browser is enabled in the Next configuration.</value>
+  </data>
+  <data name="browser.next_cleanup" xml:space="preserve">
+    <value>Review cleanup errors and ownership before another attempt; no browser launches yet.</value>
+  </data>
+  <data name="browser.next_company" xml:space="preserve">
+    <value>For company work, use the previously authorized exact Edge profile and explicit evidence; configured counts do not prove login. Other eligible work may use the managed headless route.</value>
+  </data>
+  <data name="browser.next_core" xml:space="preserve">
+    <value>Check the Next Core connection, then refresh.</value>
+  </data>
+  <data name="browser.next_exclusive" xml:space="preserve">
+    <value>Exclusive mode uses a separate resource per lease, not a shared pool.</value>
+  </data>
+  <data name="browser.next_session" xml:space="preserve">
+    <value>Broker can accept a session in principle. Start a permitted background work task with your existing ChatGPT/ACP connection; a snapshot alone does not prove Chrome/Edge ready or consent.</value>
+  </data>
+  <data name="browser.next_shared" xml:space="preserve">
+    <value>Shared mode is experimental and is not production ready.</value>
+  </data>
+  <data name="browser.next_title" xml:space="preserve">
+    <value>What can I do next?</value>
+  </data>
   <data name="browser.observation_hint" xml:space="preserve">
     <value>Observed at is the UTC time of this diagnostic observation. Stale means retained broker anomalies, not elapsed snapshot age or connector health. Counts are observed separately, not atomically.</value>
   </data>

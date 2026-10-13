@@ -4,6 +4,7 @@ import { useBrowserStore } from '../../stores/browser'
 import { useI18n } from '../../i18n'
 import BrowserRouteObservations from './BrowserRouteObservations.vue'
 import BrowserSnapshotDetails from './BrowserSnapshotDetails.vue'
+import BrowserReadinessGuidance from './BrowserReadinessGuidance.vue'
 const store = useBrowserStore()
 const { t } = useI18n()
 onMounted(() => { void store.refresh() })
@@ -12,6 +13,7 @@ onMounted(() => { void store.refresh() })
 <template>
   <section class="panel browser-panel" aria-labelledby="browser-title" :aria-busy="store.busy">
     <h2 id="browser-title">{{ t('browser.title') }}</h2>
+    <BrowserReadinessGuidance :snapshot="store.snapshot" :error="store.error" />
     <p class="hint">{{ t('browser.scope') }}</p>
     <button type="button" :disabled="store.busy" @click="store.refresh">{{ t('common.refresh') }}</button>
     <div role="status" aria-live="polite" aria-atomic="true">

@@ -875,3 +875,13 @@ browser.pool_hint: "Pool accounting is not the actual Chrome instance count and 
 
 browser.authenticated_transport_owners: "Owners with verified-token MCP endpoint access"
 browser.authenticated_transport_hint: "Only proves authorized endpoint access; does NOT prove an MCP handshake, browser session, browser process, no-focus behavior, Chrome profile authorization, or a ChatGPT connection."
+browser.next_title: "What can I do next?"
+browser.next_core: "Check the Next Core connection, then refresh."
+browser.next_browser: "Check that Browser is enabled in the Next configuration."
+browser.next_acp: "Check that ACP is enabled in Next ACP settings/configuration."
+browser.next_broker: "Broker isn't ready; review diagnostics before trying a session."
+browser.next_cleanup: "Review cleanup errors and ownership before another attempt; no browser launches yet."
+browser.next_company: "For company work, use the previously authorized exact Edge profile and explicit evidence; configured counts do not prove login. Other eligible work may use the managed headless route."
+browser.next_session: "Broker can accept a session in principle. Start a permitted background work task with your existing ChatGPT/ACP connection; a snapshot alone does not prove Chrome/Edge ready or consent."
+browser.next_exclusive: "Exclusive mode uses a separate resource per lease, not a shared pool."
+browser.next_shared: "Shared mode is experimental and is not production ready."

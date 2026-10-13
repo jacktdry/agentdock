@@ -706,6 +706,36 @@
   <data name="browser.max_concurrency" xml:space="preserve">
     <value>最大並行數</value>
   </data>
+  <data name="browser.next_acp" xml:space="preserve">
+    <value>檢查 Next ACP 設定／組態是否已啟用 ACP。</value>
+  </data>
+  <data name="browser.next_broker" xml:space="preserve">
+    <value>Broker 尚未就緒；嘗試工作階段前，先檢視診斷。</value>
+  </data>
+  <data name="browser.next_browser" xml:space="preserve">
+    <value>檢查 Next 組態是否已啟用 Browser。</value>
+  </data>
+  <data name="browser.next_cleanup" xml:space="preserve">
+    <value>再次嘗試前，先檢視清理錯誤與資源歸屬；暫勿啟動瀏覽器。</value>
+  </data>
+  <data name="browser.next_company" xml:space="preserve">
+    <value>公司工作請使用先前獲准的確切 Edge 設定檔與明確證據；設定數量不能證明已登入。其他符合條件的工作可使用受管理的 headless 路由。</value>
+  </data>
+  <data name="browser.next_core" xml:space="preserve">
+    <value>檢查 Next Core 連線，再重新整理。</value>
+  </data>
+  <data name="browser.next_exclusive" xml:space="preserve">
+    <value>Exclusive 模式每個租約使用獨立資源，不共用資源池。</value>
+  </data>
+  <data name="browser.next_session" xml:space="preserve">
+    <value>Broker 原則上可接受工作階段。透過既有的 ChatGPT/ACP 連線開始獲准的背景工作；快照本身不能證明 Chrome/Edge 已就緒或已取得同意。</value>
+  </data>
+  <data name="browser.next_shared" xml:space="preserve">
+    <value>共用模式仍屬實驗性質，尚未適用於正式環境。</value>
+  </data>
+  <data name="browser.next_title" xml:space="preserve">
+    <value>接下來可以做什麼？</value>
+  </data>
   <data name="browser.observation_hint" xml:space="preserve">
     <value>觀察時間是此次診斷觀察的 UTC 時間。stale 表示保留的 Broker 異常，不代表快照經過多久或連接器健康。各計數分別觀察，並非原子快照。</value>
   </data>

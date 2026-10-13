@@ -234,6 +234,16 @@
 "browser.managed_leases" = "Managed 隔離路由 lease";
 "browser.managed_orphans" = "受管理孤立紀錄";
 "browser.max_concurrency" = "最大並行數";
+"browser.next_acp" = "檢查 Next ACP 設定／組態是否已啟用 ACP。";
+"browser.next_broker" = "Broker 尚未就緒；嘗試工作階段前，先檢視診斷。";
+"browser.next_browser" = "檢查 Next 組態是否已啟用 Browser。";
+"browser.next_cleanup" = "再次嘗試前，先檢視清理錯誤與資源歸屬；暫勿啟動瀏覽器。";
+"browser.next_company" = "公司工作請使用先前獲准的確切 Edge 設定檔與明確證據；設定數量不能證明已登入。其他符合條件的工作可使用受管理的 headless 路由。";
+"browser.next_core" = "檢查 Next Core 連線，再重新整理。";
+"browser.next_exclusive" = "Exclusive 模式每個租約使用獨立資源，不共用資源池。";
+"browser.next_session" = "Broker 原則上可接受工作階段。透過既有的 ChatGPT/ACP 連線開始獲准的背景工作；快照本身不能證明 Chrome/Edge 已就緒或已取得同意。";
+"browser.next_shared" = "共用模式仍屬實驗性質，尚未適用於正式環境。";
+"browser.next_title" = "接下來可以做什麼？";
 "browser.observation_hint" = "觀察時間是此次診斷觀察的 UTC 時間。stale 表示保留的 Broker 異常，不代表快照經過多久或連接器健康。各計數分別觀察，並非原子快照。";
 "browser.observed_at" = "觀察時間（UTC）";
 "browser.operations" = "准入佇列";

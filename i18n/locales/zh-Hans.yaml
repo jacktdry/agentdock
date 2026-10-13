@@ -875,3 +875,13 @@ browser.pool_hint: "池记账计数不等于实际 Chrome 实例数，也不证�
 
 browser.authenticated_transport_owners: "已观测有效 token 访问 MCP 端点的所有者"
 browser.authenticated_transport_hint: "仅证明已授权的端点访问；不证明 MCP 握手、浏览器会话、浏览器进程、不抢焦点行为、Chrome 配置文件授权或 ChatGPT 连接。"
+browser.next_title: "接下来可以做什么？"
+browser.next_core: "检查 Next Core 连接，再刷新。"
+browser.next_browser: "检查 Next 配置是否已启用 Browser。"
+browser.next_acp: "检查 Next ACP 设置／配置是否已启用 ACP。"
+browser.next_broker: "Broker 尚未就绪；尝试会话前，先查看诊断。"
+browser.next_cleanup: "再次尝试前，先查看清理错误与资源归属；暂勿启动浏览器。"
+browser.next_company: "公司工作请使用先前获准的确切 Edge 配置文件与明确证据；配置数量不能证明已登录。其他符合条件的工作可使用受管理的 headless 路由。"
+browser.next_session: "Broker 原则上可接受会话。通过既有的 ChatGPT/ACP 连接开始获准的后台工作；快照本身不能证明 Chrome/Edge 已就绪或已取得同意。"
+browser.next_exclusive: "Exclusive 模式每个租约使用独立资源，不共享资源池。"
+browser.next_shared: "共享模式仍属实验性质，尚未适用于生产环境。"
