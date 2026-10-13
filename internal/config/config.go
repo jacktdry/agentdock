@@ -131,10 +131,6 @@ func FromEnv() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	browserEnabled, err := getenvBool("AGENTDOCK_BROWSER_ENABLED", false)
-	if err != nil {
-		return Config{}, err
-	}
 	browserReuseExistingCDP, err := getenvBool("AGENTDOCK_BROWSER_REUSE_EXISTING_CDP", false)
 	if err != nil {
 		return Config{}, err
@@ -160,6 +156,13 @@ func FromEnv() (Config, error) {
 		return Config{}, err
 	}
 	acpEnabled, err := getenvBool("AGENTDOCK_ACP_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
+	// Next's non-stdio ACP role enables the lazy Broker by default. The launcher
+	// supplies the state root separately; explicit browser settings still win.
+	browserDefault := strings.TrimSpace(os.Getenv("AGENTDOCK_DESKTOP_VARIANT")) == "next" && acpEnabled && !stdio
+	browserEnabled, err := getenvBool("AGENTDOCK_BROWSER_ENABLED", browserDefault)
 	if err != nil {
 		return Config{}, err
 	}
