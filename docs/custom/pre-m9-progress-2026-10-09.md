@@ -39,11 +39,11 @@
 
 ## AGY-ACP .14（獨立 Session 最新交接）
 
-- 使用者確認 ACP 已到 **`1.2.0-agentdock.14` 候選版**，目前**等待 Next 開發／介面就緒後再安排整合測試**。
+- 使用者確認 ACP 已到 **`1.2.0-agentdock.14` 候選版**；2026-10-13 已完成 Next-side isolation source 整合與 **Next-only live Browser Broker UAT**，不再處於「等待 Next 就緒」階段。完整 native M8/stream/其他功能 gate 仍開放。
 - 獨立 ACP 工作樹 `/Users/wei/sideProject/antigravity-acp-next-integration`，`feature/next-integration-optin`；交接記錄 HEAD `87cff1e`，功能修正 `9381b04`。ACP 本身測試 **456 pass／0 fail（43 files）**、TypeScript、Lint、macOS arm64 build PASS（根據 ACP 工作線交接報告）。
-- .14 加強已 ACK 的 stream / SQLite 跨事件一致性；DB 刪除／回退／重複 Step ID／文字改寫 → fail-closed，避免重播已送出文字。但**尚未推送／部署**，交接文件記錄 stable 及 Next **已安裝 ACP 仍是 .8**。`AGY_ACP_STREAM_JSON=direct` 未接正式 `Adapter.runPrompt`；native M8 Hook/IPC、State/HOME opt-in、Keychain/OAuth、Session/工具／圖片／取消／Replay、stream parity 與跨專案權限驗證**尚未完成**。
+- .14 加強已 ACK 的 stream / SQLite 跨事件一致性；DB 刪除／回退／重複 Step ID／文字改寫 → fail-closed，避免重播已送出文字。原始碼分支仍未推送，但乾淨 `87cff1e` 已建置並**只部署到 Next**；stable/global adapter 維持 `.8`。`AGY_ACP_STREAM_JSON=direct` 仍未接正式 `Adapter.runPrompt`；native M8 Hook/IPC、工具／圖片／取消／Replay、stream parity 與跨專案權限驗證仍未完成。
 - Next Session 負責 Core-owned Profile/State/M8 權限與 IPC；ACP Session 負責 AGY ACP 自身實作；**不得交叉修改 repo 或誤將 .14 候選版視為 Next 整合完成**。見 [ACP Next 整合交接](agy-acp-next-integration-handoff.md)。
-- **2026-10-13 Next-side source checkpoint**：Next Core 已補上 `.14` 既有 opt-in 的 `AGY_ACP_STATE_DIR=~/.agentdock-next/acp/antigravity` + `AGY_ACP_CHILD_ISOLATION=required`，只對 macOS Next + 精確 Next home 的 Antigravity profile 生效；私有目錄鏈 owner/type/symlink/mode fail-closed，衝突 env 直接拒絕。沒有覆寫 parent HOME、沒有啟用 AUTO_APPROVE/stream direct/native hook/OAuth/Keychain。focused tests/vet/diff/cross-compile PASS；完整 app suite 僅遇既有 ACP output-contract timing flake，單獨 3/3 PASS。**尚未部署 `.14`，安裝版仍是 `.8`，不算聯合 UAT 完成。**
+- **2026-10-13 Next-side source + live checkpoint**：Next Core 已補上 `.14` 既有 opt-in 的 `AGY_ACP_STATE_DIR=~/.agentdock-next/acp/antigravity` + `AGY_ACP_CHILD_ISOLATION=required`，只對 macOS Next + 精確 Next home 的 Antigravity profile 生效；私有目錄鏈 owner/type/symlink/mode fail-closed，衝突 env 直接拒絕。source tests/vet/diff/cross-compile PASS；完整 app suite 的既有 ACP output-contract timing flake單獨 3/3 PASS。之後 Next Core 已部署 `afab0339`，Next 專用 adapter 升到 `.14`；真實 AGY session/new、private child HOME、Broker acquire/evaluate/snapshot/release 與 cleanup PASS，無 loginKC/queryCreate/SecurityAgent modal。第一次 evaluate 漏 `lease_id` 被 fail-closed，AGY 自我重試後成功，列為 ACP compatibility caveat。**stable/global 仍 `.8`；AUTO_APPROVE=0、stream direct、native M8 hook 未啟用。**
 
 ## Loopback 事故與最新狀況
 
@@ -54,7 +54,7 @@
 ## 下一步（優先順序）
 
 1. **P8 可信來源與傳輸邊界**：Edge 簽章／Profile／登入與 no-focus、safe-release 驗證；實作原子化 CDP 執行個體／操作身分綁定；不得以「連得到」或 OS 程序預檢直接放行公司 Edge。
-2. **Next 與 AGY .14 整合前置**：凍結 Next-owned State/HOME、ACP Profile opt-in、M8 Native PreToolUse Hook／可信 Core IPC 的授權與拒絕合約；等 Next 準備好再做 Next-only .14 聯合 UAT，勿改動原版及 AGY Session 的原始碼。
+2. **AGY .14 剩餘整合**：Next-owned State/HOME 與 Browser actor live UAT 已完成；下一步聚焦 M8 Native PreToolUse Hook／可信 Core IPC、AUTO_APPROVE=0 的安全可用範圍，以及模型/usage/圖片/取消/Replay/stream parity。AGY 首次後續 Browser tool 偶發漏 `lease_id` 由 ACP 工作線評估 proxy/參數綁定改善；勿在 AgentDock Core 寫 adapter-specific workaround。
 3. **P6/P7/P8 原生 GUI UAT**：視覺／鍵盤／焦點／生命週期驗收；真實 Nexus 配對持續延後。
 4. **Pre-M9 整合與發行 gate**：安全複審、故障回復、簽章更新、Windows/WSL/Linux 原生驗證。
 

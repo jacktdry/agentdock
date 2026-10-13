@@ -7,7 +7,7 @@
 
 ## ACP .14 跨事件驗證與 Fail-Closed 修正（2026-10-09）
 
-- **ACP 最新原始碼候選版 `1.2.0-agentdock.14`**；`/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`87cff1e`**，功能修正 **`9381b04`**；尚未推送、部署。原版／Next 已安裝 ACP 仍為 `.8`。
+- **ACP 最新原始碼候選版 `1.2.0-agentdock.14`**；`/Users/wei/sideProject/antigravity-acp-next-integration`，分支 `feature/next-integration-optin`，HEAD **`87cff1e`**，功能修正 **`9381b04`**；原始碼分支仍未推送。2026-10-13 已將此乾淨候選版建成 arm64 binary 並**只部署到 AgentDock Next**；stable/global `antigravity-acp` 維持 `.8`。實機結果見下方 Next `.14` UAT checkpoint。
 - 修正先前 .13 的安全缺口：文字已向 ACP Client 確認送出後，若 SQLite 對應資料列遭刪除、status 由完成回退、同一 Step ID 重複，或文字改寫，先在 `StreamPoller.poll()` **和下次 reserveExternalText 前**檢查全量已確認列，一旦不一致立即 fail-closed，不能自動重播。驗證採 O(DB rows + acknowledged step count) 索引，避免多列時反覆巢狀掃描。
 - `StreamDirectLedger` 同步改為已 ACK 的資料列消失或回退非完成狀態 → `POST_COMMIT_DIVERGENCE`，`safeToRetry=false`。跨事件模擬涵蓋多段 UTF-8、部分送達／遠端 ACK 不明、取消競態、工具事件不直接輸出、上游 ERROR、完成前 DB 尚未落地、Session 恢復時僅發送新回合、歷史 Replay 與雙 Ledger 狀態。
 - ACP 整合測試 **456 pass／0 fail（43 files）**，TypeScript、Lint（既有非阻擋提示）及 macOS arm64 build PASS。研究詳見 `docs/research/stream-direct-admission.md` 與 `tests/agy/stream-cross-event-recovery.test.ts`。
@@ -19,7 +19,16 @@
 - Core 只建立／接受目前使用者擁有、非 symlink、group/world 不可存取的 `~/.agentdock-next` → `acp` → `antigravity` 目錄鏈；既有 symlink、dangling symlink、檔案型別、錯誤權限或 owner 判定不符時 fail closed，不 chmod／替換不安全既有路徑。profile 若提供衝突的 `AGY_ACP_STATE_DIR` 或 `AGY_ACP_CHILD_ISOLATION` 也直接拒絕。
 - **刻意不做**：不覆寫 ACP parent `HOME`、不設定 `AGY_ACP_AUTO_APPROVE`、不開 `AGY_ACP_STREAM_JSON=direct`、不指定 `AGY_CONVERSATIONS_DIR`、不注入 native-hook fixture／OAuth／Keychain／credential。既有 Browser Broker required / browser-backends-disabled 行為保留。
 - 驗證：focused Next/Antigravity env + unsafe path + wrong-owner predicate PASS；`go vet ./internal/app`、`git diff --check`、Linux/Windows compile-only PASS。一次完整 `internal/app` regression 僅有既有 `TestRuntimeOutputContractACPOptionalFields` timing failure（看到 prompt `running`）；同一測試獨立重跑 **3/3 PASS**。`.14` worktree 維持乾淨 HEAD `87cff1e`，未修改、未建置／部署到 Next。
-- **仍未完成實機 `.14` 聯合 UAT**：Next 安裝中的 Antigravity adapter 仍為 `1.2.0-agentdock.8`。在 `.14` 真正部署前，仍須決定／完成 native PreToolUse M8 bridge 的可用範圍，並做 Keychain/OAuth、模型/usage、Session、Browser Broker、工具/圖片/取消/Replay、stream/DB parity 驗收；不能把本 checkpoint 當 `.14` production activation。
+- **此 source checkpoint 當下尚未完成實機 `.14` 聯合 UAT**；後續同日已完成 Next-only `.14` Browser Broker 實機驗收，見下一節。native PreToolUse M8 bridge、模型/usage、工具/圖片/取消/Replay、stream/DB parity 與 production activation 仍未因此自動放行。
+
+## Next `.14` live Browser Broker UAT（2026-10-13）
+
+- **部署範圍**：AgentDock Next Core 先以 transactional Next-only deploy 更新到 `afab0339`，live 8767 PID `44263`；stable Core 8765 PID `44832` 全程未變。Next 專用 `~/.agentdock-next/bin/antigravity-acp` 由 `.8` 更新為 `1.2.0-agentdock.14`（SHA-256 `6e9d583b...`），stable `/Users/wei/.local/bin/antigravity-acp` 仍為 `.8`（`c4cef492...`）。候選 ACP worktree 最終保持乾淨 `87cff1e`。
+- **State / child isolation live proof**：`session/new` 回報 Agent `1.2.0-agentdock.14`、`idle-managed` 30 分鐘；`~/.agentdock-next/acp/antigravity` 實際建立為 `0700` 且目前使用者擁有。AGY child 使用 `/private/.../agy-acp-browser-*` 私有 HOME，內含隔離 `.gemini`、OAuth token material、Browser MCP config 與 log；同時依 `.14` 現行設計仍使用既有全域 conversation DB，這不是本輪 State 隔離範圍。沒有覆寫 parent ACP HOME。
+- **Keychain / modal**：UAT 前後沒有 `loginKC`、`queryCreate` 或 `SecurityAgent` prompt 紀錄；只觀察到既有 `CoreServicesUIAgent`。AGY 能直接啟動模型回合，沒有重新 OAuth 登入。
+- **真實 Browser flow**：AGY model 使用 injected `agentdock-browser`，`browser_acquire` 成功取得 `isolated-temporary`、`foreground_policy=forbidden` lease。第一次 `browser_evaluate` **漏傳 `lease_id`**，Broker 正確 fail-closed 為 `ACTION_INVALID: lease_id required`；AGY 隨後以 acquire 回傳的 lease 自我重試，evaluate 成功回傳 `agentdock-agy14-p8-ok`。`browser_snapshot` 在 `about:blank` 確認同一文字；`browser_release` 回 `cleanup_state=complete` / `exclusive managed worker stopped`；Run 最終 `completed/end_turn`。
+- **Cleanup**：Session manual close 後 ready/running/loaded 全為 0、Broker `sessions=null`、adapter descendants=0。以 Next Core 為 root 的唯讀 descendant 檢查為 **0 chrome-devtools-mcp、0 Headless Chrome、0 AGY child、0 browser proxy**；只保留 Antigravity ACP adapter root。沒有使用 Edge、user Chrome profile、Computer Use 或 shell fallback。
+- **判定**：`.14` 的 Next Browser actor UAT **PASS with caveat**，因此保留 Next `.14`，不 rollback。caveat 是 AGY 首次後續 Browser tool 參數可能漏 `lease_id`；因 Broker fail-closed 且本輪可自我修復，暫不視為 runtime rollback blocker，但應由 AGY ACP 工作線評估 proxy/工具參數綁定改善。這份 PASS **不等於** native PreToolUse M8 bridge、AUTO_APPROVE=0、stream direct、完整模型/usage/圖片/取消/Replay 或 production release 已完成。
 
 ## ACP .13 共用文字輸出游標 checkpoint（2026-10-09）
 
