@@ -128,7 +128,10 @@ type realSharedProcess struct {
 // Observations never grant kill authority. Only registry/backend Stop terminates
 // processes. Marker matching also catches Chrome's separately detached group.
 func realSharedProcesses(ctx context.Context, root int, marker string, observed map[int]string) ([]realSharedProcess, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// Busy developer machines can have thousands of unrelated MCP/Chrome
+	// processes. The process snapshot can legitimately exceed 2s; a timeout
+	// is an unknown ownership state, never evidence that owned work exited.
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=,pgid=,command=").Output()
 	if err != nil {

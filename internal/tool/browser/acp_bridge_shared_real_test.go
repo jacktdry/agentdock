@@ -6,7 +6,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/uvwt/agentdock/internal/browserpolicy"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 )
@@ -50,7 +55,7 @@ func (s *realACPBridgeSession) Call(ctx context.Context, tool string, args map[s
 		if !s.hasKeeper || args["pageId"] == s.keeper || s.selected != s.keeper {
 			return nil, fmt.Errorf("test forbids keeper close or unguarded cleanup")
 		}
-	case "evaluate_script", "list_pages":
+	case "evaluate_script", "take_snapshot", "list_pages":
 	default:
 		return nil, fmt.Errorf("tool outside isolated real proof")
 	}
@@ -408,6 +413,187 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 		}
 		checkBudget(1) // Releasing a borrow never releases a browser slot.
 	}
+	// These SDK callers prove HTTP protocol -> real engine, not installed ACP
+	// agent behavior. Reuse this generation and its owned cleanup safeguards.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal("test loopback listener unavailable")
+	}
+	server := &http.Server{Handler: bridge.MCPHTTPHandler(), ReadHeaderTimeout: 5 * time.Second}
+	served := make(chan error, 1)
+	go func() { served <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		cleanupCtx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stop()
+		if err := server.Shutdown(cleanupCtx); err != nil {
+			t.Error("HTTP shutdown failed")
+			_ = server.Close()
+		}
+		_ = listener.Close()
+		select {
+		case err := <-served:
+			if !errors.Is(err, http.ErrServerClosed) {
+				t.Error("HTTP serve failed")
+			}
+		case <-cleanupCtx.Done():
+			t.Error("HTTP serve cleanup timed out")
+		}
+	})
+	endpoint := bridge.MCPServerURL(listener.Addr().(*net.TCPAddr).Port)
+	base := &http.Transport{Proxy: nil}
+	t.Cleanup(base.CloseIdleConnections)
+	var httpOwners [2]owner
+	var clients [2]*mcpsdk.ClientSession
+	var httpClients [2]*http.Client
+	callHTTP := func(i int, name string, args map[string]any) map[string]any {
+		t.Helper()
+		result, err := clients[i].CallTool(ctx, &mcpsdk.CallToolParams{Name: name, Arguments: args})
+		if err != nil || result == nil || result.IsError {
+			var code, phase string
+			if result != nil {
+				if payload, ok := result.StructuredContent.(map[string]any); ok {
+					code, _ = payload["code"].(string)
+					phase, _ = payload["phase"].(string)
+				}
+			}
+			t.Fatalf("HTTP owner %d %s failed: transport=%t code=%q phase=%q (raw details withheld)", i, name, err != nil, code, phase)
+		}
+		payload, ok := result.StructuredContent.(map[string]any)
+		if !ok || payload["ok"] != true {
+			t.Fatal("HTTP tool success payload missing")
+		}
+		return payload
+	}
+	checkHTTPWorker := func() {
+		t.Helper()
+		mu.Lock()
+		starts, current, maximum := len(sessions), live, peak
+		mu.Unlock()
+		if starts != 1 || current != 1 || maximum != 1 {
+			t.Fatal("HTTP callers started an extra MCP worker")
+		}
+		checkChrome()
+		checkBudget(1)
+	}
+	for i := range httpOwners {
+		o := &httpOwners[i]
+		o.session = fmt.Sprintf("http-sdk-owner-%d", i)
+		o.token, err = bridge.RegisterSession(o.session, o.session, cwd)
+		if err != nil {
+			t.Fatal("HTTP owner registration failed")
+		}
+		httpClients[i] = &http.Client{Timeout: 20 * time.Second, Transport: realACPBridgeHTTPTransport{base, endpoint, o.token}, CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("redirect forbidden")
+		}}
+		client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: o.session, Version: "test"}, nil)
+		clients[i], err = client.Connect(ctx, &mcpsdk.StreamableClientTransport{Endpoint: endpoint, HTTPClient: httpClients[i], MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+		if err != nil {
+			t.Fatal("HTTP SDK connect failed")
+		}
+		session := clients[i]
+		t.Cleanup(func() {
+			if err := session.Close(); err != nil {
+				t.Error("HTTP SDK session cleanup failed")
+			}
+		})
+		listed, err := session.ListTools(ctx, &mcpsdk.ListToolsParams{})
+		if err != nil {
+			t.Fatal("HTTP SDK tools/list failed")
+		}
+		var names []string
+		for _, tool := range listed.Tools {
+			names = append(names, tool.Name)
+		}
+		slices.Sort(names)
+		want := []string{"browser_acquire", "browser_click", "browser_evaluate", "browser_fill", "browser_navigate", "browser_press_key", "browser_release", "browser_screenshot", "browser_snapshot"}
+		if !slices.Equal(names, want) || listed.NextCursor != "" {
+			t.Fatal("HTTP broker tool list mismatch")
+		}
+		payload := callHTTP(i, "browser_acquire", map[string]any{"url": "about:blank"})
+		leaseID, _ := payload["lease_id"].(string)
+		if leaseID == "" || ids["1:"+leaseID] {
+			t.Fatal("HTTP acquire returned duplicate/empty lease")
+		}
+		ids["1:"+leaseID] = true
+		lease, err := bridge.managed.manager.lease(leaseID)
+		if err != nil {
+			t.Fatal("HTTP acquired lease missing")
+		}
+		lease.mu.Lock()
+		o.meta = lease.metadata
+		lease.mu.Unlock()
+		for j, id := range []string{o.token, o.meta.WorkerID, o.meta.PageID, o.meta.IsolationContextName} {
+			key := fmt.Sprintf("http-%d:%s", j, id)
+			if id == "" || ids[key] {
+				t.Fatal("HTTP owners share an identity or isolated target")
+			}
+			ids[key] = true
+		}
+		if o.meta.ConnectorPID.PID != a.meta.ConnectorPID.PID || o.meta.ForegroundPolicy != ForegroundForbidden {
+			t.Fatal("HTTP lease did not reuse background owned MCP engine")
+		}
+		checkHTTPWorker()
+	}
+	httpEvaluate := func(i int, function, want string) {
+		t.Helper()
+		payload := callHTTP(i, "browser_evaluate", map[string]any{"lease_id": httpOwners[i].meta.BrowserLeaseID, "function": function})
+		engine, _ := payload["engine_result"].(map[string]any)
+		structured, _ := engine["structuredContent"].(map[string]any)
+		message, _ := structured["message"].(string)
+		_, block, found := strings.Cut(message, "```json\n")
+		value, _, ended := strings.Cut(block, "\n```")
+		var got string
+		if leaseCallResultError(engine) != nil || structured["reconnected"] == true || !found || !ended || json.Unmarshal([]byte(value), &got) != nil || got != want {
+			t.Fatal("HTTP evaluate did not preserve isolated page value")
+		}
+	}
+	for i := range httpOwners {
+		httpOwners[i].value = rand.Text()
+		httpEvaluate(i, fmt.Sprintf("() => { window.__httpAgent = %q; return window.__httpAgent; }", httpOwners[i].value), httpOwners[i].value)
+		httpEvaluate(1-i, "() => window.__httpAgent ?? ''", httpOwners[1-i].value)
+		payload := callHTTP(i, "browser_snapshot", map[string]any{"lease_id": httpOwners[i].meta.BrowserLeaseID})
+		engine, ok := payload["engine_result"].(map[string]any)
+		if !ok || len(engine) == 0 || leaseCallResultError(engine) != nil {
+			t.Fatal("HTTP snapshot engine result missing/failed")
+		}
+		checkHTTPWorker()
+	}
+	forged, err := clients[1].CallTool(ctx, &mcpsdk.CallToolParams{Name: "browser_evaluate", Arguments: map[string]any{"lease_id": httpOwners[0].meta.BrowserLeaseID, "function": "() => ''"}})
+	if err != nil || forged == nil || !forged.IsError {
+		t.Fatal("HTTP cross-owner forged lease was not rejected")
+	}
+	denial, _ := forged.StructuredContent.(map[string]any)
+	if denial["code"] != ErrLeaseOwnerMismatch {
+		t.Fatal("HTTP forged lease did not fail owner gate")
+	}
+	for i := range httpOwners {
+		payload := callHTTP(i, "browser_release", map[string]any{"lease_id": httpOwners[i].meta.BrowserLeaseID})
+		if payload["cleanup_state"] != string(CleanupComplete) {
+			t.Fatal("HTTP release did not complete owned page cleanup")
+		}
+		if err := bridge.ReleaseSession(ctx, httpOwners[i].session); err != nil {
+			t.Fatal("HTTP owner revocation failed")
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+		if err != nil {
+			t.Fatal("revoked request construction failed")
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		response, err := httpClients[i].Do(req)
+		if err != nil {
+			t.Fatal("revoked HTTP request failed")
+		}
+		_, _ = io.Copy(io.Discard, response.Body)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusUnauthorized {
+			t.Fatal("revoked HTTP token did not return 401")
+		}
+		if i == 0 {
+			httpEvaluate(1, "() => window.__httpAgent ?? ''", httpOwners[1].value)
+		}
+		checkHTTPWorker()
+	}
 	mu.Lock()
 	first := sessions[0]
 	starts := len(sessions)
@@ -415,7 +601,7 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 	first.mu.Lock()
 	closes, selections, stops := first.closes, first.selections, first.stopCalls
 	first.mu.Unlock()
-	if starts != 1 || closes != 3 || selections != 3 || stops != 0 {
+	if starts != 1 || closes != 5 || selections != 5 || stops != 0 {
 		t.Fatalf("starts=%d closes=%d keeper selections=%d stops=%d", starts, closes, selections, stops)
 	}
 	result, err := registry.Call(ctx, underlying, "list_pages", map[string]any{})
@@ -530,5 +716,19 @@ func TestACPBridgeSharedRealHeadless(t *testing.T) {
 			t.Fatalf("owned session stops=%d, want exactly 1", stops)
 		}
 	}
-	t.Logf("ACPBridge owners=3; MCP PID=%d; generations=2; budget max=1; owned MCP peak=1; Chrome main=1 per generation; headless/no-focus call guards enforced", a.meta.ConnectorPID.PID)
+	t.Logf("ACPBridge direct owners=3 HTTP SDK owners=2 (not installed ACP agents); MCP PID=%d; generations=2; budget max=1; owned MCP peak=1; Chrome main=1 per generation; headless/no-focus call guards enforced", a.meta.ConnectorPID.PID)
+}
+
+type realACPBridgeHTTPTransport struct {
+	base            http.RoundTripper
+	endpoint, token string
+}
+
+func (r realACPBridgeHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.String() != r.endpoint {
+		return nil, errors.New("non-test endpoint forbidden")
+	}
+	clone := req.Clone(req.Context())
+	clone.Header.Set("Authorization", "Bearer "+r.token)
+	return r.base.RoundTrip(clone)
 }
