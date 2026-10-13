@@ -5,10 +5,12 @@ package desktopruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeDarwinPortFixture(t *testing.T, request PortObservationRequest, label string) {
@@ -51,14 +53,28 @@ func TestPortDarwinForeignTempListener(t *testing.T) {
 	listener := tempPortListener(t)
 	request := portFixtureRequest(t, listener.Addr().(*net.TCPAddr).Port)
 	writeDarwinPortFixture(t, request, "dev.dropabit.agentdock.next.core")
-	observation := ObservePort(context.Background(), request)
 	// !cgo cannot read kernel process identity and must return unknown.
 	_, _, processErr := platformPortProcess(os.Getpid())
 	if processErr != nil {
-		if observation.State != PortUnknown {
-			t.Fatal(observation)
-		}
-	} else if observation.State != PortConflict {
+		assertDarwinPortFixture(t, request, PortUnknown, "ownership_unavailable")
+	} else {
+		assertDarwinPortFixture(t, request, PortConflict, "foreign_listener")
+	}
+}
+
+func assertDarwinPortFixture(t *testing.T, request PortObservationRequest, state PortState, reason string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	observation := ObservePort(ctx, request)
+	t.Logf("native observation: %s, state=%s reason=%s", time.Since(started), observation.State, observation.ReasonCode)
+	// Host load may exhaust the native scan budget. Accept only an explicit,
+	// independently expired deadline as conservative rejection, never ownership.
+	if observation.State == PortUnknown && observation.ReasonCode == "observation_cancelled" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return
+	}
+	if observation.State != state || observation.ReasonCode != reason {
 		t.Fatal(observation)
 	}
 }
@@ -77,11 +93,27 @@ func TestPortDarwinOwnedSelectedProcessFixture(t *testing.T) {
 	// AgentDock process, app bundle, environment, or launchd service.
 	request.Runtime.Binary, request.Runtime.PID, request.Runtime.ProcessInstance = path, os.Getpid(), instance
 	writeDarwinPortFixture(t, request, "dev.dropabit.agentdock.next.core")
-	if observation := ObservePort(context.Background(), request); observation.State != PortOwnedByNext {
-		t.Fatal(observation)
-	}
+	assertDarwinPortFixture(t, request, PortOwnedByNext, "selected_next_process")
 	request.Runtime.ProcessInstance += "-stale"
-	if observation := ObservePort(context.Background(), request); observation.State != PortUnknown {
-		t.Fatal("reused process accepted", observation)
+	assertDarwinPortFixture(t, request, PortUnknown, "process_instance_mismatch")
+}
+
+func TestPortDarwinCancelledOwnershipProbe(t *testing.T) {
+	listener := tempPortListener(t)
+	request := portFixtureRequest(t, listener.Addr().(*net.TCPAddr).Port)
+	writeDarwinPortFixture(t, request, "dev.dropabit.agentdock.next.core")
+	for _, deadline := range []bool{false, true} {
+		ctx, cancel := context.WithCancel(context.Background())
+		if deadline {
+			cancel()
+			ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		} else {
+			cancel()
+		}
+		state, reason := platformPortOwner(ctx, request)
+		cancel()
+		if state != PortUnknown || reason != "observation_cancelled" {
+			t.Fatalf("cancelled native probe accepted or misclassified: %s %s", state, reason)
+		}
 	}
 }

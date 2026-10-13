@@ -119,6 +119,29 @@ func TestPortOccupiedFixtures(t *testing.T) {
 	}
 }
 
+func TestPortProbePreservesCallerDeadline(t *testing.T) {
+	listener := tempPortListener(t)
+	request := portFixtureRequest(t, listener.Addr().(*net.TCPAddr).Port)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	called := false
+	observation := observePort(ctx, request, func(probeCtx context.Context, _ PortObservationRequest) (PortState, string) {
+		called = true
+		if probeDeadline, ok := probeCtx.Deadline(); !ok || !probeDeadline.Equal(deadline) {
+			t.Fatal("ownership probe extended caller deadline")
+		}
+		cancel()
+		if !errors.Is(probeCtx.Err(), context.Canceled) {
+			t.Fatal("ownership probe ignored caller cancellation")
+		}
+		return PortUnknown, "ownership_unavailable"
+	})
+	if !called || observation.State != PortUnknown {
+		t.Fatal("cancelled ownership probe accepted", observation)
+	}
+}
+
 func TestPortInvalidIdentityAndScope(t *testing.T) {
 	request := portFixtureRequest(t, 8767) // invalid inputs must not probe Next's real default.
 	for _, mutate := range []func(*PortObservationRequest){

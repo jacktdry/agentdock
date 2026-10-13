@@ -68,6 +68,9 @@ func platformPortOwner(ctx context.Context, request PortObservationRequest) (Por
 		return darwinPortPIDs(string(output))
 	}
 	pids, err := read()
+	if ctx.Err() != nil {
+		return PortUnknown, "observation_cancelled"
+	}
 	if err != nil || len(pids) != 1 {
 		return PortUnknown, "ownership_unavailable"
 	}
@@ -76,6 +79,9 @@ func platformPortOwner(ctx context.Context, request PortObservationRequest) (Por
 	if state == PortOwnedByNext {
 		again, readErr := read()
 		afterBinary, after, processErr := platformPortProcess(pids[0])
+		if ctx.Err() != nil {
+			return PortUnknown, "observation_cancelled"
+		}
 		if readErr != nil || len(again) != 1 || again[0] != pids[0] || processErr != nil || after != instance || !portBinaryMatches(afterBinary, binary) || !darwinPortSelection(request.Runtime) {
 			return PortUnknown, "listener_changed"
 		}
