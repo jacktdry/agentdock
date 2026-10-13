@@ -32,6 +32,50 @@ func TestRuntimeBrowserDesktopAvailability(t *testing.T) {
 	}
 }
 
+func TestRuntimeBrowserDesktopCompletedLeaseDoesNotReportStale(t *testing.T) {
+	now := time.Now().UTC()
+	for _, test := range []struct {
+		name         string
+		failedLease  bool
+		failedWorker bool
+	}{
+		{name: "completed"},
+		{name: "failed lease", failedLease: true},
+		{name: "failed worker", failedWorker: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			d := toolbrowser.BrokerDiagnostics{
+				Leases:  []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteManaged, PageID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupComplete, CleanupError: "PRIVATE_CANARY", ExpiresAt: now.Add(-time.Minute)}},
+				Workers: []toolbrowser.BrokerWorkerDiagnostic{{State: toolbrowser.WorkerStopped, Error: "PRIVATE_CANARY"}},
+			}
+			if test.failedLease {
+				d.Leases = append(d.Leases, toolbrowser.BrokerLeaseDiagnostic{Route: browserpolicy.RouteManaged, ACPSessionID: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupFailed, CleanupError: "PRIVATE_CANARY"})
+			}
+			if test.failedWorker {
+				d.Workers = append(d.Workers, toolbrowser.BrokerWorkerDiagnostic{State: toolbrowser.WorkerFailed, Error: "PRIVATE_CANARY"})
+			}
+			s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, now)
+			wantLeases, wantWorkers, wantState := 0, 0, "idle"
+			if test.failedLease {
+				wantLeases, wantState = 1, "stale"
+			}
+			if test.failedWorker {
+				wantWorkers, wantState = 1, "stale"
+			}
+			if s.Availability != "available" || s.State != wantState || s.Stale != (test.failedLease || test.failedWorker) || s.Leases != wantLeases || s.ManagedLeases != wantLeases || s.RequiredExternalLeases != 0 || s.ExplicitExternalLeases != 0 || s.Workers != wantWorkers || s.FailedLeases != wantLeases || s.FailedWorkers != wantWorkers || s.ActiveLeases != 0 || s.ReleasingLeases != 0 || s.ReadyWorkers != 0 || s.UnownedLeases != 0 || s.ExpiredLeases != 0 {
+				t.Fatalf("snapshot %#v", s)
+			}
+			data, err := json.Marshal(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "PRIVATE_CANARY") {
+				t.Fatal("private diagnostics leaked")
+			}
+		})
+	}
+}
+
 func TestRuntimeBrowserDesktopStaleProjectionIsAllowlisted(t *testing.T) {
 	now := time.Now().UTC()
 	d := toolbrowser.BrokerDiagnostics{
@@ -211,6 +255,7 @@ func TestRuntimeBrowserDesktopInvalidDiagnosticsHideAllRetainedCounts(t *testing
 	for _, d := range []toolbrowser.BrokerDiagnostics{
 		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteManaged}, {Route: "PRIVATE_CANARY"}}},
 		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: ""}}},
+		{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: "PRIVATE_CANARY", CleanupState: toolbrowser.CleanupComplete}}},
 		{Queue: toolbrowser.BrokerQueueDiagnostic{Active: -1}},
 		{AuthenticatedMCPRequestOwners: -1},
 		{AuthenticatedMCPRequestOwners: 2, Owners: []toolbrowser.BrokerOwnerDiagnostic{{}}},

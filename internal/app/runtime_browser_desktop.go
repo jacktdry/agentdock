@@ -84,8 +84,12 @@ func aggregateBrowserDiagnostics(s browserdesktop.Snapshot, d toolbrowser.Broker
 			Available: b.AvailableSlots, Claimed: b.ClaimedOwners, Uncertain: b.UncertainSlots}
 	}
 	s.AuthenticatedTransportOwners = d.AuthenticatedMCPRequestOwners
-	s.Owners, s.Leases, s.Workers = len(d.Owners), len(d.Leases), len(d.Workers)
+	s.Owners = len(d.Owners)
 	for _, l := range d.Leases {
+		if l.CleanupState == toolbrowser.CleanupComplete {
+			continue
+		}
+		s.Leases++
 		switch l.Route {
 		case browserpolicy.RouteManaged:
 			s.ManagedLeases++
@@ -113,6 +117,10 @@ func aggregateBrowserDiagnostics(s browserdesktop.Snapshot, d toolbrowser.Broker
 		}
 	}
 	for _, w := range d.Workers {
+		if w.State == toolbrowser.WorkerStopped {
+			continue
+		}
+		s.Workers++
 		if w.State == toolbrowser.WorkerReady {
 			s.ReadyWorkers++
 		}
