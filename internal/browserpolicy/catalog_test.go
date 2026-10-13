@@ -112,7 +112,7 @@ func TestCatalogWorkspacePolicies(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := catalogFixture()
-			p := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "edge-ws", RequiredProfileID: "user-edge"}
+			p := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "edge-ws", RequiredProfileID: "user-edge", AllowedOrigins: []string{"https://cms.example.com"}}
 			if tc.mutate != nil {
 				tc.mutate(&d, &p)
 			}

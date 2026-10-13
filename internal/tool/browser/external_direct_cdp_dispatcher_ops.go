@@ -11,6 +11,7 @@ import (
 type directTargetInfo struct {
 	TargetID string `json:"targetId"`
 	Type     string `json:"type"`
+	URL      string `json:"url"`
 }
 
 func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTargetInfo, error) {
@@ -29,7 +30,9 @@ func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTarge
 }
 func (d *directCDPDispatcher) verifyTargetLocked(ctx context.Context) error {
 	info, err := d.targetInfoLocked(ctx)
-	if err != nil || info.TargetID != d.targetID || info.Type != "page" || d.sessionID == "" {
+	if err != nil || info.TargetID != d.targetID || info.Type != "page" || d.sessionID == "" ||
+		(info.URL == "about:blank" && !d.bootstrap) ||
+		(info.URL != "about:blank" && !d.originScope.Allows(info.URL)) {
 		d.Close()
 		return errDirectCDPRetired
 	}

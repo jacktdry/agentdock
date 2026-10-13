@@ -47,9 +47,11 @@ func NormalizeWorkspacePolicies(mappings []WorkspaceRootPolicy) ([]WorkspaceRoot
 		if err != nil {
 			return nil, fmt.Errorf("workspace policy %d: %w", i, err)
 		}
-		result[i] = WorkspaceRootPolicy{Root: root, Policy: m.Policy}
+		policy := m.Policy
+		policy.AllowedOrigins = append([]string(nil), m.Policy.AllowedOrigins...)
+		result[i] = WorkspaceRootPolicy{Root: root, Policy: policy}
 		for _, previous := range result[:i] {
-			if root == previous.Root || ((rootContains(root, previous.Root) || rootContains(previous.Root, root)) && m.Policy != previous.Policy) {
+			if root == previous.Root || ((rootContains(root, previous.Root) || rootContains(previous.Root, root)) && !routePoliciesEqual(policy, previous.Policy)) {
 				return nil, fmt.Errorf("duplicate or conflicting overlapping workspace policies")
 			}
 		}

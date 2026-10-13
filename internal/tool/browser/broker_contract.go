@@ -126,6 +126,7 @@ type ResolvedStart struct {
 	ProfileClass     ProfileClass
 	Endpoint         string
 	ProfilePath      string
+	OriginScope      browserpolicy.OriginScope
 	Headless         bool
 	BackgroundPage   bool
 	ForegroundPolicy ForegroundPolicy

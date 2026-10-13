@@ -30,12 +30,13 @@ func plannerFixture(t *testing.T, provider ConnectorStatusProvider) (*RoutePlann
 		t.Fatal(err)
 	}
 	scope := RequestScope{WorkspaceID: "workspace", CanonicalWorkspaceRoot: t.TempDir(), OwnerTaskID: "task", Provenance: ScopeACP}
-	policies := []browserpolicy.WorkspaceRootPolicy{{Root: scope.CanonicalWorkspaceRoot, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "edge-ws", RequiredProfileID: "user-edge"}}}
+	policies := []browserpolicy.WorkspaceRootPolicy{{Root: scope.CanonicalWorkspaceRoot, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "edge-ws", RequiredProfileID: "user-edge", AllowedOrigins: []string{"https://cms.example.com"}}}}
 	planner, err := NewRoutePlanner(policies, catalog, provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Caller mutations cannot weaken the planner's trusted policy snapshot.
+	policies[0].Policy.AllowedOrigins[0] = "https://evil.example.com"
 	policies[0].Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}
 	return planner, scope
 }
@@ -64,7 +65,7 @@ func TestPlannerCompanyIntentAndCanonicalScope(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.Scope.CanonicalWorkspaceRoot != canonical || plan.Route != browserpolicy.RouteRequiredExternal || plan.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || plan.ProfileID != "user-edge" || plan.ConnectorID != "edge-ws" || plan.Browser != BrowserEdge || plan.ProfileClass != ProfileAuthenticatedExternal || plan.Endpoint != "ws://127.0.0.1:9222/devtools/browser" || plan.ProfileTemplate != "" || plan.Engine != EngineChromeDevToolsMCP || plan.EngineVersion != PreferredEngineVersion || plan.Headless || len(plan.RequiredCapabilities) != 4 {
+		if plan.Scope.CanonicalWorkspaceRoot != canonical || plan.Route != browserpolicy.RouteRequiredExternal || plan.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || plan.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || plan.ProfileID != "user-edge" || plan.ConnectorID != "edge-ws" || plan.Browser != BrowserEdge || plan.ProfileClass != ProfileAuthenticatedExternal || plan.Endpoint != "ws://127.0.0.1:9222/devtools/browser" || plan.ProfileTemplate != "" || plan.Engine != EngineChromeDevToolsMCP || plan.EngineVersion != PreferredEngineVersion || plan.Headless || len(plan.RequiredCapabilities) != 4 {
 			t.Fatalf("plan=%+v", plan)
 		}
 		if plan.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
@@ -212,7 +213,7 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge || decision.Start.ProfileID != "user-edge" || decision.Start.ConnectorID != "edge-ws" || decision.Start.EngineVersion != PreferredEngineVersion || decision.Start.LifecyclePolicy != LifecycleExternal || decision.Start.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || decision.Start.ForegroundPolicy != ForegroundForbidden || !decision.Start.BackgroundPage || decision.Start.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
+			if err != nil || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge || decision.Start.ProfileID != "user-edge" || decision.Start.ConnectorID != "edge-ws" || decision.Start.EngineVersion != PreferredEngineVersion || decision.Start.LifecyclePolicy != LifecycleExternal || decision.Start.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || decision.Start.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || decision.Start.ForegroundPolicy != ForegroundForbidden || !decision.Start.BackgroundPage || decision.Start.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
 				t.Fatalf("decision=%+v error=%v", decision, err)
 			}
 		})
@@ -266,7 +267,7 @@ func TestPlannerOverridesAndDefault(t *testing.T) {
 
 func TestPlannerRejectsInvalidPolicyCatalog(t *testing.T) {
 	planner, scope := plannerFixture(t, nil)
-	bad := []browserpolicy.WorkspaceRootPolicy{{Root: scope.CanonicalWorkspaceRoot, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "missing", RequiredProfileID: "user-edge"}}}
+	bad := []browserpolicy.WorkspaceRootPolicy{{Root: scope.CanonicalWorkspaceRoot, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "missing", RequiredProfileID: "user-edge", AllowedOrigins: []string{"https://cms.example.com"}}}}
 	if _, err := NewRoutePlanner(bad, planner.catalog, nil); err == nil {
 		t.Fatal("dangling required route accepted")
 	}

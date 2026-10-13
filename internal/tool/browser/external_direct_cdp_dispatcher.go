@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 const directCDPCallTimeout = 10 * time.Second
@@ -38,10 +39,12 @@ type directCDPDispatcher struct {
 	closeErr                               error
 	snapshotSeq                            uint64
 	uidToBackend                           map[string]int64
+	originScope                            browserpolicy.OriginScope
+	bootstrap                              bool
 }
 
-func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay) (*directCDPDispatcher, error) {
-	if relay == nil {
+func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay, originScope browserpolicy.OriginScope) (*directCDPDispatcher, error) {
+	if relay == nil || originScope == "" {
 		return nil, errDirectCDPRetired
 	}
 	if ctx == nil || ctx.Err() != nil || relay.Lost() {
@@ -60,7 +63,7 @@ func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay) (*direct
 		return nil, errDirectCDPRetired
 	}
 	c.SetReadLimit(pinnedCDPLimit)
-	d := &directCDPDispatcher{relay: relay, down: c, gate: make(chan struct{}, 1), uidToBackend: make(map[string]int64)}
+	d := &directCDPDispatcher{relay: relay, down: c, gate: make(chan struct{}, 1), uidToBackend: make(map[string]int64), originScope: originScope, bootstrap: true}
 	d.gate <- struct{}{}
 	return d, nil
 }
@@ -214,6 +217,9 @@ func (d *directCDPDispatcher) OpenOwnedTarget(ctx context.Context, initialURL st
 	if err != nil {
 		return err
 	}
+	if u != "about:blank" {
+		return errDirectCDPAction
+	}
 	ctx, unlock, err := d.lock(ctx)
 	if err != nil {
 		return err
@@ -361,6 +367,9 @@ func (d *directCDPDispatcher) Navigate(ctx context.Context, rawURL string) error
 	if err != nil {
 		return err
 	}
+	if !d.originScope.Allows(u) {
+		return errDirectCDPAction
+	}
 	ctx, unlock, err := d.lock(ctx)
 	if err != nil {
 		return err
@@ -388,5 +397,6 @@ func (d *directCDPDispatcher) Navigate(ctx context.Context, rawURL string) error
 	if result.ErrorText != "" || result.IsDownload {
 		return errDirectCDPAction
 	}
+	d.bootstrap = false
 	return nil
 }

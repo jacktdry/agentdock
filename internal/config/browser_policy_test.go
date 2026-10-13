@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 func TestBrowserWorkspacePoliciesConfig(t *testing.T) {
 	t.Setenv(browserCatalogEnv, validBrowserCatalogJSON)
 	root := t.TempDir()
-	mappings := []browserpolicy.WorkspaceRootPolicy{{Root: root, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered-connector", RequiredProfileID: "authenticated-profile"}}}
+	mappings := []browserpolicy.WorkspaceRootPolicy{{Root: root, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered-connector", RequiredProfileID: "authenticated-profile", AllowedOrigins: []string{"https://cms.example.com"}}}}
 	raw, err := json.Marshal(mappings)
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +23,7 @@ func TestBrowserWorkspacePoliciesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.BrowserWorkspacePolicies) != 1 || cfg.BrowserWorkspacePolicies[0].Policy != mappings[0].Policy {
+	if len(cfg.BrowserWorkspacePolicies) != 1 || !reflect.DeepEqual(cfg.BrowserWorkspacePolicies[0].Policy, mappings[0].Policy) {
 		t.Fatalf("%+v", cfg.BrowserWorkspacePolicies)
 	}
 	setTestUserHome(t, t.TempDir())
@@ -54,7 +55,7 @@ const validBrowserCatalogJSON = `{"profiles":[{"id":"authenticated-profile","bro
 
 func TestBrowserCatalogConfig(t *testing.T) {
 	root := t.TempDir()
-	policies, err := json.Marshal([]browserpolicy.WorkspaceRootPolicy{{Root: root, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered-connector", RequiredProfileID: "authenticated-profile"}}})
+	policies, err := json.Marshal([]browserpolicy.WorkspaceRootPolicy{{Root: root, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered-connector", RequiredProfileID: "authenticated-profile", AllowedOrigins: []string{"https://cms.example.com"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

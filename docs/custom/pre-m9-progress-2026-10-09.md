@@ -485,3 +485,9 @@ P6 final frontend regression after GUI UAT: Vue typecheck PASS, Vitest **139/139
 - 新增 MCP-compatible typed operation foundation：evaluate、navigate、AX snapshot、click/fill、press key、PNG screenshot。AX snapshot 每代建立 ephemeral UID→backendDOMNodeId；navigation／新 snapshot／release 清除舊 UID，unknown/stale UID 在 `DOM.resolveNode` 前 fail closed。cancel/timeout 若命令已可能送出即 retire 整條 dispatcher+relay generation，不 reconnect。
 - synthetic loopback focused + `-race` ×3、完整 Browser package、vet、cached diff check、Linux/Windows compile-only 全 PASS；全程沒有真實 Edge/browser/profile 操作，也沒有 stable/Next/AGY restart/deploy。
 - **尚未 production 接線**：沒有 `ExternalLeaseManager`/ACPBridge/Runtime provider、沒有 `ConnectorStatusProvider`、沒有 `Authenticated=true` 或 consent/login proof。company Edge 繼續 `UNQUALIFIED`。下一步只剩可信 auth/consent qualification 與 native live Edge no-focus/login UAT；不能以 configured `authenticated-external` 或安全 `user_data_dir` 冒充已登入／已同意。
+
+## 2026-10-13 B2q Edge company origin scope（source-only）
+
+- Company required-external browser policy 新增 canonical HTTPS `allowed_origins`，未提供／非法來源 fail-closed；一路帶到 RoutePlan/direct CDP dispatcher，初始化僅 `about:blank`，明確 Navigate 僅允許白名單 exact origin，其他目標 URL 在下一次操作前核對，違反即退休 dispatcher。
+- browserpolicy/config/browser 全量測試、focused race×2、vet、Linux/Windows compile-only、diff check PASS。**這不是** JS/redirect/form/popup 的先行阻擋，也不代表登入、同意或 no-focus；production Edge 依舊不可選。下一個實際需求是不可繞過的 navigation/popup enforcement + live auth/profile evidence。
+- 唯讀原生 preflight：現有 Edge PID26060 確有 loopback 9222 listener，但 command line 沒明示 user-data-dir/debug flags；嚴格 B2c profile/argv identity 尚不能通過。stable 8765 與 Next 8767 均未變；不擅自重啟 Edge、開 debug prompt、採用未知 profile 或操作 tabs。

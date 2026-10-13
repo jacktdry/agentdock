@@ -67,7 +67,7 @@ func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 			return RouteDecision{}, browserError(ErrRequiredRouteUnavailable, "browser route rejected", "routing", &ErrorDetails{WorkspaceID: s.WorkspaceID, ConnectorID: id, Reason: "required capability unavailable", RequiredCapabilities: []ConnectorCapability{want}}, nil)
 		}
 	}
-	d.Start = ResolvedStart{Browser: c.Browser, Engine: c.Engine, EngineVersion: c.EngineVersion, ConnectorID: id, ProfileID: c.ProfileID, ProfileClass: c.ProfileClass, Endpoint: c.Endpoint, ProfilePath: c.ProfilePath, BackgroundPage: true, ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleExternal, Ownership: c.Ownership}
+	d.Start = ResolvedStart{Browser: c.Browser, Engine: c.Engine, EngineVersion: c.EngineVersion, ConnectorID: id, ProfileID: c.ProfileID, ProfileClass: c.ProfileClass, Endpoint: c.Endpoint, ProfilePath: c.ProfilePath, OriginScope: browserpolicy.OriginScopeForPolicy(r.Policy), BackgroundPage: true, ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleExternal, Ownership: c.Ownership}
 	return d, nil
 }
 

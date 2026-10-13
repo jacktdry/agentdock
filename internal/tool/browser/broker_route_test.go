@@ -11,7 +11,7 @@ func requiredRouteFixture(t *testing.T) RouteRequest {
 	t.Helper()
 	return RouteRequest{
 		Scope:      RequestScope{WorkspaceID: "workspace-1", CanonicalWorkspaceRoot: filepath.Clean(t.TempDir()), OwnerTaskID: "task-1", Provenance: ScopeACP},
-		Policy:     browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered", RequiredProfileID: "user-profile"},
+		Policy:     browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered", RequiredProfileID: "user-profile", AllowedOrigins: []string{"https://cms.example.com"}},
 		Connectors: []ConnectorMetadata{{ID: "registered", Browser: BrowserEdge, ProfileID: "user-profile", ProfileClass: ProfileAuthenticatedExternal, Engine: EngineChromeDevToolsMCP, EngineVersion: PreferredEngineVersion, Transport: "websocket", Endpoint: "ws://127.0.0.1:9222/devtools/browser", Registered: true, Healthy: true, Verified: true, Authenticated: true, Capabilities: []ConnectorCapability{CapabilityBackgroundPage, CapabilityNoFocus, CapabilityLeaseTarget, CapabilitySafeRelease}, Ownership: ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}}},
 	}
 }
@@ -26,7 +26,7 @@ func TestResolveRoute(t *testing.T) {
 	}{
 		{name: "required authenticated external", route: browserpolicy.RouteRequiredExternal},
 		{name: "generic required authenticated Chrome", mutate: func(r *RouteRequest) {
-			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered", RequiredProfileID: "user-profile"}
+			r.Policy = browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "registered", RequiredProfileID: "user-profile", AllowedOrigins: []string{"https://cms.example.com"}}
 			r.Connectors[0].Browser = BrowserChrome
 		}, route: browserpolicy.RouteRequiredExternal, browser: BrowserChrome},
 		{name: "missing connector", mutate: func(r *RouteRequest) { r.Connectors = nil }, code: ErrRequiredRouteUnavailable},
@@ -104,7 +104,7 @@ func TestResolveRoute(t *testing.T) {
 				if wantBrowser == "" {
 					wantBrowser = BrowserEdge
 				}
-				if got.Start.Browser != wantBrowser || got.Start.Ownership.Process != OwnerExternalPersistent || got.Start.Ownership.Profile != OwnerExternalPersistent || got.Start.LifecyclePolicy != LifecycleExternal {
+				if got.Start.Browser != wantBrowser || got.Start.OriginScope != browserpolicy.OriginScopeForPolicy(r.Policy) || got.Start.Ownership.Process != OwnerExternalPersistent || got.Start.Ownership.Profile != OwnerExternalPersistent || got.Start.LifecyclePolicy != LifecycleExternal {
 					t.Fatalf("external route=%+v", got)
 				}
 			}

@@ -19,6 +19,7 @@ type ProfilePlan struct {
 	ProfileTemplate      string
 	ProfileID            string
 	ProfilePath          string
+	OriginScope          browserpolicy.OriginScope
 	ConnectorID          string
 	Browser              Kind
 	ProfileClass         ProfileClass
@@ -164,6 +165,7 @@ func (p *RoutePlanner) plan(scope RequestScope, override *RouteOverride) (Profil
 	plan.ProfileTemplate = ""
 	plan.ProfileID, plan.ConnectorID, plan.Endpoint = profile.ID, connector.ID, connector.Endpoint
 	plan.ProfilePath = profile.UserDataDir
+	plan.OriginScope = browserpolicy.OriginScopeForPolicy(policy)
 	plan.Browser, plan.ProfileClass = Kind(profile.Browser), ProfileClass(profile.Class)
 	plan.Headless = false
 	plan.Ownership = ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}

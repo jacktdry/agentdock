@@ -16,7 +16,7 @@ func TestWorkspacePolicies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	policy := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "connector", RequiredProfileID: "profile"}
+	policy := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "connector", RequiredProfileID: "profile", AllowedOrigins: []string{"https://cms.example.com"}}
 	mappings := []WorkspaceRootPolicy{{Root: root, Policy: policy}}
 	cases := []struct {
 		name, path string
@@ -59,10 +59,10 @@ func TestWorkspaceSymlinkAlias(t *testing.T) {
 	if err := os.Symlink(root, alias); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	policy := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "connector", RequiredProfileID: "profile"}
+	policy := BrowserRoutePolicy{Class: WorkspaceCompany, Route: RouteRequiredExternal, RequiredConnectorID: "connector", RequiredProfileID: "profile", AllowedOrigins: []string{"https://cms.example.com"}}
 	canonical, p, err := ClassifyWorkspace(root, []WorkspaceRootPolicy{{Root: alias, Policy: policy}})
 	want, canonicalErr := CanonicalWorkspaceRoot(alias)
-	if err != nil || canonicalErr != nil || canonical != want || p != policy {
+	if err != nil || canonicalErr != nil || canonical != want || !routePoliciesEqual(p, policy) {
 		t.Fatalf("%q %+v %v", canonical, p, err)
 	}
 	if _, err := NormalizeWorkspacePolicies([]WorkspaceRootPolicy{{Root: root, Policy: policy}, {Root: alias, Policy: policy}}); err == nil {

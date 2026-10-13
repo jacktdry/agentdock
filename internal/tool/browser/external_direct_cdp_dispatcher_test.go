@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 type dispatcherCommand struct {
@@ -26,6 +27,7 @@ type dispatcherFixture struct {
 	commands      []dispatcherCommand
 	connections   atomic.Int32
 	snapshotCalls int
+	currentURL    string
 }
 type dispatcherResponder func(*dispatcherFixture, *websocket.Conn, dispatcherCommand) bool
 
@@ -45,11 +47,17 @@ func dispatcherDefaultReply(t *testing.T, f *dispatcherFixture, c *websocket.Con
 	var result any = map[string]any{}
 	switch cmd.Method {
 	case "Target.createTarget":
+		f.mu.Lock()
+		f.currentURL, _ = cmd.Params["url"].(string)
+		f.mu.Unlock()
 		result = map[string]any{"targetId": "owned-target"}
 	case "Target.attachToTarget":
 		result = map[string]any{"sessionId": "owned-session"}
 	case "Target.getTargetInfo":
-		result = map[string]any{"targetInfo": map[string]any{"targetId": "owned-target", "type": "page"}}
+		f.mu.Lock()
+		currentURL := f.currentURL
+		f.mu.Unlock()
+		result = map[string]any{"targetInfo": map[string]any{"targetId": "owned-target", "type": "page", "url": currentURL}}
 	case "Target.closeTarget":
 		result = map[string]any{"success": true}
 	case "Runtime.evaluate":
@@ -66,7 +74,12 @@ func dispatcherDefaultReply(t *testing.T, f *dispatcherFixture, c *websocket.Con
 		result = map[string]any{"object": map[string]any{"objectId": fmt.Sprintf("object-%d", int64(backend))}}
 	case "Runtime.callFunctionOn":
 		result = map[string]any{"result": map[string]any{"value": true}}
-	case "Runtime.releaseObject", "Input.dispatchKeyEvent", "Page.navigate":
+	case "Page.navigate":
+		f.mu.Lock()
+		f.currentURL, _ = cmd.Params["url"].(string)
+		f.mu.Unlock()
+		result = map[string]any{}
+	case "Runtime.releaseObject", "Input.dispatchKeyEvent":
 		result = map[string]any{}
 	case "Page.captureScreenshot":
 		result = map[string]any{"data": "aGVsbG8="}
@@ -122,7 +135,11 @@ func newDispatcherFixture(t *testing.T, responder dispatcherResponder) (*directC
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { relay.Close(); pinnedWait(t, relay.Done()); pinnedWait(t, done) })
-	d, err := newDirectCDPDispatcher(context.Background(), relay)
+	scope, err := browserpolicy.NewOriginScope([]string{"https://example.invalid", "https://cms.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := newDirectCDPDispatcher(context.Background(), relay, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +164,10 @@ func commandCount(cmds []dispatcherCommand, m string) int {
 func TestDirectCDPDispatcherOwnedTargetAndOperations(t *testing.T) {
 	d, f := newDispatcherFixture(t, nil)
 	ctx := context.Background()
-	if err := d.OpenOwnedTarget(ctx, "https://example.invalid/"); err != nil {
+	if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Navigate(ctx, "https://example.invalid/start"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.EvaluateScript(ctx, "() => 'ok'"); err != nil {
@@ -205,7 +225,7 @@ func TestDirectCDPDispatcherOwnedTargetAndOperations(t *testing.T) {
 		}
 	}
 	create := cmds[0]
-	if create.Method != "Target.createTarget" || create.Params["background"] != true || create.Params["hidden"] != true || create.Params["newWindow"] != false || create.Params["forTab"] != false {
+	if create.Method != "Target.createTarget" || create.Params["url"] != "about:blank" || create.Params["background"] != true || create.Params["hidden"] != true || create.Params["newWindow"] != false || create.Params["forTab"] != false {
 		t.Fatalf("create=%+v", create)
 	}
 	for _, c := range cmds {
@@ -267,7 +287,7 @@ func TestDirectCDPDispatcherSecondClaimDoesNotDisruptFirst(t *testing.T) {
 	if err := d.OpenOwnedTarget(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	second, err := newDirectCDPDispatcher(context.Background(), d.relay)
+	second, err := newDirectCDPDispatcher(context.Background(), d.relay, d.originScope)
 	if err == nil || second != nil {
 		t.Fatal("second claimed")
 	}
@@ -276,7 +296,7 @@ func TestDirectCDPDispatcherSecondClaimDoesNotDisruptFirst(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	second, err = newDirectCDPDispatcher(ctx, d.relay)
+	second, err = newDirectCDPDispatcher(ctx, d.relay, d.originScope)
 	if err == nil || second != nil {
 		t.Fatal("canceled second claimed")
 	}
@@ -322,7 +342,7 @@ func TestDirectCDPDispatcherCancellationAfterWriteRetires(t *testing.T) {
 func TestDirectCDPDispatcherTargetMismatchFailsClosed(t *testing.T) {
 	d, f := newDispatcherFixture(t, func(_ *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
 		if cmd.Method == "Target.getTargetInfo" {
-			_ = dispatcherReply(c, cmd, map[string]any{"targetInfo": map[string]any{"targetId": "user-target", "type": "page"}})
+			_ = dispatcherReply(c, cmd, map[string]any{"targetInfo": map[string]any{"targetId": "user-target", "type": "page", "url": "about:blank"}})
 			return true
 		}
 		return false
@@ -335,6 +355,48 @@ func TestDirectCDPDispatcherTargetMismatchFailsClosed(t *testing.T) {
 	}
 	if commandCount(f.recorded(), "Target.closeTarget") != 1 {
 		t.Fatal("cleanup missing")
+	}
+}
+
+func TestDirectCDPDispatcherOriginScope(t *testing.T) {
+	d, f := newDispatcherFixture(t, nil)
+	ctx := context.Background()
+	if err := d.OpenOwnedTarget(ctx, "https://example.invalid/"); err == nil {
+		t.Fatal("non-blank bootstrap target accepted")
+	}
+	if commandCount(f.recorded(), "Target.createTarget") != 0 {
+		t.Fatal("rejected bootstrap sent createTarget")
+	}
+	if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	before := commandCount(f.recorded(), "Page.navigate")
+	for _, raw := range []string{"about:blank", "http://example.invalid/", "https://evil.invalid/", "https://example.invalid.evil/"} {
+		if err := d.Navigate(ctx, raw); err == nil {
+			t.Fatalf("out-of-scope navigation accepted: %s", raw)
+		}
+	}
+	if commandCount(f.recorded(), "Page.navigate") != before {
+		t.Fatal("out-of-scope navigation reached CDP")
+	}
+	if err := d.Navigate(ctx, "https://example.invalid:443/path?q=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.EvaluateScript(ctx, "() => 1"); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.currentURL = "https://evil.invalid/redirected"
+	f.mu.Unlock()
+	before = commandCount(f.recorded(), "Runtime.evaluate")
+	if _, err := d.EvaluateScript(ctx, "() => 2"); err == nil {
+		t.Fatal("out-of-scope current target remained usable")
+	}
+	if commandCount(f.recorded(), "Runtime.evaluate") != before {
+		t.Fatal("out-of-scope target executed operation")
+	}
+	if d.live() {
+		t.Fatal("out-of-scope target did not retire dispatcher")
 	}
 }
 
