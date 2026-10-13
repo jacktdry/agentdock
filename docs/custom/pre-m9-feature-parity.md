@@ -420,6 +420,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
    - 若 AgentDock install/update 會造成 installed-vs-running build mismatch 或破壞使用者正常工作，M9 前修；
    - 若只屬於外部 Codebase Memory 自身 executable 更新的 maintenance 問題，正式標記 post-M9 debt，不擴大 M9 scope。
 
+> **P9 2026-10-14 checkpoint**：腳本治理缺漏已修復（`bfb76f15`），46/46 tracked scripts 受清單管理且無新增 waiver，Script Governance + macOS stable/Next metadata + Next transactional deploy tests PASS。CBM 外部 executable 更新後 supervisor build mismatch 與 Git watcher/manual indexing options conflict 已分開定性；目前唯讀證據未發現 AgentDock Next 安裝／更新會觸碰 CBM binary 或造成現行 mismatch，因此 **CBM 專用維護／跨 ACP Session resource lifecycle 列 post-M9 follow-up**，不擴大 P9 實作。`make check` 仍被 **Shared UI i18n 25 項硬編碼掃描**阻擋；另 `go test ./...` 會將 `dist/.../tmp/go-build*` 視作套件而產生 cgo setup errors，且 macOS Port Observation fixture 已觀察到間歇 `listener_changed`。這三者是**另需排查的獨立 root/release gate**，不能稱完整 root check PASS。詳 [P9 紀錄](pre-m9-progress-2026-10-09.md)。
+
 ### P10 — M9 Release Migration
 
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
