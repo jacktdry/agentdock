@@ -460,6 +460,17 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 > **P8 2026-10-10 約 01:10 更正 gate：** CDP／Remote Debugging 允許，首要要求是共享 Broker 與不干擾 UAT：零反覆提示、不搶焦點、不為每 ACP 新啟 browser。公司 CMS 使用既有 Edge Profile，明確指定 Chrome 時使用 exact Profile；失敗不 silent fallback。managed Headless Chrome DevTools MCP 為候選主路徑；使用者 Profile 可評估 authorized persistent CDP 或 Extension + Native Messaging contingency，均須獨立 UAT、不得繞過同意。**尚未完成新規格實作／部署／live acceptance；歷史 checkpoints 保留。** 詳見 [現行 Browser 決策](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)。
 
+
+## P13 / P14 — Next ChatGPT 卡片與 UI/UX 品質工作線（2026-10-14）
+
+**規劃已接受／實作未開始**。與 P10 Release Migration 的 source-only prep 並行，P10 不正式發佈；不把 UI/UX 審查或尚未驗證的界面宣稱 release-ready。工作線：`feature/next-uiux-audit`。
+
+- **P13 Task Progress 單一即時卡**：選擇性參考 upstream PR #229（目前 open），一個 Task ID 一張進度卡，checkpoint/final_review/complete 只更新該卡。真實 ChatGPT MCP App、權限/Scope、hide/teardown、multi-card polling、full/compact/off 和舊 Plugin metadata cache 必須驗證，既有 task_manage API 相容；不同 Task 絕不錯誤合併。見 [P13 規格](upstream-ports/task-progress-live-card-pr229.md)。
+- **P14 MCP Apps 卡片降噪**：重複 workspace_context、ACP status、model/effort no-change 應縮減卡片密度，重大變更、錯誤、審批需清楚可見；不假設 ChatGPT 可以刪除或原地合併不同工具訊息。見 [P14 規格](mcp-apps-card-noise-reduction.md)。
+- **全頁 UI/UX 審查（UX-0 起）**：從 Next Shared UI 各頁、系統原生選單列/Tray、到 ChatGPT MCP Apps 逐頁檢查功能可用性、狀態來源、loading/空白/error/cancel/retry、固定佔位防 layout shift、文案精簡/進階摺疊、繁體中文、a11y/keyboard/深淺主題/窄版、操作成功/失敗/未知的證據。其檢視/決策/分期驗收以 [UX 圓桌](next-uiux-roundtable-2026-10-14.md) 為準。
+- **Menu Bar/Tray**：參考使用者提供的 stable AgentDock 1.0.1 screenshot；Next Wails 現有 tray 只有 Show/Quit，故「服務健康/連線/正在執行」皆為待設計/待原生驗證，不應臆測已完成。尤其 loading 消失不可使行高跳動；NexusDock 依使用者決定維持「開發中」而不宣稱可用。
+- **排序與合併**：P10 source-only 版本與發佈管線繼續；UX review/P13/P14 可先獨立實作測試並審查後有序合併。正式 RC freeze 與 P11 原生安裝/更新回滾驗收放在 UI/UX 必要修正後；P12 仍是 M9 closeout 後才淘汰重複 native 業務 UI，不因新增 P13/P14 改變其定義。
+
 ## M9 — Release Migration
 
 建立從 `custom/main` 的正式 cross-platform release pipeline。

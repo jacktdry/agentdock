@@ -649,3 +649,5 @@ Worker 成功不等於 Pre-M9 step 完成。
 6. 任何 Next mutation 仍由 stable `mac-dev` 執行；`macbook-air-m3` 只作 Next runtime/connector 驗證。M9 必須等必要 parity + hardening integration review。
 
 除非 repo 文件已被後續 commit 明確 supersede，這個順序是 Pre-M9 的 source of truth。
+
+> **2026-10-14 UI/UX 工作線**：P13 Task Progress 單卡、P14 MCP Apps 降噪、Menu Bar/Tray 狀態與逐頁 Shared UI review 已開獨立工作線，請見 [UX 圓桌](next-uiux-roundtable-2026-10-14.md)。P10 不正式發佈，並行 source 工作不可誤稱 installed native UI UAT。
