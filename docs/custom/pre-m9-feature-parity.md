@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **2026-10-14 P10 macOS 本地候選包驗證**：從已提交 `15b116dd` 真實編出 Next arm64 Wails、Core、Core Skills、App／ZIP／DMG；Core RC 版本、ad-hoc Bundle 身分與 DMG checksum 已核對。完整腳本最後受 Python fixture 候選環境變數污染而 exit 1，隔離後 8 項測試與真實 Bundle 驗證通過；後續已修正 fixture、加 arm64 專用檔名與第 9 項負向／命名測試（9 PASS）。**不是 Universal / Developer ID 正式發佈驗收**；新 Commit 的完整包仍須再驗，詳 [P10 macOS checkpoint](p10-release-preflight.md#2026-10-14-第三批macos-arm64-本地候選包實證未發布)。UIUX unfrozen；無 Tag／Release／Push／安裝／更新。
+
+
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
 
 > **2026-10-14 P10 後續（UIUX 獨立）**：Next Windows 已有獨立 canonical RC metadata／Go overlay 準備工具，但原版 Windows Installer 仍使用 Stable GUID、安裝根目錄、排程工作、Tray AUMID 與 runtime discovery，因此 **Next Setup 仍 fail-closed 禁止產生，P10 未 closeout**；見 [Windows 準備與隔離門檻](p10-windows-packaging.md)。Next 更新路徑已新增預設 disabled/unpublished／拒絕 upstream Stable feed 的來源保護；見 [Next update channel](p10-update-channel.md)。Read-only PR CI 已定義 macOS arm64／Windows amd64+arm64 Core source candidate 驗證（仍待 hosted CI 真實執行）；見 [CI source contract](p10-ci-release-pipeline.md)。三者不依賴 UIUX，現階段未啟用更新、未發佈 Tag／Release、未部署／安裝；發布流程、完整 Next Windows Installer 與 P11 原生驗收不得混同。

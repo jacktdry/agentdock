@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Metadata/negative fixtures; optional real bundle inspection, never execution."""
 import importlib.util
+import os
 from pathlib import Path
 import plistlib
 import subprocess
@@ -23,7 +24,12 @@ class NextPackageTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name)
         output = self.home / "Applications"
-        subprocess.run(["env", "AGENTDOCK_MACOS_APP_VARIANT=next", "zsh", str(ROOT / "packaging/macos/build-app.sh"), "--metadata-only", str(output)], check=True)
+        fixture_env = os.environ.copy()
+        # Candidate build scripts set this for real bundles; metadata fixtures
+        # deliberately exercise the non-candidate path outside repository dist.
+        fixture_env.pop("AGENTDOCK_NEXT_CANDIDATE_MANIFEST", None)
+        fixture_env["AGENTDOCK_MACOS_APP_VARIANT"] = "next"
+        subprocess.run(["zsh", str(ROOT / "packaging/macos/build-app.sh"), "--metadata-only", str(output)], check=True, env=fixture_env)
         self.app = output / "AgentDock Next.app"
         contents = self.app / "Contents"
         for relative in ("MacOS/AgentDock", "Helpers/agentdock", "Helpers/cloudflared", "Helpers/agentdock-arbiter", "Helpers/AgentDockLoginHelper", "Resources/core-skills/manifest.json"):
@@ -31,6 +37,21 @@ class NextPackageTests(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text("fixture")
             p.chmod(0o755)
+
+    def test_architecture_specific_next_artifact_names(self):
+        for variant, arches, expected in (
+            ("next", "arm64", "AgentDock-Next-macos-arm64"),
+            ("next", "arm64,x86_64", "AgentDock-Next-macos-universal"),
+            ("stable", "arm64", "AgentDock-macos-universal"),
+        ):
+            env = os.environ.copy()
+            env["AGENTDOCK_MACOS_APP_VARIANT"] = variant
+            env["AGENTDOCK_MACOS_ARCHES"] = arches
+            values = subprocess.check_output(
+                ["zsh", "-c", 'source packaging/macos/app-identity.sh; print -r -- "$ZIP_NAME" "$DMG_NAME"'],
+                cwd=ROOT, env=env, text=True,
+            ).split()
+            self.assertEqual(values, [expected + ".zip", expected + ".dmg"])
 
     def test_next_contract(self):
         validate_bundle(self.app, signatures=False)

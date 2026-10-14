@@ -89,3 +89,14 @@ rtk proxy go version -m dist/p10-core-smoke/agentdock
 - 以 `GOMAXPROCS=2 GOFLAGS=-p=2 CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 MACOSX_DEPLOYMENT_TARGET=13.0` 及對應 CGo flags 真實建置 `./cmd/agentdock`，只執行無服務副作用的 `version --json`、`go version -m`。
 - **PASS**：`version=0.9.1-rc.1`、`commit=b4092271b07a`（runtime 僅顯示 12 位）、`build_date=2026-10-14T02:33:12Z`；`go version -m` 包含完整 Commit 與 BuildDate；後續 `git status --porcelain` 仍為空。
 - 產物只保存在本工作樹 `dist/p10-clean-core.qWKpBz/agentdock`，未執行服務、安裝、部署、推送、建立 Tag 或 GitHub Release。這是**實際 Core 編譯與版本驗證**，仍**不是**完整 macOS .app/DMG、Windows installer、Next updater channel 或 P11 簽章與原生更新驗收。UI/UX 仍未凍結。
+
+
+## 2026-10-14 第三批：macOS arm64 本地候選包實證（未發布）
+
+- 使用者流程／直接收益：在 UIUX 尚未凍結期間，可以從乾淨的 P10 SHA 檢查「同一候選 Manifest → Next Wails／Core／arbiter → 本地 App／ZIP／DMG」實際打包路徑，避免只靠 source fixture 宣稱可發佈。
+- 來源：**已提交的** `15b116dd`；`0.9.1-rc.1` 只是示範版本，`release_ready=false`、feed disabled/unpublished。候選 JSON 留在本工作樹 `dist/p10-macos-candidate.json`。Stable 安裝／更新、正式 Release、Tag、Push 均未操作。
+- 首次完整 build 因前端 pnpm 網路下載過慢而逾時，後以 repo-local `dist/pnpm-store` 的 `pnpm install --offline --frozen-lockfile` 重用 80 個套件（0 download），前端 `vue-tsc` / Vite 192 modules **PASS**；JS chunk 大於 500 kB 僅效能警告。
+- 本地建置成功產生 arm64 Wails Desktop、Next Core (`version=0.9.1-rc.1`、runtime commit `15b116ddf76e`、UTC BuildDate `2026-10-14T03:14:47Z`)、Core Skills 與 cloudflared payload，皆為 source-only 測試，不安裝／啟動服務。
+- 直接從這些編譯產物執行 `build-app.sh`：**Next App、ZIP、DMG 實際產出，ad-hoc codesign 檢查通過，DMG `hdiutil verify` checksum valid**。第一次整包腳本最後的 Python 套件 fixture 因繼承 `AGENTDOCK_NEXT_CANDIDATE_MANIFEST`，把獨立的 `--metadata-only` fixture 誤判為 candidate，導致整體 exit 1；不是 App 啟動或簽章失敗。隔離環境後 `test-next-shared-package.py <bundle>` **原有 8 項 PASS**，完整實際 Bundle 驗證 PASS。
+- 修正：package fixture 明確移除所繼承的 candidate marker，另加一項 arm64/universal/Stable 名稱驗證，**9 項 PASS**，包含故意設置無效 candidate marker 的負向情境。Next arm64-only 打包原先錯用 `universal` 檔名，現改為使用 `AgentDock-Next-macos-arm64.zip/.dmg`；Stable 及 Next 雙架構命名規則不變。先前已建立的本地 ZIP／DMG 僅在忽略版控的 dist 內重新命名並重新計算 SHA-256，兩項 checksum **PASS**；它們仍是 commit `15b116dd` 的測試包，不能冒充修正後 SHA 的完整 build acceptance。
+- 限制：**僅 arm64**，尚無 x86_64 / 真正 universal 產物；簽章為 `-` ad-hoc，非 Developer ID；沒有 notarization、GitHub Hosted CI、Windows Next installer、正式更新 feed、原生安裝／更新／回滾、P11 UAT。提交本次來源修正後，日後仍需對該新 SHA 執行 clean HEAD 完整包驗證；本記錄不授予 P10 closeout 或公開發佈權限。

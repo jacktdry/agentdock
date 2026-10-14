@@ -29,8 +29,15 @@ LOGIN_SIGN_ID="$BUNDLE_ID.login-helper"
 CLOUDFLARED_SIGN_ID="$BUNDLE_ID.cloudflared"
 ARBITER_SIGN_ID="$BUNDLE_ID.arbiter"
 REGISTRAR_SIGN_ID="$BUNDLE_ID.service-registrar"
-ZIP_NAME="$ARTIFACT_PREFIX-macos-universal.zip"
-DMG_NAME="$ARTIFACT_PREFIX-macos-universal.dmg"
+# Do not advertise a single-architecture Next development build as universal.
+# Full release builds still use arm64,x86_64 and keep the existing feed asset name.
+if [[ "$APP_VARIANT" == next && "${AGENTDOCK_MACOS_ARCHES:-$(uname -m)}" == arm64 ]]; then
+  ZIP_NAME="$ARTIFACT_PREFIX-macos-arm64.zip"
+  DMG_NAME="$ARTIFACT_PREFIX-macos-arm64.dmg"
+else
+  ZIP_NAME="$ARTIFACT_PREFIX-macos-universal.zip"
+  DMG_NAME="$ARTIFACT_PREFIX-macos-universal.dmg"
+fi
 
 write_app_metadata() {
   local CONTENTS_DIR="$1"
