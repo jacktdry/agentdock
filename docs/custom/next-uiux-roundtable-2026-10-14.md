@@ -169,3 +169,54 @@ Next Wails source `desktop/shared-poc/main.go` 目前原生 tray 只有 `Show <p
 6. UX-S5 Menu Bar/Windows Tray 本地化 + 可信唯讀服務狀態與可執行入口；P13/P14 可各自獨立修復與實機聊天驗收。
 
 **與 release 交互**：P10 是 source-only 版本/Tag/Installer/Pipeline prep，繼續不阻擋；必要 UX/權威修正與 ChatGPT Card 工作結束並 UAT 後再凍結 Release Candidate；P11 macOS Developer ID/Updater/Rollback 和 Windows/WSL/Linux 原生驗收不提前混入 UI/UX。
+
+## AI 圓桌第三方 Claude Sonnet 5.5 專家複核（2026-10-14）
+
+> 執行者：AGY ACP `claude-sonnet-5-5`、High effort、Plan Mode，**唯讀**（實際 ACP 執行完畢）。建立在已存在的 Gemini/Codex 兩位 Reviewer Round 1/2 之後，僅進行窄範圍反例審查與主持人整合；**沒有啟動 installed Next GUI、部署或修改程式碼**。原始 Code review 使用指定 store/component/Main tray 以及 P13/P14 規格；下述凡涉及畫面結果均是「待真實 UAT」。
+
+### Claude Round 1 — 對既有結論的挑戰
+
+| 原評估 | Claude 補充／不同意 | Source evidence 與驗證程度 | 收斂決定 |
+| --- | --- | --- | --- |
+| **T02 Connection operation error**（P0） | 問題不只是錯誤被覆蓋；mutation 成功、snapshot refresh 卻失敗時也可能同時顯示 `completed=true`、`snapshot=null` 與 `error`，回傳值卻為 true | `desktop/shared-poc/frontend/src/stores/connection.ts` 的 `runMutation()` 對同一 `error` 賦值、接著 `readSnapshot()` 也會覆寫。Source verified，GUI 提示尚未重現 | **P0**：分開 `actionFeedback` 與 `readError`，保留操作結果；操作成功但刷新失敗需顯示「已受理，最新狀態尚未確認」，不可強行標 complete healthy |
+| **T01 Runtime 初始全 false**（P0） | 舊結論把「讀取失敗」也可能顯示停止說太廣：store 的 `stateKind` 在有 `error` 時會返回 `unavailable`。真正源碼缺口是「首次取得狀態前 false 導致 stopped」，以及 loading 覆蓋最後已知狀態 | `stores/runtime.ts`：`emptyStatus` 初值全 false；`stateKind` 按 `loading → error → !running` 判斷。子欄位還需讀 panel/實機驗收 | **P0 限定補強**：加 `observed=false` 或 null+unknown，修首次載入語意；先不用重寫所有 ViewModel |
+| **T03 ACP stale**（原 P0） | `canInvoke` 依舊 `status` 判斷、readStatus 失敗保存 snapshot 確實存在，但尚無「權限外洩」的 source 證據；Core 再檢查權限 | `stores/acp.ts` source verified；具體操作結果、後端授權與失敗仍待 UAT | **P1**：顯示過期狀態、disabled/重新驗證時機；保留 M8 guard，不新增權限架構 |
+| **T04 OAuth clickable no-op**（P0） | 新增更高價值風險：`authorization` 是**共用單值**，`MCPOAuthStatus.vue` 首選該值而非目前 server 觀察；切換不同 Server／generation 可能短暫顯示前一個的「已授權」，尤其失敗時舊值不清 | `stores/mcp.ts` `authorization`（單例）與 `readAuthorization(server)`、`MCPOAuthStatus.vue` 的 `status`；`MCPPanel.vue` 雖以 serverName:generation key remount detail，Store 仍未依 server/generation 隔離。**Source risk verified，實際錯顯尚未重現** | **P0**：OAuth status 與 callback options 用 `serverName + generation` 或受控當前選取範圍繫結；請求序號拒絕過期 response；Login/Clear disabled 與 `canInvoke` 一致並說明原因 |
+| **T06 Browser loading 跳動**（待測） | Browser refresh 清空 snapshot 是明確 source；然而「某頁必然跳動」沒有坐標證據。MCP 已有 stale 保留模式，可選擇性借用；**不能對 Connection 同樣套用**，因其當前 fail-closed 避免顯示過期 Public URL | `stores/browser.ts` 在 refresh 先設 snapshot=null；`stores/mcp.ts` 已有 stale gate。視覺幅度未測 | **P1 視覺 + P0 保真**：允許 Browser 顯示明標過期的上次 Snapshot，動作仍 guard；Connection 保留 fail-closed 清空授權/連線快照行為，僅先分離錯誤回饋 |
+
+### Claude 發現最容易忽略的產品錯誤：隱藏視窗時的 Tray 假健康
+
+`desktop/shared-poc/main.go` 的 Wails Tray 目前只有靜態 Show/Quit，**沒有具備 provenance 的 Core health reader**。關閉主視窗後前端的 refresh/visibility 可能停下來，讓 Tray 若直接讀 Vue Store 就長期顯示過期綠燈。**這是設計風險，不是已發生的 bug**。
+
+**主持人採用的最小 MVP 契約：**
+1. Tray 由 Next-owned Go/desktop authority 直接取得**一次性、有期限的唯讀健康資料**（具體是否已有 Service 需進 UX-S5 前實查），不能從 `running` 或 Vue 的 `false` 推論健康。附 `source`、`observedAt`、`stale` 與分層狀態。
+2. 優先考慮「使用者打開 Tray／前景恢復」等既有事件觸發有界 refresh；先確認 Wails v3 有無 menu-show hook，沒有就採低頻 TTL/顯式刷新，不照搬舊 Swift 的 15s 輪詢、不新增 daemon。必要資料源未準備好時，**可先只交付繁中 Show/Quit＋未知狀態**，不得先放綠燈。
+3. MVP 僅用能證明的 Core health、必要時新鮮的 M8 attention count（不確定則 `—`，非 0）、public endpoint 已驗證狀態（必核對 `configRevision` / `tunnelGeneration`）。不宣稱 ChatGPT 連線正常、MCP/ACP 全可用、Nexus 已配置、升級已最新；敏感憑證不在 Tray 顯示。
+4. `Quit` 只退出 UI、**不等於停止 Core**，需清楚說明。暫不在 Tray 新增 Restart Core；須待 Next-owned authority + confirmation 與原生非干擾 UAT 完成。更新標籤不呼叫 `Show`、不偷焦點。
+
+### Loading／卡高設計契約（Claude 建議，主持人採用）
+
+- 沿用 `OperationStatus.vue`，新增 `idle/busy/ok/error/unknown/stale` 可辨識的顯示狀態，**舊版 `busy/error/completed` props 保持相容**，逐步採用。以 `--ad-status-row-min-h` 這類 token 預留 1–2 行，優先相對字級 `em/lh` 以支援縮放；`<p>` 不隨切換卸載，長錯誤可展開、不可裁掉核心內容。
+- 有可靠上次 snapshot 時顯示 `stale` 與 timestamp；只有**無任何已驗證資料**時用 3 種最低成本的摘要／列表／詳細區占位。**Connection 的敏感配置與端點不應無條件保留**：需看來源與安全語意分頁決定 fail-closed / hold-last-value。
+- 原生 UAT 不假定 WKWebView 可用 `PerformanceObserver.layout-shift`；以控件 `getBoundingClientRect` 或同一縮放倍率截圖測首要 CTA/卡片的位移 px，初始、刷新、成功、錯誤、過期、重試各 10 次，macOS native 最低 760px 與一般 1080px，Windows 另驗。**先量基線再設定門檻**，不要寫「已做到 CLS=0」。
+
+### P13／P14 邊界、額外評估
+
+Claude 確認既有規格已正確防止三種誤區：不同 Tool Message 不假裝能直接替換、`UIVisibility: ["app"]` 不等於服務端 ACL、no-op 必由權威 state 產生。
+
+補充：`visibilitychange` 只保證 Host 頁面隱藏，不保證**卡片捲離視窗但頁面還可見**時停止輪詢；評估 `IntersectionObserver`（視實際 MCP App iframe Host 支援）或 polling TTL/backoff，上限實測，**不預先假設 Host 行為**。P13 Task 單卡和 P14 MCP App 卡片降噪與 Tray 原生介面**分開 UAT / 分開完成門檻**，不綁同一 UX-S5 結案。
+
+### Round 2 兩個問題／主持人回覆
+
+1. **問：隱藏視窗後 Tray 靠什麼維持可信資料？** 決定 Go 端使用 Next-only 可信快照＋觀測時間，若未獲可信來源退回未知／僅提供 Show/Quit；這不阻擋其他 UI 修改。
+2. **問：Connection 讀取失敗清空快照是否也要因防跳動而保留？** **不全面保留**。Connection 的 port/OAuth/Public URL 很可能隨 generation/revision 失效；保留易誤導。先維持 fail-closed，只拆 mutation feedback 和 read error；待實測再設限定安全的摘要舊值。
+
+### 修訂後的最高優先序與可驗收證據
+
+| 順序 | 切片 | 通過標準（source test → installed UAT） |
+| --- | --- | --- |
+| **1 / P0** | UX-S1：Connection actionFeedback/readError 分離、Runtime 初次尚未觀測不可標 stopped | mutation 失敗後 read 成功，原錯誤仍明確可見；mutation accepted/read 失敗不能假稱完成可用；Runtime 首次 `observed=false` 為 unknown，真停機才 stopped |
+| **2 / P0** | UX-S2：MCP OAuth status server/generation scoped + stale disabled | Server A→B 切換、A 延遲成功、B 失敗均不顯示 A 已授權；stale/capability 不足 button disabled 且有原因；不觸發無提示額外 OAuth |
+| **3 / P1** | UX-S3：Browser client stale snapshot、共用 fixed status slot、Native UI 位移基線 | Browser refresh 時顯示「上次觀測」而不整塊消失；畫面不同狀態切換有測量 px 與 baseline，CTA 不因 loading 進出跳動；未經量測不宣稱視覺 PASS |
+
+**驗證等級：** 本次只有源碼和文件複核，全部視覺 UAT 待實作後執行。與 P10 release-prep 平行，不混入 P11，stable Mac-Dev/Next live runtime 保持不變。
