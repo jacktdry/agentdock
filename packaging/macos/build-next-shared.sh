@@ -2,9 +2,13 @@
 # Repository-only arm64 product build. Never installs or executes the product.
 set -euo pipefail
 ROOT_DIR="${0:A:h:h:h}"
-[[ $# == 1 && "$(uname -sm)" == "Darwin arm64" ]] || {
-  print -u2 -- "Usage: build-next-shared.sh /absolute/path/to/arm64/cloudflared"; exit 2
+[[ ( $# == 1 || ( $# == 3 && "$2" == --candidate-manifest ) ) && "$(uname -sm)" == "Darwin arm64" ]] || {
+  print -u2 -- "Usage: build-next-shared.sh /absolute/path/to/arm64/cloudflared [--candidate-manifest MANIFEST]"; exit 2
 }
+export AGENTDOCK_NEXT_CANDIDATE_MANIFEST="${3:-}"
+if [[ -n "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" ]]; then
+  AGENTDOCK_NEXT_CANDIDATE_MANIFEST="${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:A}"
+fi
 CLOUDFLARED_SOURCE="$1"
 [[ "$CLOUDFLARED_SOURCE" == /* && -f "$CLOUDFLARED_SOURCE" && ! -L "$CLOUDFLARED_SOURCE" ]] || exit 1
 [[ "$(file "$CLOUDFLARED_SOURCE")" == *"arm64"* ]] || exit 1
@@ -30,6 +34,13 @@ export npm_config_store_dir="${npm_config_store_dir:-$ROOT_DIR/dist/pnpm-store}"
 VERSION="$(go run ./tools/release version)"
 SOURCE_COMMIT="$(git rev-parse HEAD)"
 SOURCE_DATE="$(git show -s --format=%cI HEAD)"
+CORE_BUILD_ARGS=()
+if [[ -n "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" ]]; then
+  # Validate before frontend/GUI compilation. Only this explicit option enables RC.
+  candidate_values="$(go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" --output "$BUILD_DIR")"
+  IFS=$'\t' read -r VERSION SOURCE_COMMIT SOURCE_DATE candidate_short candidate_build <<< "$candidate_values"
+  CORE_BUILD_ARGS=(-overlay "$BUILD_DIR/overlay.json")
+fi
 (
   cd desktop/shared-poc/frontend
   pnpm install --frozen-lockfile --store-dir "$npm_config_store_dir"
@@ -43,7 +54,7 @@ SOURCE_DATE="$(git show -s --format=%cI HEAD)"
     -ldflags="-s -w -X 'main.productName=AgentDock Next' -X main.desktopVariant=next" \
     -o "$BUILD_DIR/AgentDock" .
 )
-CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -mod=readonly -trimpath \
+CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build "${CORE_BUILD_ARGS[@]}" -mod=readonly -trimpath \
   -ldflags="-s -w -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$SOURCE_COMMIT -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$SOURCE_DATE" \
   -o "$BUILD_DIR/core/bin/agentdock" ./cmd/agentdock
 python3 packaging/build-core-skill-bundle.py --output "$BUILD_DIR/core/share/agentdock/core-skills"

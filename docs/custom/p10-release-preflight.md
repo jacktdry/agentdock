@@ -50,9 +50,35 @@ rtk git diff --check
 ## 剩餘 gate / 下一步
 
 1. **UIUX unfrozen、custom/main 尚未整合**；P10 pipeline source authorization / parity integration 仍待 upstream owner 收斂。
-2. Stable `internal/buildinfo.Version` 仍是常數；現有 `build-next-shared.sh` 仍取 Stable version，Core 只注入 Commit/BuildDate。本批 JSON 的 Next Core Version 是要求值，尚未接入真正建置；不得把這支腳本產物稱符合 RC 合約。
-3. `app-identity.sh` 現在用同一 `$VERSION` 寫兩個 CFBundle 欄位，需要後續分離 metadata；既有 Next shared builder 僅 arm64，不能因產物名稱含 universal 就視為 universal。Windows Next identity / installer、完整 artifact/hash/metadata verify 亦待實作。
+2. 第二批已接入 opt-in Next overlay 與 plist 分離版本（見下方）；Stable `internal/buildinfo.Version` 仍是常數。真正 clean HEAD 的候選 Core binary smoke 待 orchestrator 整合後執行，fixture compile 不是 RC artifact acceptance。
+3. Next shared builder 仍僅 arm64，不能因名稱含 universal 就視為 universal。Windows Next identity / installer、完整 artifact/hash/metadata verify 亦待實作。
 4. **`internal/selfupdate/update.go` 的 `defaultReleaseAPI` 仍指向 upstream `uvwt/agentdock/releases/latest`，尚未 Next channelize**。本批不更改或呼叫 updater；Next feed 必須保持 disabled/unpublished，直到 channel/identity fail-closed gate 完成。
 5. P11：Developer ID signed macOS 13 deployment target、certificate-bound update → trial → commit、rollback/interrupted recovery、Windows/WSL/Linux helper native UAT、install/update/recovery。Cross-build、source tests 或本 preflight 都不能取代这些驗收。
 
 最接近的後續使用者流程：UIUX 凍結與 owner 整合後，在 clean immutable SHA 將本契約接到既有 Next build metadata，核對真正 artifact；其後才進 P11。沒有安裝、發布、服務或 Stable retirement 授權。
+
+## 2026-10-14 第二批：opt-in RC metadata 接線
+
+- 痛點／直接改善：同一 manifest 驅動 Core、bundled arbiter 的 RC Version/Commit/BuildDate 與 App 分離版本，避免 RC Core 與 Stable arbiter 的更新／回滾版本不一致。
+- 最小實作：`tools/release next-candidate --manifest MANIFEST [--output DIR]` 沿用 canonical preflight，逐 byte 驗證 JSON，核對 HEAD、UTC source date、Next identity、clean checkout（含 untracked）。只在 repo-local dist 子目錄 exclusive-create overlay，不改 Stable 常數、version/verify-version 或 `release.yml`。
+- 明確 opt-in：`build-next-shared.sh CLOUDFLARED --candidate-manifest MANIFEST` 將已驗證 provenance 與 overlay 接到 Core。`build-app.sh` 的 `AGENTDOCK_NEXT_CANDIDATE_MANIFEST` 重新驗證 manifest，限制 candidate output 到 dist；arbiter 使用同一 manifest 的 overlay 和 Commit/BuildDate。ShortVersion = M.m.p、BundleVersion = B.0.0；未 opt-in 的 dev/Stable/metadata-only 行為維持。
+- 驗收與非干擾：focused canonical/clean/dirty tests、isolated Git fixture 的實際 metadata-only plist、tiny Go binary `version --json` / `go version -m`、實際 arbiter compile / `go version -m`。不執行 arbiter、App、服務或 updater；fixture 不是 clean HEAD release acceptance。
+- 尚未做：UIUX unfrozen、Windows identity/installer、Next updater feeds、macOS full signed/universal release、候選安裝與真實更新／回滾 UAT；P10/M9 尚未 closeout。`remaining_gates` 保留第一批 source-contract checklist，不自動授予 closeout；本 checkpoint 與 orchestrator artifact 驗收才是完成度依據。
+
+整合後 orchestrator 在 **clean HEAD** 重新產生 manifest，再執行下面的準備與只讀查核；示例不是發布授權：
+
+```sh
+rtk proxy mkdir -p dist/p10-core-smoke
+rtk proxy go run ./tools/release next-candidate --manifest /private/tmp/agentdock-p10-candidate.json --output "$PWD/dist/p10-core-smoke"
+# 上一步 TSV 提供已驗證 version / full commit / UTC date / short / build。
+# 以下 linker placeholders 必須換成該 verified full commit/date。
+rtk proxy go build -mod=readonly -overlay "$PWD/dist/p10-core-smoke/overlay.json" \
+  -ldflags "-X github.com/uvwt/agentdock/internal/buildinfo.Commit=<verified-full-commit> -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=<verified-UTC-date>" \
+  -o dist/p10-core-smoke/agentdock ./cmd/agentdock
+rtk proxy dist/p10-core-smoke/agentdock version --json
+rtk proxy go version -m dist/p10-core-smoke/agentdock
+```
+
+核對完整 RC version、12 位 runtime Commit、UTC BuildDate；完整 40 位 commit 用 `go version -m` linker metadata 核對。overlay output 必須 fresh。修改中的 dirty checkout 拒絕候選建置，不以自行 commit 或放寬 gate 跑 smoke。沒有完整 GUI/DMG build、簽章、安裝、tag/push、發布或 P11 改造。Next CI 仍 `contents: read`、無 publish；hosted CI 未執行。
+
+本批驗證紀錄：orchestrator 回報 focused `go test ./tools/release ./internal/buildinfo -count=1`、`zsh -n`、diff check PASS。Worker 最後新增／修正部分以 `go test ./tools/release -run '^TestNext(ArbiterOverlayBuild|CandidatePlistFixture)$' -count=1` PASS（16.964s），並完成 `git diff --check`。先前 worker fixture 曾因預設 Go cache 的 sandbox 寫入限制及 macOS temp symlink 路徑失敗；後者已以 canonical temp root 修正，上述兩項重驗 PASS。沒有再重跑整組測試或完整建置。

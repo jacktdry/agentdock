@@ -1,5 +1,11 @@
 # AgentDock Next — Pre-M9 最新進度（2026-10-09）
 
+## 2026-10-14 P10 第二批 Next RC metadata（未發布）
+
+- 已接通明確 opt-in manifest → Next-only Go overlay → Core 與 bundled arbiter RC Version/Commit/BuildDate；macOS ShortVersion 與 BundleVersion 分離。canonical identity/HEAD/UTC date/clean checkout fail-closed，repo-local output；Stable 常數與 release workflow 不變。
+- 驗證限 focused Go tests、小型 binary 編入 fixture、metadata-only plist、arbiter 實際 compile 與只讀 build metadata。修改中的工作樹不能作 candidate；真正 clean HEAD Core smoke 留給 orchestrator 整合後執行。沒有 GUI build、簽章、服務、安裝、更新或發布。
+- UIUX unfrozen、Windows identity、Next updater feeds、macOS full signed/universal release 與更新／回滾 native UAT 尚未完成；不宣稱 bundled runtime 的完整安裝驗收。詳見 [P10 preflight](p10-release-preflight.md#2026-10-14-第二批opt-in-rc-metadata-接線)。
+
 ## 2026-10-10 P8-B ACPBridge 三 Session 真實 Headless 整合（SOURCE-ONLY）
 
 - 最新 `TestACPBridgeSharedRealHeadless` **真實 PASS（46.76s）**：獨立 Headless Chrome＋cached MCP 1.7.0 由 budgeted rotating ACPBridge 連線，三個 Session Token 共用單一 MCP/Chrome，交錯操作隔離，最後一租約釋放後先完全回收，第二世代才重新建立。全程 peak Chrome main=1、兩個 generation、舊租約拒絕、test-owned 程序無殘留、budget slot/owner claims=0；未接管使用者 Chrome/Edge。先前 `list_pages` 傳 nil 造成 MCP schema 錯誤，已改為空 JSON object，未放寬驗證。

@@ -12,6 +12,15 @@ OFFLINE_PAYLOAD_DIR="${AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR:-}"
 MIN_VERSION="${AGENTDOCK_MACOS_MIN_VERSION:-13.0}"
 # Fixed flavor contract; shared with the metadata-only fixture path.
 source "$ROOT_DIR/packaging/macos/app-identity.sh"
+if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
+  [[ "$APP_VARIANT" == next ]] || { print -u2 -- "RC manifest requires Next identity"; exit 1; }
+  candidate_output="$OUTPUT_DIR"
+  [[ "${1:-}" != --metadata-only ]] || candidate_output="${2:-}"
+  [[ -n "$candidate_output" ]] || exit 1
+  candidate_values="$(cd "$ROOT_DIR" && go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" --check-output "$candidate_output")"
+  IFS=$'\t' read -r candidate_version candidate_commit candidate_date candidate_short candidate_build <<< "$candidate_values"
+  [[ "${1:-}" == --metadata-only || "${1:-}" == "$candidate_version" ]] || { print -u2 -- "RC App version mismatch"; exit 1; }
+fi
 # Only the Next product packager may supply a Shared Desktop entrypoint.
 SHARED_EXECUTABLE="${AGENTDOCK_MACOS_SHARED_EXECUTABLE:-}"
 if [[ -n "$SHARED_EXECUTABLE" ]]; then
@@ -104,6 +113,16 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentdock-macos-app.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$OUTPUT_DIR"
+ARBITER_BUILD_ARGS=()
+NEXT_OVERLAY_DIR=''
+if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
+  NEXT_OVERLAY_DIR="$(mktemp -d "$OUTPUT_DIR/.next-overlay.XXXXXX")"
+  trap 'rm -rf "$TMP_DIR" "$NEXT_OVERLAY_DIR"' EXIT
+  (cd "$ROOT_DIR" && go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" --output "$NEXT_OVERLAY_DIR") >/dev/null
+  ARBITER_BUILD_ARGS=(-overlay "$NEXT_OVERLAY_DIR/overlay.json" -ldflags "-s -w -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$candidate_commit -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$candidate_date")
+else
+  ARBITER_BUILD_ARGS=(-ldflags '-s -w')
+fi
 rm -rf \
   "$OUTPUT_DIR/$APP_BUNDLE_NAME" \
   "$OUTPUT_DIR/$DMG_NAME" \
@@ -272,7 +291,7 @@ for release_architecture in "${release_architectures[@]}"; do
   (
     cd "$ROOT_DIR"
     CGO_ENABLED=0 GOOS=darwin GOARCH="$release_architecture" \
-      go build -trimpath -ldflags '-s -w' -o "$arbiter_binary" ./cmd/agentdock-arbiter
+      go build -trimpath "${ARBITER_BUILD_ARGS[@]}" -o "$arbiter_binary" ./cmd/agentdock-arbiter
   )
   arbiter_file_output="$(file "$arbiter_binary")"
   [[ "$arbiter_file_output" == *"$expected_file_architecture"* ]] || \

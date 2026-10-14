@@ -26,6 +26,8 @@ func run(args []string, stdout io.Writer) error {
 		return errors.New("用法：release <catalog|version|verify-version|verify-dist|checksum> [参数]")
 	}
 	switch args[0] {
+	case "next-candidate":
+		return runNextCandidate(args[1:], stdout)
 	case "next-preflight":
 		return runNextPreflight(args[1:], stdout)
 	case "version":

@@ -34,6 +34,14 @@ DMG_NAME="$ARTIFACT_PREFIX-macos-universal.dmg"
 
 write_app_metadata() {
   local CONTENTS_DIR="$1"
+  local SHORT_VERSION="$VERSION" BUILD_VERSION="$VERSION"
+  if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
+    [[ "$APP_VARIANT" == next ]] || { print -u2 -- "RC manifest requires Next identity"; return 1; }
+    local candidate_values candidate_version candidate_commit candidate_date
+    candidate_values="$(cd "$ROOT_DIR" && go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST")" || return 1
+    IFS=$'\t' read -r candidate_version candidate_commit candidate_date SHORT_VERSION BUILD_VERSION <<< "$candidate_values"
+    [[ "$VERSION" == "$candidate_version" || "$VERSION" == 0.0.0 ]] || { print -u2 -- "RC App version mismatch"; return 1; }
+  fi
   local LAUNCH_AGENTS_DIR="$CONTENTS_DIR/Library/LaunchAgents"
   mkdir -p "$LAUNCH_AGENTS_DIR"
 cat > "$LAUNCH_AGENTS_DIR/${CORE_LABEL}.plist" <<PLIST
@@ -148,9 +156,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
+  <string>$SHORT_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>$VERSION</string>
+  <string>$BUILD_VERSION</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_VERSION</string>
   <key>LSUIElement</key>
