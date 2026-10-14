@@ -10,7 +10,7 @@ import { useRuntimeStore } from '../../stores/runtime'
 const { t } = useI18n()
 const runtime = useRuntimeStore()
 const contract = useContractStore()
-const { status, runtimeRoot, loading, actionPending, error, announcement, stateKind, stateLabel } =
+const { status, observed, runtimeRoot, loading, actionPending, error, announcement, stateKind, stateLabel } =
   storeToRefs(runtime)
 const confirmationAction = ref<RuntimeActionName | null>(null)
 
@@ -65,19 +65,19 @@ function cancelConfirmation() {
     <dl class="status-grid">
       <div>
         <dt>{{ t('runtime.process') }}</dt>
-        <dd>{{ status.running ? t('common.running') : t('common.stopped') }}</dd>
+        <dd>{{ !observed || !!error ? t('common.unknown') : status.running ? t('common.running') : t('common.stopped') }}</dd>
       </div>
       <div>
         <dt>{{ t('runtime.health') }}</dt>
-        <dd>{{ status.healthy ? t('common.healthy') : t('common.not_healthy') }}</dd>
+        <dd>{{ !observed || !!error ? t('common.unknown') : status.healthy ? t('common.healthy') : t('common.not_healthy') }}</dd>
       </div>
       <div>
         <dt>{{ t('runtime.autostart') }}</dt>
-        <dd>{{ status.startupEnabled ? t('common.enabled') : t('common.disabled') }}</dd>
+        <dd>{{ !observed || !!error ? t('common.unknown') : status.startupEnabled ? t('common.enabled') : t('common.disabled') }}</dd>
       </div>
       <div>
         <dt>{{ t('runtime.nexus') }}</dt>
-        <dd>{{ status.nexusConnected ? t('common.connected') : t('common.not_connected') }}</dd>
+        <dd>{{ !observed || !!error ? t('common.unknown') : status.nexusConnected ? t('common.connected') : t('common.not_connected') }}</dd>
       </div>
     </dl>
 

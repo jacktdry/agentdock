@@ -10,7 +10,9 @@ export const useBrowserStore = defineStore('browser', () => {
   const snapshot = ref<Snapshot | null>(null)
   const busy = ref(false)
   const error = ref<MessageKey | null>(null)
+  const clientStale = ref(false)
   const availabilityKey = computed<MessageKey>(() => {
+    if (clientStale.value) return 'browser.core_unavailable'
     switch (snapshot.value?.availability) {
       case 'available': return 'browser.available'
       case 'browser_disabled': return 'browser.browser_disabled'
@@ -21,7 +23,7 @@ export const useBrowserStore = defineStore('browser', () => {
   })
   const stateKey = computed<MessageKey>(() => {
     if (snapshot.value?.availability !== 'available') return 'browser.unavailable'
-    if (snapshot.value.stale) return 'browser.stale'
+    if (clientStale.value || snapshot.value.stale) return 'browser.stale'
     switch (snapshot.value.state) {
       case 'idle': return 'browser.idle'
       case 'leases_present': return 'browser.leases_present'
@@ -33,25 +35,28 @@ export const useBrowserStore = defineStore('browser', () => {
   async function refresh() {
     if (busy.value) return
     busy.value = true
-    snapshot.value = null
     error.value = null
     try {
       await contract.load()
       if (contract.error || !contract.canInvoke(Domain.DomainBrowser, 'snapshot')) {
+        clientStale.value = snapshot.value !== null
         error.value = 'browser.capability_unavailable'
         return
       }
       const result = await desktopApi.browserSnapshot()
-      if (result.error || result.snapshot.availability === 'core_unavailable') {
+      if (result.error || !result.snapshot || result.snapshot.availability === 'core_unavailable') {
+        clientStale.value = snapshot.value !== null
         error.value = 'browser.core_unavailable'
         return
       }
       snapshot.value = result.snapshot
+      clientStale.value = false
     } catch {
+      clientStale.value = snapshot.value !== null
       error.value = 'browser.snapshot_unavailable'
     } finally {
       busy.value = false
     }
   }
-  return { snapshot, busy, error, availabilityKey, stateKey, refresh }
+  return { snapshot, busy, error, clientStale, availabilityKey, stateKey, refresh }
 })

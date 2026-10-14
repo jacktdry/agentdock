@@ -39,18 +39,20 @@ describe('read-only browser observations', () => {
     else mocks.load.mockRejectedValue(new Error('/secret/token'))
     await store.refresh()
     expect(mocks.snapshot).toHaveBeenCalledTimes(1)
-    expect(store.snapshot).toBeNull()
+    expect(store.snapshot).toEqual(idle())
+    expect(store.clientStale).toBe(true)
     expect(JSON.stringify(store.error)).not.toContain('secret')
   })
-  it.each(['error', 'exception', 'core_unavailable'])('clears previous observation on %s instead of reporting idle', async mode => {
+  it.each(['error', 'exception', 'core_unavailable'])('marks previous observation stale on %s instead of reporting current idle', async mode => {
     const store = useBrowserStore()
     await store.refresh()
     expect(store.stateKey).toBe('browser.idle')
     if (mode === 'exception') mocks.snapshot.mockRejectedValue(new Error('/secret/token'))
     else mocks.snapshot.mockResolvedValue({ snapshot: { ...idle(), availability: 'core_unavailable' }, error: mode === 'error' ? { message: '/secret/token' } : undefined })
     await store.refresh()
-    expect(store.snapshot).toBeNull()
-    expect(store.stateKey).toBe('browser.unavailable')
+    expect(store.snapshot).toEqual(idle())
+    expect(store.clientStale).toBe(true)
+    expect(store.stateKey).toBe('browser.stale')
     expect(store.error).toBe(mode === 'exception' ? 'browser.snapshot_unavailable' : 'browser.core_unavailable')
   })
   it.each(['browser_disabled', 'acp_disabled', 'broker_unavailable'])('distinguishes %s from confirmed idle', async availability => {
@@ -76,13 +78,13 @@ describe('read-only browser observations', () => {
     expect(store.availabilityKey).toBe('browser.available')
     expect(store.stateKey).toBe('browser.stale')
   })
-  it('clears counters during refresh and prevents concurrent duplicate reads', async () => {
+  it('keeps last-known counters during refresh and prevents concurrent duplicate reads', async () => {
     const store = useBrowserStore()
     await store.refresh()
     let finish!: (value: { snapshot: Snapshot }) => void
     mocks.snapshot.mockReturnValue(new Promise(resolve => { finish = resolve }))
     const pending = store.refresh()
-    expect(store.snapshot).toBeNull()
+    expect(store.snapshot).toEqual(idle())
     await store.refresh()
     expect(mocks.snapshot).toHaveBeenCalledTimes(2)
     finish({ snapshot: idle() }); await pending

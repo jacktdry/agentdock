@@ -304,3 +304,70 @@ describe('mcp_store_authority', () => {
     store.stopOAuthPolling()
   })
 })
+
+
+describe('MCP OAuth status is scoped to server and generation', () => {
+  const other = { ...server, name: 'other', displayName: 'Other', generation: 'gen-other' }
+  it('never displays server A authorization on server B while reads complete out of order', async () => {
+    mocks.snapshot.mockResolvedValueOnce({ snapshot: { ...snapshot, servers: [server, other] }, error: null })
+    const store = useMCPStore()
+    await store.refresh()
+    let resolveA!: (value: unknown) => void
+    mocks.authorizationStatus.mockImplementationOnce(() => new Promise(resolve => { resolveA = resolve }))
+      .mockResolvedValueOnce({ authorization: { status: 'unauthorized', callbackOptions: [] }, error: null })
+    const readA = store.readAuthorization(server)
+    const readB = store.readAuthorization(other)
+    await readB
+    expect(store.authorizationFor(other)?.status).toBe('unauthorized')
+    expect(store.authorizationFor(server)).toBeNull()
+    resolveA({ authorization: { status: 'authorized', callbackOptions: [] }, error: null })
+    await readA
+    expect(store.authorizationFor(other)?.status).toBe('unauthorized')
+    expect(store.authorizationFor(server)).toBeNull()
+  })
+
+  it('invalidates prior authorization on generation rollover without reusing callback options', async () => {
+    const store = useMCPStore()
+    await store.refresh()
+    mocks.authorizationStatus.mockResolvedValueOnce({ authorization: {
+      status: 'authorized', callbackOptions: [{ id: 'local', label: 'Local' }],
+    }, error: null })
+    await store.readAuthorization(server)
+    expect(store.authorizationFor(server)?.status).toBe('authorized')
+    expect(store.callbackOptionsFor(server)).toHaveLength(1)
+
+    const next = { ...server, generation: 'gen-2' }
+    mocks.snapshot.mockResolvedValueOnce({ snapshot: { ...snapshot, servers: [next] }, error: null })
+    await store.refresh()
+    expect(store.authorizationFor(next)).toBeNull()
+    expect(store.callbackOptionsFor(next)).toHaveLength(0)
+    expect(store.authorizationFor(server)).toBeNull()
+  })
+
+  it('does not retain authorized state when a subsequent authorization read fails', async () => {
+    const store = useMCPStore()
+    await store.refresh()
+    mocks.authorizationStatus.mockResolvedValueOnce({ authorization: { status: 'authorized', callbackOptions: [] }, error: null })
+    await store.readAuthorization(server)
+    expect(store.authorizationFor(server)?.status).toBe('authorized')
+    mocks.authorizationStatus.mockResolvedValueOnce({
+      error: { code: 'auth_read_failed', message: '', category: 'unavailable', retryable: true },
+    })
+    await store.readAuthorization(server)
+    expect(store.authorizationFor(server)).toBeNull()
+    expect(store.callbackOptionsFor(server)).toHaveLength(0)
+  })
+
+  it('rejects OAuth mutations while snapshot is stale and does not open a provider', async () => {
+    const store = useMCPStore()
+    await store.refresh()
+    mocks.snapshot.mockResolvedValueOnce({ snapshot, error: { code: 'mcp_offline', category: 'unavailable', message: '', retryable: true } })
+    await store.refresh()
+    expect(store.canInvoke('authorize', server)).toBe(false)
+    expect(store.canInvoke('clearAuthorization', server)).toBe(false)
+    expect(await store.authorize(server, '', 'rev-1', 'gen-1')).toBeNull()
+    expect(mocks.authorize).not.toHaveBeenCalled()
+    expect(await store.clearAuthorization(server, 'rev-1', 'gen-1')).toBeNull()
+    expect(mocks.clearAuthorization).not.toHaveBeenCalled()
+  })
+})

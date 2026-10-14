@@ -25,6 +25,7 @@ const actionMessageKeys: Record<RuntimeActionName, MessageKey> = {
 
 export const useRuntimeStore = defineStore('runtime', () => {
   const status = ref<RuntimeStatus>(emptyStatus())
+  const observed = ref(false)
   const runtimeRoot = ref('')
   const loading = ref(false)
   const actionPending = ref<RuntimeActionName | null>(null)
@@ -34,6 +35,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
   const stateKind = computed(() => {
     if (loading.value) return 'loading'
     if (error.value) return 'unavailable'
+    if (!observed.value) return 'unknown'
     if (!status.value.running) return 'stopped'
     return status.value.healthy ? 'healthy' : 'running'
   })
@@ -46,6 +48,8 @@ export const useRuntimeStore = defineStore('runtime', () => {
         return t('common.unavailable')
       case 'stopped':
         return t('common.stopped')
+      case 'unknown':
+        return t('common.unknown')
       case 'healthy':
         return t('common.healthy')
       default:
@@ -62,9 +66,12 @@ export const useRuntimeStore = defineStore('runtime', () => {
       runtimeRoot.value = result.runtimeRoot || ''
       status.value = result.status ?? emptyStatus()
       error.value = result.error ?? null
+      observed.value = !!result.status && !error.value
       announcement.value = error.value
         ? t('runtime.status_failed', { message: errorMessage(error.value) })
-        : t('runtime.status_summary', { state: stateLabel.value })
+        : t('runtime.status_summary', { state: observed.value
+          ? t(!status.value.running ? 'common.stopped' : status.value.healthy ? 'common.healthy' : 'common.running')
+          : t('common.unknown') })
     } catch (caught) {
       error.value = clientError('runtime_call_failed', caught)
       announcement.value = t('runtime.status_failed', { message: errorMessage(error.value) })
@@ -101,6 +108,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
 
   return {
     status,
+    observed,
     runtimeRoot,
     loading,
     actionPending,

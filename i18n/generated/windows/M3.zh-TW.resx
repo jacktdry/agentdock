@@ -2006,7 +2006,7 @@
     <value>請使用允許的 HTTPS 伺服器網址或本機回環 HTTP 開發端點，勿含帳密、查詢參數或片段。</value>
   </data>
   <data name="nexus.help" xml:space="preserve">
-    <value>NexusDock 將此 Next 裝置連結至 Nexus。配對與 ChatGPT MCP、通道及 OAuth 存取分開；已配對不代表已連線。</value>
+    <value>NexusDock 尚在開發中，目前僅提供唯讀狀態檢視。配對、取代配對與 Core 重新啟動功能尚未開放；此處顯示的資訊不代表已完成連線。</value>
   </data>
   <data name="nexus.identity_saved" xml:space="preserve">
     <value>身分資料已儲存，這本身不代表已連線。</value>
