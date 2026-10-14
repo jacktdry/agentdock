@@ -8,6 +8,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import stat
+import struct
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -18,6 +21,143 @@ INSTALLER_BLOCKER = (
     "Next runtime, complete verified payload, install/uninstall ownership and "
     "updater isolation gates are not accepted"
 )
+
+# Known minimum from build-windows-offline-setup.ps1; never copy its Stable ZIP.
+# This inventory is an integrity contract, not an accepted runtime/layout contract.
+REQUIRED_PAYLOAD = {
+    "agentdock.exe", "agentdock-arbiter.exe", "agentdock-tray.exe",
+    "agentdock-shim.exe", "agentdock-tray-shim.exe", "agentdock.ico",
+    "cloudflared.exe", "wsl-helper/manifest.json",
+    "wsl-helper/agentdock-wsl-helper-linux-amd64",
+    "wsl-helper/agentdock-wsl-helper-linux-arm64",
+    "share/agentdock/core-skills/manifest.json",
+}
+NEXT_IDENTITY = {
+    "product_name": "AgentDock Next",
+    "product_variant": "next", "product_id": "dev.dropabit.agentdock.next",
+    "install_root": "LocalAppData/AgentDock Next",
+    "app_id": "725CE7CB-6F4D-4D78-957E-64CF729FF413",
+    "aumid": "dev.dropabit.agentdock.next.controlpanel",
+    "state_directory": ".agentdock-next", "listen_port": 8767,
+}
+
+
+def safe_path(path):
+    """Reject link/reparse components before reading, including broken links."""
+    path = Path(path).absolute()
+    for part in (*reversed(path.parents), path):
+        info = part.lstat()
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise ValueError("symlink/reparse input rejected: " + str(part))
+    return path
+
+
+def read_input(path):
+    path = safe_path(path)
+    if not stat.S_ISREG(path.stat().st_mode):
+        raise ValueError("regular input file required: " + str(path))
+    return path.read_bytes()
+
+
+def strict_json(data):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate JSON key: " + key)
+            result[key] = value
+        return result
+    value = json.loads(data.decode("utf-8"), object_pairs_hook=pairs)
+    if not isinstance(value, dict):
+        raise ValueError("JSON object required")
+    return value
+
+
+def verify_payload(manifest_path, payload, output, architecture):
+    """Read-only pre-ISCC check. Success never grants build/install permission."""
+    if architecture not in ("amd64", "arm64"):
+        raise ValueError("unsupported architecture")
+    manifest_path = safe_path(manifest_path)
+    payload = safe_path(payload)
+    if not payload.is_dir():
+        raise ValueError("explicit Next payload directory required")
+    output = Path(os.path.abspath(output))
+    if os.path.lexists(output):
+        raise ValueError("output must be fresh")
+    data = read_input(manifest_path)
+    manifest = strict_json(data)
+    candidate = safe_path(payload / "candidate.json")
+    if read_input(candidate) != data:
+        raise ValueError("payload candidate bytes mismatch")
+    record = strict_json(read_input(payload / "next-payload.json"))
+    if any(k not in manifest for k in
+           ("version", "windows_version", "commit", "build_date", "channel", "update_feed")):
+        raise ValueError("incomplete candidate manifest")
+    expected = dict(NEXT_IDENTITY, schema="agentdock-next-windows-payload-v1",
+                    architecture=architecture,
+                    candidate_manifest_sha256=hashlib.sha256(data).hexdigest(),
+                    **{k: manifest[k] for k in
+                       ("version", "windows_version", "commit", "build_date", "channel", "update_feed")})
+    if set(record) != set(expected) | {"files"} or any(
+            type(record[k]) is not type(v) or record[k] != v for k, v in expected.items()):
+        raise ValueError("Next payload identity/manifest/architecture mismatch")
+    files = record["files"]
+    if not isinstance(files, dict) or not REQUIRED_PAYLOAD <= set(files):
+        raise ValueError("missing required Next payload assets")
+    for name, digest in files.items():
+        # Portable Windows spelling: reject ADS, traversal, drive/UNC, reserved
+        # names, case aliases and trailing-dot/space normalization.
+        parts = name.split("/")
+        if (not all(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", p) and
+                    p not in (".", "..") and not p.endswith(".") and
+                    not re.fullmatch(r"(?i)(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?", p)
+                    for p in parts) or name in ("candidate.json", "next-payload.json")):
+            raise ValueError("unsafe payload path: " + name)
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("invalid SHA-256: " + name)
+    names = {"candidate.json", "next-payload.json"} | set(files)
+    if len({n.casefold() for n in names}) != len(names):
+        raise ValueError("case-alias payload path")
+    spellings = {}
+    for name in names:
+        parts = name.split("/")
+        for end in range(1, len(parts) + 1):
+            prefix = "/".join(parts[:end])
+            previous = spellings.setdefault(prefix.casefold(), prefix)
+            if previous != prefix:
+                raise ValueError("case-alias payload directory")
+    actual = set()
+    for path in payload.rglob("*"):
+        safe_path(path)
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError("non-regular payload file")
+        actual.add(path.relative_to(payload).as_posix())
+    if actual != names:
+        raise ValueError("unlisted or missing payload file")
+    for name, digest in files.items():
+        path = safe_path(payload / name)
+        blob = read_input(path)
+        if hashlib.sha256(blob).hexdigest() != digest:
+            raise ValueError("SHA-256 mismatch: " + name)
+        if name.endswith(".exe"):
+            offset = struct.unpack_from("<I", blob, 0x3c)[0] if len(blob) >= 64 else len(blob)
+            if (blob[:2] != b"MZ" or offset + 6 > len(blob) or
+                    blob[offset:offset + 4] != b"PE\0\0" or
+                    struct.unpack_from("<H", blob, offset + 4)[0] !=
+                    {"amd64": 0x8664, "arm64": 0xaa64}[architecture]):
+                raise ValueError("PE architecture mismatch: " + name)
+    root = Path(run(["git", "rev-parse", "--show-toplevel"], Path.cwd())).resolve()
+    env = dict(os.environ, GOPROXY="off", GOTOOLCHAIN="local", GOSUMDB="off")
+    # Existing canonical candidate verifier owns clean HEAD/date/channel checks.
+    run(["go", "run", "-mod=readonly", "./tools/release", "next-candidate",
+         "--manifest", str(manifest_path), "--check-output", str(output)], root, env)
+    if manifest_path.read_bytes() != data or candidate.read_bytes() != data:
+        raise ValueError("candidate changed during verification")
+    return {"input_integrity_verified": True, "architecture": architecture,
+            "installable": False, "release_ready": False,
+            "installer_blocker": INSTALLER_BLOCKER}
 
 
 def run(args, root, env=None):
@@ -124,11 +264,17 @@ def main():
     parser.add_argument("--architecture", required=True, choices=("amd64", "arm64"))
     parser.add_argument("--build-binaries", action="store_true")
     parser.add_argument("--build-installer", action="store_true", help="always fails before ISCC")
+    parser.add_argument("--verify-payload", type=Path, help="read-only offline input check; never enables ISCC")
     args = parser.parse_args()
     if args.build_installer:
         parser.exit(2, INSTALLER_BLOCKER + "\n")
     try:
-        record = prepare(args.manifest, args.output, args.architecture, args.build_binaries)
+        if args.verify_payload:
+            if args.build_binaries:
+                raise ValueError("payload verification cannot build binaries")
+            record = verify_payload(args.manifest, args.verify_payload, args.output, args.architecture)
+        else:
+            record = prepare(args.manifest, args.output, args.architecture, args.build_binaries)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         parser.exit(1, str(exc) + "\n")
     print(json.dumps(record, indent=2))

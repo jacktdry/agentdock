@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -124,6 +125,121 @@ class InstallerSourceTests(unittest.TestCase):
                 self.assertFalse(out.exists())
 
 
+class PayloadIntegrityTests(unittest.TestCase):
+    """Synthetic bytes test rejection rules, never runtime/installer acceptance."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="next-integrity-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.payload = self.root / "payload"
+        self.payload.mkdir()
+        self.output = self.root / "fresh"
+        self.manifest = self.root / "candidate.json"
+        self.candidate = dict(version="0.9.1-rc.7", windows_version="0.9.1.7",
+                              commit="a" * 40, build_date="2026-10-14T00:00:00Z",
+                              channel="next-rc", update_feed="disabled/unpublished")
+        data = json.dumps(self.candidate).encode()
+        self.manifest.write_bytes(data)
+        (self.payload / "candidate.json").write_bytes(data)
+        self.record = dict(module.NEXT_IDENTITY, **self.candidate,
+                           schema="agentdock-next-windows-payload-v1", architecture="amd64",
+                           candidate_manifest_sha256=module.hashlib.sha256(data).hexdigest(), files={})
+        for name in module.REQUIRED_PAYLOAD:
+            path = self.payload / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            blob = b"fixture"
+            if name.endswith(".exe"):
+                blob = b"MZ" + bytes(58) + (64).to_bytes(4, "little") + b"PE\0\0\x64\x86"
+            path.write_bytes(blob)
+            self.record["files"][name] = module.hashlib.sha256(blob).hexdigest()
+        self.save()
+
+    def save(self):
+        (self.payload / "next-payload.json").write_text(json.dumps(self.record))
+
+    def verify(self):
+        return module.verify_payload(self.manifest, self.payload, self.output, "amd64")
+
+    def test_integrity_success_still_blocked_and_offline(self):
+        with patch.object(module, "run", return_value=str(ROOT)) as run:
+            result = self.verify()
+        self.assertTrue(result["input_integrity_verified"])
+        self.assertFalse(result["installable"])
+        self.assertFalse(self.output.exists())
+        args, root, env = run.call_args.args
+        self.assertIn("next-candidate", args)
+        self.assertIn("--check-output", args)
+        self.assertEqual(env["GOPROXY"], "off")
+        with patch.object(module, "run", side_effect=ValueError("canonical verifier rejection")):
+            with self.assertRaisesRegex(ValueError, "canonical verifier rejection"):
+                self.verify()
+
+    def test_unsafe_windows_paths(self):
+        for name in ("../escape", "/abs", "C:/escape", r"..\escape", "core:ads",
+                     "CON.txt", "nul", "dir/..", "file.", "file ", "//host/share",
+                     "AGENTDOCK.EXE", "candidate.json"):
+            with self.subTest(name=name):
+                self.record["files"][name] = "a" * 64
+                self.save()
+                with self.assertRaises(ValueError):
+                    self.verify()
+                del self.record["files"][name]
+        self.save()
+
+    def test_stable_identity_or_arch_manifest_rejected(self):
+        for key, value in dict(product_name="AgentDock", aumid="com.uvwt.agentdock.controlpanel",
+                               product_variant="stable", product_id="dev.dropabit.agentdock",
+                               listen_port=8765, architecture="arm64", commit="b" * 40,
+                               candidate_manifest_sha256="0" * 64).items():
+            old = self.record[key]
+            self.record[key] = value
+            self.save()
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.verify()
+            self.record[key] = old
+        self.save()
+        (self.payload / "candidate.json").write_bytes(b"{}")
+        with self.assertRaisesRegex(ValueError, "candidate bytes"):
+            self.verify()
+
+    def test_hash_pe_missing_extra_and_links_rejected(self):
+        exe = self.payload / "agentdock.exe"
+        original = exe.read_bytes()
+        exe.write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            self.verify()
+        wrong_arch = original[:-2] + b"\x64\xaa"
+        exe.write_bytes(wrong_arch)
+        self.record["files"][exe.name] = module.hashlib.sha256(wrong_arch).hexdigest()
+        self.save()
+        with self.assertRaisesRegex(ValueError, "PE architecture"):
+            self.verify()
+        exe.write_bytes(original)
+        self.record["files"][exe.name] = module.hashlib.sha256(original).hexdigest()
+        self.save()
+        extra = self.payload / "stable.zip"
+        extra.write_bytes(b"stable fallback")
+        with self.assertRaisesRegex(ValueError, "unlisted"):
+            self.verify()
+        extra.unlink()
+        exe.unlink()
+        with self.assertRaisesRegex(ValueError, "missing"):
+            self.verify()
+        exe.symlink_to(self.manifest)
+        with self.assertRaisesRegex(ValueError, "symlink/reparse"):
+            self.verify()
+
+    def test_duplicate_json_and_existing_output_rejected(self):
+        self.output.mkdir()
+        with self.assertRaisesRegex(ValueError, "fresh"):
+            self.verify()
+        self.output.rmdir()
+        (self.payload / "next-payload.json").write_text('{"files":{},"files":{}}')
+        with self.assertRaisesRegex(ValueError, "duplicate JSON"):
+            self.verify()
+
+
 class PackagingFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -174,6 +290,35 @@ class PackagingFixture(unittest.TestCase):
         self.assertEqual(group.findtext("AssemblyVersion"), "0.9.1.7")
         self.assertEqual(group.findtext("InformationalVersion"), "0.9.1-rc.7")
         self.assertNotEqual(self.invoke(out).returncode, 0)
+
+    def test_payload_uses_real_canonical_verifier(self):
+        fixture = PayloadIntegrityTests()
+        fixture.setUp()
+        try:
+            fixture.manifest.write_text(self.canonical)
+            (fixture.payload / "candidate.json").write_text(self.canonical)
+            candidate = json.loads(self.canonical)
+            for key in fixture.candidate:
+                fixture.record[key] = candidate[key]
+            fixture.record["candidate_manifest_sha256"] = module.hashlib.sha256(
+                self.canonical.encode()).hexdigest()
+            fixture.output = self.repo / "dist/verified-payload"
+            fixture.save()
+            original_run = module.run
+            def in_clone(args, root, env=None):
+                return original_run(args, self.repo, dict(self.env, **(env or {})))
+            with patch.object(module, "run", side_effect=in_clone):
+                self.assertTrue(fixture.verify()["input_integrity_verified"])
+                fixture.manifest.write_text(json.dumps(candidate))
+                (fixture.payload / "candidate.json").write_bytes(fixture.manifest.read_bytes())
+                fixture.record["candidate_manifest_sha256"] = module.hashlib.sha256(
+                    fixture.manifest.read_bytes()).hexdigest()
+                fixture.save()
+                with self.assertRaises(subprocess.CalledProcessError):
+                    fixture.verify()
+            self.assertFalse(fixture.output.exists())
+        finally:
+            fixture.doCleanups()
 
     def test_installer_fails_before_any_output_or_tool(self):
         out = self.repo / "dist/blocked"
