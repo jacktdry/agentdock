@@ -30,6 +30,8 @@ public sealed class RuntimeService : IDisposable
 
     public RuntimeService(string? runtimeRoot = null)
     {
+        // Also protect direct callers; Next must never reach Stable discovery or operations.
+        WindowsProductIdentity.Current.RequireSupportedRuntime();
         RuntimeRoot = string.IsNullOrWhiteSpace(runtimeRoot)
             ? ResolveRuntimeRoot()
             : Path.GetFullPath(runtimeRoot);

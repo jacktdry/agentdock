@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -15,6 +16,112 @@ SCRIPT = ROOT / "packaging/windows/prepare-next-rc.py"
 spec = importlib.util.spec_from_file_location("next_windows", SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+
+
+class InstallerSourceTests(unittest.TestCase):
+    """Fast source-only gates; select this class to avoid the cold Go fixture."""
+
+    def setUp(self):
+        self.source = (ROOT / "packaging/windows/NextAgentDock.iss").read_text()
+        self.payload = (ROOT / "packaging/windows/includes/next-payload.iss").read_text()
+        self.code = (ROOT / "packaging/windows/includes/next-code.iss").read_text()
+
+    def test_wpf_next_entrypoints_fail_before_stable_access(self):
+        panel = ROOT / "desktop/windows/control-panel"
+        identity = (panel / "Models/WindowsProductIdentity.cs").read_text()
+        app = (panel / "App.xaml.cs").read_text()
+        service = (panel / "Services/RuntimeService.cs").read_text()
+        admin = (panel / "Services/TaskAdminService.cs").read_text()
+        for value in (
+            "AgentDock Next", "dev.dropabit.agentdock.next.controlpanel",
+            ".agentdock-next", "8767", r"Local\AgentDock.Next.ControlPanel.Singleton",
+            r"Local\AgentDock.Next.ControlPanel.Show",
+        ):
+            self.assertIn(value, identity)
+        self.assertIn('null or "" or "stable" => new(false)', identity)
+        self.assertIn('"next" => new(true)', identity)
+        self.assertIn('_ => throw new InvalidOperationException(', identity)
+        self.assertIn("if (IsNext)", identity)
+        self.assertIn("throw new InvalidOperationException(", identity.split("if (IsNext)", 1)[1])
+        self.assertIn('AppUserModelID: "dev.dropabit.agentdock.next.controlpanel"', self.source)
+        gate = "WindowsProductIdentity.Current.RequireSupportedRuntime();"
+        startup = app.split("protected override void OnStartup", 1)[1]
+        for side_effect in (
+            "UiText.ConfigureCurrentUICulture()", "SetCurrentProcessExplicitAppUserModelID(AppUserModelId)",
+            "base.OnStartup(e)", "TaskAdminService.Run(e.Args)",
+            "new Mutex(", "new RuntimeService()",
+        ):
+            self.assertLess(startup.index(gate), startup.index(side_effect), side_effect)
+        self.assertIn("Shutdown(2);", startup[:startup.index("UiText.ConfigureCurrentUICulture()")])
+        constructor = service.split("public RuntimeService(string? runtimeRoot = null)", 1)[1]
+        self.assertLess(constructor.index(gate), constructor.index("ResolveRuntimeRoot()"))
+        task = admin.split("internal static", 1)[1] if "internal static" in admin else admin
+        self.assertLess(task.index(gate), task.index("Parse(arguments)"))
+
+    def test_identity_and_architecture(self):
+        app_id = re.search(r"^AppId=\{\{([^}]+)\}", self.source, re.M).group(1)
+        self.assertEqual(app_id, "725CE7CB-6F4D-4D78-957E-64CF729FF413")
+        self.assertNotEqual(app_id, "D6788C7A-4104-48D4-B5C3-F4858B5606EA")
+        for line in (
+            "AppName=AgentDock Next", "AppPublisher=AgentDock",
+            "AppVersion={#NextVersion}", "VersionInfoVersion={#NextWindowsVersion}",
+            "VersionInfoProductVersion={#NextWindowsVersion}",
+            "OutputBaseFilename=AgentDock-NextSetup-{#NextArchitecture}",
+            'NextArchitecture == "amd64"', 'NextArchitecture == "arm64"',
+            '"x64compatible and not arm64"', "#error Unsupported NextArchitecture",
+        ):
+            self.assertIn(line, self.source)
+        self.assertIn('AppUserModelID: "dev.dropabit.agentdock.next.controlpanel"', self.source)
+        for icon in self.source.split("[Icons]\n")[1].split("#include")[0].strip().splitlines():
+            self.assertIn('{userprograms}\\AgentDock Next\\', icon)
+
+    def test_fixed_root_rejects_directory_overrides(self):
+        for line in (
+            r"DefaultDirName={localappdata}\AgentDock Next", "UsePreviousAppDir=no",
+            "UsePreviousGroup=no", "DisableDirPage=yes", "PrivilegesRequired=lowest",
+            "CloseApplications=no", "RestartApplications=no",
+            r"UninstallFilesDir={app}\installer",
+        ):
+            self.assertIn(line, self.source)
+        self.assertIn("if not IsNextRoot(WizardDirValue) then", self.code)
+        self.assertIn("Result := IsNextRoot(ExpandConstant('{app}'))", self.code)
+        self.assertIn("CompareText(RemoveBackslash(ExpandFileName(Path))", self.code)
+        self.assertIn(r"ExpandConstant('{localappdata}\AgentDock Next')", self.code)
+
+    def test_no_stable_calls_or_implicit_payload(self):
+        includes = re.findall(r'^#include "([^"]+)"', self.source, re.M)
+        self.assertEqual(includes, [r"includes\next-payload.iss", r"includes\next-code.iss"])
+        all_source = "\n".join((self.source, self.payload, self.code)).lower()
+        for forbidden in (
+            "d6788c7a", "com.uvwt.agentdock.controlpanel", "agentdock.iss",
+            "install.ps1", "uninstall-windows.ps1", "includes\\code.iss",
+            "[run]", "[uninstallrun]", "[registry]", "[uninstalldelete]",
+            "schtasks", "scheduledtask", "dpapi", "powershell", "exec(",
+            "shellexec(", "regquery", "regwrite", "8765", "recursesubdirs",
+        ):
+            self.assertNotIn(forbidden, all_source)
+        sources = re.findall(r'^Source: "([^"]+)"', self.payload, re.M)
+        self.assertEqual(sources, ["{#NextPayloadDir}\\" + name for name in (
+            "agentdock.exe", "agentdock-arbiter.exe", "agentdock-tray.exe", "candidate.json")])
+        self.assertNotIn("*", self.payload)
+
+    def test_direct_compilation_cannot_be_enabled_by_define(self):
+        directives = [line for line in self.source.splitlines() if line.startswith("#")]
+        self.assertTrue(directives[0].startswith("#error Next Windows installer disabled:"))
+        self.assertNotIn("SignedBuild", self.source)
+
+    def test_wrapper_blocks_before_manifest_output_and_tools(self):
+        with tempfile.TemporaryDirectory(prefix="next-source-gate-") as tmp:
+            for arch in ("amd64", "arm64"):
+                out = Path(tmp) / arch
+                result = subprocess.run([
+                    os.sys.executable, "-B", str(SCRIPT), "--manifest", str(Path(tmp) / "missing.json"),
+                    "--architecture", arch, "--output", str(out),
+                    "--build-installer", "--build-binaries",
+                ], cwd=tmp, env=dict(os.environ, PATH=""), text=True, capture_output=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("blocked before ISCC", result.stderr)
+                self.assertFalse(out.exists())
 
 
 class PackagingFixture(unittest.TestCase):

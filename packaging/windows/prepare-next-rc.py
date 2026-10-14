@@ -14,8 +14,9 @@ import xml.etree.ElementTree as ET
 
 
 INSTALLER_BLOCKER = (
-    "Next Windows Setup blocked before ISCC: stable install.ps1, scheduled task, "
-    "tray AUMID/runtime discovery, uninstall and updater targets are not Next-isolated"
+    "Next Windows Setup blocked before ISCC: Next Inno source is declarative only; "
+    "Next runtime, complete verified payload, install/uninstall ownership and "
+    "updater isolation gates are not accepted"
 )
 
 

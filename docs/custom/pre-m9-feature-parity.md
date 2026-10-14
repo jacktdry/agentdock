@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **2026-10-14 P10 Windows source-isolation gate**：新增 Next 專屬 Inno 來源 `packaging/windows/NextAgentDock.iss`、獨立 GUID／`%LocalAppData%\AgentDock Next`／Next shortcut AUMID；此檔頂層無條件 `#error`，`prepare-next-rc.py --build-installer` 仍在 ISCC 前拒絕，**絕非可安裝 Setup**。Windows 控制面板新增明確 Next/Stable identity，Next 因缺經驗證的 Windows runtime manifest，於 WPF startup、RuntimeService 與 TaskAdmin 預先 fail-closed，避免觸及 Stable root／port／tasks／helpers；Stable 流程不變。快速離線來源測試（包含 WPF 與 Inno 身分一致性）**6/6 PASS**；本機無 .NET/ISCC，Windows 真實編譯、安裝／相容驗收仍未完成。見 [Windows Runtime 安全門檻](p10-windows-runtime-isolation.md) 與 [Windows Installer 來源契約](p10-windows-installer-source.md)。
+
+
 > **2026-10-14 P10 source-only Windows crossbuild**：clean `3cecb735` Next RC manifest／overlay 已交叉編譯 Windows amd64 與 arm64 的 Core／arbiter 四個 unsigned EXE，PE 格式、GOOS／GOARCH、完整 SHA／UTC metadata **4/4 PASS**。未 patch PE File/Product VersionInfo，亦非 Next Installer／Windows 原生 UAT。詳 [P10 Windows checkpoint](p10-windows-packaging.md#2026-10-14-clean-head-source-only-windows-dual-architecture-crossbuild)。仍不建立 Release、Tag、Push 或更新 feed。
 
 

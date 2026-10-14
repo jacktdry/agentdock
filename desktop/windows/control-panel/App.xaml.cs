@@ -12,9 +12,9 @@ namespace AgentDock.ControlPanel;
 
 public partial class App : System.Windows.Application
 {
-    private const string MutexName = "Local\\AgentDock.ControlPanel.Singleton";
-    private const string ShowEventName = "Local\\AgentDock.ControlPanel.Show";
-    private const string AppUserModelId = "com.uvwt.agentdock.controlpanel";
+    private static string MutexName => WindowsProductIdentity.Current.MutexName;
+    private static string ShowEventName => WindowsProductIdentity.Current.ShowEventName;
+    private static string AppUserModelId => WindowsProductIdentity.Current.AppUserModelId;
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
@@ -37,6 +37,18 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Reject unsupported variants before reading Stable UI preferences or dispatching
+        // helpers (including explicit --runtime-root), singleton events and update handoff.
+        try
+        {
+            WindowsProductIdentity.Current.RequireSupportedRuntime();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Shutdown(2);
+            return;
+        }
         UiText.ConfigureCurrentUICulture();
         // 使用稳定的 AppUserModelID，避免升级后任务栏沿用旧版本的隐式图标缓存。
         _ = SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
