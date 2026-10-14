@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
 
     <p v-else-if="!store.busy">{{ t('connection.state_unavailable') }}</p>
 
-    <OperationStatus :busy="store.busy" :error="store.error" :completed="store.completed" />
+    <OperationStatus :busy="store.busy" :error="store.operationError" :completed="store.completed" />
 
     <ConfirmDialog v-if="confirmation" :prompt="confirmationPrompt"
       @confirm="confirmOperation" @cancel="cancelConfirmation">

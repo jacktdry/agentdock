@@ -141,6 +141,12 @@ input {
   padding: 1rem;
 }
 
+/* Reserve the status line when async text disappears so primary actions stay put. */
+.operation-status {
+  min-height: 1.5lh;
+  overflow-wrap: anywhere;
+}
+
 .panel-wide {
   grid-column: 1 / -1;
 }

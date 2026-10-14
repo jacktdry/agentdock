@@ -207,3 +207,33 @@ describe('Connection store secret and revision boundaries', () => {
     expect(store.error).toBeNull()
   })
 })
+
+
+describe('Connection mutation truthfulness', () => {
+  it('does not erase a mutation rejection when refreshing the latest snapshot succeeds', async () => {
+    const store = useConnectionStore()
+    await store.refresh()
+    mocks.action.mockResolvedValueOnce({
+      completed: false, phase: 'rejected',
+      error: { code: 'connection_action_rejected', message: '', category: 'operation', retryable: true },
+    })
+    expect(await store.perform('restart')).toBe(false)
+    expect(store.snapshot).not.toBeNull()
+    expect(store.actionError?.code).toBe('connection_action_rejected')
+    expect(store.operationError?.code).toBe('connection_action_rejected')
+    expect(store.completed).toBe(false)
+  })
+
+  it('does not claim completion when mutation ACK is followed by failed verification', async () => {
+    const store = useConnectionStore()
+    await store.refresh()
+    mocks.snapshot.mockResolvedValueOnce({
+      error: { code: 'connection_refresh_failed', message: '', category: 'unavailable', retryable: true },
+    })
+    expect(await store.perform('restart')).toBe(false)
+    expect(store.completed).toBe(false)
+    expect(store.snapshot).toBeNull()
+    expect(store.error?.code).toBe('connection_refresh_failed')
+    expect(store.operationError?.code).toBe('connection_refresh_failed')
+  })
+})

@@ -23,6 +23,8 @@ export const useConnectionStore = defineStore('connection', () => {
   const endpointBusy = shallowRef(false)
   const revealBusy = shallowRef(false)
   const error = shallowRef<APIError | null>(null)
+  const actionError = shallowRef<APIError | null>(null)
+  const operationError = computed(() => actionError.value ?? error.value)
   const completed = shallowRef(false)
   const phase = shallowRef('')
 
@@ -69,14 +71,15 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function readSnapshot() {
+  async function readSnapshot(): Promise<boolean> {
     const result = await desktopApi.connectionSnapshot()
     error.value = result.error ?? null
-    if (error.value) {
+    if (error.value || !result.snapshot) {
       snapshot.value = null
-      return
+      return false
     }
     syncSnapshot(result.snapshot)
+    return true
   }
 
   async function refresh() {
@@ -85,6 +88,7 @@ export const useConnectionStore = defineStore('connection', () => {
     completed.value = false
     phase.value = ''
     error.value = null
+    actionError.value = null
     try {
       await readSnapshot()
     } catch (caught) {
@@ -125,20 +129,28 @@ export const useConnectionStore = defineStore('connection', () => {
     completed.value = false
     phase.value = ''
     error.value = null
+    actionError.value = null
     try {
       const result = await call()
       phase.value = result.phase
-      error.value = result.error ?? (!result.completed ? clientError('connection_not_completed', '') : null)
-      if (!error.value) {
-        completed.value = true
-        await readSnapshot()
-        return true
+      actionError.value = result.error ?? (!result.completed ? clientError('connection_not_completed', '') : null)
+      // An action acknowledgement cannot establish that the refreshed connection is healthy.
+      try {
+        const refreshed = await readSnapshot()
+        completed.value = !actionError.value && refreshed
+      } catch (caught) {
+        snapshot.value = null
+        error.value = clientError('connection_snapshot_call_failed', caught)
       }
-      await readSnapshot()
-      return false
+      return completed.value
     } catch (caught) {
-      error.value = clientError('connection_mutation_call_failed', caught)
-      await readSnapshot().catch(() => undefined)
+      actionError.value = clientError('connection_mutation_call_failed', caught)
+      try {
+        await readSnapshot()
+      } catch (refreshError) {
+        snapshot.value = null
+        error.value = clientError('connection_snapshot_call_failed', refreshError)
+      }
       return false
     } finally {
       busy.value = false
@@ -249,6 +261,8 @@ export const useConnectionStore = defineStore('connection', () => {
     endpointBusy,
     revealBusy,
     error,
+    actionError,
+    operationError,
     completed,
     phase,
     capability,

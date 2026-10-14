@@ -47,6 +47,32 @@ export const useMCPStore = defineStore('mcp', () => {
 
   let oauthTimer: ReturnType<typeof setTimeout> | undefined
   let oauthPollToken = 0
+  let authorizationScope = ''
+  let authorizationReadToken = 0
+
+  function scopeKey(server: MCPManagedServer): string {
+    return JSON.stringify([server.name, server.generation])
+  }
+
+  function selectAuthorizationScope(server: MCPManagedServer): string {
+    const key = scopeKey(server)
+    if (key !== authorizationScope) {
+      stopOAuthPolling()
+      authorizationReadToken += 1
+      authorizationScope = key
+      authorization.value = null
+      callbackOptions.value = []
+    }
+    return key
+  }
+
+  function authorizationFor(server: MCPManagedServer): MCPAuthorizationStatus | null {
+    return authorizationScope === scopeKey(server) ? authorization.value : null
+  }
+
+  function callbackOptionsFor(server: MCPManagedServer): MCPAuthCallback[] {
+    return authorizationScope === scopeKey(server) ? callbackOptions.value : []
+  }
 
   const servers = computed(() => snapshot.value?.servers ?? [])
   const canRead = computed(() => contract.canInvoke(Domain.DomainMCP, 'snapshot'))
@@ -69,6 +95,13 @@ export const useMCPStore = defineStore('mcp', () => {
   function syncSnapshot(next: MCPSnapshot) {
     const previous = new Map((snapshot.value?.servers ?? []).map((server) => [server.name, server.generation]))
     snapshot.value = next
+    if (authorizationScope && !(next.servers ?? []).some((item) => scopeKey(item) === authorizationScope)) {
+      stopOAuthPolling()
+      authorizationReadToken += 1
+      authorizationScope = ''
+      authorization.value = null
+      callbackOptions.value = []
+    }
     stale.value = false
     readError.value = null
 
@@ -281,16 +314,27 @@ export const useMCPStore = defineStore('mcp', () => {
 
   async function readAuthorization(server: MCPManagedServer) {
     if (server.sourceType === 'plugin' || server.transport !== 'streamable_http' || !contract.canInvoke(Domain.DomainMCP, 'authorizationStatus')) return null
+    if (!snapshot.value?.servers?.some((item) => scopeKey(item) === scopeKey(server))) return null
+    const scope = selectAuthorizationScope(server)
+    const readToken = ++authorizationReadToken
     try {
       const result = await desktopApi.mcpAuthorizationStatus(server.name)
+      if (scope !== authorizationScope || readToken !== authorizationReadToken) return null
       mutationError.value = result.error ?? null
       if (!result.error) {
         authorization.value = result.authorization
         callbackOptions.value = [...(result.authorization.callbackOptions ?? [])]
+      } else {
+        authorization.value = null
+        callbackOptions.value = []
       }
       return result
     } catch {
-      mutationError.value = clientError('mcp_authorization_status_failed', '')
+      if (scope === authorizationScope && readToken === authorizationReadToken) {
+        mutationError.value = clientError('mcp_authorization_status_failed', '')
+        authorization.value = null
+        callbackOptions.value = []
+      }
       return null
     }
   }
@@ -301,11 +345,11 @@ export const useMCPStore = defineStore('mcp', () => {
     oauthTimer = undefined
   }
 
-  async function pollAuthorization(flowId: string, attempt = 0, token = oauthPollToken) {
-    if (!flowId || token !== oauthPollToken || attempt >= maxOAuthPolls) return
+  async function pollAuthorization(flowId: string, attempt = 0, token = oauthPollToken, scope = authorizationScope) {
+    if (!flowId || token !== oauthPollToken || scope !== authorizationScope || attempt >= maxOAuthPolls) return
     try {
       const result = await desktopApi.mcpAuthorizationFlowStatus(flowId)
-      if (token !== oauthPollToken) return
+      if (token !== oauthPollToken || scope !== authorizationScope) return
       if (result.error) {
         mutationError.value = result.error
         return
@@ -320,17 +364,19 @@ export const useMCPStore = defineStore('mcp', () => {
       mutationError.value = clientError('mcp_authorization_status_failed', '')
       return
     }
-    oauthTimer = setTimeout(() => void pollAuthorization(flowId, attempt + 1, token), oauthPollDelayMs)
+    oauthTimer = setTimeout(() => void pollAuthorization(flowId, attempt + 1, token, scope), oauthPollDelayMs)
   }
 
   async function authorize(server: MCPManagedServer, callbackId: string, expectedRevision: string, expectedGeneration: string) {
-    if (server.sourceType === 'plugin') return null
+    if (!canInvoke('authorize', server) || server.transport !== 'streamable_http' || !snapshot.value?.servers?.some((item) => scopeKey(item) === scopeKey(server))) return null
+    const scope = selectAuthorizationScope(server)
     stopOAuthPolling()
+    const readToken = ++authorizationReadToken
     callbackOptions.value = []
     const result = await runMutation('authorize', (requestId) =>
       desktopApi.mcpAuthorize(requestId, server.name, callbackId, expectedRevision, expectedGeneration),
     )
-    if (!result || result.error || result.outcomeUnknown) return result
+    if (!result || result.error || result.outcomeUnknown || stale.value || scope !== authorizationScope || readToken !== authorizationReadToken) return result
     callbackOptions.value = [...(result.callbackOptions ?? [])]
     if (result.flowId) {
       const flowId = result.flowId
@@ -342,17 +388,19 @@ export const useMCPStore = defineStore('mcp', () => {
         callbackOptions: [],
       }
       const token = oauthPollToken
-      oauthTimer = setTimeout(() => void pollAuthorization(flowId, 0, token), oauthPollDelayMs)
+      oauthTimer = setTimeout(() => void pollAuthorization(flowId, 0, token, scope), oauthPollDelayMs)
     }
     return result
   }
 
   async function clearAuthorization(server: MCPManagedServer, expectedRevision: string, expectedGeneration: string) {
-    if (server.sourceType === 'plugin') return null
+    if (!canInvoke('clearAuthorization', server) || !snapshot.value?.servers?.some((item) => scopeKey(item) === scopeKey(server))) return null
+    const scope = selectAuthorizationScope(server)
+    const readToken = ++authorizationReadToken
     const result = await runMutation('clearAuthorization', (requestId) =>
       desktopApi.mcpClearAuthorization(requestId, server.name, expectedRevision, expectedGeneration),
     )
-    if (result && !result.error && !result.outcomeUnknown) {
+    if (result && !result.error && !result.outcomeUnknown && !stale.value && scope === authorizationScope && readToken === authorizationReadToken) {
       stopOAuthPolling()
       authorization.value = { status: 'unauthorized', callbackOptions: [] }
       callbackOptions.value = []
@@ -370,6 +418,8 @@ export const useMCPStore = defineStore('mcp', () => {
 
   function clearTransient() {
     stopOAuthPolling()
+    authorizationScope = ''
+    authorizationReadToken += 1
     authorization.value = null
     callbackOptions.value = []
     mutationError.value = null
@@ -393,6 +443,8 @@ export const useMCPStore = defineStore('mcp', () => {
     authorizationRequiredCount,
     authorization,
     callbackOptions,
+    authorizationFor,
+    callbackOptionsFor,
     canRead,
     canInvoke,
     refresh,

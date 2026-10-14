@@ -10,7 +10,12 @@ const store = useMCPStore()
 const { t } = useI18n()
 const clearOpen = ref(false)
 
-const status = computed(() => store.authorization?.status || props.server.observation.authStatus || 'unknown')
+const authorization = computed(() => store.authorizationFor(props.server))
+const callbackOptions = computed(() => store.callbackOptionsFor(props.server))
+const canSignIn = computed(() => store.canInvoke('authorize', props.server))
+const canClear = computed(() => store.canInvoke('clearAuthorization', props.server))
+const unavailableReason = computed(() => store.stale ? t('mcp.stale_hint') : store.busy ? t('common.loading') : t('common.unavailable'))
+const status = computed(() => authorization.value?.status || props.server.observation.authStatus || 'unknown')
 const knownStatuses = new Set([
   'unknown',
   'not_applicable',
@@ -33,11 +38,13 @@ const statusLabel = computed(() => {
 const reconnectPending = computed(() => status.value === 'authorized' && props.server.observation.status !== 'ready')
 
 async function begin(callbackID = '') {
+  if (!canSignIn.value) return
   await store.authorize(props.server, callbackID, props.registryRevision, props.server.generation)
 }
 
 async function confirmClear() {
   clearOpen.value = false
+  if (!canClear.value) return
   await store.clearAuthorization(props.server, props.registryRevision, props.server.generation)
 }
 
@@ -45,7 +52,7 @@ async function reload() {
   await store.readAuthorization(props.server)
 }
 
-watch(() => props.server.generation, () => void reload())
+watch(() => [props.server.name, props.server.generation], () => void reload())
 onMounted(() => void reload())
 onUnmounted(() => store.stopOAuthPolling())
 </script>
@@ -59,24 +66,26 @@ onUnmounted(() => store.stopOAuthPolling())
 
     <div class="mcp-auth-status">
       <span class="state-pill" :data-state="status === 'authorized' ? 'healthy' : status">{{ statusLabel }}</span>
-      <span v-if="store.authorization?.errorCode" class="execution-meta mono">{{ store.authorization.errorCode }}</span>
+      <span v-if="authorization?.errorCode" class="execution-meta mono">{{ authorization?.errorCode }}</span>
     </div>
 
     <p v-if="reconnectPending" class="restart-notice">{{ t('mcp.oauth_reconnect_pending') }}</p>
 
-    <div v-if="store.callbackOptions.length" class="mcp-callback-options">
+    <div v-if="callbackOptions.length" class="mcp-callback-options">
       <p>{{ t('mcp.choose_callback') }}</p>
       <div class="actions">
-        <button v-for="option in store.callbackOptions" :key="option.id" type="button" :disabled="store.busy" @click="begin(option.id)">
+        <button v-for="option in callbackOptions" :key="option.id" type="button" :disabled="!canSignIn" @click="begin(option.id)">
           {{ option.label || option.id }}
         </button>
       </div>
     </div>
 
     <div class="actions">
-      <button v-if="store.callbackOptions.length === 0" type="button" :disabled="store.busy" @click="begin()">{{ t('mcp.sign_in') }}</button>
-      <button type="button" class="danger-button" :disabled="store.busy" @click="clearOpen = true">{{ t('mcp.clear_authorization') }}</button>
+      <button v-if="callbackOptions.length === 0" type="button" :disabled="!canSignIn" @click="begin()">{{ t('mcp.sign_in') }}</button>
+      <button type="button" class="danger-button" :disabled="!canClear" @click="clearOpen = true">{{ t('mcp.clear_authorization') }}</button>
     </div>
+
+    <p class="field-hint operation-status" role="status">{{ !canSignIn || !canClear ? unavailableReason : '' }}</p>
 
     <ConfirmDialog v-if="clearOpen" :prompt="t('mcp.confirm_clear_authorization')" @cancel="clearOpen = false" @confirm="confirmClear">
       <p class="field-hint">{{ t('mcp.clear_authorization_hint') }}</p>

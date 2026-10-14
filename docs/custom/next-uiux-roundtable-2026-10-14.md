@@ -220,3 +220,18 @@ Claude 確認既有規格已正確防止三種誤區：不同 Tool Message 不�
 | **3 / P1** | UX-S3：Browser client stale snapshot、共用 fixed status slot、Native UI 位移基線 | Browser refresh 時顯示「上次觀測」而不整塊消失；畫面不同狀態切換有測量 px 與 baseline，CTA 不因 loading 進出跳動；未經量測不宣稱視覺 PASS |
 
 **驗證等級：** 本次只有源碼和文件複核，全部視覺 UAT 待實作後執行。與 P10 release-prep 平行，不混入 P11，stable Mac-Dev/Next live runtime 保持不變。
+
+## UX-S1 / UX-S2 / UX-S3 第一批 source 實作 checkpoint（2026-10-14）
+
+**目的與直接改善**：桌面 GUI 在未取得 Runtime 的時候不再誤顯已停止；Connection 操作失敗不因被動刷新而消失；MCP 授權結果不可跨不同 Server 重用；刷新時盡量維持卡片高度並顯示上次觀察是否過期。
+
+**已實作範圍**：
+- Runtime：stores/runtime.ts 加 observed 標記，初始 Unknown、不把讀取失敗當真實 stopped；RuntimeStatusPanel.vue 四個狀態欄位在未觀察/讀取出錯時顯示 Unknown。保留原生確認與控制能力。
+- Connection：stores/connection.ts 將 actionError 與 read error 分離，OperationStatus 讀取 operationError；mutation ACK 後須刷新成功才將 completed 設 true。敏感設定/公網 URL 讀取失敗仍 fail-closed，避免展示失效資訊。
+- MCP OAuth：stores/mcp.ts 以 Server 名稱+generation 綁定授權及 callback 暫存，透過 request token 避免延遲回覆與 polling 汙染切換後 Server。MCPOAuthStatus.vue 的 Login/Clear 改由能力 gate 控制按鈕 disabled，查詢授權失敗時不保留假授權綠燈。不改 OAuth 後端與憑證。
+- Browser：stores/browser.ts 刷新保留 last-known snapshot、標記 clientStale；BrowserPanel.vue 明確顯示過期/不可確認而非假綠燈，子元件也收到 stale 標記，observedAt 顯示 local time 並守護無效時間。
+- Loading：共用 OperationStatus 元件維持 1.5lh 最低狀態列高度，Browser 與 OAuth 局部使用固定狀態區，避免 Loading 文字瞬間移除造成正常狀態的區塊收縮；仍需原生 GUI pixel position 測量。
+
+**驗證分級**：最終 targeted Vitest：Runtime/Connection/MCP/Browser 四檔共 33 項通過（含 OAuth read-error 清除舊授權）；另此前針對 MCP 單檔 12 項通過；vue-tsc --noEmit PASS；Vite dev build PASS（192 modules）。以上是 source/單元/編譯證據，非 Native GUI/ChatGPT Host UAT。載入/完成/失敗時卡高是否真的不跳、macOS/Windows 權限/焦點、Tray Menu 與實際多 MCP OAuth 顯示需留待實機。
+
+**隔離、非目標與後續**：只寫 feature/next-uiux-audit worktree 原始碼與文件，不動 stable Mac-Dev/Next running process、不部署、不中斷 P10、沒有 Tag 或 Release。UX-S0 原生基線、ACP stale P1、Nexus 開發中 UI、全繁中、Tray 可信狀態及 P13/P14 各自保留後續切片；不提早混入 P11。
