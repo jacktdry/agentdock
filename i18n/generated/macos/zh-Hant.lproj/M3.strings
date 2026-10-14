@@ -667,7 +667,7 @@
 "nexus.durability" = "身分資料已寫入，但尚未確認故障後的持久性。請勿重用配對碼；刷新後使用復原操作。";
 "nexus.endpoint" = "NexusDock 伺服器網址";
 "nexus.endpoint_invalid" = "請使用允許的 HTTPS 伺服器網址或本機回環 HTTP 開發端點，勿含帳密、查詢參數或片段。";
-"nexus.help" = "NexusDock 將此 Next 裝置連結至 Nexus。配對與 ChatGPT MCP、通道及 OAuth 存取分開；已配對不代表已連線。";
+"nexus.help" = "NexusDock 尚在開發中，目前僅提供唯讀狀態檢視。配對、取代配對與 Core 重新啟動功能尚未開放；此處顯示的資訊不代表已完成連線。";
 "nexus.identity_saved" = "身分資料已儲存，這本身不代表已連線。";
 "nexus.in_development" = "開發中";
 "nexus.invalid" = "身分資料無效，無法配對。";

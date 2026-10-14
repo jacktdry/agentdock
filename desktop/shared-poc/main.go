@@ -32,6 +32,7 @@ func main() {
 	if *runtimeRootFlag != "" {
 		settingsPath = filepath.Join(*runtimeRootFlag, "shared-desktop-poc", "preferences.json")
 	}
+	nativeLabels := labelsForNativeMenu(nativeMenuLanguage())
 	settings := NewSettingsService(settingsPath)
 	prefs := settings.Get().Preferences
 	contractService := desktopapi.NewContractService()
@@ -56,8 +57,8 @@ func main() {
 				CanChooseFiles:       false,
 				CanCreateDirectories: false,
 				ResolvesAliases:      true,
-				Title:                "Choose Plugin folder",
-				ButtonText:           "Choose",
+				Title:                nativeLabels.pluginFolder,
+				ButtonText:           nativeLabels.choose,
 			}).PromptForSingleSelection()
 		case "zip":
 			return app.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
@@ -67,10 +68,10 @@ func main() {
 				ResolvesAliases:      true,
 				AllowsOtherFileTypes: false,
 				Filters: []application.FileFilter{
-					{DisplayName: "ZIP archives", Pattern: "*.zip"},
+					{DisplayName: nativeLabels.zipArchives, Pattern: "*.zip"},
 				},
-				Title:      "Choose Plugin ZIP file",
-				ButtonText: "Choose",
+				Title:      nativeLabels.pluginZip,
+				ButtonText: nativeLabels.choose,
 			}).PromptForSingleSelection()
 		default:
 			return "", errors.New("unsupported Plugin source type")
@@ -156,11 +157,11 @@ func main() {
 		menu.AddRole(application.AppMenu)
 	}
 	desktopMenu := menu.AddSubmenu(productName)
-	desktopMenu.Add("Show Window").SetAccelerator("CmdOrCtrl+Shift+A").OnClick(func(*application.Context) {
+	desktopMenu.Add(nativeLabels.showWindow).SetAccelerator("CmdOrCtrl+Shift+A").OnClick(func(*application.Context) {
 		showWindow()
 	})
 	desktopMenu.AddSeparator()
-	desktopMenu.Add("Quit").OnClick(func(*application.Context) {
+	desktopMenu.Add(nativeLabels.quit).OnClick(func(*application.Context) {
 		quit()
 	})
 	menu.AddRole(application.EditMenu)
@@ -175,11 +176,11 @@ func main() {
 	}
 	tray.SetTooltip(productName)
 	trayMenu := app.NewMenu()
-	trayMenu.Add("Show " + productName).OnClick(func(*application.Context) {
+	trayMenu.Add(nativeLabels.open + " " + productName).OnClick(func(*application.Context) {
 		showWindow()
 	})
 	trayMenu.AddSeparator()
-	trayMenu.Add("Quit").OnClick(func(*application.Context) {
+	trayMenu.Add(nativeLabels.quit).OnClick(func(*application.Context) {
 		quit()
 	})
 	tray.SetMenu(trayMenu)

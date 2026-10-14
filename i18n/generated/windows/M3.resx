@@ -2006,7 +2006,7 @@
     <value>Use a permitted HTTPS server URL, or a loopback HTTP development endpoint, without credentials, query or fragment.</value>
   </data>
   <data name="nexus.help" xml:space="preserve">
-    <value>NexusDock links this Next device to Nexus. Pairing is separate from ChatGPT MCP, tunnel and OAuth access. Paired does not mean connected.</value>
+    <value>NexusDock is in development. This page only shows read-only status; pairing, replacing a pairing, and restarting Core are not available here. Displayed status does not prove a working connection.</value>
   </data>
   <data name="nexus.identity_saved" xml:space="preserve">
     <value>Identity saved; this alone does not prove a connection.</value>

@@ -235,3 +235,29 @@ Claude 確認既有規格已正確防止三種誤區：不同 Tool Message 不�
 **驗證分級**：最終 targeted Vitest：Runtime/Connection/MCP/Browser 四檔共 33 項通過（含 OAuth read-error 清除舊授權）；另此前針對 MCP 單檔 12 項通過；vue-tsc --noEmit PASS；Vite dev build PASS（192 modules）。以上是 source/單元/編譯證據，非 Native GUI/ChatGPT Host UAT。載入/完成/失敗時卡高是否真的不跳、macOS/Windows 權限/焦點、Tray Menu 與實際多 MCP OAuth 顯示需留待實機。
 
 **隔離、非目標與後續**：只寫 feature/next-uiux-audit worktree 原始碼與文件，不動 stable Mac-Dev/Next running process、不部署、不中斷 P10、沒有 Tag 或 Release。UX-S0 原生基線、ACP stale P1、Nexus 開發中 UI、全繁中、Tray 可信狀態及 P13/P14 各自保留後續切片；不提早混入 P11。
+## UX-S4/S5 第二批實作 — Nexus deferred 與原生選單繁中（2026-10-14）
+
+**針對實際使用者痛點**：NexusDock 被決定為「開發中」，但原版仍呈現 Pair、取代配對、Reconcile/Restart 的按鈕；選單列只有英文 Show/Quit，原生 Plugin 選檔對話框也仍使用英文。使用者可能誤以為尚未實作的流程可安全操作，或在切換到原生 UI 時遇到不一致語言。
+
+**已完成的 source 變更**：
+- `NexusDockPanel.vue` 改為**唯讀狀態**：保留 Pairing/Connection/Safe Origin/Token 是否儲存、刷新、上次觀察與 Advanced Node ID；在沒有 snapshot 時 Token 顯示 `未知` 而非 `未儲存`。Panel 移除 Pair Form、Reconcile/Restart、確認對話框及其變更 handler；Core 對應 API 不刪除、不執行。本次不會開啟配對碼或操作 Next Core。
+- `ConnectionWorkspace.vue` 在 Nexus 頁籤直接標示「開發中」；`nexus.help` 在 en/zh-Hant/zh-Hans 說明僅唯讀且無法配對、恢復或重啟，生成的 Web/i18n/macOS/Windows 資源同步更新。
+- Nexus observedAt 改依 Vue locale 顯示本地日期時間；無效時間標 `未知`；Status 只保留**固定一列**避免 busy/notice/error 插拔帶來不必要的版面高度變化。
+- Wails `main.go` 原生 App Menu、Menu Bar/System Tray 的 Show/Open/Quit UI，以及 Plugin Folder/ZIP 原生選檔標題與按鈕加入系統語言字串（en/zh-Hant/zh-Hans）。macOS 使用**一次性、bounded read-only** `defaults read -g AppleLanguages` 偵測系統第一語言；讀取失敗或非 macOS 則 fallback LC_ALL/LC_MESSAGES/LANGUAGE/LANG，未辨識的語言使用英文字串。不在背景頻繁輪詢，不讀取秘密，不開視窗，不修改使用者的系統設定。Quit 明確稱「結束介面」以避免誤以為停止 Core。
+
+**狀態誠實性／未完成邊界**：本批**沒有**動態健康燈號或工作數的可信 Go Snapshot；因此不增加假的「運行正常」綠燈。macOS 使用系統語言而非 Webview 個別語言設定，切換 Vue 繁中不會自動改變原生選單；Windows 是否能可靠取得使用者系統顯示語言尚需後續原生 UAT／WinAPI，不能以 LANG fallback 冒稱 Windows 完整繁中化。未驗證 Qt/Win Wails Tray、macOS 真正 Menu layout、動態壓縮/VoiceOver，也尚未對本批做相同尺寸的 pixel shift/焦點量測。
+
+**完成 Gate**：以新的 `NexusDockPanel.test.ts` SSR 測頁面只有開發中/未知/唯讀、無配對/重啟 CTA；原先 `nexusLogic.test.ts` 仍保留後端 Fail Closed/Secret 保護；`menu_locale_test.go` 驗證 macOS locale 偵測優先序/zh-Hant/zh-Hans/English，及 UI-only Quit 語意；三語 i18n generate/check；Go nested package 和前端 Typecheck/Build 的結果需在完成後附上，不在 source pass 時宣稱已 Native UAT。
+
+**後續**：UX-S0 需對已安裝的獨立 Next（非 stable）做 Nexus 未載入/載入/錯誤/重新整理的卡片高度、鍵盤焦點及 zh-TW 畫面量測；UX-S5 下一階段評估 Go-owned health 時間戳/狀態來源、mac/Windows 原生不同菜單的測試，避免無證據綠燈；其他 UI IA、P13 Task Card/P14 MCP Apps 由各自工作項目繼續，P10 保持 prep-only 不正式發佈。
+### 第二批 source 驗證結果（本機，未做原生視覺 UAT）
+
+- `pnpm exec vitest run --no-file-parallelism --testTimeout=20000`：**23 個測試檔／168 個測試全數通過**，包括 Nexus SSR、Runtime、Connection、MCP OAuth、Browser 及既有回歸。初次併行執行時曾有 Execution/MCP/i18n 共 3 項碰到預設 5 秒逾時（165/168）；降低併行度後全部通過，不在缺乏重現時改寫業務邏輯或既有 timeout。
+- `pnpm exec vue-tsc --noEmit --pretty false`：**PASS**。
+- `pnpm exec vite build --mode development --minify false`：**PASS，189 個模組**。
+- `GOMAXPROCS=2 go test . -run 'TestNativeMenu|TestNextProduct|TestInvalidProduct' -count=1`（`desktop/shared-poc`）：**PASS**；只有本機 Xcode/macOS SDK 版本不同導致的 non-fatal linker warnings，尚未完成正式打包原生驗收。
+- `go test menu_locale.go menu_locale_test.go -count=1`：**PASS**。
+- `go run ./tools/i18n generate` 與 `go run ./tools/i18n check`：**PASS，3 locale／882 keys**。
+- `git diff --check`：**PASS**。變更僅限 Next Shared UI、Wails 原生標籤與三語系生成資源／本報告，未操作 Core、Stable、P10 或正式更新通道。
+
+上述證據**不構成已安裝 macOS Next／Windows Tray 真實 GUI 測試**。狀態健康、觀察時間可信來源、系統語言同步、Loading 卡高量測、P13/P14 ChatGPT Host 均維持獨立 pending gate。

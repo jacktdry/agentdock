@@ -10,7 +10,7 @@ const { t } = useI18n()
   <div>
     <nav class="actions connection-subnav" :aria-label="t('nexus.navigation')">
       <button type="button" :aria-current="view === 'chatgpt' ? 'page' : undefined" @click="view = 'chatgpt'">{{ t('nexus.chatgpt_access') }}</button>
-      <button type="button" :aria-current="view === 'nexus' ? 'page' : undefined" @click="view = 'nexus'">{{ t('nexus.title') }}</button>
+      <button type="button" :aria-current="view === 'nexus' ? 'page' : undefined" @click="view = 'nexus'">{{ t('nexus.title') }} · {{ t('nexus.in_development') }}</button>
     </nav>
     <ConnectionPanel v-if="view === 'chatgpt'" />
     <NexusDockPanel v-else />

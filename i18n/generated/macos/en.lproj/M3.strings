@@ -667,7 +667,7 @@
 "nexus.durability" = "Identity was written, but crash durability is unverified. Do not reuse the code; refresh and use trusted recovery.";
 "nexus.endpoint" = "NexusDock server URL";
 "nexus.endpoint_invalid" = "Use a permitted HTTPS server URL, or a loopback HTTP development endpoint, without credentials, query or fragment.";
-"nexus.help" = "NexusDock links this Next device to Nexus. Pairing is separate from ChatGPT MCP, tunnel and OAuth access. Paired does not mean connected.";
+"nexus.help" = "NexusDock is in development. This page only shows read-only status; pairing, replacing a pairing, and restarting Core are not available here. Displayed status does not prove a working connection.";
 "nexus.identity_saved" = "Identity saved; this alone does not prove a connection.";
 "nexus.in_development" = "In development";
 "nexus.invalid" = "Identity invalid; pairing is unavailable.";

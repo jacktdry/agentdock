@@ -1,21 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
-import { desktopApi } from '../../api/desktopApi'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { nexusConnectionKey, nexusErrorKey, nexusOrigin, nexusPairingKey, useNexus } from '../../features/nexusLogic'
-import { useI18n } from '../../i18n'
-import ConfirmDialog from '../common/ConfirmDialog.vue'
-import NexusPairForm from './NexusPairForm.vue'
+import { currentLocale, useI18n } from '../../i18n'
 const { t } = useI18n()
-const { snapshot, busy, notice, result, canPair, canReconcile, refresh, finishMutation, dispose } = useNexus()
-const recoveryGeneration = shallowRef('')
+const { snapshot, busy, notice, refresh, dispose } = useNexus()
 const origin = computed(() => nexusOrigin(snapshot.value?.safeOrigin ?? ''))
-function confirmRecovery() {
-  const generation = recoveryGeneration.value
-  recoveryGeneration.value = ''
-  if (canReconcile.value && generation === snapshot.value?.generation) {
-    void finishMutation(desktopApi.nexusReconcile(generation))
-  }
-}
+const observedAtLabel = computed(() => {
+  const raw = snapshot.value?.observedAt
+  if (!raw) return t('nexus.unknown')
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return t('nexus.unknown')
+  return new Intl.DateTimeFormat(currentLocale.value, {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(date)
+})
 onMounted(refresh)
 onBeforeUnmount(dispose)
 </script>
@@ -25,33 +23,18 @@ onBeforeUnmount(dispose)
       <h2 id="nexus-title">{{ t('nexus.title') }} <span class="state-pill nexus-development">{{ t('nexus.in_development') }}</span></h2>
       <button type="button" :disabled="busy" @click="refresh">{{ t('common.refresh') }}</button>
     </div>
-    <p class="hint">{{ t('nexus.help') }}</p>
+    <p class="hint" role="status">{{ t('nexus.help') }}</p>
     <dl class="status-grid" aria-live="polite">
       <div><dt>{{ t('nexus.pairing_state') }}</dt><dd>{{ t(nexusPairingKey(snapshot?.pairingState)) }}</dd></div>
       <div><dt>{{ t('nexus.connection_state') }}</dt><dd>{{ t(nexusConnectionKey(snapshot?.connectionState)) }}</dd></div>
       <div><dt>{{ t('nexus.origin') }}</dt><dd>{{ origin || t('common.unavailable') }}</dd></div>
-      <div><dt>{{ t('nexus.token') }}</dt><dd>{{ t(snapshot?.deviceTokenStored ? 'nexus.saved' : 'nexus.not_saved') }}</dd></div>
+      <div><dt>{{ t('nexus.token') }}</dt><dd>{{ !snapshot ? t('nexus.unknown') : t(snapshot.deviceTokenStored ? 'nexus.saved' : 'nexus.not_saved') }}</dd></div>
     </dl>
-    <p class="hint">{{ t('nexus.observed') }} <time :datetime="snapshot?.observedAt">{{ snapshot?.observedAt || t('nexus.unknown') }}</time></p>
-    <div role="status" aria-live="polite" aria-atomic="true">
-      <p v-if="busy">{{ t('common.loading') }}</p>
-      <p v-if="notice">{{ t(notice) }}</p>
-      <p v-else-if="snapshot?.error">{{ t(nexusErrorKey(snapshot.error.code)) }}</p>
-      <p v-if="result?.identitySaved">{{ t('nexus.identity_saved') }}</p>
-      <p v-if="snapshot?.restartRequired || result?.restartRequired">{{ t('nexus.restart_required') }}</p>
-    </div>
+    <p class="hint">{{ t('nexus.observed') }} <time :datetime="snapshot?.observedAt">{{ observedAtLabel }}</time></p>
+    <p class="operation-status" role="status" aria-live="polite" aria-atomic="true">
+      {{ busy ? t('common.loading') : notice ? t(notice) : snapshot?.error ? t(nexusErrorKey(snapshot.error.code)) : '' }}
+    </p>
     <details><summary>{{ t('nexus.advanced') }}</summary><p>{{ t('nexus.node') }} <code>{{ snapshot?.nodeId || t('nexus.unknown') }}</code></p></details>
-    <NexusPairForm :snapshot="snapshot" :enabled="canPair" :busy="busy" @submitted="finishMutation" />
-    <section class="connection-section">
-      <h3>{{ t('nexus.recovery') }}</h3>
-      <p class="hint">{{ t('nexus.recovery_help') }}</p>
-      <button type="button" :disabled="!canReconcile" @click="recoveryGeneration = snapshot?.generation ?? ''">{{ t('nexus.reconcile') }}</button>
-      <p v-if="!canReconcile && !busy" class="hint">{{ t(nexusErrorKey(snapshot?.capabilities.reconcileDisabledReason)) }}</p>
-    </section>
-    <ConfirmDialog v-if="recoveryGeneration" :prompt="t('nexus.confirm_recovery')" @cancel="recoveryGeneration = ''" @confirm="confirmRecovery">
-      <p>{{ t('nexus.restart_warning') }}</p>
-      <p>{{ origin }}</p>
-    </ConfirmDialog>
   </section>
 </template>
 <style scoped>
