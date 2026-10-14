@@ -36,7 +36,12 @@ func TestNextContract(t *testing.T) {
 			t.Fatalf("stale gate: %s", stale)
 		}
 	}
-	for _, gate := range []string{"macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "p11-signing-updater-native-uat"} {
+	for _, stale := range []string{"uiux-unfrozen", "custom/main-not-integrated"} {
+		if strings.Contains(blockers, stale) {
+			t.Fatalf("resolved integration gate is stale: %s", stale)
+		}
+	}
+	for _, gate := range []string{"macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "formal-release-not-authorized", "p11-signing-updater-native-uat"} {
 		if !strings.Contains(blockers, gate) {
 			t.Fatalf("missing remaining gate: %s", gate)
 		}

@@ -275,6 +275,48 @@ scripts:
     oversize_justification: v0.8.2/v0.8.3 已发布 updater 会安装并可能在恢复路径调用该脚本；这里保留 v0.8.3 原始字节作为跨版本 Release 兼容资产，禁止新增产品能力。
     notes: 仅进入 Windows Release ZIP 兼容旧 updater；generation 迁移成功后从安装目录删除，旧版本退出支持窗口后可整体移除。
 
+  - path: packaging/windows/NextAgentDock.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next-only Inno source, build remains fail-closed; do not reuse Stable identity, payload or code.iss.
+
+  - path: packaging/windows/includes/next-code.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next-only defensive path and identity checks; not an accepted installer lifecycle.
+
+  - path: packaging/windows/includes/next-payload.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Reserved Next-only payload declaration, no Stable fallback.
+
+  - path: packaging/windows/prepare-next-rc.py
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next RC source and offline candidate input verifier; installer compilation is always refused.
+
+  - path: scripts/test/test-next-windows-packaging.py
+    class: test
+    owner: release
+    public_contract: false
+    deletable: false
+    oversize_justification: 包含 Next 來源候選版檔案身分、架構、SHA、輸入污染、禁止 Installer 編譯與 canonical manifest 負向驗證；不得視為 Windows 原生 UAT。
+
+  - path: scripts/test/test-next-wpf-runtime.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+    notes: Windows Next manifest 身分靜態檢查；native 測試需 Windows host，不作本階段 release gate。
+
   - path: packaging/windows/AgentDock.iss
     class: packaging
     owner: release
