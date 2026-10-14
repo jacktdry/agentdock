@@ -454,6 +454,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P11 — macOS Native Ad-hoc Installation / Recovery UAT
 
+> **2026-10-14 P11 Next-only Native upgrade PASS（partial P11）**：新增 Core SemVer 降版 fail-closed 入口，23/23 手動 deploy/rollback source tests、9/9 真實 Next Bundle tests 及 `/private/tmp` 完整簽章 App 原子交換／還原 PASS。從 clean `0c2c5e88` 本地建置 Next `0.9.2-rc.1`，實際只更新 `~/Applications/AgentDock Next.app`：新 Next Core PID 71292 / port 8767 與 Next Tunnel PID 71579 健康，舊版 signed `0.9.1` Contents 已保留。Stable PID 12127 / port 8765 / executable inode+size+mtime 未變。**GUI PID 730 未重啟以避免搶焦點；live 故障注入回滾／全新安裝／原生 GUI UAT 尚未 PASS。** P11 尚未 closeout，無 Developer ID／公證／正式自動更新。詳 [P11 原生 checkpoint](p11-native-deploy-checkpoint-2026-10-14.md)。
+
+
 > **2026-10-14 使用者最新決策：沒有付費 Apple Developer 帳號，P11 不做 Developer ID 簽章、公證（Notarization）、Stapling，也不把它們當作結案門檻。** 依 [P11 無付費帳號驗收契約](p11-adhoc-native-uat-scope.md)，僅驗證 Next macOS arm64 的本地 ad-hoc 安裝、手動更新／回滾及原生功能，不宣稱正式公開發佈資格。
 
 使用已驗證的 M9 Next release candidate artifacts，在不干擾 Stable 的情況下完成：

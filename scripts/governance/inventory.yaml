@@ -36,6 +36,7 @@ scripts:
     owner: desktop
     public_contract: false
     deletable: false
+    oversize_justification: Next-only 手動部署安全測試含 SemVer preflight、受限 Core metadata、stage/owner、原生 PID 與原子回滾失敗注入的正負測；聚合於單一安全邊界測試檔避免覆蓋遺漏。
     notes: Next-only 安装、回滚及服务重注册的安全回归测试。
 
   - path: scripts/test/test-next-shared-package.py
