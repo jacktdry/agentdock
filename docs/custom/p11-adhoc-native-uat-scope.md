@@ -1,5 +1,7 @@
 # P11 — macOS Next ad-hoc native install and recovery validation
 
+> **2026-10-14 Next-only 原生 GUI 與 live rollback 補驗：** 已從真實 App 重新啟動 Next GUI、用 Computer Use 檢查 12 個主頁與安全操作，修正連線模式草稿、更新通道停用顯示並在安裝版複驗；本地 `0.9.2-rc.3` 於實際替換 `Contents` 後故意注入一次 Core Registrar 失敗，**真實 rollback** 成功恢復 `0.9.2-rc.2`、Next Core/Tunnel 健康、Stable PID/8765 不變。**全新空白使用者安裝、原生 Menu Bar 與有風險的 ACP/MCP 登入／修改未驗**；非完整 P11 全功能結案。詳 [P11 GUI / rollback 原生驗收](p11-native-gui-and-rollback-uat-2026-10-14.md)。
+
 > **2026-10-14 Native checkpoint**：Next-only 手動本機升級已驗證，從 Core `0.9.1` 更新至本地測試候選 `0.9.2-rc.1`、Core/Tunnel/rollback 備份與 Stable PID/file invariant 全部 PASS；原生 GUI 尚未重啟，真實 live 故障注入回滾及全新安裝未驗。詳 [P11 native checkpoint](p11-native-deploy-checkpoint-2026-10-14.md)。
 
 > **Scope decision (2026-10-14, latest):** The owner has **no paid Apple Developer Program account**, so **Developer ID Application signing and Apple Notarization are explicitly not in P11**. Do not ask for/purchase an account, provision certificates or issue notarization requests. These omissions are accepted scope decisions and **must not remain P11 completion blockers**.

@@ -454,6 +454,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P11 — macOS Native Ad-hoc Installation / Recovery UAT
 
+> **2026-10-14 P11 後續 Native GUI + 真實 rollback PASS（優先於下方舊 checkpoint）**：已提交 `fa279cd4` 修正 Next 更新停用狀態與 Connection Named Tunnel 模式初次 hydration，實際部署／啟動 local `0.9.2-rc.2`，Orca Computer Use 導覽 12 個主頁、MCP/ACP 編輯 Cancel、權限政策 Cancel、1Hz Activity 真實事件並停止，重新整理與狀態複驗 PASS；Next `0.9.2-rc.3` 以真實 signed App `Contents` 原子交換後**故意注入一次 Core Registrar 失敗**，部署器成功回滾至 `0.9.2-rc.2`，新 Next Core/Tunnel PID 23460/23536、Next GUI PID 23865 正常，Stable 12127/8765/執行檔 inode+mtime 未變。Root `make check`、Shared Go、前端 Vitest **171/171**、Next ZIP/DMG SHA 全部 PASS。**首次全新使用者安裝與 macOS 選單列操作未驗，需獨立環境／原生支援，不聲稱 P11 全功能結案。** 詳 [GUI＋真實 rollback](p11-native-gui-and-rollback-uat-2026-10-14.md)。
+
 > **2026-10-14 P11 Next-only Native upgrade PASS（partial P11）**：新增 Core SemVer 降版 fail-closed 入口，23/23 手動 deploy/rollback source tests、9/9 真實 Next Bundle tests 及 `/private/tmp` 完整簽章 App 原子交換／還原 PASS。從 clean `0c2c5e88` 本地建置 Next `0.9.2-rc.1`，實際只更新 `~/Applications/AgentDock Next.app`：新 Next Core PID 71292 / port 8767 與 Next Tunnel PID 71579 健康，舊版 signed `0.9.1` Contents 已保留。Stable PID 12127 / port 8765 / executable inode+size+mtime 未變。**GUI PID 730 未重啟以避免搶焦點；live 故障注入回滾／全新安裝／原生 GUI UAT 尚未 PASS。** P11 尚未 closeout，無 Developer ID／公證／正式自動更新。詳 [P11 原生 checkpoint](p11-native-deploy-checkpoint-2026-10-14.md)。
 
 
