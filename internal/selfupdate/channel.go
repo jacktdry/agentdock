@@ -11,6 +11,10 @@ import (
 
 var errNextChannelDisabled = errors.New("AgentDock Next update channel is disabled/unpublished: no approved Next feed exists; use P10 release preflight and wait for an authorized Next release; stable releases cannot update Next")
 
+// IsNextChannelDisabled identifies the deliberate Next-only feed guard without
+// exposing the guard itself or weakening its fail-closed behavior.
+func IsNextChannelDisabled(err error) bool { return errors.Is(err, errNextChannelDisabled) }
+
 // The legacy empty/stable marker retains its feed unless another source proves
 // this is Next. Conflicting or unknown markers never select the stable feed.
 func validateUpdateChannel(opts options) error {

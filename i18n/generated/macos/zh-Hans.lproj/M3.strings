@@ -497,7 +497,7 @@
 "execution.unknown" = "未提供";
 "execution.updated" = "更新时间";
 "execution.waiting_hint" = "此调用正在等待用户输入。";
-"mcp.add_server" = "添加 server";
+"mcp.add_server" = "新增服务器";
 "mcp.advanced" = "高级设置";
 "mcp.args" = "参数";
 "mcp.args_protected" = "受保护的参数";
@@ -532,12 +532,12 @@
 "mcp.disable" = "停用";
 "mcp.disabled" = "已停用";
 "mcp.edit" = "编辑";
-"mcp.edit_server" = "编辑 server";
+"mcp.edit_server" = "编辑服务器";
 "mcp.empty_plugin" = "目前没有 Plugin 提供的 MCP server。";
 "mcp.empty_standalone" = "尚未配置任何独立 MCP server。";
 "mcp.enable" = "启用";
 "mcp.enabled" = "已启用";
-"mcp.endpoint" = "MCP endpoint";
+"mcp.endpoint" = "MCP 端点";
 "mcp.endpoint_hint" = "除 loopback 地址外，远程 endpoint 必须使用 HTTPS；此界面不接受 query string。";
 "mcp.endpoint_protected" = "受保护的 endpoint";
 "mcp.endpoint_protected_hint" = "已保存的 endpoint 含受保护信息。可以保持不变，或输入新的安全 endpoint 完整替换。";
@@ -550,14 +550,14 @@
 "mcp.environment_write_only" = "保存后无法再次显示原值；更新时请输入新的值。";
 "mcp.header_env" = "HTTP header → 主机环境变量";
 "mcp.header_env_hint" = "每行一项 Header=HOST_ENV。值从主机环境读取，不会显示在此界面。";
-"mcp.intro" = "管理独立 MCP server，并查看由 Plugin 提供的 MCP server。配置与凭据仍由 Core 掌握权限。";
+"mcp.intro" = "管理独立 MCP 服务器，并查看由插件提供的 MCP 服务器。配置与凭据仍由 Core 掌握权限。";
 "mcp.known_tools" = "已知工具";
 "mcp.last_observed" = "最后观察时间";
 "mcp.loading" = "正在加载 MCP 状态…";
-"mcp.manage_plugin" = "到 Plugin Management 管理";
+"mcp.manage_plugin" = "前往插件管理";
 "mcp.missing" = "未配置";
 "mcp.mutation_error" = "MCP 操作未完成。再次操作前请先检查重新加载后的状态。";
-"mcp.name" = "Server 名称";
+"mcp.name" = "服务器名称";
 "mcp.name_hint" = "使用稳定名称，可包含字母、数字、句点、连字符或下划线。";
 "mcp.name_immutable" = "创建后不能更改 server 名称。";
 "mcp.never_observed" = "尚未观察";
@@ -578,7 +578,7 @@
 "mcp.oauth_title" = "授权";
 "mcp.outcome_unknown" = "操作结果未知。AgentDock 会先按 request ID 对账，再允许其他修改。";
 "mcp.partial_title" = "配置已保存，但运行环境仍需要恢复";
-"mcp.plugin_hint" = "此处仅供查看。配置与生命周期请到 Plugin Management 管理。";
+"mcp.plugin_hint" = "此处仅供查看。配置与生命周期请前往「插件管理」。";
 "mcp.plugin_owner" = "Plugin：{name}";
 "mcp.plugin_title" = "由 Plugin 提供";
 "mcp.protected_value" = "受保护";
@@ -761,7 +761,7 @@
 "plugin.confirm_unset_hint" = "已保存的值会从此 Plugin-owned 连接范围移除。";
 "plugin.confirm_update" = "更新 Plugin";
 "plugin.current_version" = "当前版本";
-"plugin.detail_title" = "Plugin 详细信息";
+"plugin.detail_title" = "插件详细信息";
 "plugin.diff_added" = "新增";
 "plugin.diff_changed" = "变更";
 "plugin.diff_removed" = "移除";
@@ -838,7 +838,7 @@
 "plugin.status_disabled" = "已停用";
 "plugin.status_enabled" = "已启用";
 "plugin.status_recovery" = "需要清理";
-"plugin.title" = "Plugin Management";
+"plugin.title" = "插件管理";
 "plugin.unset_value" = "清除";
 "plugin.update_changes" = "变更内容";
 "plugin.update_disabled_notice" = "此 Plugin 当前已停用；更新完成后仍会保持停用。";
@@ -871,6 +871,7 @@
 "settings.saved" = "开发者偏好设置已保存。";
 "settings.title" = "开发者偏好设置";
 "update.available" = "有可用更新。";
+"update.channel_disabled" = "AgentDock Next 更新通道尚未启用；自动更新已停用。请使用经过验证的本地部署方式。";
 "update.check" = "检查更新";
 "update.core_available" = "有核心更新";
 "update.current" = "当前核心版本";

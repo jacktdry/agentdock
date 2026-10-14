@@ -871,6 +871,7 @@
 "settings.saved" = "Developer preference saved.";
 "settings.title" = "Developer preferences";
 "update.available" = "An update is available.";
+"update.channel_disabled" = "AgentDock Next update channel is not yet available. Automatic updates remain disabled; use verified local deployment instead.";
 "update.check" = "Check for updates";
 "update.core_available" = "Core update available";
 "update.current" = "Current core version";

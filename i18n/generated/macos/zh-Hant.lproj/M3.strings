@@ -497,7 +497,7 @@
 "execution.unknown" = "未提供";
 "execution.updated" = "更新時間";
 "execution.waiting_hint" = "此呼叫正在等待使用者輸入。";
-"mcp.add_server" = "新增 server";
+"mcp.add_server" = "新增伺服器";
 "mcp.advanced" = "進階設定";
 "mcp.args" = "參數";
 "mcp.args_protected" = "受保護的參數";
@@ -532,12 +532,12 @@
 "mcp.disable" = "停用";
 "mcp.disabled" = "已停用";
 "mcp.edit" = "編輯";
-"mcp.edit_server" = "編輯 server";
+"mcp.edit_server" = "編輯伺服器";
 "mcp.empty_plugin" = "目前沒有 Plugin 提供的 MCP server。";
 "mcp.empty_standalone" = "尚未設定任何獨立 MCP server。";
 "mcp.enable" = "啟用";
 "mcp.enabled" = "已啟用";
-"mcp.endpoint" = "MCP endpoint";
+"mcp.endpoint" = "MCP 端點";
 "mcp.endpoint_hint" = "除 loopback 位址外，遠端 endpoint 必須使用 HTTPS；此介面不接受 query string。";
 "mcp.endpoint_protected" = "受保護的 endpoint";
 "mcp.endpoint_protected_hint" = "已儲存的 endpoint 含有受保護資訊。可以保持不變，或輸入新的安全 endpoint 完整替換。";
@@ -550,14 +550,14 @@
 "mcp.environment_write_only" = "儲存後無法再次顯示原值；要更新時請輸入新的值。";
 "mcp.header_env" = "HTTP header → 主機環境變數";
 "mcp.header_env_hint" = "每行一筆 Header=HOST_ENV。值由主機環境讀取，不會顯示在此介面。";
-"mcp.intro" = "管理獨立 MCP server，並檢視由 Plugin 提供的 MCP server。設定與憑證仍由 Core 掌握權限。";
+"mcp.intro" = "管理獨立 MCP 伺服器，並檢視由外掛提供的 MCP 伺服器。設定與憑證仍由 Core 掌握權限。";
 "mcp.known_tools" = "已知工具";
 "mcp.last_observed" = "最後觀察時間";
 "mcp.loading" = "正在載入 MCP 狀態…";
-"mcp.manage_plugin" = "到 Plugin Management 管理";
+"mcp.manage_plugin" = "前往外掛管理";
 "mcp.missing" = "未設定";
 "mcp.mutation_error" = "MCP 操作未完成。再次操作前請先檢查重新載入後的狀態。";
-"mcp.name" = "Server 名稱";
+"mcp.name" = "伺服器名稱";
 "mcp.name_hint" = "使用穩定名稱，可包含英數字、句點、連字號或底線。";
 "mcp.name_immutable" = "建立後不能變更 server 名稱。";
 "mcp.never_observed" = "尚未觀察";
@@ -578,7 +578,7 @@
 "mcp.oauth_title" = "授權";
 "mcp.outcome_unknown" = "操作結果未知。AgentDock 會先依 request ID 對帳，再允許其他修改。";
 "mcp.partial_title" = "設定已儲存，但執行環境仍需要復原";
-"mcp.plugin_hint" = "此處只供檢視。設定與生命週期請到 Plugin Management 管理。";
+"mcp.plugin_hint" = "此處僅供檢視。設定與生命週期請至「外掛管理」操作。";
 "mcp.plugin_owner" = "Plugin：{name}";
 "mcp.plugin_title" = "由 Plugin 提供";
 "mcp.protected_value" = "受保護";
@@ -761,7 +761,7 @@
 "plugin.confirm_unset_hint" = "已儲存的值會從此 Plugin-owned 連線範圍移除。";
 "plugin.confirm_update" = "更新 Plugin";
 "plugin.current_version" = "目前版本";
-"plugin.detail_title" = "Plugin 詳細資料";
+"plugin.detail_title" = "外掛詳細資料";
 "plugin.diff_added" = "新增";
 "plugin.diff_changed" = "變更";
 "plugin.diff_removed" = "移除";
@@ -838,7 +838,7 @@
 "plugin.status_disabled" = "已停用";
 "plugin.status_enabled" = "已啟用";
 "plugin.status_recovery" = "需要清理";
-"plugin.title" = "Plugin Management";
+"plugin.title" = "外掛管理";
 "plugin.unset_value" = "清除";
 "plugin.update_changes" = "變更內容";
 "plugin.update_disabled_notice" = "此 Plugin 目前已停用；更新完成後仍會維持停用。";
@@ -871,6 +871,7 @@
 "settings.saved" = "開發者偏好設定已儲存。";
 "settings.title" = "開發者偏好設定";
 "update.available" = "有可用更新。";
+"update.channel_disabled" = "AgentDock Next 更新通道尚未啟用；自動更新已停用。請使用驗證過的本地部署方式。";
 "update.check" = "檢查更新";
 "update.core_available" = "有核心更新";
 "update.current" = "目前核心版本";

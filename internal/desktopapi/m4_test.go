@@ -117,6 +117,15 @@ func TestUpdateCheckOnlyAndSanitizedErrors(t *testing.T) {
 	if strings.Contains(string(data), "SECRET") {
 		t.Fatal(string(data))
 	}
+	// An unpublished Next update feed is intentional, not a generic failure.
+	// Preserve the fail-closed channel guard and show a stable UI reason code.
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	service.check = selfupdate.CheckForRuntime
+	disabled := service.Check(context.Background())
+	if disabled.Error == nil || disabled.Error.Code != "next_update_channel_disabled" ||
+		disabled.Error.Category != ErrorCategoryUnavailable || disabled.Error.Retryable {
+		t.Fatalf("Next update disable reason lost: %#v", disabled)
+	}
 }
 
 func TestDiagnosticsDoesNotReadContents(t *testing.T) {

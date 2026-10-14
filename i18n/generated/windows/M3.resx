@@ -2617,6 +2617,9 @@
   <data name="update.available" xml:space="preserve">
     <value>An update is available.</value>
   </data>
+  <data name="update.channel_disabled" xml:space="preserve">
+    <value>AgentDock Next update channel is not yet available. Automatic updates remain disabled; use verified local deployment instead.</value>
+  </data>
   <data name="update.check" xml:space="preserve">
     <value>Check for updates</value>
   </data>

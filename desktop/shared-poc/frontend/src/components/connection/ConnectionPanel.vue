@@ -354,6 +354,7 @@ watch(
     clearPassword()
     syncDrafts()
   },
+  { immediate: true },
 )
 
 watch(portDraft, (candidate) => {

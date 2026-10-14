@@ -34,6 +34,13 @@ func (s *UpdateService) Check(ctx context.Context) UpdateCheckResult {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	result, err := s.check(ctx, s.runtimeRoot)
+	if selfupdate.IsNextChannelDisabled(err) {
+		return UpdateCheckResult{Error: NewError(
+			"next_update_channel_disabled",
+			"AgentDock Next update channel is not yet published",
+			ErrorCategoryUnavailable, false, nil,
+		)}
+	}
 	if err != nil {
 		return UpdateCheckResult{Error: safeContextServiceError(ctx, "update_check_failed", err)}
 	}

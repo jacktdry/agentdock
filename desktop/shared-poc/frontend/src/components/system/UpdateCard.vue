@@ -8,7 +8,8 @@ const { t } = useI18n()
 <template>
   <section class="panel" aria-labelledby="update-title">
     <h2 id="update-title">{{ t('update.title') }}</h2>
-    <dl v-if="store.data" class="status-grid">
+    <p v-if="store.channelDisabled" role="status">{{ t('update.channel_disabled') }}</p>
+    <dl v-else-if="store.data" class="status-grid">
       <div><dt>{{ t('update.current') }}</dt><dd>{{ store.data.currentVersion || t('common.unavailable') }}</dd></div>
       <div><dt>{{ t('update.latest') }}</dt><dd>{{ store.data.latestVersion || t('common.unavailable') }}</dd></div>
       <div><dt>{{ t('update.desktop_current') }}</dt><dd>{{ store.data.desktopCurrentVersion || t('common.unavailable') }}</dd></div>
@@ -16,8 +17,8 @@ const { t } = useI18n()
       <div><dt>{{ t('update.desktop_available') }}</dt><dd>{{ t(store.data.desktopUpdateAvailable ? 'common.yes' : 'common.no') }}</dd></div>
     </dl>
     <p v-else>{{ t('update.not_checked') }}</p>
-    <p class="hint">{{ t('update.native_only') }}</p>
-    <button type="button" :disabled="store.busy" @click="store.refresh">{{ t('update.check') }}</button>
-    <OperationStatus :busy="store.busy" :error="store.error" :completed="!!store.data" />
+    <p v-if="!store.channelDisabled" class="hint">{{ t('update.native_only') }}</p>
+    <button type="button" :disabled="store.busy || store.channelDisabled" @click="store.refresh">{{ t('update.check') }}</button>
+    <OperationStatus :busy="store.busy" :error="store.channelDisabled ? null : store.error" :completed="!!store.data" />
   </section>
 </template>

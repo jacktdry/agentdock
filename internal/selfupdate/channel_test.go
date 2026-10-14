@@ -3,11 +3,22 @@ package selfupdate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+func TestNextDisabledReasonIsRecognizableWithoutBypass(t *testing.T) {
+	if !IsNextChannelDisabled(errNextChannelDisabled) || !IsNextChannelDisabled(
+		fmt.Errorf("wrapped: %w", errNextChannelDisabled)) {
+		t.Fatal("expected deliberate Next channel disablement")
+	}
+	if IsNextChannelDisabled(errors.New("network timeout")) || IsNextChannelDisabled(nil) {
+		t.Fatal("unrelated errors must not look like intentional disablement")
+	}
+}
 
 type channelTransport func(*http.Request) (*http.Response, error)
 

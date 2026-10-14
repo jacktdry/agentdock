@@ -1496,7 +1496,7 @@
     <value>此调用正在等待用户输入。</value>
   </data>
   <data name="mcp.add_server" xml:space="preserve">
-    <value>添加 server</value>
+    <value>新增服务器</value>
   </data>
   <data name="mcp.advanced" xml:space="preserve">
     <value>高级设置</value>
@@ -1601,7 +1601,7 @@
     <value>编辑</value>
   </data>
   <data name="mcp.edit_server" xml:space="preserve">
-    <value>编辑 server</value>
+    <value>编辑服务器</value>
   </data>
   <data name="mcp.empty_plugin" xml:space="preserve">
     <value>目前没有 Plugin 提供的 MCP server。</value>
@@ -1616,7 +1616,7 @@
     <value>已启用</value>
   </data>
   <data name="mcp.endpoint" xml:space="preserve">
-    <value>MCP endpoint</value>
+    <value>MCP 端点</value>
   </data>
   <data name="mcp.endpoint_hint" xml:space="preserve">
     <value>除 loopback 地址外，远程 endpoint 必须使用 HTTPS；此界面不接受 query string。</value>
@@ -1655,7 +1655,7 @@
     <value>每行一项 Header=HOST_ENV。值从主机环境读取，不会显示在此界面。</value>
   </data>
   <data name="mcp.intro" xml:space="preserve">
-    <value>管理独立 MCP server，并查看由 Plugin 提供的 MCP server。配置与凭据仍由 Core 掌握权限。</value>
+    <value>管理独立 MCP 服务器，并查看由插件提供的 MCP 服务器。配置与凭据仍由 Core 掌握权限。</value>
   </data>
   <data name="mcp.known_tools" xml:space="preserve">
     <value>已知工具</value>
@@ -1667,7 +1667,7 @@
     <value>正在加载 MCP 状态…</value>
   </data>
   <data name="mcp.manage_plugin" xml:space="preserve">
-    <value>到 Plugin Management 管理</value>
+    <value>前往插件管理</value>
   </data>
   <data name="mcp.missing" xml:space="preserve">
     <value>未配置</value>
@@ -1676,7 +1676,7 @@
     <value>MCP 操作未完成。再次操作前请先检查重新加载后的状态。</value>
   </data>
   <data name="mcp.name" xml:space="preserve">
-    <value>Server 名称</value>
+    <value>服务器名称</value>
   </data>
   <data name="mcp.name_hint" xml:space="preserve">
     <value>使用稳定名称，可包含字母、数字、句点、连字符或下划线。</value>
@@ -1739,7 +1739,7 @@
     <value>配置已保存，但运行环境仍需要恢复</value>
   </data>
   <data name="mcp.plugin_hint" xml:space="preserve">
-    <value>此处仅供查看。配置与生命周期请到 Plugin Management 管理。</value>
+    <value>此处仅供查看。配置与生命周期请前往「插件管理」。</value>
   </data>
   <data name="mcp.plugin_owner" xml:space="preserve">
     <value>Plugin：{name}</value>
@@ -2288,7 +2288,7 @@
     <value>当前版本</value>
   </data>
   <data name="plugin.detail_title" xml:space="preserve">
-    <value>Plugin 详细信息</value>
+    <value>插件详细信息</value>
   </data>
   <data name="plugin.diff_added" xml:space="preserve">
     <value>新增</value>
@@ -2519,7 +2519,7 @@
     <value>需要清理</value>
   </data>
   <data name="plugin.title" xml:space="preserve">
-    <value>Plugin Management</value>
+    <value>插件管理</value>
   </data>
   <data name="plugin.unset_value" xml:space="preserve">
     <value>清除</value>
@@ -2616,6 +2616,9 @@
   </data>
   <data name="update.available" xml:space="preserve">
     <value>有可用更新。</value>
+  </data>
+  <data name="update.channel_disabled" xml:space="preserve">
+    <value>AgentDock Next 更新通道尚未启用；自动更新已停用。请使用经过验证的本地部署方式。</value>
   </data>
   <data name="update.check" xml:space="preserve">
     <value>检查更新</value>
