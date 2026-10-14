@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 func validNextInput() nextInput {
@@ -29,7 +30,21 @@ func TestNextContract(t *testing.T) {
 	if m.ReleaseReady || m.UpdateFeed != "disabled/unpublished" || m.UpdateURL != "" || m.Channel != "next-rc" {
 		t.Fatal("preflight must never grant update/release authority")
 	}
+	blockers := strings.Join(m.Blockers, ",")
+	for _, stale := range []string{"core-next-version-not-wired", "selfupdate-upstream-api-not-next-channelized"} {
+		if strings.Contains(blockers, stale) {
+			t.Fatalf("stale gate: %s", stale)
+		}
+	}
+	for _, gate := range []string{"windows-next-installer-not-isolated", "hosted-ci-native-artifacts-not-verified", "p11-signing-updater-native-uat"} {
+		if !strings.Contains(blockers, gate) {
+			t.Fatalf("missing remaining gate: %s", gate)
+		}
+	}
 	for _, name := range m.Artifacts {
+		if strings.Contains(name, "universal") {
+			t.Fatalf("P10 Next is arm64-only: %s", name)
+		}
 		if !strings.HasPrefix(name, "AgentDock-Next") {
 			t.Fatalf("Stable artifact: %s", name)
 		}
@@ -38,6 +53,13 @@ func TestNextContract(t *testing.T) {
 				t.Fatal("Next overlaps Stable catalog")
 			}
 		}
+	}
+	id, err := updateidentity.Resolve("next")
+	if err != nil || m.Artifacts[0] != id.Artifact {
+		t.Fatalf("manifest/update identity mismatch: %v, %v", m.Artifacts, err)
+	}
+	if m.Artifacts[0] != "AgentDock-Next-macos-arm64.zip" || m.Artifacts[1] != "AgentDock-Next-macos-arm64.dmg" {
+		t.Fatalf("incorrect P10 macOS assets: %v", m.Artifacts)
 	}
 	if strings.Contains(buildinfo.Version, "rc") {
 		t.Fatal("Stable buildinfo was changed to Next")

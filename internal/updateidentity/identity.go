@@ -20,7 +20,7 @@ func Resolve(variant string) (Identity, error) {
 	case "", "stable":
 		return Identity{"stable", "AgentDock", "com.uvwt.agentdock", "AgentDock-macos-universal.zip"}, nil
 	case "next":
-		return Identity{"next", "AgentDock Next", "dev.dropabit.agentdock.next", "AgentDock-Next-macos-universal.zip"}, nil
+		return Identity{"next", "AgentDock Next", "dev.dropabit.agentdock.next", "AgentDock-Next-macos-arm64.zip"}, nil
 	default:
 		return Identity{}, fmt.Errorf("unknown update identity %q", variant)
 	}

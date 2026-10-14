@@ -23,7 +23,7 @@
 | CFBundleVersion | **另需明確輸入** bundle build ordinal B（1..9999），映射為 `B.0.0`；不將四段 Windows 版本或 SemVer suffix 填入此欄位 |
 | Windows File/Product/Assembly version | `M.m.p.N` 四段數字；InformationalVersion / Core 保留完整 RC 字串 |
 | channel / feed | `next-rc`；feed = `disabled/unpublished`、URL 為空、`release_ready:false`；不接入任何 updater |
-| 預計產物 | `AgentDock-Next-macos-universal.zip/.dmg`（沿用 identity 名稱），`AgentDock-NextSetup-amd64.exe`、`AgentDock-NextSetup-arm64.exe`；Windows 名稱是預定契約，尚無對應 Next installer；後續每項須具備 `.sha256` 與同 commit metadata 證據 |
+| 預計產物 | `AgentDock-Next-macos-arm64.zip/.dmg`（P10 支援 macOS arm64-only，與 canonical shell 單架構 identity 一致；不要求 Intel），`AgentDock-NextSetup-amd64.exe`、`AgentDock-NextSetup-arm64.exe`；Windows 名稱是預定契約，尚無對應 Next installer；後續每項須具備 `.sha256` 與同 commit metadata 證據 |
 
 CFBundle 使用三段數字的依據：[Apple CFBundleVersion](https://developer.apple.com/documentation/BundleResources/Information-Property-List/CFBundleVersion)。Bundle ordinal 與 SemVer 是不同欄位；此批要求顯式輸入以避免猜測。後續 release gate 仍須證明 B 對已分發 Next build 單調遞增、每個 RC 對應唯一 source commit，不能只看本機 preflight。
 
@@ -51,8 +51,8 @@ rtk git diff --check
 
 1. **UIUX unfrozen、custom/main 尚未整合**；P10 pipeline source authorization / parity integration 仍待 upstream owner 收斂。
 2. 第二批已接入 opt-in Next overlay 與 plist 分離版本（見下方）；Stable `internal/buildinfo.Version` 仍是常數。真正 clean HEAD 的候選 Core binary smoke 待 orchestrator 整合後執行，fixture compile 不是 RC artifact acceptance。
-3. Next shared builder 仍僅 arm64，不能因名稱含 universal 就視為 universal。Windows Next identity / installer、完整 artifact/hash/metadata verify 亦待實作。
-4. **`internal/selfupdate/update.go` 的 `defaultReleaseAPI` 仍指向 upstream `uvwt/agentdock/releases/latest`，尚未 Next channelize**。本批不更改或呼叫 updater；Next feed 必須保持 disabled/unpublished，直到 channel/identity fail-closed gate 完成。
+3. P10 Next macOS 支援目標為 arm64-only，不要求 Intel 或 universal；manifest 與 update identity 已對齊 canonical shell arm64 包名。Windows Next identity / installer、完整 artifact/hash/metadata verify 亦待實作。
+4. **Next channel guard 已在 HTTP 前明確拒絕更新，feed 維持 disabled/unpublished**；Stable `defaultReleaseAPI` 不變。本批不呼叫 updater；核准 Next feed 與完整 activation gates 仍未完成。
 5. P11：Developer ID signed macOS 13 deployment target、certificate-bound update → trial → commit、rollback/interrupted recovery、Windows/WSL/Linux helper native UAT、install/update/recovery。Cross-build、source tests 或本 preflight 都不能取代这些驗收。
 
 最接近的後續使用者流程：UIUX 凍結與 owner 整合後，在 clean immutable SHA 將本契約接到既有 Next build metadata，核對真正 artifact；其後才進 P11。沒有安裝、發布、服務或 Stable retirement 授權。
@@ -63,7 +63,7 @@ rtk git diff --check
 - 最小實作：`tools/release next-candidate --manifest MANIFEST [--output DIR]` 沿用 canonical preflight，逐 byte 驗證 JSON，核對 HEAD、UTC source date、Next identity、clean checkout（含 untracked）。只在 repo-local dist 子目錄 exclusive-create overlay，不改 Stable 常數、version/verify-version 或 `release.yml`。
 - 明確 opt-in：`build-next-shared.sh CLOUDFLARED --candidate-manifest MANIFEST` 將已驗證 provenance 與 overlay 接到 Core。`build-app.sh` 的 `AGENTDOCK_NEXT_CANDIDATE_MANIFEST` 重新驗證 manifest，限制 candidate output 到 dist；arbiter 使用同一 manifest 的 overlay 和 Commit/BuildDate。ShortVersion = M.m.p、BundleVersion = B.0.0；未 opt-in 的 dev/Stable/metadata-only 行為維持。
 - 驗收與非干擾：focused canonical/clean/dirty tests、isolated Git fixture 的實際 metadata-only plist、tiny Go binary `version --json` / `go version -m`、實際 arbiter compile / `go version -m`。不執行 arbiter、App、服務或 updater；fixture 不是 clean HEAD release acceptance。
-- 尚未做：UIUX unfrozen、Windows identity/installer、Next updater feeds、macOS full signed/universal release、候選安裝與真實更新／回滾 UAT；P10/M9 尚未 closeout。`remaining_gates` 保留第一批 source-contract checklist，不自動授予 closeout；本 checkpoint 與 orchestrator artifact 驗收才是完成度依據。
+- 尚未做：UIUX unfrozen、Windows identity/installer、Next updater feeds、macOS full signed arm64 release、候選安裝與真實更新／回滾 UAT；P10/M9 尚未 closeout。`remaining_gates` 不自動授予 closeout；本次 metadata cleanup 將已接線的 Core overlay 與已禁用的 Next channel 舊 gate 換為 `windows-next-installer-not-isolated` 與 `hosted-ci-native-artifacts-not-verified`；本 checkpoint 與 orchestrator artifact 驗收才是完成度依據。
 
 整合後 orchestrator 在 **clean HEAD** 重新產生 manifest，再執行下面的準備與只讀查核；示例不是發布授權：
 
@@ -99,4 +99,4 @@ rtk proxy go version -m dist/p10-core-smoke/agentdock
 - 本地建置成功產生 arm64 Wails Desktop、Next Core (`version=0.9.1-rc.1`、runtime commit `15b116ddf76e`、UTC BuildDate `2026-10-14T03:14:47Z`)、Core Skills 與 cloudflared payload，皆為 source-only 測試，不安裝／啟動服務。
 - 直接從這些編譯產物執行 `build-app.sh`：**Next App、ZIP、DMG 實際產出，ad-hoc codesign 檢查通過，DMG `hdiutil verify` checksum valid**。第一次整包腳本最後的 Python 套件 fixture 因繼承 `AGENTDOCK_NEXT_CANDIDATE_MANIFEST`，把獨立的 `--metadata-only` fixture 誤判為 candidate，導致整體 exit 1；不是 App 啟動或簽章失敗。隔離環境後 `test-next-shared-package.py <bundle>` **原有 8 項 PASS**，完整實際 Bundle 驗證 PASS。
 - 修正：package fixture 明確移除所繼承的 candidate marker，另加一項 arm64/universal/Stable 名稱驗證，**9 項 PASS**，包含故意設置無效 candidate marker 的負向情境。Next arm64-only 打包原先錯用 `universal` 檔名，現改為使用 `AgentDock-Next-macos-arm64.zip/.dmg`；Stable 及 Next 雙架構命名規則不變。先前已建立的本地 ZIP／DMG 僅在忽略版控的 dist 內重新命名並重新計算 SHA-256，兩項 checksum **PASS**；它們仍是 commit `15b116dd` 的測試包，不能冒充修正後 SHA 的完整 build acceptance。
-- 限制：**僅 arm64**，尚無 x86_64 / 真正 universal 產物；簽章為 `-` ad-hoc，非 Developer ID；沒有 notarization、GitHub Hosted CI、Windows Next installer、正式更新 feed、原生安裝／更新／回滾、P11 UAT。提交本次來源修正後，日後仍需對該新 SHA 執行 clean HEAD 完整包驗證；本記錄不授予 P10 closeout 或公開發佈權限。
+- 限制：**僅 arm64**（P10 支援目標，不要求 Intel / universal）；簽章為 `-` ad-hoc，非 Developer ID；沒有 notarization、GitHub Hosted CI、Windows Next installer、正式更新 feed、原生安裝／更新／回滾、P11 UAT。提交本次來源修正後，日後仍需對該新 SHA 執行 clean HEAD 完整包驗證；本記錄不授予 P10 closeout 或公開發佈權限。

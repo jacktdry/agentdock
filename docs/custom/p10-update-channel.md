@@ -29,7 +29,9 @@ Next policy 固定為 **disabled/unpublished**，沒有 feed URL。錯誤明示�
 - `newOptions` 對拒絕的 channel 將 `ReleaseAPI` 清空；`run` 與 `inspectUpdate` 仍重新驗證，拒絕發生在 `fetchLatestRelease` 前。手動提供 custom `ReleaseAPI` 不會解除 Next 禁用。
 - Windows local archive additionally 檢查 target version，拒絕 RC/Next 目標後才會讀取 archive/checksum。未新增 installer/updateengine/rollback 行為。
 
-因此禁用期間所有 Next 平台均無法落入 Stable Core archive 選擇／替換路徑，亦無法把 Next RC 本地 payload 寫入 Stable destination。macOS 既有 `DesktopOnly`、Next installation namespace、`AgentDock-Next-macos-universal.zip`、bundle/signature 與 ownership 檢查保留；不增加 Windows/Linux Next archive 映射，也不把 Setup EXE 當 Stable ZIP/TAR 更新。其他 lower-level engine/repair/internal recovery 路徑未改造，本政策不是 P11 的全面原生更新授權層。
+P10 macOS artifact metadata 已與 canonical shell 的單架構名稱對齊為 `AgentDock-Next-macos-arm64.zip`；Stable 仍保留 `AgentDock-macos-universal.zip`。這只更正 source identity 字串，channel guard 仍在 archive 選擇與 HTTP 前拒絕 Next，不啟用 feed 或放寬 identity validation。
+
+因此禁用期間所有 Next 平台均無法落入 Stable Core archive 選擇／替換路徑，亦無法把 Next RC 本地 payload 寫入 Stable destination。macOS 既有 `DesktopOnly`、Next installation namespace、`AgentDock-Next-macos-arm64.zip`、bundle/signature 與 ownership 檢查保留；不增加 Windows/Linux Next archive 映射，也不把 Setup EXE 當 Stable ZIP/TAR 更新。其他 lower-level engine/repair/internal recovery 路徑未改造，本政策不是 P11 的全面原生更新授權層。
 
 Stable 在空值／`stable` marker、無 Next 訊號時仍使用原 `defaultReleaseAPI`（`https://api.github.com/repos/uvwt/agentdock/releases/latest`）；custom isolated Stable ReleaseAPI 測試不變。
 
@@ -46,7 +48,7 @@ Stable 在空值／`stable` marker、無 Next 訊號時仍使用原 `defaultRele
 1. UIUX 凍結及 P10 owner integration，clean immutable SHA、canonical RC version／`next-v` tag、同 commit metadata／manifest 與實際 artifact 證據。
 2. 明確 Next-only feed 的來源、channel/tag/schema 與 URL/redirect policy；證明不能 fallback upstream Stable。不能僅增加任意 URL 或 token env override。
 3. 各平台 destination/ownership、archive 類型與 payload identity 的 fail-closed binding；獨立 Next 安裝名稱、state/services，不沿用 Stable ZIP/TAR/Setup 類型。
-4. 每項 artifact 的 checksum、簽章／certificate continuity、完整 metadata/provenance 與平台建置證據（名稱包含 universal 不代表已驗證 universal）。
+4. 每項 artifact 的 checksum、簽章／certificate continuity、完整 metadata/provenance 與平台建置證據（P10 Next macOS 僅支援 arm64，不要求 Intel / universal）。
 5. P11 另行授權的原生 update → trial → commit、rollback/interruption/recovery 與非干擾 UAT。source fixtures、cross-build 或本文件不能取代它們。
 
 最接近的下一個流程是 owner 整合 channel guard 與 Windows packaging source contract，再核對 clean SHA 候選 artifact；目前仍等待授權的 Next feed 與上述 activation gates。
