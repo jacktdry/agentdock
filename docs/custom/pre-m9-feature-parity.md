@@ -452,19 +452,22 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 > **2026-10-14 P10 第一批 source checkpoint**：[Next release preflight](p10-release-preflight.md) 新增候選合約、read-only CLI/CI 與負向測試；僅 dry-run。UIUX unfrozen、custom/main 尚未整合；Core Next version、installer metadata/architecture 與 upstream selfupdate API Next channelization 尚未接入，feed disabled/unpublished、release_ready=false。P10/M9/P11 均未 closeout，沒有正式發布或安裝。
 
-### P11 — Release-native UAT
+### P11 — macOS Native Ad-hoc Installation / Recovery UAT
 
-在 M9 release candidate artifacts 上執行：
+> **2026-10-14 使用者最新決策：沒有付費 Apple Developer 帳號，P11 不做 Developer ID 簽章、公證（Notarization）、Stapling，也不把它們當作結案門檻。** 依 [P11 無付費帳號驗收契約](p11-adhoc-native-uat-scope.md)，僅驗證 Next macOS arm64 的本地 ad-hoc 安裝、手動更新／回滾及原生功能，不宣稱正式公開發佈資格。
 
-- macOS Developer ID signed package；
-- certificate-bound GUI updater update → trial → commit；
-- rollback / interrupted recovery；
-- Windows native UAT（**非本階段必過**；無 Windows 設備，只有另行授權／取得環境後再進行）；
-- WSL native UAT（同樣非本階段必過，不冒充原生驗收）；
-- Linux-only helper native dispatch / scan execution；
-- install / update / rollback / recovery。
+使用已驗證的 M9 Next release candidate artifacts，在不干擾 Stable 的情況下完成：
 
-Cross-build 不等於 native UAT。Windows/WSL 依 2026-10-14 使用者決策改列 source-only 理論可行、無設備時**不阻塞 macOS P10/P11**；不得聲稱 Windows native PASS 或發布 Windows 安裝包，詳 [驗收決策](p10-windows-source-only-acceptance.md)。
+- macOS Next-only ad-hoc App 的身分／SHA／Core、Helper 版本與原生安裝、啟動、服務註冊；
+- Next-only 受控**本地手動部署／版本替換**、備份、健康驗證、失敗回滾及中斷恢復，不碰 Stable；
+- Next macOS 原生 UI、選單列／Tray、Connection、ACP/MCP、Runtime health、語系與實際可操作性 UAT；
+- 既有簽章／bundle 驗證及檔案完整性防護不降低；遇到 Gatekeeper 提示只記錄或依使用者親自授權的正常系統流程處理，不變更系統信任設定；
+- Linux-only helper native dispatch / scan execution（有獨立可用環境時）；
+- Windows native UAT／WSL native UAT：**非必過／不測**；Windows 僅來源／cross-build 理論可行。
+
+**重要安全邊界：** 現有 Next GUI 自動更新器要求 certificate-bound source signer，會拒絕 ad-hoc；所以正式自動更新的 update → trial → commit、憑證連續性與 feed 啟用**不納入本次可執行驗收，也不得為了通過測試而繞過拒絕條件**。手動部署及回滾不是 GUI 自動更新驗收成功。如果未來想在沒有 Developer ID 的前提下提供自動更新，需另行評估可信任來源與安全設計。
+
+Cross-build 不等於 native UAT。Windows/WSL 依 2026-10-14 使用者決策不阻塞 P11，詳 [Windows 驗收決策](p10-windows-source-only-acceptance.md)。
 
 ### P12 — Native Business UI Deprecation
 

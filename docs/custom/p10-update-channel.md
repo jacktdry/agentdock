@@ -1,5 +1,7 @@
 # P10 Next update channel：disabled/unpublished
 
+> **P11 使用者範圍調整（2026-10-14）：** 不做 Developer ID 簽章、公證及 certificate-bound GUI 自動更新 native acceptance；**仍保留 ad-hoc Next 的來源憑證拒絕、正式 feed 停用**。P11 驗證 Next-only 本地 ad-hoc 安裝／手動部署／回滾，不可稱作 GUI 自動更新成功。詳 [P11 決策](p11-adhoc-native-uat-scope.md)。
+
 本文件記錄 source contract，對應 [P10 release preflight](p10-release-preflight.md)。僅完成 channel guard 準備，P10/M9 未 closeout，沒有 updater 成功發布或原生更新／回滾證據。
 
 ## 工作與驗收範圍

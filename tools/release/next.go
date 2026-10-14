@@ -77,7 +77,7 @@ func nextContract(in nextInput) (nextManifest, error) {
 		// P10 ships no Windows Setup: Windows is source/cross-build feasibility only.
 		Artifacts:  []string{"AgentDock-Next-macos-arm64.zip", "AgentDock-Next-macos-arm64.dmg"},
 		UpdateFeed: "disabled/unpublished", UpdateURL: "", ReleaseReady: false,
-		Blockers: []string{"macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "formal-release-not-authorized", "p11-signing-updater-native-uat"},
+		Blockers: []string{"macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "formal-release-not-authorized", "p11-adhoc-next-only-install-recovery-uat"},
 	}, nil
 }
 

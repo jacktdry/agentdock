@@ -451,7 +451,7 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 9. Browser Broker Shared UI：依 M6 routing/ownership/lease 架構重新設計，不搬舊 CDP selector。
 10. Pre-M9 hardening：清除 `app-identity.sh` governance debt；CBM lifecycle debt 先 triage，只有 release/update blocker 才在 M9 前修。
 11. 進入 M9 Release Migration。
-12. 用 release candidate artifacts 做 macOS signed updater、Windows/WSL native、Linux helper native validation。
+12. 用 release candidate artifacts 做 macOS Next-only **ad-hoc 本地安裝／手動版本替換／回滾**及原生 UI 驗收；不做 Developer ID／Apple Notarization（無付費帳號），現有 certificate-bound 自動更新仍 fail-closed。Windows/WSL 只需 source-only 理論可行、無原生必過；Linux helper 有環境再驗證。詳 [P11 範圍](p11-adhoc-native-uat-scope.md)。
 13. M9 closeout 後，Shared UI parity 穩定才逐步 deprecated 重複 AppKit/WPF business UI。
 
 重要：Next connector **不等待全部 parity 完成**，目前已建立為 `macbook-air-m3`。它可用於後續 Next runtime / connector 行為驗證，但 **stable `mac-dev` 是 Next repository 修改、build/package、App reinstall、service/tunnel mutation 與修復的唯一 control plane**；Next connector 不得自我修改或自我重裝。
@@ -473,6 +473,8 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 - **2026-10-14 UX-S4/S5 第二批 Source**：NexusDock「開發中」頁面不再提供 Pair/Reconcile/Restart 變更入口，保留唯讀、unknown 狀態及本地化時間；Next Wails 選單列及原生 Plugin 選檔加入 en/zh-Hant/zh-Hans 系統語言標籤，未新增無證據健康綠燈。Vitest 168/168、vue-tsc、Vite、Go native、i18n check 通過；installed macOS/Windows GUI/Tray UAT 與真實健康資訊仍待後續。詳見 [UX 第二批](next-uiux-roundtable-2026-10-14.md)。
 - **2026-10-14 Claude Sonnet 5.5 補充審查**：重點確認 MCP OAuth 多 Server 授權狀態跨 scope 殘留風險、Connection mutation/read 錯誤覆蓋、Runtime 首次載入未知、Tray 需 Go 端帶時間戳的可信來源。ACP stale 由 P0 風險疑點改列 P1 語意/動作一致性改善（沒有權限洩漏證據）；P13/P14 Host UAT 與 Native Tray 分開驗收。詳見 [UX 圓桌 Claude 複核](next-uiux-roundtable-2026-10-14.md#ai-圓桌第三方-claude-sonnet-55-專家複核2026-10-14)。
 - **排序與合併**：P10 source-only 版本與發佈管線繼續；UX review/P13/P14 可先獨立實作測試並審查後有序合併。正式 RC freeze 與 P11 原生安裝/更新回滾驗收放在 UI/UX 必要修正後；P12 仍是 M9 closeout 後才淘汰重複 native 業務 UI，不因新增 P13/P14 改變其定義。
+
+> **2026-10-14 P11 無付費開發帳號決策**：P11 不做 Developer ID、Notarization、Stapling 或憑證綁定的 GUI 自動更新實測；保留 Next-only ad-hoc 本地安裝、手動更新與回滾、服務與 UI 原生驗收，**絕不放寬現有更新器的 signer fail-closed**。見 [P11 source of truth](p11-adhoc-native-uat-scope.md)。
 
 ## M9 — Release Migration
 

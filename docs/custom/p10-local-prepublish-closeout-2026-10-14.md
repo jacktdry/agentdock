@@ -1,5 +1,7 @@
 # P10 — M9 Release Migration: macOS-first local prepublish engineering closeout
 
+> **後續 P11 使用者決策（2026-10-14）：** 沒有付費 Apple Developer Program 帳號，Developer ID 正式簽章、Notarization、公證票據 stapling 與憑證綁定的 GUI 自動更新驗收均移出 P11 本地測試範圍；P11 仍驗證 Next-only ad-hoc 本地安裝、手動更新／回滾。**Updater certificate gate 不可放寬**；以下舊 P11 簽章描述屬歷史紀錄。見 [P11 scope](p11-adhoc-native-uat-scope.md)。
+
 **Decision / acceptance (2026-10-14):** User confirms required Next UI/UX corrections are completed in a separate workline. P10 integrates that workline and completes **local source, version, package and prepublish CI contract** for macOS arm64. The user separately decided that Windows/WSL requires theoretical source/cross-build feasibility only; it is **non-shipping** and Windows native/VM/UAT is not a gate. This does not grant consent to publish, tag, install, activate a feed, or retire Stable AgentDock.
 
 ## Product job and integration ownership
