@@ -82,3 +82,10 @@ rtk proxy go version -m dist/p10-core-smoke/agentdock
 核對完整 RC version、12 位 runtime Commit、UTC BuildDate；完整 40 位 commit 用 `go version -m` linker metadata 核對。overlay output 必須 fresh。修改中的 dirty checkout 拒絕候選建置，不以自行 commit 或放寬 gate 跑 smoke。沒有完整 GUI/DMG build、簽章、安裝、tag/push、發布或 P11 改造。Next CI 仍 `contents: read`、無 publish；hosted CI 未執行。
 
 本批驗證紀錄：orchestrator 回報 focused `go test ./tools/release ./internal/buildinfo -count=1`、`zsh -n`、diff check PASS。Worker 最後新增／修正部分以 `go test ./tools/release -run '^TestNext(ArbiterOverlayBuild|CandidatePlistFixture)$' -count=1` PASS（16.964s），並完成 `git diff --check`。先前 worker fixture 曾因預設 Go cache 的 sandbox 寫入限制及 macOS temp symlink 路徑失敗；後者已以 canonical temp root 修正，上述兩項重驗 PASS。沒有再重跑整組測試或完整建置。
+
+## 2026-10-14 第二批 clean-HEAD Core 驗收補記
+
+- P10 source commit `b4092271` 後工作樹乾淨，使用該 HEAD 的 full SHA 與 UTC commit timestamp，產生 `next-v0.9.1-rc.1` 示例 manifest；`next-candidate --output` 驗證後生成 repo-local Go overlay。
+- 以 `GOMAXPROCS=2 GOFLAGS=-p=2 CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 MACOSX_DEPLOYMENT_TARGET=13.0` 及對應 CGo flags 真實建置 `./cmd/agentdock`，只執行無服務副作用的 `version --json`、`go version -m`。
+- **PASS**：`version=0.9.1-rc.1`、`commit=b4092271b07a`（runtime 僅顯示 12 位）、`build_date=2026-10-14T02:33:12Z`；`go version -m` 包含完整 Commit 與 BuildDate；後續 `git status --porcelain` 仍為空。
+- 產物只保存在本工作樹 `dist/p10-clean-core.qWKpBz/agentdock`，未執行服務、安裝、部署、推送、建立 Tag 或 GitHub Release。這是**實際 Core 編譯與版本驗證**，仍**不是**完整 macOS .app/DMG、Windows installer、Next updater channel 或 P11 簽章與原生更新驗收。UI/UX 仍未凍結。
