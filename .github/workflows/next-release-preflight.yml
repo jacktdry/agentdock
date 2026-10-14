@@ -13,6 +13,7 @@ on:
       - 'scripts/test/test-next-windows-packaging.py'
       - '.github/workflows/next-release-preflight.yml'
       - 'docs/custom/p10-ci-release-pipeline.md'
+      - 'docs/custom/p10-release-pipeline-closeout.md'
 
 permissions:
   contents: read
@@ -78,7 +79,7 @@ jobs:
           python-version: '3.13'
       - name: Native source contract tests
         shell: bash
-        run: go test -mod=readonly ./tools/release ./internal/buildinfo -run '^TestNext(Contract.*|Identity.*|CandidateGate)$' -count=1
+        run: go test -mod=readonly ./tools/release ./internal/buildinfo -run '^TestNext(Contract.*|Identity.*|CandidateGate|Artifacts.*)$' -count=1
       - name: Build and verify actual candidate Core (no service or installer)
         shell: bash
         env:
@@ -144,6 +145,13 @@ jobs:
                                 'platform': '/'.join(target)}.items():
               require(info.get(key) == expected, f'Runtime metadata mismatch: {key}')
           require(not read('git', 'status', '--porcelain', '--untracked-files=all'), 'Build changed checkout')
+          inventory_args = ['go', 'run', '-mod=readonly', './tools/release', 'next-artifacts',
+                            '--manifest', str(manifest), '--root', str(output),
+                            '--platform', '/'.join(target)]
+          inventory = Path(os.environ['RUNNER_TEMP']) / 'next-core-inventory.json'
+          inventory.write_bytes(subprocess.check_output(inventory_args + [binary.name]))
+          subprocess.run(inventory_args + ['--verify', str(inventory), binary.name], check=True)
+          print(inventory.read_text())
           digest = hashlib.sha256(binary.read_bytes()).hexdigest()
           print(json.dumps({'evidence': 'source-only-core', 'release_ready': False,
                             'candidate': json.loads(manifest.read_bytes()), 'runtime': info,
