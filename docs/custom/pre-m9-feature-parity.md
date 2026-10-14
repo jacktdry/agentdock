@@ -430,6 +430,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
 
+> **2026-10-14 P10 第一批 source checkpoint**：[Next release preflight](p10-release-preflight.md) 新增候選合約、read-only CLI/CI 與負向測試；僅 dry-run。UIUX unfrozen、custom/main 尚未整合；Core Next version、installer metadata/architecture 與 upstream selfupdate API Next channelization 尚未接入，feed disabled/unpublished、release_ready=false。P10/M9/P11 均未 closeout，沒有正式發布或安裝。
+
 ### P11 — Release-native UAT
 
 在 M9 release candidate artifacts 上執行：
