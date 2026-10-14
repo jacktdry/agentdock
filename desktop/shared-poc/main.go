@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"flag"
@@ -145,10 +146,12 @@ func main() {
 		event.Cancel()
 	})
 
+	coreProbeClose := func() {}
 	quit := func() {
 		quitting.Store(true)
 		persistWindowSize()
 		activityProbeService.Stop()
+		coreProbeClose()
 		app.Quit()
 	}
 
@@ -176,6 +179,20 @@ func main() {
 	}
 	tray.SetTooltip(productName)
 	trayMenu := app.NewMenu()
+	coreStatusItem := trayMenu.Add(nativeLabels.trayInitial).SetEnabled(false)
+	coreProbe := newCoreTrayProbe(nativeLabels,
+		func(ctx context.Context) coreTrayReading {
+			result := runtimeService.Status(ctx)
+			return coreTrayReading{running: result.Status.Running, healthy: result.Status.Healthy, err: result.Error != nil}
+		},
+		application.InvokeAsync,
+		func(label string) { coreStatusItem.SetLabel(label) },
+	)
+	coreProbeClose = coreProbe.Close
+	trayMenu.Add(nativeLabels.trayRefresh).OnClick(func(*application.Context) {
+		coreProbe.Refresh()
+	})
+	trayMenu.AddSeparator()
 	trayMenu.Add(nativeLabels.open + " " + productName).OnClick(func(*application.Context) {
 		showWindow()
 	})
@@ -185,7 +202,9 @@ func main() {
 	})
 	tray.SetMenu(trayMenu)
 
-	if err := app.Run(); err != nil {
+	err := app.Run()
+	coreProbeClose()
+	if err != nil {
 		log.Fatal(err)
 	}
 }

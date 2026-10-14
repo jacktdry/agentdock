@@ -261,3 +261,16 @@ Claude 確認既有規格已正確防止三種誤區：不同 Tool Message 不�
 - `git diff --check`：**PASS**。變更僅限 Next Shared UI、Wails 原生標籤與三語系生成資源／本報告，未操作 Core、Stable、P10 或正式更新通道。
 
 上述證據**不構成已安裝 macOS Next／Windows Tray 真實 GUI 測試**。狀態健康、觀察時間可信來源、系統語言同步、Loading 卡高量測、P13/P14 ChatGPT Host 均維持獨立 pending gate。
+## UX-S5 第三批 — 原生選單列可信 Core 狀態（2026-10-14）
+
+**使用者工作流**：從 macOS Menu Bar／Windows Tray 不開啟主視窗即可知道 Next Core 上次檢查是否正常，無證據時明確顯示「尚未檢查／無法確認／資料已過期」，不能因 Vue Webview 隱藏而長期顯示舊綠燈。
+
+**實作（Next-only source，非 installed GUI UAT）**：
+- `desktop/shared-poc/main.go` 以原本 `desktopapi.NewRuntimeService(*runtimeRootFlag)` 的 Next-owned RuntimeService Status 為唯一 Core 狀態來源；Tray 增加**唯讀狀態文字 + 使用者主動「檢查核心服務狀態」**。不讀既有 stable Runtime Root、未改啟停 Core 的動作或 Plugin/MCP/ACP 權限。
+- `tray_core_status.go`：只在主動點擊時進行一次 bounded read（既有 RuntimeService 5 秒、外層 context 最多 6 秒），背景讀取、Wails `application.InvokeAsync` 更新主執行緒，重複點擊不啟第二個讀取；退出 UI 時取消讀取、停止計時器，晚到結果無效。**沒有新 daemon、沒有定期輪詢，也不會觸發瀏覽器/搶焦點**。
+- 起始狀態 `核心服務：尚未檢查`，查詢中、正常（running && healthy）、運行但異常、已停止、查詢失敗未知均依權威 RuntimeService 回覆顯示。附本地的 `上次觀察 HH:mm:ss` 而非「即時健康」宣稱。最後一次回覆 90 秒後由**單次過期計時器**撤去健康文案並顯示 `資料已過期`，不會替使用者再查詢；不加入尚無可信來源的 ChatGPT、OAuth、Browser、ACP 連線綠燈。`Quit UI` 仍只關閉桌面介面。
+- `menu_locale.go` 新增 en／zh-Hant／zh-Hans 可信狀態語言及時間標籤，不拿英文硬塞到繁體中文的主面板；無原生 API 可以在菜單開啟時可靠觸發狀態刷新，因此 MVP 提供明確手動刷新而不是假即時輪詢。
+
+**離線驗收**：測試已覆蓋初始 Unknown、healthy／unhealthy／stopped／error、上次觀察時間、無自動輪詢、單次 90 秒 stale、重複點擊合併、Quit 取消/晚到結果忽略；純 Go unit 與 Go race 測試 PASS、macOS Wails targeted Go package tests PASS（現機 SDK non-fatal linker warnings）。Windows amd64 cross-build PASS（僅確認 PE32+ 產物可建置，未做 Windows Tray 原生 UAT）。**未進行安裝後 macOS Menu Bar 動態更新、語系切換、VoiceOver、Windows Tray 真實 UX 測試**；下一輪 UX-S0 在不影響使用者 stable 的條件下補這些 native evidence。
+
+**與其他工作線邊界**：此批不動 P13 Task 單卡／P14 MCP Apps 卡片降噪，兩者仍應按各自 ChatGPT Host 工具結果/metadata 驗收；P10 Source release prep 可並行，維持不正式發佈、不建立正式 Tag/Release。所有檔案都在獨立 `feature/next-uiux-audit` Worktree 中。
