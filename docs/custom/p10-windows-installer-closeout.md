@@ -1,5 +1,7 @@
 # P10 Windows installer pre-publish source closeout
 
+> **較新 Windows 驗收範圍（2026-10-14）：** Windows 現階段 source-only 理論可行，無 Windows 設備、不做原生／Installer 驗收，亦**不阻塞 macOS-focused P10**。本文件其餘內容是當時的實作及未交付事實紀錄；Next Windows 仍 fail-closed 且不可發布。見 [Windows source-only acceptance](p10-windows-source-only-acceptance.md)。
+
 2026-10-14. Worker baseline: clean `8caf0995`. This advances the offline
 input-validation gate in [the installer source contract](p10-windows-installer-source.md),
 not P10/M9 native acceptance. No installer was produced or executed.

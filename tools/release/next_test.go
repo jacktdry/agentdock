@@ -36,10 +36,16 @@ func TestNextContract(t *testing.T) {
 			t.Fatalf("stale gate: %s", stale)
 		}
 	}
-	for _, gate := range []string{"windows-next-installer-not-isolated", "hosted-ci-native-artifacts-not-verified", "p11-signing-updater-native-uat"} {
+	for _, gate := range []string{"macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "p11-signing-updater-native-uat"} {
 		if !strings.Contains(blockers, gate) {
 			t.Fatalf("missing remaining gate: %s", gate)
 		}
+	}
+	if len(m.Artifacts) != 2 {
+		t.Fatalf("P10 macOS-only release must not promise Windows Setup artifacts: %v", m.Artifacts)
+	}
+	if strings.Contains(blockers, "windows-next-installer-not-isolated") || strings.Contains(blockers, "installer-metadata-and-architecture-not-wired") {
+		t.Fatalf("Windows non-shipping feasibility cannot block macOS P10: %s", blockers)
 	}
 	for _, name := range m.Artifacts {
 		if strings.Contains(name, "universal") {

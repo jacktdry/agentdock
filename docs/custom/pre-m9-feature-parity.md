@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **最新 Windows 驗收決策（2026-10-14）**：使用者目前沒有 Windows 設備，Windows 只要求來源／交叉編譯的**理論可行性**，不做實機／VM／Windows/WSL native UAT，也不要求 Windows Next Setup 完工才可收斂 **macOS-focused P10**。Windows Next 的 WPF 與 Installer 仍封鎖且不可發布；此項是明確延後的平台功能，不是已驗收。後續 P10 以 macOS arm64 同 SHA 候選產物、唯讀 CI 與 source integration 為完成目標，UI/UX／正式發佈仍暫緩。見 [Windows source-only 驗收決策](p10-windows-source-only-acceptance.md)。
+
+
 > **2026-10-14 P10 recovery/pre-publish source checkpoint**：本地 commits `cb85388e` + `1f59a5b9` 已完成 Windows Next 身分／payload 檔案完整性 read-only 驗證與 Release 實體 Core SHA inventory，驗證：Windows source fixture 4+16 PASS，Go release 測試 PASS，真實 macOS arm64 Core `0.9.1-rc.1` 的版本及 SHA inventory PASS。**P10 整體仍未 closeout**：Windows Next runtime/Setup 原生可用性依舊被安全封鎖；Hosted CI 及完整同 SHA 安裝包未驗，正式 release/push/tag/feed 依授權暫緩。P11 不提前執行。詳見 [P10 recovery checkpoint](p10-release-preflight.md#2026-10-14-recovery-p10-source-candidate-and-installer-safety-gates)。
 
 
@@ -440,7 +443,7 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 > **2026-10-14 P10 macOS 本地候選包驗證**：從已提交 `15b116dd` 真實編出 Next arm64 Wails、Core、Core Skills、App／ZIP／DMG；Core RC 版本、ad-hoc Bundle 身分與 DMG checksum 已核對。完整腳本最後受 Python fixture 候選環境變數污染而 exit 1，隔離後 8 項測試與真實 Bundle 驗證通過；後續已修正 fixture、加 arm64 專用檔名與第 9 項負向／命名測試（9 PASS）。**不是 Universal / Developer ID 正式發佈驗收**；新 Commit 的完整包仍須再驗，詳 [P10 macOS checkpoint](p10-release-preflight.md#2026-10-14-第三批macos-arm64-本地候選包實證未發布)。UIUX unfrozen；無 Tag／Release／Push／安裝／更新。
 
 
-完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
+完成 `custom/main` release source、version/tag/buildinfo、macOS arm64 候選包／更新通道及 GitHub Release pipeline 的發佈前契約；Windows 僅為 source-only 理論可行性（不交付 Setup／不要求原生驗收），依 [最新平台範圍](p10-windows-source-only-acceptance.md) 驗收。
 
 > **2026-10-14 P10 後續（UIUX 獨立）**：Next Windows 已有獨立 canonical RC metadata／Go overlay 準備工具，但原版 Windows Installer 仍使用 Stable GUID、安裝根目錄、排程工作、Tray AUMID 與 runtime discovery，因此 **Next Setup 仍 fail-closed 禁止產生，P10 未 closeout**；見 [Windows 準備與隔離門檻](p10-windows-packaging.md)。Next 更新路徑已新增預設 disabled/unpublished／拒絕 upstream Stable feed 的來源保護；見 [Next update channel](p10-update-channel.md)。Read-only PR CI 已定義 macOS arm64／Windows amd64+arm64 Core source candidate 驗證（仍待 hosted CI 真實執行）；見 [CI source contract](p10-ci-release-pipeline.md)。三者不依賴 UIUX，現階段未啟用更新、未發佈 Tag／Release、未部署／安裝；發布流程、完整 Next Windows Installer 與 P11 原生驗收不得混同。
 
@@ -453,12 +456,12 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 - macOS Developer ID signed package；
 - certificate-bound GUI updater update → trial → commit；
 - rollback / interrupted recovery；
-- Windows native UAT；
-- WSL native UAT；
+- Windows native UAT（**非本階段必過**；無 Windows 設備，只有另行授權／取得環境後再進行）；
+- WSL native UAT（同樣非本階段必過，不冒充原生驗收）；
 - Linux-only helper native dispatch / scan execution；
 - install / update / rollback / recovery。
 
-Cross-build 不等於 native UAT；無原生環境時必須明確記錄 external gate。
+Cross-build 不等於 native UAT。Windows/WSL 依 2026-10-14 使用者決策改列 source-only 理論可行、無設備時**不阻塞 macOS P10/P11**；不得聲稱 Windows native PASS 或發布 Windows 安裝包，詳 [驗收決策](p10-windows-source-only-acceptance.md)。
 
 ### P12 — Native Business UI Deprecation
 
@@ -621,8 +624,8 @@ Browser Broker 的風險與架構複雜度高於一般 CRUD domain，應獨立�
 release candidate artifact 凍結後可平行：
 
 - macOS signed/update/rollback/recovery；
-- Windows native UAT；
-- WSL native UAT；
+- Windows native UAT（依使用者 2026-10-14 決策改為**可選、非必過**）；
+- WSL native UAT（可選、非必過）；
 - Linux helper native execution。
 
 平台驗證可並行，但共同 release blocker / version contract / artifact identity 由主 orchestrator 統一裁決。

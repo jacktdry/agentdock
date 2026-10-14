@@ -1,3 +1,9 @@
+# 2026-10-14 scope revision: source-only Windows feasibility
+
+依使用者最新決定，Windows 理論可行即符合本階段範圍：source tests／交叉編譯／靜態安全審查，不做 Windows host／VM／Installer native UAT，完整 Next Windows Installer 與 WPF 執行仍為未交付功能，**非 macOS P10 closeout gate**。保留 build/install fail-closed，嚴禁宣稱 Windows release-ready。詳 [Windows 驗收決策](p10-windows-source-only-acceptance.md)。以下是決策前的歷史 checkpoint。
+
+---
+
 # P10 Windows RC packaging checkpoint
 
 2026-10-14; reviewed clean `feature/p10-release-migration` at

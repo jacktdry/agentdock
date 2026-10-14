@@ -1,5 +1,7 @@
 # P10 source release pipeline checkpoint (PRE-PUBLISH)
 
+> **較新 Windows 驗收範圍（2026-10-14）：** Windows 現階段 source-only 理論可行，無 Windows 設備、不做原生／Installer 驗收，亦**不阻塞 macOS-focused P10**。本文件其餘內容是當時的實作及未交付事實紀錄；Next Windows 仍 fail-closed 且不可發布。見 [Windows source-only acceptance](p10-windows-source-only-acceptance.md)。
+
 2026-10-14; clean starting HEAD `8caf0995d5ca773bbe1b0f167cdad273ecc2f95e`.
 This completes the available-file inventory source implementation, not P10/M9 acceptance or release readiness. Canonical contracts remain [p10-release-preflight.md](p10-release-preflight.md) and [p10-ci-release-pipeline.md](p10-ci-release-pipeline.md).
 

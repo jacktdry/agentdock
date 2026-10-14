@@ -60,12 +60,8 @@ jobs:
           - runner: macos-15
             goos: darwin
             goarch: arm64
-          - runner: windows-latest
-            goos: windows
-            goarch: amd64
-          - runner: windows-11-arm
-            goos: windows
-            goarch: arm64
+          # Windows is source/cross-build feasibility only (2026-10-14 user decision):
+          # no required Windows-native runner or install UAT for macOS P10 closeout.
     steps:
       - uses: actions/checkout@v5
         with:

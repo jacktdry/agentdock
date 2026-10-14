@@ -74,9 +74,10 @@ func nextContract(in nextInput) (nextManifest, error) {
 		Channel: "next-rc", MacName: "AgentDock Next", MacBundleID: "dev.dropabit.agentdock.next",
 		MacShortVersion: strings.Join(parts[1:4], "."), MacBuildVersion: in.BundleBuild + ".0.0",
 		WindowsVersion: strings.Join(parts[1:], "."), CoreVersion: in.Version, CoreCommit: in.Commit,
-		Artifacts:  []string{"AgentDock-Next-macos-arm64.zip", "AgentDock-Next-macos-arm64.dmg", "AgentDock-NextSetup-amd64.exe", "AgentDock-NextSetup-arm64.exe"},
+		// P10 ships no Windows Setup: Windows is source/cross-build feasibility only.
+		Artifacts:  []string{"AgentDock-Next-macos-arm64.zip", "AgentDock-Next-macos-arm64.dmg"},
 		UpdateFeed: "disabled/unpublished", UpdateURL: "", ReleaseReady: false,
-		Blockers: []string{"uiux-unfrozen", "custom/main-not-integrated", "windows-next-installer-not-isolated", "installer-metadata-and-architecture-not-wired", "hosted-ci-native-artifacts-not-verified", "p11-signing-updater-native-uat"},
+		Blockers: []string{"uiux-unfrozen", "custom/main-not-integrated", "macos-final-arm64-artifacts-not-verified", "hosted-macos-ci-not-verified", "p11-signing-updater-native-uat"},
 	}, nil
 }
 

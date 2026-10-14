@@ -1,5 +1,7 @@
 # P10 Windows Next identity preflight
 
+> **較新 Windows 驗收範圍（2026-10-14）：** Windows 現階段 source-only 理論可行，無 Windows 設備、不做原生／Installer 驗收，亦**不阻塞 macOS-focused P10**。本文件其餘內容是當時的實作及未交付事實紀錄；Next Windows 仍 fail-closed 且不可發布。見 [Windows source-only acceptance](p10-windows-source-only-acceptance.md)。
+
 2026-10-14; baseline `8caf0995d5ca773bbe1b0f167cdad273ecc2f95e`,
 `feature/p10-release-migration`. P10/M9 remains open; no native admission or
 installer activation is claimed. Read with [runtime isolation](p10-windows-runtime-isolation.md)

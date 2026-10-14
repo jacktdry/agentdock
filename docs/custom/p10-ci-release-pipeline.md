@@ -1,5 +1,7 @@
 # P10 Next CI candidate Core validation
 
+> **2026-10-14 Windows source-only scope revision（較新決策優先）**：使用者沒有 Windows 設備，P10 不再要求 Windows amd64/arm64 Hosted native runner 或 Windows/WSL native UAT；原下方 Windows matrix 是歷史規劃，現以 source-only Go cross-build／fixture 為可行性證據，Windows Setup 仍不產生。最新 P10 `planned_artifacts` 僅列 macOS arm64 ZIP／DMG，`remaining_gates` 以 macOS 最終包／Hosted CI 為主；macOS arm64 Hosted CI 才屬主線 release-preflight 目標。詳 [Windows source-only acceptance](p10-windows-source-only-acceptance.md)。
+
 2026-10-14 worker checkpoint; base `66b77426e0e082972196c9f25b32b23e887b8ab0`.
 This advances P10 source-to-candidate evidence only. It does not close P10/M9 or authorize a release.
 

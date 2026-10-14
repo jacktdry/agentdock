@@ -121,3 +121,8 @@ rtk proxy go version -m dist/p10-core-smoke/agentdock
 4. UI/UX 完成後須選定實際版本/Tag/Bundle Build、最終 source SHA 再跑 immutable preflight。依使用者決定，Tag／Release／正式 feed 在此之前暫緩。
 
 **P11 另案處理** Developer ID/Authenticode 簽章及可能的 notarization、更新／回滾／恢復、Windows/macOS 跨平台原生 UAT；不要將 P11 的實測記為 P10 已完成。
+
+
+## 2026-10-14 Windows source-only acceptance supersedes earlier release gates
+
+使用者明確表示**沒有 Windows 設備且不做 Windows 實機驗證，理論可行即可**。本條與 [Windows source-only acceptance](p10-windows-source-only-acceptance.md) 優先於本檔 2026-10-14 以前列出的 Windows Installer、Windows Hosted Runner／native UAT、Windows Setup 同 SHA 完整包作為 **macOS-focused P10 closeout 必過條件**的敘述。那些缺口仍存在，**只是正式延後，不是完成或通過**。Windows Next Installer／WPF 維持 fail-closed，不建置／安裝／發布 Windows 版；驗收僅能標示 source-only、cross-build／靜態審查。Mac P10 仍需最終 SHA arm64 App/ZIP/DMG、source/CI evidence、integration；UI/UX 及正式 Release/Tag/feed 仍未授權。P11 的 Windows/WSL native UAT 改列非強制、待設備和使用者另行決定。
