@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **2026-10-14 P10 macOS local prepublish closeout**：整合 `feature/next-uiux-audit` 的 Merge Commit `e14a9af1`，明確未帶入 P13/P14 MCP 卡片實驗。修補六項 Script Governance 缺漏後 source Commit `cceadb0c` 的完整 macOS arm64 App／ZIP／DMG 建置／版本／來源 SHA／ZIP-DMG SHA-256 驗證 **PASS**，Shared UI Vitest 168/168、獨立 Wails Go、root `make check` **PASS**；最新 source-only release inventory 不交付 Windows Setup。**P10 本地發佈前工程完成，不代表正式發布／P11 原生更新驗收。** GitHub Hosted CI 未因 push/PR 觸發；正式 Tag／Release／更新 feed 未授權。詳 [P10 closeout](p10-local-prepublish-closeout-2026-10-14.md)。
+
+
 > **最新 Windows 驗收決策（2026-10-14）**：使用者目前沒有 Windows 設備，Windows 只要求來源／交叉編譯的**理論可行性**，不做實機／VM／Windows/WSL native UAT，也不要求 Windows Next Setup 完工才可收斂 **macOS-focused P10**。Windows Next 的 WPF 與 Installer 仍封鎖且不可發布；此項是明確延後的平台功能，不是已驗收。後續 P10 以 macOS arm64 同 SHA 候選產物、唯讀 CI 與 source integration 為完成目標，UI/UX／正式發佈仍暫緩。見 [Windows source-only 驗收決策](p10-windows-source-only-acceptance.md)。
 
 

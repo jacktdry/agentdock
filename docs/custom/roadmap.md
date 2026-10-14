@@ -476,7 +476,10 @@ Engineering Memory / Codebase index / ADR 與 final handoff 同步。此 closeou
 
 ## M9 — Release Migration
 
-建立從 `custom/main` 的正式 cross-platform release pipeline。
+> **2026-10-14 P10 macOS prepublish engineering closeout**：已整合 `feature/next-uiux-audit`（不含 P13/P14 實驗），從乾淨 `cceadb0c` 實際編譯 Next arm64 App／ZIP／DMG，同 SHA 版本／來源／codesign（ad-hoc）／DMG／ZIP SHA inventory 全部 PASS；Shared Desktop 168/168 Vitest、獨立 Go、root `make check` PASS。Windows 依使用者決定僅 source-only 理論可行、不交付 Setup。**正式 Tag／Release／Push／update feed 及 Hosted CI 遠端驗證尚未進行，P11 簽章／更新回滾／原生 UAT 另案。** 詳 [P10 結案證據](p10-local-prepublish-closeout-2026-10-14.md)。
+
+
+建立從 `custom/main` 的 Next 來源／候選版驗證契約。依 2026-10-14 使用者決定，**P10 僅 macOS arm64 發佈前工程收尾**；Windows 為不交付的 source/cross-build feasibility。正式對外 Release 工作流程仍須使用者另外確認發佈時機。
 
 前置工作：
 
@@ -496,10 +499,10 @@ Desktop API tests
 Shared UI tests
 i18n validation
      ↓
-macOS package
-Windows package
+macOS arm64 RC App / ZIP / DMG + SHA inventory
+Windows source/cross-build feasibility (non-shipping)
      ↓
-GitHub Release
+Formal GitHub Release (deferred until authorization / P11 gates)
 ```
 
 Shared UI 達到穩定 parity 後，再逐步 deprecated 重複的 native business UI。
