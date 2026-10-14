@@ -424,6 +424,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 > **M9 Root Check 後續修正完成（2026-10-14）**：上述舊 checkpoint 是修正前失敗紀錄，現已逐項關閉。`e78117d4` 將 Makefile Go tests/vet/race 限於根模組 source roots，且 Next 建置 TMPDIR 改為隱藏 `.tmp`（不刪除原產物）；`4befa880` 保留 macOS port 雙重身分核驗及 **2 秒** timeout，明確區別 canceled 與 listener_changed；`16e3f88a` 排除 Browser Planner test 的 30ms 排程假設而保留晚到 healthy 拒絕；`67e802a7` 修正 i18n test fixture false positives 並翻譯 Approval Policy mode labels；`2239e0f2` 保留 200 次 command output 回歸測試，但將 host-load timing 與 60s 整體期限獨立，不改正式執行時限。**`GOMAXPROCS=2 GOFLAGS=-p=2 make check` 真實 exit=0，71 個根模組 Go packages、i18n、Script Governance、vet、Core build 全部 PASS。** `./desktop/...` 根模組套件掃描提示不包含獨立 `desktop/shared-poc/go.mod`，需另外測試。此結果僅代表 **Root Check PASS，不代表 M9 RC、簽章安裝包、更新回滾、Windows/WSL/Linux native UAT 已完成**。獨立 Shared UI `pnpm build` PASS（有 chunk-size warning）；`desktop/shared-poc` 獨立 Go module 測試在 cgo／Clang 編譯階段超過 240s 截止，尚無 PASS，必須於 P10/P11 另行收斂。
 
+> **2026-10-14 Desktop native 補驗**：獨立 `desktop/shared-poc` module 在第一次 240 秒 cgo 冷編譯截止後，以 `GOMAXPROCS=4 GOFLAGS=-p=2 go test ./... -count=1 -timeout=7m` 重試，**真實 exit=0，Go tests PASS**（耗時約 392 秒，測試本身約 4 秒）。有 linker warning：測試預設 link macOS 11.0 與部分快取／系統 cgo objects 目標 13.0／27.0 不同；不是測試失敗，**P10/P11 RC 打包仍須驗證 macOS 13 deployment target**。前端 `pnpm build` PASS（512.55 kB JS chunk 效能警告）。上述補驗不等於已完成 Developer ID 簽章包、更新或原生 UAT。
+
 ### P10 — M9 Release Migration
 
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
