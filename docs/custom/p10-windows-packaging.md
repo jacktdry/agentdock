@@ -154,3 +154,9 @@ is exactly the three new files listed by this checkpoint; no Stable file was cha
 
 The nearest real workflow is clean-HEAD Next metadata/Core preparation, then owner
 integration of Windows runtime isolation. No runtime resources were started.
+
+## 2026-10-14 clean-HEAD source-only Windows dual-architecture crossbuild
+
+從 clean P10 source SHA `3cecb735dd6133c9455cc12a0f4e87be73616587` 的 canonical `next-preflight` manifest (`0.9.1-rc.1` illustrative only)、Next-only Go overlay 及相同 full Commit/UTC BuildDate (`2026-10-14T04:10:32Z`)，以 `CGO_ENABLED=0 GOOS=windows` 分別交叉編譯 `cmd/agentdock` 和 `cmd/agentdock-arbiter` 於 amd64／arm64，輸出僅在忽略版控的 `dist/p10-windows-source-<SHA>/`。四個 binary 的 PE `MZ` magic、`go version -m` 的 GOOS、GOARCH、完整 source SHA 和 UTC BuildDate：**4/4 PASS**。來源工作樹前後皆乾淨，無安裝、啟動、修改服務、Push、Tag 或 Release。
+
+這次沒有使用 `prepare-next-rc.py --build-binaries` 的 `go-winres` patch 路徑，**未套用/讀回 Windows File/Product VersionInfo**；此證據不代表 WPF UI binary、tray/shims、完整 Next payload、獨立 Inno Setup、原生 Windows 啟動或正式 Installer 已完成。完整 P10 Windows installer 隔離門檻與 Windows Hosted CI 仍待後續工作；P11 签章、更新／回滾也未啟動。

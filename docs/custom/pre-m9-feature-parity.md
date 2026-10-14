@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **2026-10-14 P10 source-only Windows crossbuild**：clean `3cecb735` Next RC manifest／overlay 已交叉編譯 Windows amd64 與 arm64 的 Core／arbiter 四個 unsigned EXE，PE 格式、GOOS／GOARCH、完整 SHA／UTC metadata **4/4 PASS**。未 patch PE File/Product VersionInfo，亦非 Next Installer／Windows 原生 UAT。詳 [P10 Windows checkpoint](p10-windows-packaging.md#2026-10-14-clean-head-source-only-windows-dual-architecture-crossbuild)。仍不建立 Release、Tag、Push 或更新 feed。
+
+
 > **2026-10-14 P10 macOS 本地候選包驗證**：從已提交 `15b116dd` 真實編出 Next arm64 Wails、Core、Core Skills、App／ZIP／DMG；Core RC 版本、ad-hoc Bundle 身分與 DMG checksum 已核對。完整腳本最後受 Python fixture 候選環境變數污染而 exit 1，隔離後 8 項測試與真實 Bundle 驗證通過；後續已修正 fixture、加 arm64 專用檔名與第 9 項負向／命名測試（9 PASS）。**不是 Universal / Developer ID 正式發佈驗收**；新 Commit 的完整包仍須再驗，詳 [P10 macOS checkpoint](p10-release-preflight.md#2026-10-14-第三批macos-arm64-本地候選包實證未發布)。UIUX unfrozen；無 Tag／Release／Push／安裝／更新。
 
 
