@@ -100,3 +100,24 @@ rtk proxy go version -m dist/p10-core-smoke/agentdock
 - 直接從這些編譯產物執行 `build-app.sh`：**Next App、ZIP、DMG 實際產出，ad-hoc codesign 檢查通過，DMG `hdiutil verify` checksum valid**。第一次整包腳本最後的 Python 套件 fixture 因繼承 `AGENTDOCK_NEXT_CANDIDATE_MANIFEST`，把獨立的 `--metadata-only` fixture 誤判為 candidate，導致整體 exit 1；不是 App 啟動或簽章失敗。隔離環境後 `test-next-shared-package.py <bundle>` **原有 8 項 PASS**，完整實際 Bundle 驗證 PASS。
 - 修正：package fixture 明確移除所繼承的 candidate marker，另加一項 arm64/universal/Stable 名稱驗證，**9 項 PASS**，包含故意設置無效 candidate marker 的負向情境。Next arm64-only 打包原先錯用 `universal` 檔名，現改為使用 `AgentDock-Next-macos-arm64.zip/.dmg`；Stable 及 Next 雙架構命名規則不變。先前已建立的本地 ZIP／DMG 僅在忽略版控的 dist 內重新命名並重新計算 SHA-256，兩項 checksum **PASS**；它們仍是 commit `15b116dd` 的測試包，不能冒充修正後 SHA 的完整 build acceptance。
 - 限制：**僅 arm64**（P10 支援目標，不要求 Intel / universal）；簽章為 `-` ad-hoc，非 Developer ID；沒有 notarization、GitHub Hosted CI、Windows Next installer、正式更新 feed、原生安裝／更新／回滾、P11 UAT。提交本次來源修正後，日後仍需對該新 SHA 執行 clean HEAD 完整包驗證；本記錄不授予 P10 closeout 或公開發佈權限。
+
+
+## 2026-10-14 recovery: P10 source candidate and installer safety gates
+
+本紀錄用於區分「**P10 source preflight 實作通過**」與「**P10 release/installer readiness 正式驗收**」；UI/UX 尚未凍結、P10 尚不得標示完整 closeout，正式發佈仍暫停。
+
+- Mac-Dev 1.1.0 連線恢復後，檢查 `feature/p10-release-migration` 從乾淨 `8caf0995` 開始。斷線前的三個 Codex run 均為 interrupted / run ID missing，**沒有可採信的原始碼成果**；改以新獨立 worker 完成並由 owner 整合測試。
+- Windows Next WPF：新增只讀 `Models/NextWindowsManifestIdentity.cs` 與 `scripts/test/test-next-wpf-runtime.py`，要求明確 `product_variant=next`、`product_id=dev.dropabit.agentdock.next`、`8767`、Next 專屬 root/state/task/run 值並拒絕缺漏、重複、路徑別名及非 Next 內容。**現有 Next WPF 入口仍 fail-closed**，驗證器的存在不解鎖管理／更新或回退 Stable。來源測試 **4/4 PASS**，並非 Windows C# 原生執行驗收。
+- Windows Installer：`prepare-next-rc.py --verify-payload` 讀取 Next 專用候選 metadata 與逐檔 SHA-256、PE 架構／命名／link 安全檢查，並執行既有 canonical `next-candidate` clean-HEAD gate。**本機 selected 16/16 PASS**，含一次真實 Go canonical verifier 連接測試；成功路徑仍 `installable=false`。Next `.iss` 首行無條件 `#error`，`--build-installer` 仍在 ISCC 前拒絕。未產生 Windows Setup 或操作 Stable／Next 安裝狀態。
+- Release：新增 `go run ./tools/release next-artifacts`，僅對已存在且明確點名的 Next macOS arm64 / Windows 架構產物建立確切 JSON 清單、SHA-256、大小與格式驗證，`release_ready=false`，用 `--verify` byte-exact 核對。native PR `candidate-core` CI 各架構多了一次 Core-only inventory；仍只有 `contents:read`、不傳 release、無 secrets、無 dispatch。Go release 完整套件測試 **PASS**；Ruby YAML／CI read-only policy **PASS**。
+- 實體 source-only smoke：從乾淨 `1f59a5b984e06067bc069feefc3d37290c54005b` 編出 macOS arm64 `agentdock-next-core`；`version --json` 回報 `0.9.1-rc.1`、`1f59a5b984e0`、`2026-10-14T05:38:35Z`、`darwin/arm64`，`next-artifacts --verify` **PASS**。實體檔案為 31,677,698 bytes、SHA-256 `0628c7055a7c719daae59e90909100438c2d7403d50a99e53a2bee3a7a8d3345`。這**不等同最新 SHA 的完整 App/ZIP/DMG build**；先前成功的完整 macOS bundle 是其他已提交 SHA 的 ad-hoc arm64 包。
+- Source commit：`cb85388e`（Windows identity/payload candidate checks）、`1f59a5b9`（artifact inventory/CI）。兩者皆為本地提交，工作樹 clean，未 Push、Tag、建立 GitHub Release、部署、安裝或啟用 Next update feed。
+
+**阻塞 P10 完整結案的必要條件（不可改列已完成）：**
+
+1. Windows Next 的完整信任 Runtime Manifest 與 Core/WPF/Installer 共用、獨立排程／權限／啟動／移除 owner、完整可驗證的 Windows payload；目前 Next 入口與 Inno 編譯仍故意拒絕。這是 P10 **實作**缺口，不能只歸類為 P11 native UAT。
+2. 同一最終 immutable Commit 的 macOS arm64 App／ZIP／DMG 及 Windows Setup 資產／中繼資料／SHA 核對（目前 release CLI 是 source-only available files，不能證明完整 release assets）。
+3. GitHub Hosted PR CI（Ubuntu、macOS arm64、Windows amd64/arm64）實際遠端 PASS／產物 trace；工作流程目前僅本地語法及來源測試，未 Push／未觸發。進一步串接正式 Release 發佈 pipeline 須繼續維持 **禁用** 至另行授權。
+4. UI/UX 完成後須選定實際版本/Tag/Bundle Build、最終 source SHA 再跑 immutable preflight。依使用者決定，Tag／Release／正式 feed 在此之前暫緩。
+
+**P11 另案處理** Developer ID/Authenticode 簽章及可能的 notarization、更新／回滾／恢復、Windows/macOS 跨平台原生 UAT；不要將 P11 的實測記為 P10 已完成。

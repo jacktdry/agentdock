@@ -428,6 +428,9 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 ### P10 — M9 Release Migration
 
+> **2026-10-14 P10 recovery/pre-publish source checkpoint**：本地 commits `cb85388e` + `1f59a5b9` 已完成 Windows Next 身分／payload 檔案完整性 read-only 驗證與 Release 實體 Core SHA inventory，驗證：Windows source fixture 4+16 PASS，Go release 測試 PASS，真實 macOS arm64 Core `0.9.1-rc.1` 的版本及 SHA inventory PASS。**P10 整體仍未 closeout**：Windows Next runtime/Setup 原生可用性依舊被安全封鎖；Hosted CI 及完整同 SHA 安裝包未驗，正式 release/push/tag/feed 依授權暫緩。P11 不提前執行。詳見 [P10 recovery checkpoint](p10-release-preflight.md#2026-10-14-recovery-p10-source-candidate-and-installer-safety-gates)。
+
+
 > **2026-10-14 P10 Windows source-isolation gate**：新增 Next 專屬 Inno 來源 `packaging/windows/NextAgentDock.iss`、獨立 GUID／`%LocalAppData%\AgentDock Next`／Next shortcut AUMID；此檔頂層無條件 `#error`，`prepare-next-rc.py --build-installer` 仍在 ISCC 前拒絕，**絕非可安裝 Setup**。Windows 控制面板新增明確 Next/Stable identity，Next 因缺經驗證的 Windows runtime manifest，於 WPF startup、RuntimeService 與 TaskAdmin 預先 fail-closed，避免觸及 Stable root／port／tasks／helpers；Stable 流程不變。快速離線來源測試（包含 WPF 與 Inno 身分一致性）**6/6 PASS**；本機無 .NET/ISCC，Windows 真實編譯、安裝／相容驗收仍未完成。見 [Windows Runtime 安全門檻](p10-windows-runtime-isolation.md) 與 [Windows Installer 來源契約](p10-windows-installer-source.md)。
 
 
