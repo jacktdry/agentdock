@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import selectors
 import subprocess
 import sys
 import time
@@ -19,12 +20,90 @@ from next_shared_bundle import NAME, no_symlinks, require, validate_bundle
 
 LABEL_BASE = "dev.dropabit.agentdock.next"
 NEXT_HEALTH = "http://127.0.0.1:8767/healthz"
+VERSION_OUTPUT_LIMIT = 4096
+VERSION_TIMEOUT = 5
 
 INSTALLER = Path(__file__).with_name("install-next-shared.py")
 INSTALLER_SPEC = importlib.util.spec_from_file_location("next_shared_installer", INSTALLER)
 require(INSTALLER_SPEC is not None and INSTALLER_SPEC.loader is not None, "Next-only installer module missing")
 NEXT_INSTALLER = importlib.util.module_from_spec(INSTALLER_SPEC)
 INSTALLER_SPEC.loader.exec_module(NEXT_INSTALLER)
+
+
+def semver_key(version: str) -> tuple:
+    """Canonical SemVer precedence; build metadata does not affect ordering."""
+    require(isinstance(version, str), "Invalid Core semantic version")
+    match = re.fullmatch(
+        r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+        r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+        r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", version,
+    )
+    require(match is not None, "Invalid Core semantic version")
+    prerelease = match[4]
+    identifiers = []
+    for item in prerelease.split(".") if prerelease is not None else []:
+        numeric = item.isdecimal()
+        require(not numeric or item == "0" or not item.startswith("0"), "Noncanonical Core prerelease")
+        identifiers.append((0, int(item)) if numeric else (1, item))
+    return (*map(int, match.group(1, 2, 3)), prerelease is None, tuple(identifiers))
+
+
+def core_version(bundle: Path) -> dict:
+    """Run only the validated bundle's read-only CLI, with bounded pipe reads."""
+    binary = bundle / "Contents/Helpers/agentdock"
+    require(no_symlinks(binary) == binary and binary.is_file() and os.access(binary, os.X_OK),
+            "Core version executable path mismatch or unavailable")
+    deadline = time.monotonic() + VERSION_TIMEOUT
+    output = bytearray()
+    with subprocess.Popen([str(binary), "version", "--json"], stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    require(remaining > 0 and selector.select(remaining), "Core version probe timed out")
+                    chunk = os.read(process.stdout.fileno(), VERSION_OUTPUT_LIMIT + 1 - len(output))
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    require(len(output) <= VERSION_OUTPUT_LIMIT, "Core version output exceeds limit")
+            require(process.wait(timeout=max(0, deadline - time.monotonic())) == 0,
+                    "Core version probe failed")
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+    def unique_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, "Duplicate Core version metadata")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError("Non-JSON constant in Core version metadata")
+
+    metadata = json.loads(output.decode("utf-8"), object_pairs_hook=unique_fields,
+                          parse_constant=invalid_constant)
+    require(isinstance(metadata, dict), "Invalid Core version metadata")
+    semver_key(metadata.get("version"))
+    commit = metadata.get("commit")
+    require(isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{7,40}", commit),
+            "Missing or invalid Core commit identity")
+    require(metadata.get("platform") == "darwin/arm64", "Missing or invalid Core platform identity")
+    return metadata
+
+
+def manual_version_gate(source: Path, destination: Path) -> None:
+    candidate = core_version(source)
+    installed = core_version(destination)
+    candidate_key = semver_key(candidate["version"])
+    installed_key = semver_key(installed["version"])
+    require(candidate_key >= installed_key, "Next manual deploy refused: Core semantic version downgrade")
+    require(candidate_key != installed_key or candidate["commit"] == installed["commit"],
+            "Next manual deploy refused: equal Core version with different commit is ambiguous")
 
 
 def active_jobs(list_output: str) -> dict[str, int | None]:
@@ -149,8 +228,9 @@ def main() -> None:
     require(destination.is_dir(), "Installed AgentDock Next is required; never install into stable")
     source = no_symlinks(sys.argv[1])
     require(source != destination and not os.path.samefile(source, destination), "Source and installed Next must differ")
-    validate_bundle(source, shared=True)
-    validate_bundle(destination, shared=True)
+    require(validate_bundle(source, shared=True) == source, "Validated source bundle path mismatch")
+    require(validate_bundle(destination, shared=True) == destination, "Validated installed bundle path mismatch")
+    manual_version_gate(source, destination)
     loaded = jobs()
     previous_core = loaded.get(f"{LABEL_BASE}.core")
     require(previous_core is not None and trusted_next_core_pid(previous_core, destination)
