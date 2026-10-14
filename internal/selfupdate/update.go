@@ -75,6 +75,7 @@ type options struct {
 	GOOS                  string
 	GOARCH                string
 	ReleaseAPI            string
+	nextChannelFixture    bool // Explicit loopback-only source tests; never set by runtime options.
 	HTTPClient            *http.Client
 	Output                io.Writer
 	Progress              updateProgressReporter
@@ -141,6 +142,9 @@ func Check(ctx context.Context) (CheckResult, error) {
 // CheckForRuntime inspects updates for the managed core selected by runtimeRoot.
 // It never derives the current core version from the desktop shell executable.
 func CheckForRuntime(ctx context.Context, runtimeRoot string) (CheckResult, error) {
+	if err := validateUpdateChannel(options{CurrentVersion: buildinfo.Version, DesktopTargetPath: runtimeRoot}); err != nil {
+		return CheckResult{}, err
+	}
 	executable, err := desktopruntime.CoreBinaryForRuntime(runtimeRoot)
 	if err != nil {
 		fallback, ok := coreBinaryFallbackForRuntime(runtimeRoot)
@@ -169,8 +173,14 @@ func runtimeOptions(output io.Writer) (options, error) {
 	if err != nil {
 		return options{}, fmt.Errorf("定位当前 AgentDock 二进制失败: %w", err)
 	}
+	if err := validateUpdateChannel(options{CurrentVersion: buildinfo.Version, ExecutablePath: executable}); err != nil {
+		return options{}, err
+	}
 	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 		executable = resolved
+	}
+	if err := validateUpdateChannel(options{CurrentVersion: buildinfo.Version, ExecutablePath: executable}); err != nil {
+		return options{}, err
 	}
 	if err := validateUpdateCaller(executable); err != nil {
 		return options{}, err
@@ -180,6 +190,9 @@ func runtimeOptions(output io.Writer) (options, error) {
 }
 
 func runtimeOptionsForTarget(ctx context.Context, output io.Writer, executable, runtimeRoot string) (options, error) {
+	if err := validateUpdateChannel(options{ExecutablePath: executable, DesktopTargetPath: runtimeRoot}); err != nil {
+		return options{}, err
+	}
 	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 		executable = resolved
 	}
@@ -190,12 +203,15 @@ func runtimeOptionsForTarget(ctx context.Context, output io.Writer, executable, 
 	if err != nil {
 		return options{}, fmt.Errorf("读取目标 AgentDock 版本失败: %w", err)
 	}
+	if err := validateUpdateChannel(options{CurrentVersion: version, ExecutablePath: executable, DesktopTargetPath: runtimeRoot}); err != nil {
+		return options{}, err
+	}
 	desktopTarget := detectDesktopUpdateTargetForRuntime(runtimeRoot, executable)
 	return newOptions(output, executable, version, desktopTarget), nil
 }
 
 func newOptions(output io.Writer, executable, currentVersion, desktopTarget string) options {
-	return options{
+	opts := options{
 		CurrentVersion:        currentVersion,
 		ExecutablePath:        executable,
 		DesktopTargetPath:     desktopTarget,
@@ -210,9 +226,16 @@ func newOptions(output io.Writer, executable, currentVersion, desktopTarget stri
 		VerifyBinary:          verifyBinaryVersion,
 		ExtractDesktop:        extractDesktopUpdateArchive,
 	}
+	if validateUpdateChannel(opts) != nil {
+		opts.ReleaseAPI = ""
+	}
+	return opts
 }
 
 func run(ctx context.Context, opts options) error {
+	if err := validateUpdateChannel(opts); err != nil {
+		return err
+	}
 	if opts.HTTPClient == nil {
 		return errors.New("更新 HTTP 客户端不能为空")
 	}
@@ -417,6 +440,9 @@ func runDesktopOnlyUpdate(ctx context.Context, opts options, inspection updateIn
 }
 
 func inspectUpdate(ctx context.Context, opts options) (updateInspection, error) {
+	if err := validateUpdateChannel(opts); err != nil {
+		return updateInspection{}, err
+	}
 	archiveNameMacOS := macOSDesktopArchiveName
 	if opts.GOOS == "darwin" {
 		id, err := updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))

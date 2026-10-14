@@ -1,24 +1,18 @@
-name: Next release source preflight
+name: Next candidate Core validation
 
 on:
   pull_request:
     paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'tools/release/**'
-      - 'internal/buildinfo/**'
       - 'packaging/macos/app-identity.sh'
+      - 'packaging/windows/**'
+      - 'scripts/test/test-next-windows-packaging.py'
       - '.github/workflows/next-release-preflight.yml'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Illustrative RC contract only; no tag or release is created'
-        required: true
-        default: '0.9.1-rc.1'
-        type: string
-      bundle_build:
-        description: 'Explicit macOS bundle build ordinal (source dry-run only)'
-        required: true
-        default: '1'
-        type: string
+      - 'docs/custom/p10-ci-release-pipeline.md'
 
 permissions:
   contents: read
@@ -26,6 +20,7 @@ permissions:
 jobs:
   preflight:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -36,10 +31,12 @@ jobs:
           cache: false
       - name: Source contract and negative tests
         run: go test ./tools/release ./internal/buildinfo -count=1
+      - name: Offline Windows Next metadata fixtures (no installer)
+        run: python3 scripts/test/test-next-windows-packaging.py -v
       - name: Generate and verify source-only candidate manifest
         env:
-          RC_VERSION: ${{ inputs.version || '0.9.1-rc.1' }}
-          BUNDLE_BUILD: ${{ inputs.bundle_build || '1' }}
+          RC_VERSION: '0.9.1-rc.1'
+          BUNDLE_BUILD: '1'
         shell: bash
         run: |
           set -euo pipefail
@@ -49,3 +46,106 @@ jobs:
           args=(next-preflight --version "$RC_VERSION" --tag "next-v$RC_VERSION" --commit "$commit" --build-date "$build_date" --bundle-build "$BUNDLE_BUILD")
           go run ./tools/release "${args[@]}" > "$RUNNER_TEMP/next-candidate.json"
           go run ./tools/release "${args[@]}" --verify "$RUNNER_TEMP/next-candidate.json"
+
+  candidate-core:
+    name: Source-only Next Core ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: preflight
+    timeout-minutes: 25
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+          - runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Native source contract tests
+        shell: bash
+        run: go test -mod=readonly ./tools/release ./internal/buildinfo -run '^TestNext(Contract.*|Identity.*|CandidateGate)$' -count=1
+      - name: Build and verify actual candidate Core (no service or installer)
+        shell: bash
+        env:
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
+          RC_VERSION: '0.9.1-rc.1'
+          BUNDLE_BUILD: '1'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import shlex
+          import subprocess
+
+          def read(*args):
+              return subprocess.check_output(args, text=True).strip()
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          target = (os.environ['TARGET_OS'], os.environ['TARGET_ARCH'])
+          host = (read('go', 'env', 'GOHOSTOS'), read('go', 'env', 'GOHOSTARCH'))
+          require(host == target, f'Native runner required: host={host}, target={target}')
+          require(not read('git', 'status', '--porcelain', '--untracked-files=all'), 'Dirty checkout')
+          commit = read('git', 'rev-parse', 'HEAD')
+          stamp = int(read('git', 'show', '-s', '--format=%ct', 'HEAD'))
+          date = datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+          version = os.environ['RC_VERSION']
+          manifest = Path(os.environ['RUNNER_TEMP']) / 'next-core-candidate.json'
+          args = ['go', 'run', '-mod=readonly', './tools/release', 'next-preflight',
+                  '--version', version, '--tag', 'next-v' + version, '--commit', commit,
+                  '--build-date', date, '--bundle-build', os.environ['BUNDLE_BUILD']]
+          # Preserve exact canonical bytes on Windows too (no CRLF translation).
+          manifest.write_bytes(subprocess.check_output(args))
+          subprocess.run(args + ['--verify', str(manifest)], check=True)
+          output = Path('dist/p10-ci-core').resolve()
+          output.mkdir(parents=True, exist_ok=False)
+          verified = read('go', 'run', '-mod=readonly', './tools/release', 'next-candidate',
+                          '--manifest', str(manifest), '--output', str(output)).split('\t')
+          require(verified[:3] == [version, commit, date], 'Verified candidate tuple mismatch')
+          binary = output / ('agentdock-next-core.exe' if target[0] == 'windows' else 'agentdock-next-core')
+          flags = (f'-X github.com/uvwt/agentdock/internal/buildinfo.Commit={commit} '
+                   f'-X github.com/uvwt/agentdock/internal/buildinfo.BuildDate={date}')
+          env = dict(os.environ, CGO_ENABLED='0', GOOS=target[0], GOARCH=target[1])
+          # Keep linker settings inspectable; Go omits -ldflags metadata with -trimpath.
+          subprocess.run(['go', 'build', '-mod=readonly', '-buildvcs=true', '-overlay',
+                          str(output / 'overlay.json'), '-ldflags', flags, '-o', str(binary),
+                          './cmd/agentdock'], env=env, check=True)
+          metadata = json.loads(read('go', 'version', '-m', '-json', str(binary)))
+          settings = {entry['Key']: entry['Value'] for entry in metadata['Settings']}
+          for key, expected in {'GOOS': target[0], 'GOARCH': target[1], 'CGO_ENABLED': '0',
+                                'vcs.revision': commit, 'vcs.time': date, 'vcs.modified': 'false'}.items():
+              require(settings.get(key) == expected, f'Build metadata mismatch: {key}')
+          require(shlex.split(settings.get('-ldflags', '')) == shlex.split(flags), 'Linker provenance mismatch')
+          # Only the early, read-only CLI version branch is executed.
+          info = json.loads(read(str(binary), 'version', '--json'))
+          for key, expected in {'version': version, 'commit': commit[:12], 'build_date': date,
+                                'platform': '/'.join(target)}.items():
+              require(info.get(key) == expected, f'Runtime metadata mismatch: {key}')
+          require(not read('git', 'status', '--porcelain', '--untracked-files=all'), 'Build changed checkout')
+          digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+          print(json.dumps({'evidence': 'source-only-core', 'release_ready': False,
+                            'candidate': json.loads(manifest.read_bytes()), 'runtime': info,
+                            'go_build': metadata, 'binary': binary.name, 'sha256': digest}, indent=2))
+          PY

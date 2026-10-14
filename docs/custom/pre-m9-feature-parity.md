@@ -430,6 +430,8 @@ Phase A/B 已通過 repo-wide Go tests、race、Windows/Linux backend compile、
 
 完成 `custom/main` release source、version/tag/buildinfo/installer/update-channel contract、macOS/Windows artifacts 與 GitHub Release pipeline。
 
+> **2026-10-14 P10 後續（UIUX 獨立）**：Next Windows 已有獨立 canonical RC metadata／Go overlay 準備工具，但原版 Windows Installer 仍使用 Stable GUID、安裝根目錄、排程工作、Tray AUMID 與 runtime discovery，因此 **Next Setup 仍 fail-closed 禁止產生，P10 未 closeout**；見 [Windows 準備與隔離門檻](p10-windows-packaging.md)。Next 更新路徑已新增預設 disabled/unpublished／拒絕 upstream Stable feed 的來源保護；見 [Next update channel](p10-update-channel.md)。Read-only PR CI 已定義 macOS arm64／Windows amd64+arm64 Core source candidate 驗證（仍待 hosted CI 真實執行）；見 [CI source contract](p10-ci-release-pipeline.md)。三者不依賴 UIUX，現階段未啟用更新、未發佈 Tag／Release、未部署／安裝；發布流程、完整 Next Windows Installer 與 P11 原生驗收不得混同。
+
 > **2026-10-14 P10 第一批 source checkpoint**：[Next release preflight](p10-release-preflight.md) 新增候選合約、read-only CLI/CI 與負向測試；僅 dry-run。UIUX unfrozen、custom/main 尚未整合；Core Next version、installer metadata/architecture 與 upstream selfupdate API Next channelization 尚未接入，feed disabled/unpublished、release_ready=false。P10/M9/P11 均未 closeout，沒有正式發布或安裝。
 
 ### P11 — Release-native UAT

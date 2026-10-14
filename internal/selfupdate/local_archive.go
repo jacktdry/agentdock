@@ -23,6 +23,9 @@ func RunLocalArchive(ctx context.Context, archivePath, checksumPath, targetVersi
 	if err != nil {
 		return err
 	}
+	if err := validateUpdateChannel(options{CurrentVersion: targetVersion, ExecutablePath: opts.ExecutablePath, DesktopTargetPath: opts.DesktopTargetPath}); err != nil {
+		return err
+	}
 	if opts.Output == nil {
 		opts.Output = io.Discard
 	}

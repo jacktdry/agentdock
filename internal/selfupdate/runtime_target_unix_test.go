@@ -25,7 +25,11 @@ func TestRuntimeOptionsForTargetReadsManagedCoreVersion(t *testing.T) {
 	if opts.CurrentVersion != "v0.8.7" {
 		t.Fatalf("current version = %q", opts.CurrentVersion)
 	}
-	if opts.ExecutablePath != binary {
-		t.Fatalf("executable = %q, want %q", opts.ExecutablePath, binary)
+	expected, err := filepath.EvalSymlinks(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.ExecutablePath != expected {
+		t.Fatalf("executable = %q, want %q", opts.ExecutablePath, expected)
 	}
 }

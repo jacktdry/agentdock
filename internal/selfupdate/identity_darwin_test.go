@@ -119,7 +119,7 @@ func TestNextReleaseRequiresNextArtifactWithoutFallback(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(release{TagName: "v0.8.8", Assets: []releaseAsset{{Name: artifact, URL: "https://fixture.invalid/app"}, {Name: artifact + ".sha256", URL: "https://fixture.invalid/checksum"}}})
 			}))
 			defer server.Close()
-			result, err := inspectUpdate(context.Background(), options{GOOS: "darwin", DesktopOnly: true, DesktopTargetPath: filepath.Join(home, "Applications", id.AppName()), CurrentVersion: "0.8.7", DesktopCurrentVersion: "0.8.7", ReleaseAPI: server.URL, HTTPClient: server.Client()})
+			result, err := inspectUpdate(context.Background(), options{nextChannelFixture: true, GOOS: "darwin", DesktopOnly: true, DesktopTargetPath: filepath.Join(home, "Applications", id.AppName()), CurrentVersion: "0.8.7", DesktopCurrentVersion: "0.8.7", ReleaseAPI: server.URL, HTTPClient: server.Client()})
 			if artifact == id.Artifact {
 				if err != nil || result.DesktopArchiveAsset.Name != id.Artifact {
 					t.Fatalf("Next asset: %v", err)
