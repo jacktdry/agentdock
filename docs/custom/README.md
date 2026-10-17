@@ -35,6 +35,7 @@
 - [pre-m9-browser-no-remote-debugging-decision-2026-10-10.md](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)：**SUPERSEDED 歷史誤解**；全面禁令已失效，保留原文供追溯。
 - [pre-m9-browser-broker-roundtable.md](pre-m9-browser-broker-roundtable.md)：P8 Browser Broker Phase A 唯讀 Core 快照、經驗證的 Next Unix Desktop Control、權限／敏感資訊邊界、測試與 Shared UI 待辦。
 - [computer-use-backends.md](computer-use-backends.md)：Computer Use provider 選型、Orca / OpenAI Sky 實測、no-focus policy 與 ACP Computer Control Broker 邊界。
+- [next-orca-live-deploy-2026-10-18.md](next-orca-live-deploy-2026-10-18.md)：Next Orca CLI 啟動路徑修復的本機候選建置、受版本門檻保護的部署及 Broker 真實無焦點驗收（含一次外部焦點變更事件）。
 - [pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)：**新 HIGH 跨域改進項目**：CBM/Chrome DevTools/search-console MCP 程序盤點、owner/lease/generation/lifecycle 共用契約、分階段處理與安全 UAT。
 - [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)：Codebase Memory 更新後 supervisor / worker build 衝突、現場證據與後續 lifecycle 改善方向。
 
