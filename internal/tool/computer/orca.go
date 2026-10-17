@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/commandpath"
 )
 
 const defaultProviderTimeout = 30 * time.Second
@@ -43,9 +46,24 @@ func NewOrcaProvider(cfg OrcaProviderConfig) (*OrcaProvider, error) {
 	if command == "" {
 		command = resolveOrcaCommand()
 	}
-	if _, err := exec.LookPath(command); err != nil {
+	// launchd does not inherit a shell PATH. Reuse the macOS command locator
+	// already used by other Next CLI integrations; it checks user-local,
+	// Homebrew, and /usr/local/bin without changing global PATH.
+	var (
+		resolved string
+		err      error
+	)
+	if filepath.IsAbs(command) || strings.ContainsRune(command, os.PathSeparator) {
+		// Preserve explicit paths: the shared command locator searches names
+		// in known CLI directories, not absolute/relative configured paths.
+		resolved, err = exec.LookPath(command)
+	} else {
+		resolved, err = commandpath.LookPath(command)
+	}
+	if err != nil {
 		return nil, computerError(ErrProviderUnavailable, "Orca computer-use provider is unavailable", "provider", &ErrorDetails{Provider: ProviderOrca, Reason: command}, err)
 	}
+	command = resolved
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = defaultProviderTimeout

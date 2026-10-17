@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -105,5 +108,52 @@ func TestOrcaActionCanExplicitlyRestoreWindow(t *testing.T) {
 	joined := strings.Join(got, " ")
 	if !strings.Contains(joined, "--restore-window") || !strings.Contains(joined, "--no-screenshot") {
 		t.Fatalf("args=%v", got)
+	}
+}
+
+// This reproduces Next launchd's missing /usr/local/bin in PATH; Orca is
+// already installed in a known CLI directory but exec.LookPath("orca") fails.
+func TestOrcaProviderDiscoversUserLocalCLIWithMinimalLaunchdPATH(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS launchd CLI path")
+	}
+	home := t.TempDir()
+	cmd := filepath.Join(home, ".local", "bin", "orca")
+	if err := os.MkdirAll(filepath.Dir(cmd), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cmd, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("ORCA_CLI_COMMAND", "")
+	t.Setenv("ORCA_DEV_REPO_ROOT", "")
+	p, err := NewOrcaProvider(OrcaProviderConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.command != cmd {
+		t.Fatalf("discovered command=%q, want %q", p.command, cmd)
+	}
+}
+
+func TestOrcaProviderResolvesExplicitExecutableOverrideWithMinimalLaunchdPATH(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS launchd CLI path")
+	}
+	root := t.TempDir()
+	cmd := filepath.Join(root, "orca")
+	if err := os.WriteFile(cmd, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("ORCA_CLI_COMMAND", cmd)
+	p, err := NewOrcaProvider(OrcaProviderConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.command != cmd {
+		t.Fatalf("override command=%q, want %q", p.command, cmd)
 	}
 }
