@@ -159,6 +159,7 @@ type SessionRecord struct {
 	LifecyclePolicy       SessionLifecyclePolicy `json:"lifecycle_policy"`
 	IdleCloseAfterMS      int64                  `json:"idle_close_after_ms,omitempty"`
 	LastActiveAt          time.Time              `json:"last_active_at"`
+	RetentionProtected    bool                   `json:"retention_protected,omitempty"`
 	ClosedReason          string                 `json:"closed_reason,omitempty"`
 	AutoCloseAttemptedAt  *time.Time             `json:"auto_close_attempted_at,omitempty"`
 	AutoCloseError        string                 `json:"auto_close_error,omitempty"`
