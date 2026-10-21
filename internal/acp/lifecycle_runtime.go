@@ -151,12 +151,28 @@ func (m *Manager) runLifecycleSweeper() {
 		return
 	}
 	defer close(m.lifecycleDone)
+	// Reclaim orphaned AgentDock mappings without deleting adapter-native history.
+	// Each profile/home owns an independent manager and session store.
+	prune := func(now time.Time) {
+		report, err := m.SweepStaleManagedSessions(now, false)
+		if err != nil {
+			slog.Warn("ACP stale session sweep failed", "agent", m.opts.Agent.Name, "error", err)
+		}
+		if report.Removed > 0 {
+			slog.Info("ACP stale managed session mappings removed", "agent", m.opts.Agent.Name, "removed", report.Removed)
+		}
+	}
+	prune(time.Now().UTC())
+	retentionTicker := time.NewTicker(24 * time.Hour)
+	defer retentionTicker.Stop()
 	ticker := time.NewTicker(lifecycleSweepInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-m.closedCh:
 			return
+		case now := <-retentionTicker.C:
+			prune(now.UTC())
 		case now := <-ticker.C:
 			if err := m.SweepIdleManaged(now.UTC()); err != nil {
 				slog.Warn("ACP idle-managed lifecycle sweep failed", "agent", m.opts.Agent.Name, "error", err)
