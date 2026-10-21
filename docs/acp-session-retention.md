@@ -62,3 +62,27 @@ upstream `v1.1.0` source; NEXT `go test ./internal/acp ./internal/tool/computer
 -count=1` passed, as did NEXT's 23 deployment-script tests and 9 bundle
 validation tests. The NEXT candidate remains **unpublished**; no public tag,
 release, enabled update feed, or formal production readiness is implied.
+
+### Original Tunnel recovery verification (2026-10-21 12:57 +08:00)
+
+The original macOS Tunnel LaunchAgent remained at `EX_CONFIG (78)` after
+the Core was deployed. A public `GET https://mac-dev.dropabit.dev/healthz`
+returned HTTP 200, but that alone did not establish ownership by AgentDock's
+Tunnel: a separate system `com.cloudflare.cloudflared` service also runs.
+Moreover, the current original CLI `tunnel status` implementation reports
+`running` when the launchd job is *loaded*, even when its process failed to
+spawn. Treat `launchctl list`, the owned process lineage and recent
+`cloudflared` registration logs as the authoritative runtime evidence.
+
+Recovery used the **original GUI Stop, then Start** (from the still-healthy
+NEXT control channel). That unregistered/re-registered both original managed
+services, without changing Tunnel mode/domain/token or the installed App.
+Subsequent observation confirmed original Core PID `81757`, original Tunnel
+PID `81765`, and its owned cloudflared child PID `81773`; Next Core and
+Tunnel remained running. The original Cloudflare log recorded four fresh
+registered connections around 12:57, and public `/healthz` remained HTTP 200.
+
+**Follow-up, not part of this rollout:** fix the original macOS Tunnel status
+readiness check so a loaded-but-spawn-failed launchd job is not reported as
+`running/ready`. Do not alter this installed release just to change that
+diagnostic; validate it separately. Keep rollback and recovery paths documented.
