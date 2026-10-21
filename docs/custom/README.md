@@ -12,6 +12,10 @@
 
 ## 文件索引
 
+- [next-active-backlog-2026-10-21.md](next-active-backlog-2026-10-21.md)：**目前 NEXT 待辦與單頁交接入口**，區分 installed/source-only、保留分支與發佈門檻。
+- [worktree-consolidation-2026-10-21.md](worktree-consolidation-2026-10-21.md)：NEXT 工作樹收斂、保留原因、清理結果與恢復位置。
+
+
 - [architecture.md](architecture.md)：整體產品與技術架構。
 - [next-product-first-guardrails.md](next-product-first-guardrails.md)：2026-10-13 重新確認產品初衷、工作優先級與防偏離檢查；repo 根目錄 `AGENTS.md` 提供所有開發 Agent 的強制工作規則。
 - [agentdock-next-isolation.md](agentdock-next-isolation.md)：AgentDock Next side-by-side 隔離、namespace、rollout 與驗收契約。
