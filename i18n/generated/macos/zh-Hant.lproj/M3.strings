@@ -269,6 +269,17 @@
 "browser.retained_hint" = "擁有者、租約與工作程序是保留紀錄，不代表全部正在執行。有效租約為待清理、有擁有者且未到期；就緒工作程序是保留狀態，並非程序探測。";
 "browser.retained_routes" = "依路由分類的保留 lease";
 "browser.retained_routes_hint" = "保留紀錄包含已過期、釋放中與失敗的 lease；計數不代表即時連線已確認。";
+"browser.route_company_incomplete" = "已有公司策略，但缺少必要的 Edge 設定檔或連接器定義。先補齊 NEXT 專屬的確切設定，不得自動改走其他路由。";
+"browser.route_company_no_policy" = "未記錄公司必要 Edge 策略。公司工作前先檢查 NEXT 專屬工作區策略與允許來源，不得以受管理 Chrome 替代。";
+"browser.route_company_title" = "公司工作 — 必須使用 Edge";
+"browser.route_company_unknown" = "無法從此快照信任公司路由設定。先檢查 NEXT Core 診斷，再處理公司工作；不得改走其他路由。";
+"browser.route_company_unverified" = "已有公司 Edge 策略與設定檔／連接器定義，但尚未驗證登入、同意、確切 Profile、CDP 目標及連線健康。設定不等於授權，也不得退回 Chrome。";
+"browser.route_explicit_title" = "明確指定的 Chrome Profile／CDP";
+"browser.route_explicit_unobserved" = "此快照未提供確切 Chrome Profile 或 CDP 可用性證據。指定的 Profile 必須另行取得授權並驗證；不得自動替換、重啟瀏覽器或擅自開啟除錯。";
+"browser.route_guide_title" = "選擇瀏覽器路由";
+"browser.route_managed_title" = "受管理的 Headless Chrome";
+"browser.route_managed_unavailable" = "Browser Broker 無法使用或仍有保留異常。先依上方 Core／ACP／清理指引排除問題，再啟動受管理的瀏覽器。";
+"browser.route_managed_unverified" = "Broker 原則上可接受請求。可透過 ChatGPT／ACP 開始已獲准的背景工作；此快照不證明 Chrome 正在執行或已取得使用者同意。";
 "browser.route_observations" = "路由與連接器觀測";
 "browser.routes" = "預設路由：受管理的隔離 Chrome。公司路由：嚴格要求已設定的驗證 Edge。";
 "browser.scope" = "唯讀 Broker 診斷。可用僅代表橋接存在，不代表即時連接器健康。";

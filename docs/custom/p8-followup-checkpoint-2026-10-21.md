@@ -38,3 +38,9 @@ Local evidence files: `/tmp/agentdock-next-p8-proof-20261021/real-shared-headles
 5. **P13/P14** remains separately unmerged, not part of P8 native acceptance. P10 official release still deferred.
 
 No new source code was required for the already proven 3-actor Broker capability. The only changes in this checkpoint are correcting historical status and recording verified remaining gates. NEXT and Stable were not restarted or redeployed, no Tag/Release/Push.
+
+## 2026-10-21 evening — Browser route operator guidance (NEXT source-only)
+
+A later Mac-Dev-only source change improves the existing read-only Browser page without touching either installed runtime. The page now gives route-specific next-step guidance for **managed headless Chrome**, **company-required authenticated Edge** (missing policy vs missing connector/profile definition vs configured-but-unqualified), and **explicit Chrome Profile / CDP** (not observed by this snapshot). It deliberately does **not** add a CDP selector, open user Profiles, start Chrome, set debug flags, mutate connector configuration, or infer verified authentication/consent from configured counts or misleading raw `connectorHealth`. Malformed counts, stale lease/lifecycle conditions and unknown managed-pool budgets suppress the managed-admission hint.
+
+Acceptance includes source-side SSR Vue tests for all three locales, malformed/disabled/stale counts, no interactive controls, and explicit non-authorization wording; validation and commit are recorded in Git. This is **operator guidance only**: Native installed NEXT UI review, trusted profile/provider health/consent authority and an actual authorized company Edge/explicit Chrome live route remain outstanding. The originally verified 2026-10-14 real triple-actor Chrome proof is unchanged.

@@ -811,6 +811,39 @@
   <data name="browser.retained_routes_hint" xml:space="preserve">
     <value>保留紀錄包含已過期、釋放中與失敗的 lease；計數不代表即時連線已確認。</value>
   </data>
+  <data name="browser.route_company_incomplete" xml:space="preserve">
+    <value>已有公司策略，但缺少必要的 Edge 設定檔或連接器定義。先補齊 NEXT 專屬的確切設定，不得自動改走其他路由。</value>
+  </data>
+  <data name="browser.route_company_no_policy" xml:space="preserve">
+    <value>未記錄公司必要 Edge 策略。公司工作前先檢查 NEXT 專屬工作區策略與允許來源，不得以受管理 Chrome 替代。</value>
+  </data>
+  <data name="browser.route_company_title" xml:space="preserve">
+    <value>公司工作 — 必須使用 Edge</value>
+  </data>
+  <data name="browser.route_company_unknown" xml:space="preserve">
+    <value>無法從此快照信任公司路由設定。先檢查 NEXT Core 診斷，再處理公司工作；不得改走其他路由。</value>
+  </data>
+  <data name="browser.route_company_unverified" xml:space="preserve">
+    <value>已有公司 Edge 策略與設定檔／連接器定義，但尚未驗證登入、同意、確切 Profile、CDP 目標及連線健康。設定不等於授權，也不得退回 Chrome。</value>
+  </data>
+  <data name="browser.route_explicit_title" xml:space="preserve">
+    <value>明確指定的 Chrome Profile／CDP</value>
+  </data>
+  <data name="browser.route_explicit_unobserved" xml:space="preserve">
+    <value>此快照未提供確切 Chrome Profile 或 CDP 可用性證據。指定的 Profile 必須另行取得授權並驗證；不得自動替換、重啟瀏覽器或擅自開啟除錯。</value>
+  </data>
+  <data name="browser.route_guide_title" xml:space="preserve">
+    <value>選擇瀏覽器路由</value>
+  </data>
+  <data name="browser.route_managed_title" xml:space="preserve">
+    <value>受管理的 Headless Chrome</value>
+  </data>
+  <data name="browser.route_managed_unavailable" xml:space="preserve">
+    <value>Browser Broker 無法使用或仍有保留異常。先依上方 Core／ACP／清理指引排除問題，再啟動受管理的瀏覽器。</value>
+  </data>
+  <data name="browser.route_managed_unverified" xml:space="preserve">
+    <value>Broker 原則上可接受請求。可透過 ChatGPT／ACP 開始已獲准的背景工作；此快照不證明 Chrome 正在執行或已取得使用者同意。</value>
+  </data>
   <data name="browser.route_observations" xml:space="preserve">
     <value>路由與連接器觀測</value>
   </data>

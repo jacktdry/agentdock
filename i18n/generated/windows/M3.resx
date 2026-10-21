@@ -811,6 +811,39 @@
   <data name="browser.retained_routes_hint" xml:space="preserve">
     <value>Retained records include expired, releasing and failed leases; these counts do not confirm live connections.</value>
   </data>
+  <data name="browser.route_company_incomplete" xml:space="preserve">
+    <value>Company policy is recorded, but a required Edge profile or connector definition is missing. Complete the exact Next-only configuration before company work; never fall back.</value>
+  </data>
+  <data name="browser.route_company_no_policy" xml:space="preserve">
+    <value>No company-required Edge policy is recorded. Check the Next-only workspace policy and allowed origins before company work; never substitute managed Chrome.</value>
+  </data>
+  <data name="browser.route_company_title" xml:space="preserve">
+    <value>Company work — required Edge</value>
+  </data>
+  <data name="browser.route_company_unknown" xml:space="preserve">
+    <value>Company route configuration cannot be trusted from this snapshot. Inspect Next Core diagnostics before company work; never fall back.</value>
+  </data>
+  <data name="browser.route_company_unverified" xml:space="preserve">
+    <value>Company Edge policy and profile/connector definitions exist, but login, consent, exact Profile, CDP target and connector health are NOT verified. Configuration is not authorization, and Chrome is not a fallback.</value>
+  </data>
+  <data name="browser.route_explicit_title" xml:space="preserve">
+    <value>Explicit Chrome Profile / CDP</value>
+  </data>
+  <data name="browser.route_explicit_unobserved" xml:space="preserve">
+    <value>This snapshot has no exact Chrome Profile or CDP readiness evidence. A requested Profile must be separately authorized and verified; no automatic substitution, browser restart or debugging switch.</value>
+  </data>
+  <data name="browser.route_guide_title" xml:space="preserve">
+    <value>Choose a browser route</value>
+  </data>
+  <data name="browser.route_managed_title" xml:space="preserve">
+    <value>Managed headless Chrome</value>
+  </data>
+  <data name="browser.route_managed_unavailable" xml:space="preserve">
+    <value>Browser Broker is unavailable or has retained anomalies. Resolve the Core/ACP/cleanup guidance above before starting another managed browser.</value>
+  </data>
+  <data name="browser.route_managed_unverified" xml:space="preserve">
+    <value>Broker admission is available in principle. Start permitted background work through ChatGPT/ACP; this snapshot does not verify a running Chrome or user consent.</value>
+  </data>
   <data name="browser.route_observations" xml:space="preserve">
     <value>Route and connector observations</value>
   </data>

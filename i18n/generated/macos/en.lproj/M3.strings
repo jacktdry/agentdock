@@ -269,6 +269,17 @@
 "browser.retained_hint" = "Owners, leases and workers are retained records, not all running. Active leases are pending-cleanup, owned and unexpired; ready workers are retained states, not process probes.";
 "browser.retained_routes" = "Retained leases by route";
 "browser.retained_routes_hint" = "Retained records include expired, releasing and failed leases; these counts do not confirm live connections.";
+"browser.route_company_incomplete" = "Company policy is recorded, but a required Edge profile or connector definition is missing. Complete the exact Next-only configuration before company work; never fall back.";
+"browser.route_company_no_policy" = "No company-required Edge policy is recorded. Check the Next-only workspace policy and allowed origins before company work; never substitute managed Chrome.";
+"browser.route_company_title" = "Company work — required Edge";
+"browser.route_company_unknown" = "Company route configuration cannot be trusted from this snapshot. Inspect Next Core diagnostics before company work; never fall back.";
+"browser.route_company_unverified" = "Company Edge policy and profile/connector definitions exist, but login, consent, exact Profile, CDP target and connector health are NOT verified. Configuration is not authorization, and Chrome is not a fallback.";
+"browser.route_explicit_title" = "Explicit Chrome Profile / CDP";
+"browser.route_explicit_unobserved" = "This snapshot has no exact Chrome Profile or CDP readiness evidence. A requested Profile must be separately authorized and verified; no automatic substitution, browser restart or debugging switch.";
+"browser.route_guide_title" = "Choose a browser route";
+"browser.route_managed_title" = "Managed headless Chrome";
+"browser.route_managed_unavailable" = "Browser Broker is unavailable or has retained anomalies. Resolve the Core/ACP/cleanup guidance above before starting another managed browser.";
+"browser.route_managed_unverified" = "Broker admission is available in principle. Start permitted background work through ChatGPT/ACP; this snapshot does not verify a running Chrome or user consent.";
 "browser.route_observations" = "Route and connector observations";
 "browser.routes" = "Default route: managed isolated Chrome. Company route: strictly requires configured authenticated Edge.";
 "browser.scope" = "Read-only broker diagnostics. Available means the bridge exists, not live connector health.";
