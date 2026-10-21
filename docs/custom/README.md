@@ -12,6 +12,8 @@
 
 ## 文件索引
 
+- [p8-followup-checkpoint-2026-10-21.md](p8-followup-checkpoint-2026-10-21.md)：P8 三真實 Agent 已通過的歷史證據及現階段 Edge／原生非干擾／崩潰恢復驗收門檻。
+
 - [next-active-backlog-2026-10-21.md](next-active-backlog-2026-10-21.md)：**目前 NEXT 待辦與單頁交接入口**，區分 installed/source-only、保留分支與發佈門檻。
 - [worktree-consolidation-2026-10-21.md](worktree-consolidation-2026-10-21.md)：NEXT 工作樹收斂、保留原因、清理結果與恢復位置。
 

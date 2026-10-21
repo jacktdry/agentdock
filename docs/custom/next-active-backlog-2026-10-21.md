@@ -2,6 +2,8 @@
 
 > Canonical working branch: `custom/main`. **Installed/runtime evidence and source-only proofs are separate.** This short handoff overrides stale progress assertions in older chronological milestone documents; it does not erase their historical evidence.
 
+> **P8 correction 2026-10-21:** Full *installed* three-genuine-actor shared-Chrome overlap and owned release **passed on 2026-10-14**; earlier Pending text was stale. Read [current P8 follow-up](p8-followup-checkpoint-2026-10-21.md) for remaining Edge/no-focus/crash gates.
+
 ## User workflow and boundary
 
 NEXT is the separately installed development control surface for ChatGPT + real Codex/Antigravity ACP workers sharing browser/computer/MCP resources, with truthful Vue UI and lifecycle ownership. Stable AgentDock is **Maintenance-only**. All NEXT source and deployment mutations use **stable Mac-Dev**, never self-modify via NEXT. Stable port `8765`, app, state, memory and browser profile are off-limits; NEXT is port `8767` with isolated identity/state.
@@ -12,7 +14,7 @@ NEXT is the separately installed development control surface for ChatGPT + real 
 
 | Priority | Track / owner branch | Next smallest user-visible outcome and acceptance | Status / gate |
 | --- | --- | --- | --- |
-| **P0** | **P8 Browser Broker + Computer Use**; main product line | One bounded **real ChatGPT + Codex ACP + Antigravity ACP** workflow shares a managed headless Chrome through Broker, with scoped pages/leases, no extra browser per worker, no focus stealing/consent prompts, and only owned cleanup; record actual process and permission evidence | Source tests/isolated evidence exist; the complete live three-actor workflow **has not been accepted** |
+| **P1** | **P8 Browser Broker follow-up + Computer Use**; main product line | Preserve the verified 3-actor one-Chrome flow; separately validate actual macOS foreground/no-popup behavior, truthful non-default shared-mode status, restart/crash owner recovery, and browser/computer resource lifecycle without affecting stable | **2026-10-14 installed NEXT 8767 three real actors (ChatGPT + Codex ACP + AGY ACP) concurrently shared one Chrome, held isolated leases, and safely released: PASS**. Shared mode was intentionally restored to exclusive afterward. Crash/SIGKILL, consent-grounded Edge, native no-focus remain **open**. [Evidence §52](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md#52-2026-10-14-p8-installed-next-three-real-actor-shared-chrome-overlap--owned-release-uat-pass) |
 | **P0** | **P8 route/CDP operator controls** | Show actionable Browser route status and authorized Edge/explicit Chrome Profile/CDP configuration; company workflow must require the selected authenticated Edge, general background tasks use managed headless Chrome, exact Profile requests cannot silently fall back | Old standalone CDP selector is not the design; GUI route/configuration and consent-grounded live route UAT remain open |
 | **P0** | **P13 Task / P14 MCP card UX**, `feature/next-mcp-card-ux` | One Task ID gets one opt-in updating progress card where host permits; compact/no-op MCP status reduces repetitive cards but never suppresses permissions/errors; test real ChatGPT Host/cache/multiple tasks/teardown | One **unmerged prototype commit**; do not represent it as shipped. Independent host acceptance required |
 | **P1** | **UX-S0..S5 Shared UI and native Tray** | Complete initial/stale/unknown semantics, precise action-feedback vs snapshot-error, OAuth status scoped by server+generation, stable loading regions, concise zh-Hant text, a11y/keyboard, and real macOS Menu Bar state/actions with timestamp | Some source fixes merged 2026-10-14; broad installed GUI/focus/shift/Tray UAT and narrower remaining items still pending |
@@ -24,7 +26,7 @@ NEXT is the separately installed development control surface for ChatGPT + real 
 
 ## Already closed — do not reopen merely because an old worktree exists
 
-P4 ACP Manager, P5 MCP Management, P6 Plugin Management GUI closeout, M8 Permission/Approval, core UI source changes from 2026-10-14, NEXT Orca CLI detection deployed 2026-10-18/21, seven-day managed ACP retention rollout 2026-10-21. Explicitly distinguish historical checkpoint text claiming P6 GUI pending from the later [2026-10-12 P6 GUI closeout](pre-m9-plugin-management-roundtable.md).
+P4 ACP Manager, P5 MCP Management, P6 Plugin Management GUI closeout, M8 Permission/Approval, **P8 three genuine ChatGPT/Codex/AGY actors sharing one real Chrome with isolated leases and safe per-actor release (installed NEXT 2026-10-14, §52)**, core UI source changes from 2026-10-14, NEXT Orca CLI detection deployed 2026-10-18/21, seven-day managed ACP retention rollout 2026-10-21. P8 Edge/consent/crash/no-focus are separate open gates; do not reopen the completed triple-actor test by misreading older checkpoints. Explicitly distinguish historical checkpoint text claiming P6 GUI pending from the later [2026-10-12 P6 GUI closeout](pre-m9-plugin-management-roundtable.md).
 
 ## Outstanding Git integration triage (do not auto-merge)
 
