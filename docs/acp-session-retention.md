@@ -25,3 +25,40 @@ The initial inventory on 2026-10-20 found 627 stale local mappings under
 `~/.agentdock` and 150 under `~/.agentdock-next` (preview only). These counts
 may change before the updated runtime is installed or restarted. Retention
 is not active in already-running binaries until they are rebuilt and deployed.
+
+## 2026-10-21 live rollout and handoff
+
+The original and NEXT were deployed **sequentially**, with the opposite MCP
+connection kept operational throughout each service restart. This is installed
+runtime evidence, not a claim about future 24-hour sweeper executions.
+
+| Runtime | Installed Core | Pruned on first start | Managed mappings left | Health |
+| --- | --- | --- | --- | --- |
+| Original / 8765 | `1.1.0` at `c0768a890d99` (source branch based on installed upstream `v1.1.0`) | Codex 539; Antigravity 102 = **641** | **37** | HTTP 200; original MCP reconnected |
+| NEXT / 8767 | local-only `0.9.2-rc.4` at `5860a2b46dee` (includes live Orca PATH fix `35a69c74`) | Codex 98; Antigravity 59 = **157** | **8** | HTTP 200; NEXT MCP reconnected |
+
+The original's first manual App hot-swap exposed a macOS `SMAppService`
+`BundleProgram` registration failure (`EX_CONFIG 78`). Its old App was restored
+and Core service recovered. Successful second rollout stopped the original Core
+**through its GUI** (unregistering the old background job), quit only the
+original GUI, installed the verified bundle, launched through LaunchServices,
+then started Core through the new GUI. Avoid hot-swapping a still-registered
+original App bundle. The NEXT rollout used its existing verified
+`deploy-next-shared.py` transaction and GUI reopen; it reported
+`NEXT_ONLY_DEPLOYED` with a retained rollback bundle.
+
+Additional verification: original/Next native Codex transcript file counts
+remained **59 / 113** before and after cleanup. NEXT observation-only ACP
+status reported **0 loaded, 0 running, 0 auto-close failures** and no Broker
+session leases. These are AgentDock mapping counts; native Codex and
+Antigravity transcripts were **not** removed. Existing state backups are at
+`~/Library/Application Support/AgentDock-Rollback/acp-retention-20261021/`
+and `~/Library/Application Support/AgentDock Next-Rollback/acp-retention-20261021/`.
+The verified NEXT transaction rollback Contents is under
+`~/Applications/.agentdock-next-replacement-b9ciq9tg/AgentDock Next.app/`.
+
+Tests: original full `go test ./internal/acp -count=1` passed on the installed
+upstream `v1.1.0` source; NEXT `go test ./internal/acp ./internal/tool/computer
+-count=1` passed, as did NEXT's 23 deployment-script tests and 9 bundle
+validation tests. The NEXT candidate remains **unpublished**; no public tag,
+release, enabled update feed, or formal production readiness is implied.
