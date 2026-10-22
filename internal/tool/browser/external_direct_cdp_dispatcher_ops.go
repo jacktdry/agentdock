@@ -9,9 +9,10 @@ import (
 )
 
 type directTargetInfo struct {
-	TargetID string `json:"targetId"`
-	Type     string `json:"type"`
-	URL      string `json:"url"`
+	TargetID         string `json:"targetId"`
+	Type             string `json:"type"`
+	URL              string `json:"url"`
+	BrowserContextID string `json:"browserContextId"`
 }
 
 func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTargetInfo, error) {
@@ -29,8 +30,12 @@ func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTarge
 	return result.TargetInfo, nil
 }
 func (d *directCDPDispatcher) verifyTargetLocked(ctx context.Context) error {
+	if d.retired.Load() {
+		return errDirectCDPRetired
+	}
 	info, err := d.targetInfoLocked(ctx)
 	if err != nil || info.TargetID != d.targetID || info.Type != "page" || d.sessionID == "" ||
+		!d.targetContextMatchesLocked(ctx, info) ||
 		(info.URL == "about:blank" && !d.bootstrap) ||
 		(info.URL != "about:blank" && !d.originScope.Allows(info.URL)) {
 		d.Close()

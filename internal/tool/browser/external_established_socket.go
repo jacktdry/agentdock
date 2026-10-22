@@ -65,7 +65,8 @@ func readEdgeEstablishedSocketEvidence(ctx context.Context, conn net.Conn, sourc
 		source.executable != "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" ||
 		len(source.userDataDir) > 4096 || !filepath.IsAbs(source.userDataDir) || filepath.Clean(source.userDataDir) != source.userDataDir ||
 		source.userDataDir == "/" || strings.ContainsRune(source.userDataDir, 0) || strings.Count(source.userDataDir, "/") > edgeProfileMaxComponents ||
-		len(source.endpoint) > edgeSocketLimit || !pinnedCDPEndpointValid(source.endpoint) {
+		len(source.endpoint) > edgeSocketLimit ||
+		(!pinnedCDPEndpointValid(source.endpoint) && !(source.defaultLaunch && directCDPEndpointValid(source.endpoint))) {
 		return fail()
 	}
 	if v := reflect.ValueOf(probe); v.Kind() == reflect.Ptr && v.IsNil() {

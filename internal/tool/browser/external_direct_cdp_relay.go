@@ -9,18 +9,21 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 // PRIVATE transport identity foundation for a future trusted Core direct
 // dispatcher. Semantic intent belongs to that dispatcher, not CDP frames.
 // This does not prove browser login, consent, or no-focus; Edge is UNQUALIFIED.
 const (
-	directCDPAttachTimeout = 5 * time.Second
-	directCDPMaxLifetime   = 30 * time.Minute
+	directCDPAttachTimeout    = 5 * time.Second
+	directCDPHandshakeTimeout = 15 * time.Second
+	directCDPMaxLifetime      = 30 * time.Minute
 )
 
 type directCDPRelay struct {
@@ -43,15 +46,15 @@ type directCDPRelay struct {
 // No production caller, discovery, reconnect, or status mint.
 func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor) (*directCDPRelay, error) {
 	if ctx == nil || ctx.Err() != nil || attest == nil || expected.source == nil || expected.incarnation == nil ||
-		expected.source == expected.incarnation || !pinnedCDPEndpointValid(endpoint) {
+		expected.source == expected.incarnation || !directCDPEndpointValid(endpoint) {
 		return nil, errPinnedCDPUnavailable
 	}
-	dialCtx, stopDial := context.WithTimeout(ctx, pinnedCDPTimeout)
+	dialCtx, stopDial := context.WithTimeout(ctx, directCDPHandshakeTimeout)
 	defer stopDial()
 	var tcp net.Conn
 	var attempted bool
 	var stopSocket func() bool
-	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: pinnedCDPTimeout,
+	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: directCDPHandshakeTimeout,
 		NetDialContext: func(dc context.Context, network, addr string) (net.Conn, error) {
 			if attempted { // Count attempts, including failed TCP dials.
 				return nil, errPinnedCDPUnavailable
@@ -121,6 +124,22 @@ func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPe
 	go func() { defer r.wg.Done(); r.forward(up, true) }()
 	go func() { r.wg.Wait(); close(r.done) }()
 	return r, nil
+}
+
+// Edge's existing supported socket can use /devtools/browser without a
+// browser-ID suffix. This canonical form is allowed only by the direct
+// dispatcher; the legacy single-use MCP relay retains its stricter grammar.
+// Either form still requires pre-handshake attestation of the concrete socket.
+func directCDPEndpointValid(endpoint string) bool {
+	if browserpolicy.ValidateCanonicalBrowserEndpoint(endpoint) != nil {
+		return false
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "ws" {
+		return false
+	}
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && (ip.Equal(net.IPv4(127, 0, 0, 1)) || ip.Equal(net.IPv6loopback))
 }
 
 func (r *directCDPRelay) configure(c *websocket.Conn) {

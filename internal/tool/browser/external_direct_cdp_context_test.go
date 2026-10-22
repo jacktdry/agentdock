@@ -1,0 +1,162 @@
+package browser
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/gorilla/websocket"
+)
+
+func contextResponder(t *testing.T, contextID, profilePath string) dispatcherResponder {
+	t.Helper()
+	return func(f *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
+		var result any
+		switch cmd.Method {
+		case "Target.getBrowserContexts":
+			result = map[string]any{"browserContextIds": []string{"unselected", "company"}, "defaultBrowserContextId": "unselected"}
+		case "Target.getTargetInfo":
+			f.mu.Lock()
+			u := f.currentURL
+			f.mu.Unlock()
+			result = map[string]any{"targetInfo": map[string]any{"targetId": "owned-target", "type": "page", "url": u, "browserContextId": contextID}}
+		case "Runtime.evaluate":
+			result = map[string]any{"result": map[string]any{"value": profilePath}}
+		default:
+			return false
+		}
+		if err := dispatcherReply(c, cmd, result); err != nil {
+			t.Error(err)
+		}
+		return true
+	}
+}
+
+func TestDirectCDPContextNeverFallsBackToDefault(t *testing.T) {
+	for _, selected := range []string{"company", "missing"} {
+		t.Run(selected, func(t *testing.T) {
+			d, f := newDispatcherFixture(t, contextResponder(t, "company", ""))
+			err := d.bindBrowserContext(context.Background(), selected)
+			if selected == "missing" {
+				if err == nil || d.live() || d.OpenOwnedTarget(context.Background(), "") == nil {
+					t.Fatal("missing company context fell back")
+				}
+				if commandCount(f.recorded(), "Target.createTarget") != 0 {
+					t.Fatal("unselected Profile was touched")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := d.OpenOwnedTarget(context.Background(), ""); err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range f.recorded() {
+				if c.Method == "Target.createTarget" && c.Params["browserContextId"] != "company" {
+					t.Fatal("default context used")
+				}
+			}
+			if err := d.bindBrowserContext(context.Background(), "unselected"); err == nil {
+				t.Fatal("live target rebound")
+			}
+		})
+	}
+}
+
+func TestDirectCDPContextDriftRejectsBeforeCompanyNavigation(t *testing.T) {
+	d, f := newDispatcherFixture(t, contextResponder(t, "wrong-context", ""))
+	ctx := context.Background()
+	if err := d.bindBrowserContext(ctx, "company"); err != nil {
+		t.Fatal(err)
+	}
+	if d.OpenOwnedTarget(ctx, "") == nil || d.live() {
+		t.Fatal("wrong Profile target accepted")
+	}
+	if commandCount(f.recorded(), "Target.closeTarget") != 1 || commandCount(f.recorded(), "Page.navigate") != 0 {
+		t.Fatal("wrong target cleanup/navigation")
+	}
+}
+
+func TestDirectCDPExplicitDefaultContextStillRequiresSameIncarnation(t *testing.T) {
+	for _, drift := range []bool{false, true} {
+		d, f := newDispatcherFixture(t, contextResponder(t, "", ""))
+		ctx := context.Background()
+		if err := d.bindBrowserContext(ctx, "unselected"); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+			t.Fatal(err)
+		}
+		for _, cmd := range f.recorded() {
+			if cmd.Method == "Target.createTarget" {
+				if _, present := cmd.Params["browserContextId"]; present {
+					t.Fatal("default context encoded as an incognito context")
+				}
+			}
+		}
+		if drift {
+			d.browserContextID = "replacement"
+		}
+		err := d.Navigate(ctx, "https://example.invalid/")
+		if drift {
+			if err == nil || commandCount(f.recorded(), "Page.navigate") != 0 {
+				t.Fatal("replaced default context navigated company website")
+			}
+		} else if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestDirectCDPOwnedProfileProbeCannotBecomeCompanyTarget(t *testing.T) {
+	for _, profile := range []string{"/owned/edge/Default", "/other/edge/Default", "/owned/edge/../other"} {
+		t.Run(profile, func(t *testing.T) {
+			d, f := newDispatcherFixture(t, contextResponder(t, "company", profile))
+			ctx := context.Background()
+			if err := d.bindBrowserContext(ctx, "company"); err != nil {
+				t.Fatal(err)
+			}
+			if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+				t.Fatal(err)
+			}
+			got, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge")
+			if profile == "/owned/edge/Default" {
+				if err != nil || got != "Default" {
+					t.Fatalf("profile=%q err=%v", got, err)
+				}
+				// A metadata probe grants no company origin or authentication.
+				if d.Navigate(ctx, "https://example.invalid/") == nil {
+					t.Fatal("metadata target reused for company operation")
+				}
+			} else if err == nil || got != "" || d.live() {
+				t.Fatal("wrong Profile root accepted")
+			}
+			for _, c := range f.recorded() {
+				if c.Method == "Page.navigate" && c.Params["url"] != "edge://version/" {
+					t.Fatal("probe navigated company website")
+				}
+				if c.Method == "Runtime.evaluate" && c.Params["expression"] != `document.getElementById('profile_path')?.textContent ?? ''` {
+					t.Fatal("arbitrary probe evaluation")
+				}
+			}
+		})
+	}
+}
+
+func TestEdgeProfileDirectoryRejectsTraversalAndGuest(t *testing.T) {
+	for _, name := range []string{"Default", "Profile 1", "Profile 123"} {
+		if !edgeProfileDirectoryValid(name) {
+			t.Fatal(name)
+		}
+	}
+	for _, name := range []string{"", ".", "..", "Guest Profile", "System Profile", "Profile 01", "Profile -1", "Profile 1/../Default", "Profile 1\x00"} {
+		if edgeProfileDirectoryValid(name) {
+			t.Fatal(name)
+		}
+	}
+	// Do not accidentally admit a path containing a valid-looking suffix.
+	if edgeProfileDirectoryValid(filepath.Join("/tmp", "Default")) {
+		t.Fatal("absolute Profile directory admitted")
+	}
+}

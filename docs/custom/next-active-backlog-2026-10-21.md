@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-10-23 本輪 RC 執行入口：** [目前驗收清單](next-local-rc-acceptance.md) 記錄真實 Edge 相容性修正、單一授權連線的 private 多 target 共用、已發生的使用者偵錯允許與 short-probe 斷線問題、GitLab 原生 OAuth discovery，以及未完成的正式 Runtime/provider/backend 與 Host UAT。Source 改善不等於四站 UAT／新 RC 完成；已停止會讓使用者反覆允許的短連線重試。
+
 > Canonical working branch: `custom/main`. **Installed/runtime evidence and source-only proofs are separate.** This short handoff overrides stale progress assertions in older chronological milestone documents; it does not erase their historical evidence.
 
 > **2026-10-23 macOS Edge process/Profile epoch guard (newest source-only):** Added immutable OS epoch snapshot revalidation for every fenced action, comparing Edge signer/process start/listener and **Profile ancestor device/inode/mode**, including post-operation result quarantine on replacement. Synthetic failure/race regression only; process evidence is NOT authenticated WebSocket peer status. NEXT Runtime provider remains nil, company route not enabled. [Scope](next-edge-process-epoch-guard-2026-10-23.md).

@@ -22,6 +22,30 @@ var (
 	errDirectCDPAction  = errors.New("direct CDP operation failed")
 )
 
+type directCDPProtocolError struct {
+	code   int
+	reason string
+}
+
+func (e *directCDPProtocolError) Error() string { return errDirectCDPAction.Error() }
+func (e *directCDPProtocolError) Unwrap() error { return errDirectCDPAction }
+
+func directCDPProtocolReason(message string) string {
+	message = strings.ToLower(message)
+	switch {
+	case strings.Contains(message, "browser context"), strings.Contains(message, "browsercontext"):
+		return "browser_context_rejected"
+	case strings.Contains(message, "hidden"):
+		return "hidden_target_rejected"
+	case strings.Contains(message, "background"):
+		return "background_target_rejected"
+	case strings.Contains(message, "permission"), strings.Contains(message, "not allowed"):
+		return "browser_permission_required"
+	default:
+		return "protocol_rejected"
+	}
+}
+
 // PRIVATE Core foundation: proves transport and command/target provenance only,
 // NOT login, consent, or no-focus. Edge remains UNQUALIFIED. Hidden=true +
 // Background=true are protocol requests; live Edge no-focus remains UAT. No production caller.
@@ -34,6 +58,8 @@ type directCDPDispatcher struct {
 	retired                                atomic.Bool
 	closeOnce                              sync.Once
 	nextID                                 int64
+	sharedSequence                         *int64 // Protected by the shared gate.
+	keepTransportOnRelease                 bool
 	targetID, sessionID                    string
 	opened, closeAttempted, closeConfirmed bool
 	closeErr                               error
@@ -41,6 +67,8 @@ type directCDPDispatcher struct {
 	uidToBackend                           map[string]int64
 	originScope                            browserpolicy.OriginScope
 	bootstrap                              bool
+	browserContextID                       string
+	defaultBrowserContext                  bool
 }
 
 func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay, originScope browserpolicy.OriginScope) (*directCDPDispatcher, error) {
@@ -71,6 +99,29 @@ func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay, originSc
 func (d *directCDPDispatcher) Close() {
 	d.retired.Store(true)
 	d.closeOnce.Do(func() { _ = d.down.Close(); d.relay.Close() })
+}
+
+// forkTarget shares the single Core-owned, already-attached transport. Every
+// target retains its own ID/session/UIDs/origin scope; whole operations share
+// the connection gate and command sequence. Closing one owned target does not
+// close sibling targets or ask the user to authorize another WebSocket.
+// The root owns transport shutdown; any ambiguous I/O still retires it.
+func (d *directCDPDispatcher) forkTarget(scope browserpolicy.OriginScope) (*directCDPDispatcher, error) {
+	if scope == "" || d.browserContextID == "" || !d.live() {
+		return nil, errDirectCDPRetired
+	}
+	for _, origin := range strings.Split(string(scope), "\n") {
+		if !d.originScope.Allows(origin) {
+			return nil, errDirectCDPAction
+		}
+	}
+	sequence := d.sharedSequence
+	if sequence == nil {
+		sequence = &d.nextID
+	}
+	return &directCDPDispatcher{relay: d.relay, down: d.down, gate: d.gate, sharedSequence: sequence, keepTransportOnRelease: true,
+		uidToBackend: make(map[string]int64), originScope: scope, bootstrap: true,
+		browserContextID: d.browserContextID, defaultBrowserContext: d.defaultBrowserContext}, nil
 }
 
 func (d *directCDPDispatcher) live() bool { return !d.retired.Load() && !d.relay.Lost() }
@@ -111,16 +162,24 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if d.retired.Load() {
+		return errDirectCDPRetired
+	}
 	if !d.live() {
 		d.Close()
 		return errDirectCDPRetired
 	}
-	if d.nextID == math.MaxInt64 {
+	sequence := &d.nextID
+	if d.sharedSequence != nil {
+		sequence = d.sharedSequence
+	}
+	if *sequence == math.MaxInt64 {
 		d.Close()
 		return errDirectCDPRetired
 	}
-	d.nextID++
-	data, err := json.Marshal(directCDPCommand{d.nextID, method, session, params})
+	*sequence++
+	commandID := *sequence
+	data, err := json.Marshal(directCDPCommand{commandID, method, session, params})
 	if err != nil {
 		return errDirectCDPAction
 	}
@@ -167,7 +226,7 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 			}
 			continue // Events can never supply an operation result.
 		}
-		if *reply.ID != d.nextID || reply.SessionID != session || reply.Method != "" ||
+		if *reply.ID != commandID || reply.SessionID != session || reply.Method != "" ||
 			(reply.Result == nil) == (reply.Error == nil) {
 			d.Close()
 			return errDirectCDPRetired
@@ -179,7 +238,7 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 			return errDirectCDPRetired
 		}
 		if reply.Error != nil {
-			return errDirectCDPAction
+			return &directCDPProtocolError{code: reply.Error.Code, reason: directCDPProtocolReason(reply.Error.Message)}
 		}
 		if string(reply.Result) == "null" || json.Unmarshal(reply.Result, result) != nil {
 			d.Close()
@@ -235,13 +294,20 @@ func (d *directCDPDispatcher) OpenOwnedTarget(ctx context.Context, initialURL st
 	var created struct {
 		TargetID string `json:"targetId"`
 	}
+	contextID := d.browserContextID
+	if d.defaultBrowserContext {
+		contextID = ""
+	}
+	// Chromium rejects the presence of newWindow for a hidden target, even
+	// when its boolean value is false. Omit it; hidden+background creates no
+	// native window. Do not retry by creating a visible target on failure.
 	err = d.callLocked(ctx, "Target.createTarget", "", struct {
-		URL        string `json:"url"`
-		Background bool   `json:"background"`
-		NewWindow  bool   `json:"newWindow"`
-		Hidden     bool   `json:"hidden"`
-		ForTab     bool   `json:"forTab"`
-	}{u, true, false, true, false}, &created)
+		URL              string `json:"url"`
+		Background       bool   `json:"background"`
+		Hidden           bool   `json:"hidden"`
+		ForTab           bool   `json:"forTab"`
+		BrowserContextID string `json:"browserContextId,omitempty"`
+	}{u, true, true, false, contextID}, &created)
 	if err != nil {
 		d.Close()
 		return err
@@ -272,7 +338,8 @@ func (d *directCDPDispatcher) OpenOwnedTarget(ctx context.Context, initialURL st
 	}
 	d.sessionID = attached.SessionID
 	info, err := d.targetInfoLocked(ctx)
-	if err != nil || info.TargetID != d.targetID || info.Type != "page" {
+	if err != nil || info.TargetID != d.targetID || info.Type != "page" ||
+		!d.targetContextMatchesLocked(ctx, info) {
 		if d.live() {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), directCDPCallTimeout)
 			_ = d.closeTargetLocked(cleanupCtx)
@@ -306,11 +373,19 @@ func (d *directCDPDispatcher) closeTargetLocked(ctx context.Context) error {
 func (d *directCDPDispatcher) CloseOwnedTarget(ctx context.Context) (bool, error) {
 	ctx, unlock, err := d.lock(ctx)
 	if err != nil {
-		d.Close()
+		if !d.keepTransportOnRelease {
+			d.Close()
+		}
 		return false, err
 	}
 	defer unlock()
-	defer d.Close()
+	defer func() {
+		if d.keepTransportOnRelease {
+			d.retired.Store(true)
+		} else {
+			d.Close()
+		}
+	}()
 	if d.closeAttempted {
 		return d.closeConfirmed, d.closeErr
 	}

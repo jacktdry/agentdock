@@ -1,5 +1,7 @@
 # AgentDock Custom Roadmap
 
+> **2026-10-23 local RC execution:** [Current prioritized acceptance](next-local-rc-acceptance.md) tracks the remaining company Edge, independent GitLab authorization, lifecycle/native UAT and NEXT-only RC gates. No new installed RC or live company-site acceptance is claimed by source diagnostics.
+
 > **Current operational entrypoint (2026-10-21):** [NEXT active backlog](next-active-backlog-2026-10-21.md) and [worktree consolidation](worktree-consolidation-2026-10-21.md). Older sections preserve chronological checkpoints and may state pending gates closed by later evidence.
 
 > 狀態：Accepted initial roadmap

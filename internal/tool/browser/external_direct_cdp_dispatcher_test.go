@@ -47,6 +47,10 @@ func dispatcherDefaultReply(t *testing.T, f *dispatcherFixture, c *websocket.Con
 	var result any = map[string]any{}
 	switch cmd.Method {
 	case "Target.createTarget":
+		if _, present := cmd.Params["newWindow"]; present {
+			dispatcherProtocolError(c, cmd)
+			return true
+		}
 		f.mu.Lock()
 		f.currentURL, _ = cmd.Params["url"].(string)
 		f.mu.Unlock()
@@ -225,7 +229,8 @@ func TestDirectCDPDispatcherOwnedTargetAndOperations(t *testing.T) {
 		}
 	}
 	create := cmds[0]
-	if create.Method != "Target.createTarget" || create.Params["url"] != "about:blank" || create.Params["background"] != true || create.Params["hidden"] != true || create.Params["newWindow"] != false || create.Params["forTab"] != false {
+	_, hasNewWindow := create.Params["newWindow"]
+	if create.Method != "Target.createTarget" || create.Params["url"] != "about:blank" || create.Params["background"] != true || create.Params["hidden"] != true || hasNewWindow || create.Params["forTab"] != false {
 		t.Fatalf("create=%+v", create)
 	}
 	for _, c := range cmds {

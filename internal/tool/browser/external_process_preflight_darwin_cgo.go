@@ -7,6 +7,7 @@ package browser
 #include <Security/Security.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <stdlib.h>
+#include <libproc.h>
 
 static int edge_live_signature(int pid, const char *requirementText) {
     int valid = 0;
@@ -41,9 +42,29 @@ import "C"
 
 import (
 	"context"
+	"strings"
 	"time"
 	"unsafe"
 )
+
+// Kernel-reported running executable; unlike lsof's txt catalog this is not
+// proportional to Edge's loaded libraries. Signature and epoch checks remain
+// independent requirements before/after this bounded native observation.
+func macEdgeExecutablePath(ctx context.Context, pid int) (string, error) {
+	if ctx == nil || ctx.Err() != nil || pid <= 0 || int64(pid) > 2147483647 {
+		return "", errEdgeProcessUnqualified
+	}
+	var buf [C.PROC_PIDPATHINFO_MAXSIZE]C.char
+	n := C.proc_pidpath(C.int(pid), unsafe.Pointer(&buf[0]), C.uint32_t(len(buf)))
+	if n <= 0 || int(n) >= len(buf) || ctx.Err() != nil {
+		return "", errEdgeProcessUnqualified
+	}
+	path := C.GoStringN(&buf[0], C.int(n))
+	if strings.ContainsRune(path, 0) {
+		return "", errEdgeProcessUnqualified
+	}
+	return path, nil
+}
 
 // Security.framework calls cannot be canceled. Keep the slot until native
 // verification actually returns, even after the caller times out. A stuck call

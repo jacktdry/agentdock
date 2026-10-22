@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,13 +22,14 @@ import (
 // to mint connectorQualification/externalPeerIdentity without an independently
 // reviewed runtime and transport-bound attestor.
 type edgeProcessPreflight struct {
-	pid         int
-	endpoint    string
-	executable  string
-	userDataDir string
-	profile     edgeProfileMetadata // Bounded ancestor inode/device/owner/mode evidence; NOT login identity.
-	startToken  string
-	observedAt  time.Time
+	pid           int
+	endpoint      string
+	executable    string
+	userDataDir   string
+	profile       edgeProfileMetadata // Bounded ancestor inode/device/owner/mode evidence; NOT login identity.
+	startToken    string
+	observedAt    time.Time
+	defaultLaunch bool // Native metadata-only prerequisite; Profile still needs CDP proof.
 }
 
 // edgeProcessProbe is OS evidence only. Its concrete macOS implementation
@@ -57,6 +59,10 @@ var errEdgeProcessUnqualified = errors.New("external Edge process identity unqua
 // profile contents. Only bounded directory metadata is inspected; all raw
 // OS evidence stays package-private.
 func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDataDir string, probe edgeProcessProbe) (edgeProcessPreflight, error) {
+	return readEdgeProcessPreflightCommand(ctx, canonicalEndpoint, expectedDataDir, probe, false)
+}
+
+func readEdgeProcessPreflightCommand(ctx context.Context, canonicalEndpoint, expectedDataDir string, probe edgeProcessProbe, defaultLaunch bool) (edgeProcessPreflight, error) {
 	fail := func() (edgeProcessPreflight, error) {
 		return edgeProcessPreflight{}, errEdgeProcessUnqualified
 	}
@@ -100,7 +106,7 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	}
 	args, err := probe.command(probeCtx, first.pid)
 	if err != nil || probeCtx.Err() != nil ||
-		!edgeCommandMatches(args, port, expectedDataDir) {
+		!edgePreflightCommandMatches(args, port, expectedDataDir, defaultLaunch) {
 		return fail()
 	}
 	mapped, err := probe.image(probeCtx, first.pid)
@@ -146,8 +152,26 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	return edgeProcessPreflight{
 		pid: first.pid, endpoint: canonicalEndpoint,
 		executable:  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-		userDataDir: expectedDataDir, profile: profile, startToken: start, observedAt: time.Now().UTC(),
+		userDataDir: expectedDataDir, profile: profile, startToken: start, observedAt: time.Now().UTC(), defaultLaunch: defaultLaunch,
 	}, nil
+}
+
+// Native Edge can expose an already-authorized debugging session without
+// command-line debugging flags. Accept only its observed ordinary startup
+// shape, for the OS user's exact default data root. This proves neither which
+// Profile/context is selected nor consent/login; those require the subsequent
+// same-socket, owner-selected Profile check. Legacy MCP admission stays strict.
+func edgePreflightCommandMatches(command string, port int, dir string, defaultLaunch bool) bool {
+	if !defaultLaunch {
+		return edgeCommandMatches(command, port, dir)
+	}
+	const executable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+	home, err := os.UserHomeDir()
+	if err != nil || dir != filepath.Join(home, "Library", "Application Support", "Microsoft Edge") || port < 1 || port > 65535 {
+		return false
+	}
+	command = strings.TrimSuffix(command, "\n")
+	return command == executable || command == executable+" --no-startup-window" || command == executable+" --restart"
 }
 
 func parseUniqueEdgeListener(raw string, port int) (edgeListener, bool) {

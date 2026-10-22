@@ -5,9 +5,27 @@ package browser
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestEdgeKernelExecutablePathOnlyObservesOwnedTestProcess(t *testing.T) {
+	path, err := macEdgeExecutablePath(context.Background(), os.Getpid())
+	if err != nil || !filepath.IsAbs(path) || path == edgeSystemBundle+"/Contents/MacOS/Microsoft Edge" {
+		t.Fatal("kernel executable lookup invalid")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, pid := range []int{0, -1, int(1 << 31)} {
+		if _, err := macEdgeExecutablePath(context.Background(), pid); err != errEdgeProcessUnqualified {
+			t.Fatal("invalid PID admitted")
+		}
+	}
+	if _, err := macEdgeExecutablePath(ctx, os.Getpid()); err != errEdgeProcessUnqualified {
+		t.Fatal("canceled executable lookup admitted")
+	}
+}
 
 func TestEdgeLiveSignatureNativeRejectsTestProcess(t *testing.T) {
 	// Only this test process is queried; never discover or inspect user's Edge.
