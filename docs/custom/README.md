@@ -62,3 +62,5 @@
 11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。
 
 - [2026-10-14 Next UI/UX 逐頁圓桌與品質驗收](next-uiux-roundtable-2026-10-14.md)：涵蓋 P13/P14、Shared UI 全頁、Menu Bar/Tray、載入狀態、真實操作、繁中與原生 UAT
+
+- [p13-p14-ux-scope-decision-2026-10-22.md](p13-p14-ux-scope-decision-2026-10-22.md)：2026/10/22 使用者 UX 決策，維持原版精簡 Task 卡片、暫緩 P13 live Monitor 與 P14 降噪；既有實驗不納入 NEXT 主線。
