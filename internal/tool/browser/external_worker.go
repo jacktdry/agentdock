@@ -25,7 +25,7 @@ func validateExternalStart(d RouteDecision) error {
 		return externalLeaseError(ErrPolicyConflict, "", "resolved route is not external or lacks required authentication", nil)
 	}
 	owned := ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}
-	if s.Engine != EngineChromeDevToolsMCP || s.EngineVersion != PreferredEngineVersion ||
+	if !supportedExternalEngine(s.Browser, s.Engine, s.EngineVersion) ||
 		(s.Browser != BrowserEdge && s.Browser != BrowserChrome && s.Browser != BrowserChromium) ||
 		(s.ProfileClass != ProfileExternal && s.ProfileClass != ProfileAuthenticatedExternal) ||
 		strings.TrimSpace(s.ProfileID) == "" || strings.TrimSpace(s.ConnectorID) == "" ||
@@ -49,6 +49,9 @@ func externalWorkerConfig(options ExternalWorkerOptions) mcpclient.ServerConfig 
 func (r *WorkerRegistry) StartExternal(ctx context.Context, options ExternalWorkerOptions) (WorkerInfo, error) {
 	if err := validateExternalStart(options.Route); err != nil {
 		return WorkerInfo{}, err
+	}
+	if options.Route.Start.Engine != EngineChromeDevToolsMCP {
+		return WorkerInfo{}, externalTransportFenceError()
 	}
 	return r.startWorker(ctx, externalWorkerConfig(options))
 }

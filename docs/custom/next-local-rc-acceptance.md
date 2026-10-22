@@ -26,7 +26,7 @@
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
 | NEXT | 8767 `/healthz` 回覆 `0.9.2-rc.5`；App bundle `0.9.2`／`6.0.0`；沒有修改／重啟／安裝 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
-| 公司路由 | `~/.agentdock-next/browser-routes.json` 仍不存在；Runtime provider 仍為 nil |
+| 公司路由 | `~/.agentdock-next/browser-routes.json` 仍不存在；安裝版尚未接入 native provider；source 已接入明確選擇的 NEXT-only provider/backend |
 | NEXT MCP | Version 2 registry 目前只有 `memory`、`codebase-memory`；沒有 `gitlab` |
 | Edge | 唯讀 WebSocket 成功回覆過 `Edg/155.0.4283.60`，之後回覆 `.62`；程序在本輪期間由外部換代，並非本工作重啟 |
 | Profile | 使用者回覆只有一個名稱為「公司」的 Profile；尚未完成其 directory/context 的實機綁定 |
@@ -37,8 +37,8 @@
 | 順序 | 工作 | 狀態／剩餘門檻 |
 | --- | --- | --- |
 | P1 / Phase 1 | 真實 Edge 相容性 | **source 已實作**：一般啟動形狀、kernel executable path、無 suffix 的 WS endpoint、explicit context pin、hidden target 參數修正；尚未完成最終實機流程 |
-| P1 / Phase 1 | 公司 Edge 持續連線 | **source 已實作 private 共用路徑**：同一 socket／command gate／sequence，不同 target/session/UID/origin，釋放一頁保留連線及其他頁面；**正式 Runtime 尚未接入** |
-| P1 / Phase 1 | ConnectorStatusProvider / ExternalLeaseBackend | **待開發**：可信 NEXT-only 建構、明確連線動作、真實 Profile proof、既有 epoch/peer/fence 接合、one-shot grant、task/session/worker ownership、TTL／停止／異常回收 |
+| P1 / Phase 1 | 公司 Edge 持續連線 | **正式 Runtime source 已接入**：明確 connect 一次、同 socket／gate／sequence、獨立 target/session/UID/origin、釋放一頁保留 siblings；尚未部署及 Host UAT |
+| P1 / Phase 1 | ConnectorStatusProvider / ExternalLeaseBackend | **source 已實作並離線整合驗證**：NEXT-only constructor、明確 connect/disconnect、同 socket Profile metadata、epoch/peer/fence、one-shot grant、task/session/worker、TTL／停止；實機 Profile／取消／異常回收仍待驗收。詳見 [Runtime 整合](next-edge-runtime-2026-10-23.md) |
 | P1 / Phase 1 | 四個網站的真正 NEXT Broker UAT | **待實機驗收**：精確工作樹／HTTPS origin pair、owner consent、單一連線、多頁隔離與 owned release；目前沒有網站 UAT PASS |
 | P1 / Phase 2 | GitLab 獨立 API 授權 | **待授權及 NEXT 整合**：原站 `/api/v4/mcp` 回覆 401；OAuth authorization-server／protected-resource discovery 回覆 200，包含 DCR metadata；使用 NEXT 獨立 OAuth storage，不複製原版 Token |
 | P1 / Phase 3 | Edge/Chrome 與多 Session 生命週期 | **保留既有三真實 Agent 共用 Managed Chrome PASS**；仍需 Edge、macOS no-focus、取消／逾時／crash／恢復及原生程序保護的實機證據 |
@@ -72,10 +72,17 @@
    依該 root 限制四個固定 HTTPS origins 中的適用 pair、獨立 owned targets 與同一 socket，
    僅導覽／固定 readiness read／AX snapshot／PNG capture，無 click/fill/任意腳本或公司寫入。
    此工具**不啟動 Core、不改 live config、不 mint route grant，也不是 installed Broker UAT**。
-   網路導覽的完整預先 origin／popup enforcement 仍未接成 production。
+   此歷史診斷 helper 不等於新的正式 Runtime；後者另在 owned session 啟用 Document
+   request/response origin interception。popup/no-focus 實機證據仍 open。
 8. App suite 的 protected-path 搜尋測試在乾淨主線同樣失敗：macOS `/var`／`/private/var`
    alias 比較不一致。測試改以 `EvalSymlinks` 後的實際檔案路徑比較；保留 protected state
    不可被搜尋且 ordinary visible file 必須保留的兩個行為斷言，沒有改 production 搜尋行為。
+9. 正式 NEXT Core 經 `next-core-edge-cdp` driver 接入 native provider/backend。
+   `browser_broker` 明確 connect／disconnect、exact company worktree selection、scoped
+   navigate/snapshot/screenshot 已接上 M8；直接與 ACP 租約共用連線，各自 owned cleanup。
+   Profile current-binding 的首次 directory pin 僅在同 Core 記憶體中保留，跨重啟 pin 尚未自動保存。
+10. Broker diagnostics 納入 native logical workers 與 authenticated direct ownership；
+    修正直接租約被 GUI 誤算為 unowned/stale，保留未觀察 connector health 的 truthful 狀態。
 
 ## 實機授權與失敗記錄
 
@@ -92,7 +99,7 @@
 
 ## 驗證
 
-驗證命令及最終結果見本輪提交與工作交接。已執行過完整
+前一 source checkpoint（`b50fdc29`）已執行過完整
 `./internal/tool/browser ./internal/browserpolicy ./internal/config ./internal/app`：
 最終本輪 source **1,639 case PASS、7 個既有 opt-in cases SKIP**。七個跳過項目是 shared real-headless、managed real worker，
 以及四個 Codex adapter/native/containment opt-in；沒有將它們算成 live acceptance。
@@ -100,13 +107,16 @@
 定點 direct/context/Profile/default-launch/kernel-path/site-smoke synthetic tests 已通過；
 最終相關 Race Detector selection（含 shared connection、queued cancel）及四包 `go vet` PASS。
 source diagnostic CLI `go build` PASS；`git diff --check` PASS。
-沒有執行新的 Vue/Vitest／打包／安裝／回滾／原生 GUI UAT；本輪未修改 Vue。
+新 Runtime 整合 checkpoint 的四包完整 Go 測試為 **1,666 PASS、0 FAIL、7 opt-in SKIP**，
+JSONL 證據 `/private/tmp/agentdock-next-edge-verification-y6b6836m/go-tests.jsonl`。
+相關 Race Detector selection **137 PASS**；四包 `go vet` PASS。
+Shared GUI `pnpm typecheck` PASS；Vitest **24 files／176 tests PASS**。
+Vitest 有 Node localStorage experimental warning，無測試失敗。本輪未修改 Vue。
+尚未完成新的 App／ZIP／DMG、安裝／回滾／原生 GUI 及四站 UAT。
 
 ## 下一個安全步驟
 
-先完成 private persistent connection 到 NEXT 自己的正式 provider/backend 與 explicit
-connect lifecycle，保留既有 M8 authority、manager ownership、世代／TTL／cleanup 及
-公司不可 fallback 的限制。只有連線建立是 owner consent 準備動作，不能讓每個
-status 查詢或 lease operation 在 planner 的兩秒 window 內重新打開公司 WebSocket。
-完成可審查的 source／離線檢查後，再集中安排一次可持續保留連線的 Host UAT，
-隨後才進行新 RC／部署授權 gate。不要重跑短命 helper 讓使用者反覆按允許。
+正式 provider/backend 與 explicit connect lifecycle 已進入 source。完成可追溯的 candidate
+建置後，在保留原版控制通道及確認 NEXT 無工作中的情況下，安排 NEXT-only 安裝與
+一次可持續保留連線的 Host UAT。設定範例已可審查，尚未寫入 live home；安裝／服務
+中斷仍需適當的使用者授權。不要重跑短命 helper 讓使用者反覆按允許。

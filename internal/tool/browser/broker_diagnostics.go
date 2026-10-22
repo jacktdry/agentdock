@@ -32,25 +32,26 @@ type BrokerWorkerDiagnostic struct {
 }
 
 type BrokerLeaseDiagnostic struct {
-	LeaseID              string                    `json:"lease_id"`
-	ACPSessionID         string                    `json:"owner_acp_session_id,omitempty"`
-	ProfileID            string                    `json:"owner_profile_id,omitempty"`
-	Route                browserpolicy.RouteKind   `json:"route"`
-	WorkspaceID          string                    `json:"workspace_id"`
-	WorkerID             string                    `json:"worker_id"`
-	PageID               string                    `json:"page_id"`
-	IsolationContextName string                    `json:"isolation_context_name,omitempty"`
-	ConnectorID          string                    `json:"connector_id,omitempty"`
-	ConnectorPID         int                       `json:"connector_pid,omitempty"`
-	OwnerType            ResourceOwner             `json:"owner_type"`
-	Ownership            BrokerOwnershipDiagnostic `json:"ownership"`
-	ForegroundPolicy     ForegroundPolicy          `json:"foreground_policy"`
-	CleanupState         CleanupState              `json:"cleanup_state"`
-	CleanupReason        string                    `json:"cleanup_reason,omitempty"`
-	CleanupError         string                    `json:"cleanup_error,omitempty"`
-	CreatedAt            time.Time                 `json:"created_at"`
-	LastActiveAt         time.Time                 `json:"last_active_at"`
-	ExpiresAt            time.Time                 `json:"expires_at,omitempty"`
+	LeaseID                  string                    `json:"lease_id"`
+	AuthenticatedDirectOwner bool                      `json:"authenticated_direct_owner,omitempty"`
+	ACPSessionID             string                    `json:"owner_acp_session_id,omitempty"`
+	ProfileID                string                    `json:"owner_profile_id,omitempty"`
+	Route                    browserpolicy.RouteKind   `json:"route"`
+	WorkspaceID              string                    `json:"workspace_id"`
+	WorkerID                 string                    `json:"worker_id"`
+	PageID                   string                    `json:"page_id"`
+	IsolationContextName     string                    `json:"isolation_context_name,omitempty"`
+	ConnectorID              string                    `json:"connector_id,omitempty"`
+	ConnectorPID             int                       `json:"connector_pid,omitempty"`
+	OwnerType                ResourceOwner             `json:"owner_type"`
+	Ownership                BrokerOwnershipDiagnostic `json:"ownership"`
+	ForegroundPolicy         ForegroundPolicy          `json:"foreground_policy"`
+	CleanupState             CleanupState              `json:"cleanup_state"`
+	CleanupReason            string                    `json:"cleanup_reason,omitempty"`
+	CleanupError             string                    `json:"cleanup_error,omitempty"`
+	CreatedAt                time.Time                 `json:"created_at"`
+	LastActiveAt             time.Time                 `json:"last_active_at"`
+	ExpiresAt                time.Time                 `json:"expires_at,omitempty"`
 }
 
 type BrokerQueueDiagnostic struct {
@@ -106,6 +107,11 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 	owners := make([]BrokerOwnerDiagnostic, 0, len(b.bySession))
 	leaseOwners := make(map[string]BrokerOwnerDiagnostic)
 	leaseRoutes := make(map[string]browserpolicy.RouteKind)
+	directOwners := make(map[string]RequestScope, len(b.directLeases))
+	for id, entry := range b.directLeases {
+		directOwners[id] = entry.scope
+		leaseRoutes[id] = entry.route
+	}
 	for _, owner := range b.bySession {
 		if owner.authenticatedMCPRequestObserved {
 			authenticatedOwners++
@@ -134,8 +140,10 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 		m := l.metadata
 		bind := l.binding
 		l.mu.Unlock()
+		directScope, direct := directOwners[id]
+		direct = direct && directScope == m.Scope
 		o := leaseOwners[id]
-		leases = append(leases, BrokerLeaseDiagnostic{LeaseID: id, ACPSessionID: o.ACPSessionID, ProfileID: o.ProfileID, Route: func() browserpolicy.RouteKind {
+		leases = append(leases, BrokerLeaseDiagnostic{LeaseID: id, AuthenticatedDirectOwner: direct, ACPSessionID: o.ACPSessionID, ProfileID: o.ProfileID, Route: func() browserpolicy.RouteKind {
 			r := leaseRoutes[id]
 			if r == "" {
 				return browserpolicy.RouteManaged
@@ -155,8 +163,10 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 		m := l.metadata
 		bind := l.binding
 		l.mu.Unlock()
+		directScope, direct := directOwners[id]
+		direct = direct && directScope == m.Scope
 		o := leaseOwners[id]
-		leases = append(leases, BrokerLeaseDiagnostic{LeaseID: id, ACPSessionID: o.ACPSessionID, ProfileID: o.ProfileID, Route: func() browserpolicy.RouteKind {
+		leases = append(leases, BrokerLeaseDiagnostic{LeaseID: id, AuthenticatedDirectOwner: direct, ACPSessionID: o.ACPSessionID, ProfileID: o.ProfileID, Route: func() browserpolicy.RouteKind {
 			r := leaseRoutes[id]
 			if r == "" {
 				return browserpolicy.RouteExternal
@@ -181,7 +191,12 @@ func (b *ACPBridge) Diagnostics() BrokerDiagnostics {
 		snapshot := b.rotating.budget.snapshot()
 		sharedBudget = &snapshot
 	}
-	return BrokerDiagnostics{AuthenticatedMCPRequestOwners: authenticatedOwners, Owners: owners, Leases: leases, Workers: b.registry.Snapshot(), Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr, SharedBudget: sharedBudget}
+	workers := b.registry.Snapshot()
+	if b.planner.externalRuntime != nil {
+		workers = append(workers, b.planner.externalRuntime.workerSnapshot()...)
+		sort.Slice(workers, func(i, j int) bool { return workers[i].CreatedAt.Before(workers[j].CreatedAt) })
+	}
+	return BrokerDiagnostics{AuthenticatedMCPRequestOwners: authenticatedOwners, Owners: owners, Leases: leases, Workers: workers, Queue: BrokerQueueDiagnostic{Active: active, Queued: queued, MaxConcurrency: b.managed.policy.MaxConcurrency, QueueCapacity: b.managed.policy.QueueCapacity, ManagedOrphans: managedOrphans, ExternalOrphans: externalOrphans}, LifecycleLastError: lastErr, SharedBudget: sharedBudget}
 }
 
 func (b *ACPBridge) CleanupStale(now time.Time) error { return b.sweepLifecycle(now.UTC()) }

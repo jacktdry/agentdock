@@ -110,9 +110,10 @@ func copyConnectorRuntimeStatus(status ConnectorRuntimeStatus) ConnectorRuntimeS
 }
 
 type RoutePlanner struct {
-	policies []browserpolicy.WorkspaceRootPolicy
-	catalog  browserpolicy.Catalog
-	status   ConnectorStatusProvider
+	policies        []browserpolicy.WorkspaceRootPolicy
+	catalog         browserpolicy.Catalog
+	status          ConnectorStatusProvider
+	externalRuntime externalRuntime
 	// Held until the provider actually returns, even after the caller times out.
 	statusInFlight chan struct{}
 }
@@ -168,6 +169,10 @@ func (p *RoutePlanner) plan(scope RequestScope, override *RouteOverride) (Profil
 	plan.OriginScope = browserpolicy.OriginScopeForPolicy(policy)
 	plan.Browser, plan.ProfileClass = Kind(profile.Browser), ProfileClass(profile.Class)
 	plan.Headless = false
+	if connector.Driver == browserpolicy.DriverNextEdgeCDP {
+		plan.Engine = EngineNativeCDP
+		plan.EngineVersion = nativeEdgeEngineVersion
+	}
 	plan.Ownership = ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}
 	return plan, policy, nil
 }
@@ -243,6 +248,9 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	status := result.status
 	if status.ConnectorID != plan.ConnectorID || status.ProfileID != plan.ProfileID || status.Endpoint != plan.Endpoint {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector identity mismatch")
+	}
+	if status.Engine != plan.Engine || status.EngineVersion != plan.EngineVersion {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "connector identity incomplete")
 	}
 	now := time.Now().UTC()
 	if !connectorObservationFresh(status, now) {

@@ -17,6 +17,7 @@ type externalRouteGrant struct {
 	peer      externalPeerIdentity
 	expiresAt time.Time
 	used      atomic.Bool
+	started   atomic.Bool // The native backend may start one worker for a consumed grant.
 }
 
 type externalPeerIdentity struct {

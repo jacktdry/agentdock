@@ -45,8 +45,15 @@ type directCDPRelay struct {
 
 // No production caller, discovery, reconnect, or status mint.
 func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor) (*directCDPRelay, error) {
+	return newDirectCDPRelayWithLimit(ctx, endpoint, expected, attest, directCDPMaxLifetime)
+}
+
+// Only the Core-owned explicit native connection uses limit=0. Its parent
+// lifecycle is canceled on disconnect, failed admission and Runtime.Close;
+// source probes retain their deadline and the default thirty-minute ceiling.
+func newDirectCDPRelayWithLimit(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor, limit time.Duration) (*directCDPRelay, error) {
 	if ctx == nil || ctx.Err() != nil || attest == nil || expected.source == nil || expected.incarnation == nil ||
-		expected.source == expected.incarnation || !directCDPEndpointValid(endpoint) {
+		expected.source == expected.incarnation || !directCDPEndpointValid(endpoint) || limit < 0 {
 		return nil, errPinnedCDPUnavailable
 	}
 	dialCtx, stopDial := context.WithTimeout(ctx, directCDPHandshakeTimeout)
@@ -95,7 +102,13 @@ func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPe
 		_ = up.Close()
 		return nil, errPinnedCDPUnavailable
 	}
-	lifetime, cancel := context.WithTimeout(ctx, directCDPMaxLifetime)
+	var lifetime context.Context
+	var cancel context.CancelFunc
+	if limit == 0 {
+		lifetime, cancel = context.WithCancel(ctx)
+	} else {
+		lifetime, cancel = context.WithTimeout(ctx, limit)
+	}
 	r := &directCDPRelay{peer: expected, up: up, listener: &pinnedCDPListener{Listener: l, conns: make(map[*pinnedCDPConn]bool)},
 		path: "/devtools/browser/" + hex.EncodeToString(token[:]), cancel: cancel, lifetime: lifetime, done: make(chan struct{}), attached: make(chan struct{})}
 	r.endpoint = "ws://" + l.Addr().String() + r.path
@@ -144,8 +157,9 @@ func directCDPEndpointValid(endpoint string) bool {
 
 func (r *directCDPRelay) configure(c *websocket.Conn) {
 	c.SetReadLimit(pinnedCDPLimit)
-	deadline, _ := r.lifetime.Deadline()
-	_ = c.SetReadDeadline(deadline)
+	if deadline, limited := r.lifetime.Deadline(); limited {
+		_ = c.SetReadDeadline(deadline)
+	}
 	// Control frames are forwarded with bounded gorilla control writes. Close
 	// frames trigger permanent loss through ReadMessage, then close both sockets.
 	c.SetPingHandler(func(data string) error { return r.control(c, websocket.PingMessage, data) })
@@ -184,7 +198,7 @@ func (r *directCDPRelay) writeFrame(upstream bool, kind int, data []byte, contro
 	allowed := !r.lost && r.lifetime.Err() == nil && to != nil
 	r.mu.Unlock()
 	deadline := time.Now().Add(pinnedCDPTimeout)
-	if end, _ := r.lifetime.Deadline(); end.Before(deadline) {
+	if end, limited := r.lifetime.Deadline(); limited && end.Before(deadline) {
 		deadline = end
 	}
 	var err error

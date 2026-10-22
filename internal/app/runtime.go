@@ -250,7 +250,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser catalog: %w", catalogErr)
 		}
-		planner, plannerErr := toolbrowser.NewRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, nil)
+		planner, plannerErr := newRuntimeBrowserRoutePlanner(cfg, catalog)
 		if plannerErr != nil {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser route planner: %w", plannerErr)

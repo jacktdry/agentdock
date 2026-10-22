@@ -32,6 +32,21 @@ func TestRuntimeBrowserDesktopAvailability(t *testing.T) {
 	}
 }
 
+func TestRuntimeBrowserDesktopAuthenticatedDirectLeaseIsOwned(t *testing.T) {
+	now := time.Now().UTC()
+	d := toolbrowser.BrokerDiagnostics{Leases: []toolbrowser.BrokerLeaseDiagnostic{{Route: browserpolicy.RouteRequiredExternal,
+		AuthenticatedDirectOwner: true, CleanupState: toolbrowser.CleanupPending, ExpiresAt: now.Add(time.Minute)}}}
+	s := aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, now)
+	if s.Stale || s.UnownedLeases != 0 || s.ActiveLeases != 1 || s.RequiredExternalLeases != 1 {
+		t.Fatal("authenticated direct lease falsely reported stale/unowned", s)
+	}
+	d.Leases[0].AuthenticatedDirectOwner = false
+	s = aggregateBrowserDiagnostics(browserdesktop.Snapshot{Availability: "available"}, d, now)
+	if !s.Stale || s.UnownedLeases != 1 || s.ActiveLeases != 0 {
+		t.Fatal("missing owner evidence treated as active", s)
+	}
+}
+
 func TestRuntimeBrowserDesktopCompletedLeaseDoesNotReportStale(t *testing.T) {
 	now := time.Now().UTC()
 	for _, test := range []struct {

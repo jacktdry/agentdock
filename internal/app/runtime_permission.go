@@ -174,8 +174,13 @@ func (r *Runtime) runtimePermissionFacts(ctx context.Context, name, action strin
 
 	switch name {
 	case "browser_broker":
+		if root, err := r.browserBrokerWorkspace(args); err == nil {
+			facts.Binding.WorkspaceRoot = root
+			facts.Binding.WorkspaceID = trustedWorkspacePermissionID(root)
+			facts.Binding.TrustedWorkspace = facts.Binding.WorkspaceID != ""
+		}
 		switch action {
-		case "direct_snapshot":
+		case "direct_snapshot", "direct_screenshot":
 			facts.ReadOnly, facts.Other, facts.Network = true, false, false
 			facts.OneShotEligible = false
 			facts.Reason = "direct browser snapshot observes the owned target"
@@ -186,6 +191,17 @@ func (r *Runtime) runtimePermissionFacts(ctx context.Context, name, action strin
 		case "direct_acquire", "direct_release":
 			facts.Management = true
 			facts.Network = action == "direct_acquire" && hostPayloadHasNonBlankString(args, "url")
+		case "connect_external", "disconnect_external":
+			facts.Management = true
+			facts.Network = action == "connect_external"
+			facts.OneShotEligible = true
+			facts.Reason = "explicit NEXT company connector lifecycle; may require browser-owned consent"
+		case "direct_navigate":
+			facts.Management = false
+			facts.Network = true
+			facts.Other = true
+			facts.OneShotEligible = true
+			facts.Reason = "navigate only the owned lease target under configured browser and origin policy"
 		}
 	case "agentdock_context", "workspace_context":
 		facts.EffectsKnown = true

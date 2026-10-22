@@ -6,11 +6,12 @@ import (
 )
 
 // externalFencedOperation is one completely disposed transport permit. Close
-// MUST join/terminate that permit's owned connector and its upstream writes
-// before returning. A timed-out or failed Close permanently invalidates the
+// MUST join that permit's upstream writes before returning. Black-box MCP
+// permits must terminate their owned connector; the Core's typed synchronous
+// dispatcher may instead retire its one-shot intent on a shared pinned socket
+// because it has no child/async outbound queue. A failed Close invalidates the
 // series; merely checking status between legacy calls cannot fence queued CDP
-// frames. This is an internal source-only abstraction, not a production Edge
-// attestor, Browser Backend, or connector discovery mechanism.
+// frames. This permit cannot itself attest a browser or discover connectors.
 type externalFencedOperation interface {
 	externalTransportFence
 	Close() error
@@ -20,10 +21,7 @@ type externalFencedOperationFactory func(context.Context, WorkerInfo, externalPe
 
 // externalFenceSeries models multi-step use of separate single-operation
 // transport permits under one immutable, prequalified worker and peer.
-// It cannot mint that qualification; the production Runtime still has no
-// trusted ConnectorStatusProvider or connected multi-step lease backend.
-// Source-only callers/tests inject a factory and a verifier; no real browser is
-// contacted. Production must pass ExternalLeaseManager.verifyPeer (which has
+// It cannot mint qualification. Production passes ExternalLeaseManager.verifyPeer (which has
 // bounded, single-flight independent attestation), not a config or identity
 // echo. A verifier callback alone cannot establish transport-bound authority.
 type externalPeerRevalidation func(context.Context, externalPeerIdentity, WorkerInfo) error

@@ -31,6 +31,12 @@ const (
 	EngineChromeDevToolsMCP EngineKind = "chrome-devtools-mcp"
 )
 const PreferredEngineVersion = "1.7.0"
+const nativeEdgeEngineVersion = "1"
+
+func supportedExternalEngine(browser Kind, engine EngineKind, version string) bool {
+	return (engine == EngineChromeDevToolsMCP && version == PreferredEngineVersion) ||
+		(browser == BrowserEdge && engine == EngineNativeCDP && version == nativeEdgeEngineVersion)
+}
 
 type ProfileClass string
 

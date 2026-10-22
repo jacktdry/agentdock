@@ -25,6 +25,22 @@ const nextSharedBrowserWorkspaceEnv = "AGENTDOCK_NEXT_SHARED_BROWSER_WORKSPACE"
 
 const sharedBrowserRestartMarker = ".shared-browser-restart-pending.v1"
 
+func newRuntimeBrowserRoutePlanner(cfg config.Config, catalog browserpolicy.Catalog) (*toolbrowser.RoutePlanner, error) {
+	native := false
+	for _, connector := range catalog.Definition().Connectors {
+		if connector.Driver == browserpolicy.DriverNextEdgeCDP {
+			native = true
+		}
+	}
+	if !native {
+		return toolbrowser.NewRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, nil)
+	}
+	if cfg.Stdio || !cfg.ACPEnabled || !cfg.BrowserEnabled || cfg.Port != 8767 {
+		return nil, fmt.Errorf("native company Edge requires the isolated NEXT Core on port 8767")
+	}
+	return toolbrowser.NewNextEdgeRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, cfg.AgentDockHome)
+}
+
 func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePlanner) (*toolbrowser.ACPBridge, *sharedBrowserRestartGuard, error) {
 	registry := toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{})
 	workspace, selected := os.LookupEnv(nextSharedBrowserWorkspaceEnv)

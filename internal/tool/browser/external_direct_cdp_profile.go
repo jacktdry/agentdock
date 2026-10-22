@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 // inspectOwnedEdgeProfile reads only Edge's supported version page in this
@@ -73,20 +75,5 @@ func (d *directCDPDispatcher) inspectOwnedEdgeProfile(ctx context.Context, dataR
 }
 
 func edgeProfileDirectoryValid(name string) bool {
-	if name == "Default" {
-		return true
-	}
-	if !strings.HasPrefix(name, "Profile ") {
-		return false
-	}
-	n := strings.TrimPrefix(name, "Profile ")
-	if n == "" || len(n) > 8 || n[0] == '0' {
-		return false
-	}
-	for _, c := range n {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
+	return browserpolicy.ValidExternalProfileDirectory(name)
 }

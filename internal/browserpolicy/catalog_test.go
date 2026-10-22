@@ -11,6 +11,35 @@ func catalogFixture() CatalogDefinition {
 	return CatalogDefinition{Profiles: []ProfileDefinition{{ID: "user-edge", Browser: BrowserEdge, Class: ProfileAuthenticatedExternal, UserDataDir: filepath.Join(string(filepath.Separator), "configured", "edge")}}, Connectors: []ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}}}
 }
 
+func TestNativeEdgeProfileSelectionIsExplicitAndUnambiguous(t *testing.T) {
+	for _, tc := range []struct {
+		name, directory string
+		current, valid  bool
+	}{
+		{"missing", "", false, false},
+		{"observed current", "", true, true},
+		{"explicit Default", "Default", false, true},
+		{"explicit company directory", "Profile 1", false, true},
+		{"ambiguous", "Default", true, false},
+		{"path traversal", "../Default", false, false},
+		{"invalid Profile number", "Profile 0", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := catalogFixture()
+			d.Connectors[0].Driver = DriverNextEdgeCDP
+			d.Profiles[0].SelectedProfileName = "公司"
+			d.Profiles[0].ProfileDirectory, d.Profiles[0].BindCurrentProfile = tc.directory, tc.current
+			if _, err := NewCatalog(d); (err == nil) != tc.valid {
+				t.Fatalf("selection validity=%t: %v", tc.valid, err)
+			}
+			d.Profiles[0].SelectedProfileName = ""
+			if _, err := NewCatalog(d); err == nil {
+				t.Fatal("missing owner selection accepted")
+			}
+		})
+	}
+}
+
 func TestCatalogValidation(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -46,9 +46,9 @@ func directCDPProtocolReason(message string) string {
 	}
 }
 
-// PRIVATE Core foundation: proves transport and command/target provenance only,
-// NOT login, consent, or no-focus. Edge remains UNQUALIFIED. Hidden=true +
-// Background=true are protocol requests; live Edge no-focus remains UAT. No production caller.
+// Private Core dispatcher. Runtime qualification requires independent process,
+// Profile and held-socket verification. Hidden/background are protocol requests;
+// no-focus and real site behavior still require native Edge acceptance.
 type directCDPDispatcher struct {
 	relay *directCDPRelay
 	down  *websocket.Conn
@@ -69,6 +69,8 @@ type directCDPDispatcher struct {
 	bootstrap                              bool
 	browserContextID                       string
 	defaultBrowserContext                  bool
+	policy                                 *directCDPPolicyState // Shared, protected by gate.
+	policyEnabled                          bool
 }
 
 func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay, originScope browserpolicy.OriginScope) (*directCDPDispatcher, error) {
@@ -91,7 +93,8 @@ func newDirectCDPDispatcher(ctx context.Context, relay *directCDPRelay, originSc
 		return nil, errDirectCDPRetired
 	}
 	c.SetReadLimit(pinnedCDPLimit)
-	d := &directCDPDispatcher{relay: relay, down: c, gate: make(chan struct{}, 1), uidToBackend: make(map[string]int64), originScope: originScope, bootstrap: true}
+	d := &directCDPDispatcher{relay: relay, down: c, gate: make(chan struct{}, 1), uidToBackend: make(map[string]int64), originScope: originScope, bootstrap: true,
+		policy: &directCDPPolicyState{targets: make(map[string]*directCDPDispatcher), pending: make(map[int64]string)}}
 	d.gate <- struct{}{}
 	return d, nil
 }
@@ -121,7 +124,7 @@ func (d *directCDPDispatcher) forkTarget(scope browserpolicy.OriginScope) (*dire
 	}
 	return &directCDPDispatcher{relay: d.relay, down: d.down, gate: d.gate, sharedSequence: sequence, keepTransportOnRelease: true,
 		uidToBackend: make(map[string]int64), originScope: scope, bootstrap: true,
-		browserContextID: d.browserContextID, defaultBrowserContext: d.defaultBrowserContext}, nil
+		browserContextID: d.browserContextID, defaultBrowserContext: d.defaultBrowserContext, policy: d.policy}, nil
 }
 
 func (d *directCDPDispatcher) live() bool { return !d.retired.Load() && !d.relay.Lost() }
@@ -199,6 +202,9 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 		d.Close()
 		return errDirectCDPRetired
 	}
+	var ownResult json.RawMessage
+	var ownError *directCDPProtocolError
+	ownSeen := false
 	for {
 		kind, data, err := d.down.ReadMessage()
 		if err != nil || kind != websocket.TextMessage {
@@ -210,6 +216,7 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 			Method    string          `json:"method"`
 			SessionID string          `json:"sessionId"`
 			Result    json.RawMessage `json:"result"`
+			Params    json.RawMessage `json:"params"`
 			Error     *struct {
 				Code    int    `json:"code"`
 				Message string `json:"message"`
@@ -224,12 +231,39 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 				d.Close()
 				return errDirectCDPRetired
 			}
+			if err := d.handlePolicyEventLocked(ctx, reply.Method, reply.SessionID, reply.Params); err != nil {
+				d.Close()
+				return errDirectCDPRetired
+			}
 			continue // Events can never supply an operation result.
 		}
-		if *reply.ID != commandID || reply.SessionID != session || reply.Method != "" ||
-			(reply.Result == nil) == (reply.Error == nil) {
+		if reply.Method != "" || (reply.Result == nil) == (reply.Error == nil) {
 			d.Close()
 			return errDirectCDPRetired
+		}
+		if *reply.ID == commandID {
+			if ownSeen || reply.SessionID != session {
+				d.Close()
+				return errDirectCDPRetired
+			}
+			ownSeen = true
+			ownResult = reply.Result
+			if reply.Error != nil {
+				ownError = &directCDPProtocolError{code: reply.Error.Code, reason: directCDPProtocolReason(reply.Error.Message)}
+			}
+		} else if d.policy != nil {
+			expected, exists := d.policy.pending[*reply.ID]
+			if !exists || reply.SessionID != expected || reply.Error != nil || len(reply.Result) == 0 || string(reply.Result) == "null" {
+				d.Close()
+				return errDirectCDPRetired
+			}
+			delete(d.policy.pending, *reply.ID)
+		} else {
+			d.Close()
+			return errDirectCDPRetired
+		}
+		if !ownSeen || (d.policy != nil && len(d.policy.pending) != 0) {
+			continue
 		}
 		// Stop/wait-free cancellation fencing: a callback already running, or a
 		// canceled context, means completion cannot be trusted for later reuse.
@@ -237,10 +271,10 @@ func (d *directCDPDispatcher) callLocked(ctx context.Context, method, session st
 			d.Close()
 			return errDirectCDPRetired
 		}
-		if reply.Error != nil {
-			return &directCDPProtocolError{code: reply.Error.Code, reason: directCDPProtocolReason(reply.Error.Message)}
+		if ownError != nil {
+			return ownError
 		}
-		if string(reply.Result) == "null" || json.Unmarshal(reply.Result, result) != nil {
+		if string(ownResult) == "null" || json.Unmarshal(ownResult, result) != nil {
 			d.Close()
 			return errDirectCDPRetired
 		}
@@ -366,6 +400,9 @@ func (d *directCDPDispatcher) closeTargetLocked(ctx context.Context) error {
 		d.closeErr = errDirectCDPAction
 	}
 	d.closeConfirmed = d.closeErr == nil
+	if d.closeConfirmed {
+		d.retirePolicySessionLocked()
+	}
 	return d.closeErr
 }
 

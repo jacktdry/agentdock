@@ -35,7 +35,7 @@ func ResolveRoute(r RouteRequest) (RouteDecision, error) {
 	if c == nil || !c.Registered || !c.Healthy || !c.Verified || c.Endpoint == "" {
 		return fail(ErrRequiredRouteUnavailable, "connector missing, unhealthy or unverified", id)
 	}
-	if (c.Browser != BrowserChrome && c.Browser != BrowserChromium && c.Browser != BrowserEdge) || c.Engine != EngineChromeDevToolsMCP || c.EngineVersion != PreferredEngineVersion || c.Transport != "websocket" || c.ProfileID == "" {
+	if (c.Browser != BrowserChrome && c.Browser != BrowserChromium && c.Browser != BrowserEdge) || !supportedExternalEngine(c.Browser, c.Engine, c.EngineVersion) || c.Transport != "websocket" || c.ProfileID == "" {
 		return fail(ErrRequiredRouteUnavailable, "connector identity incomplete", id)
 	}
 	if profile != "" && c.ProfileID != profile {
