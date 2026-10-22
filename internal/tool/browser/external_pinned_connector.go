@@ -108,6 +108,19 @@ func newPinnedExternalConnector(ctx context.Context, relay *pinnedCDPRelay, expe
 	return c, nil
 }
 
+// The private connector implements the transport-fence METHOD, not the
+// ExternalLeaseBackend lifecycle. This is a one-operation, non-replayable
+// primitive: a multi-operation lease MUST NOT reuse this connection after
+// its first permit. The authenticated OS/process/profile attestor and an
+// independent ConnectorStatusProvider remain absent from production.
+// In particular, implementing this interface does not enable external
+// browser routing or authorize importing a Standalone MCP server.
+var _ externalTransportFence = (*pinnedExternalConnector)(nil)
+
+func (c *pinnedExternalConnector) CallExternalFenced(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, tool string, args map[string]any) (map[string]any, error) {
+	return c.callBound(ctx, worker, peer, tool, args)
+}
+
 // Tests/future reviewed backend ONLY. No WorkerRegistry.CallExternal fallback.
 // Only one operation per immutable binding. Overlap/reentry closes transport
 // synchronously; the lifetime watcher cleans up without waiting here for the

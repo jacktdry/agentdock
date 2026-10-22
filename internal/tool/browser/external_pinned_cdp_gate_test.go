@@ -354,3 +354,68 @@ func TestPinnedCDPGateCancellationStopAndGenerationQuarantine(t *testing.T) {
 		})
 	}
 }
+
+// The transport-fence interface must be usable without exposing the unsafe
+// legacy WorkerRegistry.CallExternal path. All traffic is synthetic and stays
+// inside httptest loopback sockets; this does not authorize a real Edge route.
+func TestPinnedExternalFenceInterfaceSinglePermit(t *testing.T) {
+	c, session, frames, _ := pinnedGateBinding(t)
+	fence := externalTransportFence(c)
+	calls := 0
+	session.call = func(context.Context) (map[string]any, error) {
+		calls++
+		return map[string]any{"ok": true}, pinnedGateEcho(session)
+	}
+	result, err := fence.CallExternalFenced(context.Background(), c.worker, c.peer, "list_pages", nil)
+	if err != nil || result["ok"] != true || calls != 1 || frames.Load() != 2 {
+		t.Fatalf("one operation not atomically fenced: err=%v calls=%d frames=%d", err, calls, frames.Load())
+	}
+	// A normal external Browser lease needs >1 operation. The private relay
+	// intentionally refuses a second operation on this same socket instead
+	// of re-opening a permit that could forward queued CDP frames.
+	for i := 0; i < 3; i++ {
+		result, err := fence.CallExternalFenced(context.Background(), c.worker, c.peer, "list_pages", nil)
+		if result != nil || err != errPinnedConnectorUnavailable || calls != 1 || frames.Load() != 2 {
+			t.Fatal("one-shot transport fence replayed a second browser operation")
+		}
+	}
+	pinnedWait(t, c.relay.done)
+	if session.closes != 1 || c.checkAlive(context.Background()) != errPinnedConnectorUnavailable {
+		t.Fatal("spent transport fence failed to close owned connector")
+	}
+}
+
+func TestPinnedExternalFenceInterfaceRejectsForeignGenerationBeforeDispatch(t *testing.T) {
+	for _, mode := range []string{"worker", "peer", "tool", "canceled"} {
+		t.Run(mode, func(t *testing.T) {
+			c, session, frames, _ := pinnedGateBinding(t)
+			fence := externalTransportFence(c)
+			calls := 0
+			session.call = func(context.Context) (map[string]any, error) {
+				calls++
+				return nil, pinnedGateEcho(session)
+			}
+			worker, peer, tool, ctx := c.worker, c.peer, "list_pages", context.Background()
+			switch mode {
+			case "worker":
+				worker.CreatedAt = worker.CreatedAt.Add(time.Second)
+			case "peer":
+				peer = pinnedTestPeer()
+			case "tool":
+				tool = "select_page"
+			case "canceled":
+				canceled, cancel := context.WithCancel(context.Background())
+				cancel()
+				ctx = canceled
+			}
+			result, err := fence.CallExternalFenced(ctx, worker, peer, tool, nil)
+			if result != nil || err != errPinnedConnectorUnavailable || calls != 0 || frames.Load() != 1 {
+				t.Fatal("foreign generation or forbidden method reached pinned transport")
+			}
+			pinnedWait(t, c.relay.done)
+			if session.closes != 1 {
+				t.Fatal("failed fenced method did not stop only its owned connector")
+			}
+		})
+	}
+}
