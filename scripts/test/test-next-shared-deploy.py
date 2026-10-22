@@ -275,15 +275,94 @@ class NextDeployTests(unittest.TestCase):
         self.assertEqual(env["AGENTDOCK_DEFAULT_DIR"], str(self.home / "AgentDock Next"))
         self.assertNotEqual(env["AGENTDOCK_HOME"], str(self.home / ".agentdock"))
 
-    def test_core_skill_bootstrap_failure_rolls_back_next_bundle(self):
+    def assert_bootstrap_requires_repair(self, error):
         with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
              mock.patch.object(deploy, "registrar") as registrar, \
              mock.patch.object(deploy.NEXT_INSTALLER, "rename_swap") as swap, \
-             mock.patch.object(deploy, "bootstrap_next_core_skills", side_effect=RuntimeError("invalid Next skill")):
+             mock.patch.object(deploy, "run_checked", side_effect=[self.install_output, error]) as run, \
+             contextlib.redirect_stdout(io.StringIO()) as output, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(RuntimeError) as raised:
+                deploy.main()
+            self.assertEqual(str(raised.exception),
+                             "Next Core Skills bootstrap incomplete; app update already active and healthy; next-only repair required")
+            self.assertIs(raised.exception.__cause__, error)
+            swap.assert_not_called()
+            registrar.assert_called_once_with(self.dest, "core")
+            deploy.wait_for_core.assert_called_once_with(123, destination=self.dest)
+            self.assertEqual(run.call_args.args[0][1:3], ["skill", "bootstrap"])
+            self.assertEqual(run.call_args.kwargs["timeout"], 90)
+            self.assertTrue(self.backup.is_dir())
+            self.assertIn(f"NEXT_ROLLBACK_BUNDLE: {self.backup.parent}", output.getvalue())
+            self.assertNotIn("NEXT_ONLY_DEPLOYED", output.getvalue())
+            self.assertNotIn("NEXT_GUI_RESTART_PENDING", output.getvalue())
+            self.assertNotIn("NEXT_ONLY_ROLLBACK_RESTORED", errors.getvalue())
+
+    def test_core_skill_bootstrap_failure_requires_next_only_repair(self):
+        self.assert_bootstrap_requires_repair(RuntimeError("invalid Next skill"))
+
+    def test_core_skill_bootstrap_timeout_requires_next_only_repair(self):
+        self.assert_bootstrap_requires_repair(deploy.subprocess.TimeoutExpired("agentdock", 90))
+
+    def test_next_skill_symlinks_rejected_before_jobs_or_install(self):
+        target = self.home / ".agentdock"
+        target.mkdir()
+        for relative in (".", "skills", "locks", "locks/skills", "tmp", "tmp/skills",
+                         "state", "state/skills", "state/skills/transactions"):
+            with self.subTest(relative=relative):
+                path = self.home / ".agentdock-next" / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.symlink_to(target, target_is_directory=True)
+                try:
+                    with mock.patch.object(deploy, "jobs") as jobs, \
+                         mock.patch.object(deploy, "registrar") as registrar, \
+                         mock.patch.object(deploy.NEXT_INSTALLER, "rename_swap") as swap:
+                        with self.assertRaisesRegex(ValueError, "Symlink refused"):
+                            deploy.main()
+                        jobs.assert_not_called()
+                        deploy.run_checked.assert_not_called()
+                        registrar.assert_not_called()
+                        swap.assert_not_called()
+                    self.assertEqual(list(target.iterdir()), [])
+                finally:
+                    path.unlink()
+
+    def test_bootstrap_rechecks_next_skill_paths_before_writing(self):
+        root = self.home / ".agentdock-next"
+        target = self.root / "redirected-skills"
+        target.mkdir()
+
+        def redirect_after_activation(*args, **kwargs):
+            root.mkdir()
+            (root / "skills").symlink_to(target, target_is_directory=True)
+            return True
+
+        with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
+             mock.patch.object(deploy, "registrar") as registrar, \
+             mock.patch.object(deploy, "wait_for_core", side_effect=redirect_after_activation), \
+             mock.patch.object(deploy.NEXT_INSTALLER, "rename_swap") as swap, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaisesRegex(RuntimeError, "next-only repair required") as raised:
+                deploy.main()
+            self.assertIn("Symlink refused", str(raised.exception.__cause__))
+            deploy.run_checked.assert_called_once()
+            registrar.assert_called_once_with(self.dest, "core")
+            swap.assert_not_called()
+            self.assertNotIn("NEXT_ONLY_DEPLOYED", output.getvalue())
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_updated_core_health_failure_rolls_back_before_bootstrap(self):
+        with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
+             mock.patch.object(deploy, "registrar") as registrar, \
+             mock.patch.object(deploy, "wait_for_core", side_effect=[False, True]), \
+             mock.patch.object(deploy, "bootstrap_next_core_skills") as bootstrap, \
+             mock.patch.object(deploy.NEXT_INSTALLER, "rename_swap") as swap:
             with self.assertRaisesRegex(RuntimeError, "previous Next bundle recovered"):
                 deploy.main()
             swap.assert_called_once_with(self.backup, self.dest / "Contents")
-            self.assertEqual(registrar.call_count, 2)
+            self.assertEqual(registrar.call_args_list,
+                             [mock.call(self.dest, "core"), mock.call(self.dest, "core")])
+            bootstrap.assert_not_called()
 
     def test_listener_belongs_to_next_core_and_not_an_unrelated_pid(self):
         expected = self.dest / "Contents/Helpers/agentdock"

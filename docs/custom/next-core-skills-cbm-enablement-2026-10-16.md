@@ -18,7 +18,7 @@
 
 - `~/Applications/AgentDock Next.app/Contents/Resources/core-skills/manifest.json` 實際包含 `agentdock-user-guide`、`skill-authoring`、`skill-installation`、`plugin-import`，其 ZIP 中 `SKILL.md` 與專案來源一致。
 - Next 使用的 Wails Shared Desktop `packaging/macos/deploy-next-shared.py` 在換包、驗證 Core PID / listener / health、重新註冊 Next Core / Tunnel 後原先**沒有呼叫** `skill bootstrap`。舊 Swift `InstallerRunner.swift` 有 bootstrap，但未涵蓋這條 Wails 部署路徑。不能把「打包存在」解釋成「已安裝」。
-- 修正：Next-only deploy 最後的可失敗步驟執行 **已安裝 Next 包內** 的 `Contents/Helpers/agentdock skill bootstrap --bundle Contents/Resources/core-skills`，明確固定 `AGENTDOCK_DESKTOP_VARIANT=next`、`AGENTDOCK_HOME=~/.agentdock-next`、`AGENTDOCK_DEFAULT_DIR=~/AgentDock Next`。本身沿用交易式 Skill bootstrap，失敗時進入既有 Next-only App rollback；避免對 stable 或其他發行平台執行。Installer-only 腳本仍保持只替換 App，不偷偷變更服務/狀態。
+- 修正：Next-only deploy 在 App 版本、服務與健康檢查成功後，執行 **已安裝 Next 包內** 的 `Contents/Helpers/agentdock skill bootstrap --bundle Contents/Resources/core-skills`，明確固定 `AGENTDOCK_DESKTOP_VARIANT=next`、`AGENTDOCK_HOME=~/.agentdock-next`、`AGENTDOCK_DEFAULT_DIR=~/AgentDock Next`。**2026-10-22 更正**：Skill bootstrap 已移出 App rollback 範圍；Go 的 Skill 交易不能保證在 Python timeout 強制終止後完成回復，不能以還原 App Contents 宣稱 Skills 已復原。失敗處理見下方 checkpoint。Installer-only 腳本仍保持只替換 App，不偷偷變更服務/狀態。
 - Core Skill 說明修正：所有原版路徑 `~/.agentdock` / `AgentDock.app` / 8765 明確標註為原版示例；macOS Next 使用自己的 Home、App、8767，優先依當前 `agentdock_context` 和實際設定，不回退原版。
 - 現場一次性修復：使用 **Next 已安裝 Core binary**，搭配本分支建置的 Core Bundle，在 Next 獨立目錄執行 bootstrap，**未重啟 Core / GUI**。live context 已回報 6 個 Managed Skills：`acp-adaptive-routing`、`multi-agent-discussion`、`agentdock-user-guide`、`plugin-import`、`skill-authoring`、`skill-installation`。
 - 未將本分支 Source 重新建出 Next App，因此「未來新部署自動執行 bootstrap」由離線測試驗證，尚待下一次 **Next-only** deployment 的真實 UAT。
@@ -72,3 +72,9 @@
 - Next `memory:memory_search` 唯讀成功（2 個結果）；Codebase Memory 仍為 `ready`，17 tools，先前 `list_projects` 讀到現有 87 個 projects。沒有 Memory store、索引或 CBM Daemon 的寫入/重建操作。
 - 這是工作流程指令型 Skill：上述驗證證明**安裝、載入及兩套讀取工具通道**正常，不代表已完成多 Session 並發索引寫入的壓力測試；此次刻意不製造競爭/索引更新。
 - `skill-vetter-runtime` 未複製或安裝，仍保持原版專用；舊版靜態 ClawHub 稽核已經在前階段分類為可選後續改進。
+
+## 2026-10-22：部署失敗邊界（source-only）
+
+- 保留 `manual_version_gate`、PID/listener/health gate；僅 App activation errors（install／registrar／health 等）沿用原 App rollback。bootstrap 在 App 已更新且通過健康檢查後執行，失敗或 timeout 不回滾 App、不印完整成功，保留 Previous Next bundle backup，明確要求 **Next-only manual repair**；Skills 可能部分更新，App backup 不代表 Skill snapshot。
+- 指定 Skills 寫入 root 及祖先在 `jobs`／installer 前與 bootstrap 前拒絕 symlink；檢查至寫入間仍有競態窗口。未操作 live state、Registry 或服務。
+- 本輪 deploy tests **29/29 PASS**、兩檔 `py_compile` 與 `git diff --check` 通過；變更未 stage／commit。這是 source-only 驗證，installed App／Host UAT 尚未執行。

@@ -221,6 +221,13 @@ def registrar(destination: Path, component: str) -> None:
     require(output.strip() == "enabled", f"Next {component} registration was not confirmed enabled")
 
 
+def validate_next_skill_paths(home: Path) -> None:
+    """Reject redirected Next Skill write roots and any symlinked ancestors."""
+    root = home / ".agentdock-next"
+    for relative in (".", "skills", "locks/skills", "tmp/skills", "state/skills/transactions"):
+        no_symlinks(root / relative)
+
+
 def bootstrap_next_core_skills(destination: Path, home: Path) -> None:
     """Install the exact Next-bundled Core Skills into Next-owned managed state.
 
@@ -228,6 +235,7 @@ def bootstrap_next_core_skills(destination: Path, home: Path) -> None:
     which normally bootstraps those Skills during initial Desktop setup.
     Keep this final deploy step Next-only; never use the stable Home.
     """
+    validate_next_skill_paths(home)
     binary = destination / "Contents/Helpers/agentdock"
     bundle = destination / "Contents/Resources/core-skills"
     require(binary.is_file() and bundle.joinpath("manifest.json").is_file(),
@@ -252,6 +260,7 @@ def main() -> None:
     require(validate_bundle(source, shared=True) == source, "Validated source bundle path mismatch")
     require(validate_bundle(destination, shared=True) == destination, "Validated installed bundle path mismatch")
     manual_version_gate(source, destination)
+    validate_next_skill_paths(home)
     loaded = jobs()
     previous_core = loaded.get(f"{LABEL_BASE}.core")
     require(previous_core is not None and trusted_next_core_pid(previous_core, destination)
@@ -273,12 +282,6 @@ def main() -> None:
             registrar(destination, "tunnel")
             updated_tunnel = jobs().get(f"{LABEL_BASE}.tunnel")
             require(updated_tunnel is not None and updated_tunnel != previous_tunnel, "Updated Next tunnel did not start a fresh instance")
-        # The last fallible activation step: bootstrap is transactional and scoped
-        # to Next state; on failure the current Next App bundle is rolled back.
-        bootstrap_next_core_skills(destination, home)
-        print(f"NEXT_ONLY_DEPLOYED: {destination}")
-        print(f"NEXT_ROLLBACK_BUNDLE: {backup.parent}")
-        print("NEXT_GUI_RESTART_PENDING: manually quit and reopen the Next app without stealing focus")
     except Exception as deployment_error:
         if backup is None:
             raise RuntimeError("Next deploy failed before a verified rollback path; inspect Next stage using stable mac-dev") from deployment_error
@@ -302,6 +305,18 @@ def main() -> None:
                 "Next deployment failed AND verified Next-only rollback did not complete; recover via stable mac-dev"
             ) from rollback_error
         raise RuntimeError("New Next deployment failed; previous Next bundle recovered") from deployment_error
+
+    # App activation is complete. A killed bootstrap may leave partial Skill
+    # updates, so restoring only App Contents would create mismatched state.
+    print(f"NEXT_ROLLBACK_BUNDLE: {backup.parent}")
+    try:
+        bootstrap_next_core_skills(destination, home)
+    except Exception as bootstrap_error:
+        raise RuntimeError(
+            "Next Core Skills bootstrap incomplete; app update already active and healthy; next-only repair required"
+        ) from bootstrap_error
+    print(f"NEXT_ONLY_DEPLOYED: {destination}")
+    print("NEXT_GUI_RESTART_PENDING: manually quit and reopen the Next app without stealing focus")
 
 
 if __name__ == "__main__":
