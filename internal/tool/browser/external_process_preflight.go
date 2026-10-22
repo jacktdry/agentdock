@@ -25,6 +25,7 @@ type edgeProcessPreflight struct {
 	endpoint    string
 	executable  string
 	userDataDir string
+	profile     edgeProfileMetadata // Bounded ancestor inode/device/owner/mode evidence; NOT login identity.
 	startToken  string
 	observedAt  time.Time
 }
@@ -145,7 +146,7 @@ func readEdgeProcessPreflight(ctx context.Context, canonicalEndpoint, expectedDa
 	return edgeProcessPreflight{
 		pid: first.pid, endpoint: canonicalEndpoint,
 		executable:  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-		userDataDir: expectedDataDir, startToken: start, observedAt: time.Now().UTC(),
+		userDataDir: expectedDataDir, profile: profile, startToken: start, observedAt: time.Now().UTC(),
 	}, nil
 }
 

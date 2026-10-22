@@ -73,3 +73,4 @@
 - [next-edge-single-use-fence-2026-10-23.md](next-edge-single-use-fence-2026-10-23.md)：NEXT 公司 Edge 單操作 WebSocket fence、不可重用授權與多步驟租約尚待實作的安全邊界。
 - [next-edge-multi-operation-fence-2026-10-23.md](next-edge-multi-operation-fence-2026-10-23.md)：NEXT Edge 多操作 one-shot fence 序列化、清理與失敗後拒絕的 source-only 實作及待完成的真實身分驗證。
 - [next-edge-peer-reverification-2026-10-23.md](next-edge-peer-reverification-2026-10-23.md)：NEXT Edge 每次操作前後的可信 peer 重新驗證、清理後結果隔離與待完成的真實 Edge 身分驗證。
+- [next-edge-process-epoch-guard-2026-10-23.md](next-edge-process-epoch-guard-2026-10-23.md)：NEXT Edge OS 程序啟動代別、Profile inode 連續性驗證與仍缺的 WebSocket 身分證明。
