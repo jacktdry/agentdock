@@ -65,3 +65,4 @@
 
 - [p13-p14-ux-scope-decision-2026-10-22.md](p13-p14-ux-scope-decision-2026-10-22.md)：2026/10/22 使用者 UX 決策，維持原版精簡 Task 卡片、暫緩 P13 live Monitor 與 P14 降噪；既有實驗不納入 NEXT 主線。
 - [next-installed-browser-skills-uat-2026-10-22.md](next-installed-browser-skills-uat-2026-10-22.md)：NEXT 實際已安裝 Core 的隔離四技能 Bootstrap／重複執行與失敗拒絕驗收、Browser GUI 零視窗限制及下一個 RC 版本門檻。
+- [next-rc5-controlled-deploy-2026-10-22.md](next-rc5-controlled-deploy-2026-10-22.md)：RC5 NEXT-only 真實安裝、七 Skills 指紋不變、Connector/服務復原、背景 GUI 無搶焦點重啟與舊版 Contents 隔離回滾演練。
