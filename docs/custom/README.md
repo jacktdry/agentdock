@@ -64,3 +64,4 @@
 - [2026-10-14 Next UI/UX 逐頁圓桌與品質驗收](next-uiux-roundtable-2026-10-14.md)：涵蓋 P13/P14、Shared UI 全頁、Menu Bar/Tray、載入狀態、真實操作、繁中與原生 UAT
 
 - [p13-p14-ux-scope-decision-2026-10-22.md](p13-p14-ux-scope-decision-2026-10-22.md)：2026/10/22 使用者 UX 決策，維持原版精簡 Task 卡片、暫緩 P13 live Monitor 與 P14 降噪；既有實驗不納入 NEXT 主線。
+- [next-installed-browser-skills-uat-2026-10-22.md](next-installed-browser-skills-uat-2026-10-22.md)：NEXT 實際已安裝 Core 的隔離四技能 Bootstrap／重複執行與失敗拒絕驗收、Browser GUI 零視窗限制及下一個 RC 版本門檻。
