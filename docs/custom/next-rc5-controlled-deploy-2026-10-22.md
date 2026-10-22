@@ -1,5 +1,8 @@
 # AgentDock NEXT RC5 — controlled installed deploy and rollback rehearsal (2026-10-22)
 
+> **Later 2026-10-22 GUI evidence:** After the user exposed the NEXT window, the actual RC5 Browser Broker native page and guidance were read and refreshed successfully; the previously unobservable background GUI limitation is now **closed for GUI presentation only**. Company Edge / explicit Chrome Profile authorization remains unverified. See [native Browser UAT](next-rc5-browser-route-host-uat-2026-10-22.md).
+
+
 **Status: actual NEXT-only upgrade PASS; controlled isolated rollback rehearsal PASS; native GUI Browser route/Edge Host UAT OPEN.** This is an ad-hoc local RC installed acceptance, **not** an official Release, Tag, feed, Developer ID signing or notarization.
 
 ## Identity, source and provenance
