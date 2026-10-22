@@ -44,6 +44,7 @@
 - [next-orca-live-deploy-2026-10-18.md](next-orca-live-deploy-2026-10-18.md)：Next Orca CLI 啟動路徑修復的本機候選建置、受版本門檻保護的部署及 Broker 真實無焦點驗收（含一次外部焦點變更事件）。
 - [pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)：**新 HIGH 跨域改進項目**：CBM/Chrome DevTools/search-console MCP 程序盤點、owner/lease/generation/lifecycle 共用契約、分階段處理與安全 UAT。
 - [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)：Codebase Memory 更新後 supervisor / worker build 衝突、現場證據與後續 lifecycle 改善方向。
+- [next-core-skills-cbm-enablement-2026-10-16.md](next-core-skills-cbm-enablement-2026-10-16.md)：Next 四個 Core Skills 部署漏裝的修正、CBM 啟用，以及後續 Next-only `memory-lifecycle` 的分開維護／單一寫入者與 5% 交接驗證。
 
 ## 不可破壞的原則
 

@@ -117,6 +117,10 @@ class NextDeployTests(unittest.TestCase):
         self.backup.mkdir(parents=True)
         (self.dest / "Contents/MacOS/AgentDockServiceRegistrar").write_text("fake registrar")
         (self.dest / "Contents/MacOS/AgentDockServiceRegistrar").chmod(0o755)
+        (self.dest / "Contents/Helpers").mkdir(parents=True)
+        (self.dest / "Contents/Helpers/agentdock").write_text("Next-only stub")
+        (self.dest / "Contents/Resources/core-skills").mkdir(parents=True)
+        (self.dest / "Contents/Resources/core-skills/manifest.json").write_text('{"skills":[]}')
         self.install_output = f"Replaced Contents in {self.dest}; previous Next Contents retained at {self.backup}"
         self.patches = [
             mock.patch.object(deploy.pwd, "getpwuid", return_value=SimpleNamespace(pw_dir=str(self.home))),
@@ -178,7 +182,15 @@ class NextDeployTests(unittest.TestCase):
              mock.patch.object(deploy, "registrar"):
             with contextlib.redirect_stdout(io.StringIO()):
                 deploy.main()
-            deploy.run_checked.assert_called_once()
+            calls = deploy.run_checked.call_args_list
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0].args[0][1], str(deploy.INSTALLER))
+            self.assertEqual(calls[1].args[0], [
+                str(self.dest / "Contents/Helpers/agentdock"),
+                "skill", "bootstrap", "--bundle",
+                str(self.dest / "Contents/Resources/core-skills"),
+            ])
+            self.assertEqual(calls[1].kwargs["env"]["AGENTDOCK_HOME"], str(self.home / ".agentdock-next"))
 
     def test_validation_and_path_binding_precede_version_probe(self):
         for result in (ValueError("signature rejected"), self.dest):
@@ -245,6 +257,33 @@ class NextDeployTests(unittest.TestCase):
             deploy.main()
             self.assertEqual(registrar.call_args_list,
                              [mock.call(self.dest, "core"), mock.call(self.dest, "tunnel")])
+
+    def test_core_skills_bootstrap_uses_only_next_state_and_bundled_binary(self):
+        with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
+             mock.patch.object(deploy, "registrar"):
+            deploy.main()
+        calls = deploy.run_checked.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[-1].args[0], [
+            str(self.dest / "Contents/Helpers/agentdock"),
+            "skill", "bootstrap", "--bundle",
+            str(self.dest / "Contents/Resources/core-skills"),
+        ])
+        env = calls[-1].kwargs["env"]
+        self.assertEqual(env["AGENTDOCK_DESKTOP_VARIANT"], "next")
+        self.assertEqual(env["AGENTDOCK_HOME"], str(self.home / ".agentdock-next"))
+        self.assertEqual(env["AGENTDOCK_DEFAULT_DIR"], str(self.home / "AgentDock Next"))
+        self.assertNotEqual(env["AGENTDOCK_HOME"], str(self.home / ".agentdock"))
+
+    def test_core_skill_bootstrap_failure_rolls_back_next_bundle(self):
+        with mock.patch.object(deploy, "jobs", return_value={"dev.dropabit.agentdock.next.core": 123}), \
+             mock.patch.object(deploy, "registrar") as registrar, \
+             mock.patch.object(deploy.NEXT_INSTALLER, "rename_swap") as swap, \
+             mock.patch.object(deploy, "bootstrap_next_core_skills", side_effect=RuntimeError("invalid Next skill")):
+            with self.assertRaisesRegex(RuntimeError, "previous Next bundle recovered"):
+                deploy.main()
+            swap.assert_called_once_with(self.backup, self.dest / "Contents")
+            self.assertEqual(registrar.call_count, 2)
 
     def test_listener_belongs_to_next_core_and_not_an_unrelated_pid(self):
         expected = self.dest / "Contents/Helpers/agentdock"

@@ -9,6 +9,8 @@ description: 当用户询问 AgentDock 是什么、如何使用、配置在哪�
 
 回答使用用户当前语言；命令、路径和配置键保持原样。
 
+**双实例边界（优先于下方默认示例）**：操作前使用当前 MCP 的 `agentdock_context.runtime.agentdock_home`、版本、实例身份与实际 Core 监听设置辨认目标。macOS 上的原版 AgentDock 默认使用 `~/.agentdock`、`AgentDock.app` 与 8765；**AgentDock Next** 使用 `~/.agentdock-next`、`AgentDock Next.app`、独立服务及 8767。下方未明确指定 Next 的 `~/.agentdock` 或 8765 路径仅是原版/通用默认举例，不是可以修改 Next 或原版的目标。在 Next 会话中不得以原版路径作为回退，也不得因为 Next 设置缺失就改写/重启原版实例。
+
 ## AgentDock 是什么
 
 AgentDock 是面向 AI Agent 的独立工具运行层。它把文件、命令、Git、Skill、动态 MCP、浏览器、任务等能力通过 MCP 提供给 ChatGPT、Claude、Codex 等客户端；它本身不是聊天界面，也不负责模型推理。

@@ -7,6 +7,8 @@ description: 审查、安装、配置、验证、更新和移除 AgentDock Skill
 
 用于把本地或外部 Skill 安全地纳入当前 AgentDock，并验证所选来源候选确实可用。
 
+**实例隔离优先**：本文中 `~/.agentdock/...` 均为 stable AgentDock 的示例；AgentDock Next 实际 Managed Skill / 环境 / 数据目录在 `~/.agentdock-next/...`。安装或移除前，先用当前 `agentdock_context.runtime.agentdock_home` 验证所属实例；调用当前实例的 `skill_manage`，不得跨实例引用 `skill_ref`、读写另一实例文件或尝试共用 Managed Skills 目录。
+
 AgentDock 的 managed Skill 只有“当前内容”，没有独立版本选择、activate 或 rollback。更新同名 managed Skill 等价于审查新内容后原子替换当前目录；相同 `content_digest` 为 no-op。
 
 完整安全审查规范见包内 `references/skill-security-review.md`。

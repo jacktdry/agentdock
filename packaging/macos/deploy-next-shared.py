@@ -135,8 +135,8 @@ def backup_from_installer_output(output: str, destination: Path) -> Path:
     return candidate
 
 
-def run_checked(args: list[str], *, timeout: int = 90) -> str:
-    result = subprocess.run(args, check=False, capture_output=True, text=True, timeout=timeout)
+def run_checked(args: list[str], *, timeout: int = 90, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(args, check=False, capture_output=True, text=True, timeout=timeout, env=env)
     if result.returncode:
         # Never echo process configuration, tokens, or unexpected raw stderr.
         raise RuntimeError(f"Next-only tool returned {result.returncode}: {Path(args[0]).name}")
@@ -221,6 +221,27 @@ def registrar(destination: Path, component: str) -> None:
     require(output.strip() == "enabled", f"Next {component} registration was not confirmed enabled")
 
 
+def bootstrap_next_core_skills(destination: Path, home: Path) -> None:
+    """Install the exact Next-bundled Core Skills into Next-owned managed state.
+
+    The shared-Wails replacement path does not execute InstallerRunner.swift,
+    which normally bootstraps those Skills during initial Desktop setup.
+    Keep this final deploy step Next-only; never use the stable Home.
+    """
+    binary = destination / "Contents/Helpers/agentdock"
+    bundle = destination / "Contents/Resources/core-skills"
+    require(binary.is_file() and bundle.joinpath("manifest.json").is_file(),
+            "Next Core Skill bootstrap payload is missing")
+    env = os.environ.copy()
+    env.update({
+        "AGENTDOCK_DESKTOP_VARIANT": "next",
+        "AGENTDOCK_HOME": str(home / ".agentdock-next"),
+        "AGENTDOCK_DEFAULT_DIR": str(home / "AgentDock Next"),
+    })
+    run_checked([str(binary), "skill", "bootstrap", "--bundle", str(bundle)],
+                timeout=90, env=env)
+
+
 def main() -> None:
     require(sys.platform == "darwin" and len(sys.argv) == 2, "Usage: python3 deploy-next-shared.py SOURCE_NEXT.app")
     home = no_symlinks(pwd.getpwuid(os.getuid()).pw_dir)
@@ -252,6 +273,9 @@ def main() -> None:
             registrar(destination, "tunnel")
             updated_tunnel = jobs().get(f"{LABEL_BASE}.tunnel")
             require(updated_tunnel is not None and updated_tunnel != previous_tunnel, "Updated Next tunnel did not start a fresh instance")
+        # The last fallible activation step: bootstrap is transactional and scoped
+        # to Next state; on failure the current Next App bundle is rolled back.
+        bootstrap_next_core_skills(destination, home)
         print(f"NEXT_ONLY_DEPLOYED: {destination}")
         print(f"NEXT_ROLLBACK_BUNDLE: {backup.parent}")
         print("NEXT_GUI_RESTART_PENDING: manually quit and reopen the Next app without stealing focus")
