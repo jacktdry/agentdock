@@ -120,13 +120,6 @@ func FromEnv() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	catalog, err := normalizeBrowserCatalog(browserCatalog)
-	if err != nil {
-		return Config{}, err
-	}
-	if err := validateBrowserPolicyCatalog(browserWorkspacePolicies, catalog); err != nil {
-		return Config{}, err
-	}
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
 	if err != nil {
 		return Config{}, err
@@ -145,6 +138,30 @@ func FromEnv() (Config, error) {
 	}
 	stdio, err := getenvBool("AGENTDOCK_STDIO", false)
 	if err != nil {
+		return Config{}, err
+	}
+	// A Next-only, owner-managed private file may supply the trusted external
+	// route catalog. It never mutates the signed LaunchAgent environment or the
+	// Stable AgentDock configuration. Absence preserves existing behavior.
+	if strings.TrimSpace(os.Getenv("AGENTDOCK_DESKTOP_VARIANT")) == "next" &&
+		!stdio {
+		privateCatalog, privatePolicies, exists, fileErr := nextBrowserRouteFile()
+		if fileErr != nil {
+			return Config{}, fileErr
+		}
+		if exists {
+			if strings.TrimSpace(os.Getenv(browserCatalogEnv)) != "" ||
+				strings.TrimSpace(os.Getenv(browserWorkspacePoliciesEnv)) != "" {
+				return Config{}, fmt.Errorf("Next private Browser route file conflicts with process Browser route environment")
+			}
+			browserCatalog, browserWorkspacePolicies = privateCatalog, privatePolicies
+		}
+	}
+	catalog, err := normalizeBrowserCatalog(browserCatalog)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateBrowserPolicyCatalog(browserWorkspacePolicies, catalog); err != nil {
 		return Config{}, err
 	}
 	mcpAppsMode, err := mcpAppsModeFromEnv()

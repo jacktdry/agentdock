@@ -68,3 +68,4 @@
 - [next-rc5-controlled-deploy-2026-10-22.md](next-rc5-controlled-deploy-2026-10-22.md)：RC5 NEXT-only 真實安裝、七 Skills 指紋不變、Connector/服務復原、背景 GUI 無搶焦點重啟與舊版 Contents 隔離回滾演練。
 - [next-rc5-browser-route-host-uat-2026-10-22.md](next-rc5-browser-route-host-uat-2026-10-22.md)：RC5 真實 GUI Browser Broker 路由資訊、缺少 Edge/Chrome 設定與授權，以及不搶焦點交接驗收。
 - [next-rc5-external-browser-readiness-2026-10-22.md](next-rc5-external-browser-readiness-2026-10-22.md)：NEXT RC5 公司 Edge 執行檔／CDP 監聽埠唯讀盤點、macOS Profile 權限限制、路由設定持久化缺口及授權後驗收門檻。
+- [next-private-browser-routes-2026-10-22.md](next-private-browser-routes-2026-10-22.md)：使用者指定現有 Edge、CDP 端點 404 限制、NEXT-only 私有路由設定載入設計與安全驗收。
