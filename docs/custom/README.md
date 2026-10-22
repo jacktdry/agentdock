@@ -71,3 +71,4 @@
 - [next-private-browser-routes-2026-10-22.md](next-private-browser-routes-2026-10-22.md)：使用者指定現有 Edge、CDP 端點 404 限制、NEXT-only 私有路由設定載入設計與安全驗收。
 - [next-company-browser-uat-scope-2026-10-22.md](next-company-browser-uat-scope-2026-10-22.md)：Oprueba／HomiPlay 公司 Edge 網站 UAT 範圍、GitLab Token API 優先、既有 Edge DevTools MCP 可用及 NEXT 連接器整合邊界。
 - [next-edge-single-use-fence-2026-10-23.md](next-edge-single-use-fence-2026-10-23.md)：NEXT 公司 Edge 單操作 WebSocket fence、不可重用授權與多步驟租約尚待實作的安全邊界。
+- [next-edge-multi-operation-fence-2026-10-23.md](next-edge-multi-operation-fence-2026-10-23.md)：NEXT Edge 多操作 one-shot fence 序列化、清理與失敗後拒絕的 source-only 實作及待完成的真實身分驗證。
