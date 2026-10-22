@@ -67,3 +67,4 @@
 - [next-installed-browser-skills-uat-2026-10-22.md](next-installed-browser-skills-uat-2026-10-22.md)：NEXT 實際已安裝 Core 的隔離四技能 Bootstrap／重複執行與失敗拒絕驗收、Browser GUI 零視窗限制及下一個 RC 版本門檻。
 - [next-rc5-controlled-deploy-2026-10-22.md](next-rc5-controlled-deploy-2026-10-22.md)：RC5 NEXT-only 真實安裝、七 Skills 指紋不變、Connector/服務復原、背景 GUI 無搶焦點重啟與舊版 Contents 隔離回滾演練。
 - [next-rc5-browser-route-host-uat-2026-10-22.md](next-rc5-browser-route-host-uat-2026-10-22.md)：RC5 真實 GUI Browser Broker 路由資訊、缺少 Edge/Chrome 設定與授權，以及不搶焦點交接驗收。
+- [next-rc5-external-browser-readiness-2026-10-22.md](next-rc5-external-browser-readiness-2026-10-22.md)：NEXT RC5 公司 Edge 執行檔／CDP 監聽埠唯讀盤點、macOS Profile 權限限制、路由設定持久化缺口及授權後驗收門檻。
