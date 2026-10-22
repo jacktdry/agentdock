@@ -1031,7 +1031,11 @@ func TestProtectedControlPathsAreSkippedFromAncestorListAndSearch(t *testing.T) 
 	if err := remarshal(searched["matches"], &matches); err != nil {
 		t.Fatal(err)
 	}
-	if len(matches) != 1 || matches[0]["path"] != filepath.Clean(visible) {
+	canonicalVisible, err := filepath.EvalSymlinks(visible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0]["path"] != canonicalVisible {
 		t.Fatalf("ordinary search result changed by protected path filtering: %#v", matches)
 	}
 }
