@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,6 +41,25 @@ type nativeEdgeConnection struct {
 type nativeEdgeDependencies struct {
 	dial   func(context.Context, browserpolicy.ConnectorDefinition, browserpolicy.ProfileDefinition, browserpolicy.OriginScope) (*nativeEdgeConnection, error)
 	verify func(context.Context, *nativeEdgeConnection) error
+}
+
+// Only finite Core-authored stages may reach the operator. Raw CDP, signing,
+// socket or Profile errors must never be included in a connection failure.
+type nativeEdgeConnectFailure struct{ stage string }
+
+func (e *nativeEdgeConnectFailure) Error() string {
+	return "native company Edge connection unavailable"
+}
+
+func nativeEdgeConnectError(err error) error {
+	var failure *nativeEdgeConnectFailure
+	if errors.As(err, &failure) {
+		switch failure.stage {
+		case "configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation":
+			return externalLeaseError(ErrRequiredRouteUnavailable, "", "company Edge connection unavailable at "+failure.stage, nil)
+		}
+	}
+	return externalPeerVerificationError()
 }
 
 type nativeEdgeWorker struct {
@@ -181,7 +201,7 @@ func (b *nativeEdgeRuntime) Connect(ctx context.Context, id string) error {
 	defer func() { stopConnect(); b.mu.Lock(); b.pendingConnect = nil; b.mu.Unlock() }()
 	connection, err := b.deps.dial(connectCtx, connector, profile, scope)
 	if err != nil || connection == nil {
-		return externalPeerVerificationError()
+		return nativeEdgeConnectError(err)
 	}
 	if connection.root == nil || connection.cancel == nil || connection.connector != connector ||
 		connection.peer.source == nil || connection.peer.incarnation == nil || connection.peer.source == connection.peer.incarnation ||

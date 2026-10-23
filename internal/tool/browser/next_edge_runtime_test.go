@@ -2,7 +2,9 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -256,5 +258,20 @@ func TestNativeEdgeExplicitReconnectPinsProfileAndIsolatesOldGeneration(t *testi
 	}
 	if commandCount(f.recorded(), "Target.closeTarget") != 0 || commandCount(f2.recorded(), "Target.closeTarget") != 1 {
 		t.Fatal("generation cleanup crossed its held connection")
+	}
+}
+
+func TestNativeEdgeConnectionFailureStagesExcludeRawDetails(t *testing.T) {
+	for _, stage := range []string{"configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation"} {
+		err := nativeEdgeConnectError(fmt.Errorf("secret-canary: %w", &nativeEdgeConnectFailure{stage: stage}))
+		var reported *Error
+		if !errors.As(err, &reported) || reported.Details.Reason != "company Edge connection unavailable at "+stage || reported.Cause != nil || strings.Contains(err.Error(), "secret-canary") {
+			t.Fatal("finite stage lost or raw detail exposed", err)
+		}
+	}
+	for _, err := range []error{errors.New("secret-canary"), &nativeEdgeConnectFailure{stage: "secret-canary"}} {
+		if strings.Contains(nativeEdgeConnectError(err).Error(), "secret-canary") {
+			t.Fatal("untrusted stage exposed")
+		}
 	}
 }

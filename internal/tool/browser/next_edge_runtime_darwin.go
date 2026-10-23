@@ -18,12 +18,19 @@ func nativeEdgePlatformDependencies() (nativeEdgeDependencies, error) {
 }
 
 func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.ConnectorDefinition, profile browserpolicy.ProfileDefinition, scope browserpolicy.OriginScope) (connection *nativeEdgeConnection, err error) {
+	stage := "configuration"
+	defer func() {
+		if err != nil {
+			err = &nativeEdgeConnectFailure{stage: stage}
+		}
+	}()
 	fail := func() (*nativeEdgeConnection, error) { return nil, externalPeerVerificationError() }
 	home, err := os.UserHomeDir()
 	selectionValid := (edgeProfileDirectoryValid(profile.ProfileDirectory) && !profile.BindCurrentProfile) || (profile.ProfileDirectory == "" && profile.BindCurrentProfile)
 	if err != nil || profile.UserDataDir != filepath.Join(home, "Library", "Application Support", "Microsoft Edge") || !selectionValid || !directCDPEndpointValid(connector.Endpoint) {
 		return fail()
 	}
+	stage = "process_preflight"
 	source, err := readEdgeProcessPreflightCommand(ctx, connector.Endpoint, profile.UserDataDir, macEdgeProcessProbe{}, true)
 	if err != nil {
 		return fail()
@@ -51,6 +58,7 @@ func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.Conne
 		}
 	}()
 	peer := externalPeerIdentity{source: &connectorEvidenceIdentity{}, incarnation: &connectorEvidenceIdentity{}}
+	stage = "socket_and_websocket"
 	relay, err := newDirectCDPRelayWithLimit(lifetime, connector.Endpoint, peer, func(check context.Context, socket net.Conn) (externalPeerIdentity, error) {
 		if _, err := readEdgeEstablishedSocketEvidence(check, socket, source, macEdgeSocketProbe{}); err != nil {
 			return externalPeerIdentity{}, err
@@ -62,12 +70,14 @@ func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.Conne
 	}
 	ownedRelay = relay
 	connection = &nativeEdgeConnection{peer: peer, source: source, profile: profile, connector: connector, cancel: cancel}
+	stage = "dispatcher_attach"
 	root, err := newDirectCDPDispatcher(ctx, relay, scope)
 	if err != nil {
 		relay.Close()
 		return fail()
 	}
 	connection.root = root
+	stage = "browser_metadata"
 	opCtx, unlock, err := root.lock(ctx)
 	if err != nil {
 		return fail()
@@ -86,6 +96,7 @@ func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.Conne
 	if err != nil || !strings.HasPrefix(version.Product, "Edg/") || contexts.Default == "" {
 		return fail()
 	}
+	stage = "profile_context"
 	if err := root.bindBrowserContext(ctx, contexts.Default); err != nil {
 		return fail()
 	}
@@ -93,23 +104,31 @@ func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.Conne
 	if err != nil {
 		return fail()
 	}
+	stage = "owned_target_create"
 	if err := probe.OpenOwnedTarget(ctx, ""); err != nil {
 		return fail()
 	}
+	stage = "owned_profile_metadata"
 	directory, probeErr := probe.inspectOwnedEdgeProfile(ctx, profile.UserDataDir)
 	cleanup, cancelCleanup := context.WithTimeout(context.Background(), directCDPCallTimeout)
 	closed, closeErr := probe.CloseOwnedTarget(cleanup)
 	cancelCleanup()
-	if probeErr != nil || (profile.ProfileDirectory != "" && directory != profile.ProfileDirectory) || closeErr != nil || !closed {
+	if probeErr != nil || (profile.ProfileDirectory != "" && directory != profile.ProfileDirectory) {
+		return fail()
+	}
+	stage = "owned_profile_cleanup"
+	if closeErr != nil || !closed {
 		return fail()
 	}
 	connection.profile.ProfileDirectory = directory
 	connection.profile.BindCurrentProfile = false
+	stage = "profile_epoch"
 	metadata, err := (macEdgeProcessProbe{}).profileMetadata(ctx, filepath.Join(profile.UserDataDir, directory))
 	if err != nil {
 		return fail()
 	}
 	connection.profileEpoch = metadata
+	stage = "peer_revalidation"
 	if verifyNativeEdgeConnection(ctx, connection) != nil {
 		return fail()
 	}
