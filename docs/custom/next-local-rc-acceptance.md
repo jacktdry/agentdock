@@ -2,7 +2,7 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
-**尚未達到 Definition of Done。RC6 已授權安裝；Edge 首次正式連線 fail closed，四站未執行。沒有正式發布。**
+**尚未達到 Definition of Done。RC6／RC7 已於 NEXT-only 驗收流程安裝；Edge connect 在 15 秒 handshake window 結束，四站未執行。沒有正式發布。**
 最新 [RC6 實際建置／安裝／失敗證據](next-rc6-local-candidate-2026-10-23.md) 優先於下列歷史 source checkpoint。
 
 ## 本輪工作契約
@@ -25,7 +25,7 @@
 | 主線 | `custom/main`，起點 `7e87605a91f3a1e48a5879f7e406c3803a06e00c`，開工時乾淨；未 push |
 | 本輪工作樹 | `/Users/wei/sideProject/agentdock-next-edge-rc-20261023`；`feature/next-edge-rc-20261023` |
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
-| NEXT | 已授權更新為 `0.9.2-rc.6`／`cce96a3d0ee9`；App `0.9.2`／`7.0.0`；helper 部署成功，原版未動 |
+| NEXT | 已更新為 `0.9.2-rc.7`／`28aef783e0a4`；App `0.9.2`／`8.0.0`；helper 部署成功，原版未動 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
 | 公司路由 | 已授權寫入 NEXT-private file，載入 1 native connector／1 profile／4 exact company policies；首次 connect 被拒絕，沒有網站 PASS |
 | NEXT MCP | Version 2 registry 目前只有 `memory`、`codebase-memory`；沒有 `gitlab` |
@@ -117,6 +117,8 @@ Vitest 有 Node localStorage experimental warning，無測試失敗。本輪未�
 
 ## 下一個安全步驟
 
-RC6 已在使用者授權、即時 idle check 後安裝並載入公司設定。首次正式連線錯誤缺少
-失敗階段；先補上 finite、安全的 stage 回饋，再以正式 Runtime 定位與驗收。
+RC7 已保留 finite、安全的 stage 回饋。正式連線約 15.484 秒後於 `socket_and_websocket`
+結束。使用者確認有按允許，並補充是在稍後才按；這時 socket 已超過 15 秒而關閉。
+把 explicit Core connect 的 native consent window 延長為 90 秒；status／admission 的短
+時限與既有 probes 維持不變。下一次使用正式 Runtime 等待同意，成功後保留連線。
 保留原版及 RC5 rollback bundle，不重跑短命 helper 讓使用者反覆按允許。

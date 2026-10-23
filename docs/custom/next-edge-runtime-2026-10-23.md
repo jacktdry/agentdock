@@ -1,6 +1,7 @@
 # NEXT 原生公司 Edge Runtime 整合
 
-狀態：正式 Core 呼叫路徑已接入 source；尚未安裝或通過公司網站 Host UAT。
+狀態：正式 Core 呼叫路徑已接入並安裝 RC6／RC7；公司網站 Host UAT 尚未通過。
+90 秒 explicit consent window 修正等待下一個候選驗證。
 這份文件接續 [RC 執行清單](next-local-rc-acceptance.md)，不取代歷史實機證據。
 
 ## 使用流程與界線
@@ -23,7 +24,8 @@
    既有 private loader 仍要求 home 0700、檔案 0600、owner／非 symlink、嚴格 JSON。
 3. `browser_broker` 的 `connect_external` 加 `workspace_root` 明確啟動連線。
    status、planner、acquire 均不啟動或重建 socket。Edge 原生同意由使用者操作。
-   連線持續到明確 disconnect、Core shutdown、來源身分變更或 I/O 不確定。
+   explicit Core connection 最長等待原生同意 90 秒，仍可取消；status／admission 不使用
+   此寬限，也不開啟連線。成功後連線持續到明確 disconnect、Core shutdown、來源身分變更或 I/O 不確定。
 4. `direct_acquire`、`direct_navigate`、`direct_snapshot`、`direct_screenshot`、
    `direct_release` 必須維持同一 authenticated principal、exact configured root 及 lease。
    ACP 使用既有 session token 及 task/session scope。每個 logical worker 僅看見自己的

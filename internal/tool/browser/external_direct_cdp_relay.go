@@ -56,12 +56,19 @@ func newDirectCDPRelayWithLimit(ctx context.Context, endpoint string, expected e
 		expected.source == expected.incarnation || !directCDPEndpointValid(endpoint) || limit < 0 {
 		return nil, errPinnedCDPUnavailable
 	}
-	dialCtx, stopDial := context.WithTimeout(ctx, directCDPHandshakeTimeout)
+	handshakeTimeout := directCDPHandshakeTimeout
+	if limit == 0 {
+		// The explicit Core connect operation waits for the owner's native
+		// Edge consent. A diagnostic's short budget otherwise expires while
+		// the user is still reading/clicking the browser-owned dialog.
+		handshakeTimeout = 90 * time.Second
+	}
+	dialCtx, stopDial := context.WithTimeout(ctx, handshakeTimeout)
 	defer stopDial()
 	var tcp net.Conn
 	var attempted bool
 	var stopSocket func() bool
-	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: directCDPHandshakeTimeout,
+	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: handshakeTimeout,
 		NetDialContext: func(dc context.Context, network, addr string) (net.Conn, error) {
 			if attempted { // Count attempts, including failed TCP dials.
 				return nil, errPinnedCDPUnavailable
