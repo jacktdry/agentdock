@@ -2,7 +2,7 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
-**尚未達到 Definition of Done。RC8 已於 NEXT-only 驗收流程安裝；正式連線已通過握手，隱藏 target 的 `other` type 被舊檢查拒絕，四站未執行。沒有正式發布。**
+**尚未達到 Definition of Done。RC9 已安裝；正式 Broker 尚卡在版本頁就緒檢查。修正後真實 source native qualification 全流程通過，仍未執行四站 installed Broker UAT。沒有正式發布。**
 最新 [RC6 實際建置／安裝／失敗證據](next-rc6-local-candidate-2026-10-23.md) 優先於下列歷史 source checkpoint。
 
 ## 本輪工作契約
@@ -25,12 +25,12 @@
 | 主線 | `custom/main`，起點 `7e87605a91f3a1e48a5879f7e406c3803a06e00c`，開工時乾淨；未 push |
 | 本輪工作樹 | `/Users/wei/sideProject/agentdock-next-edge-rc-20261023`；`feature/next-edge-rc-20261023` |
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
-| NEXT | 已更新為 `0.9.2-rc.8`／`cd1193c802ca`；App `0.9.2`／`9.0.0`；helper 部署成功，原版未動 |
+| NEXT | 已更新為 `0.9.2-rc.9`／`62849e878f94`；App `0.9.2`／`10.0.0`；helper 部署成功，原版未動 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
 | 公司路由 | 已授權寫入 NEXT-private file，載入 1 native connector／1 profile／4 exact company policies；首次 connect 被拒絕，沒有網站 PASS |
 | NEXT MCP | 已新增獨立 `gitlab-company`，direct HTTP `/api/v4/mcp`；真實 refresh 回覆 auth_required，尚無 NEXT grant；未複製原版憑證 |
 | Edge | 唯讀 WebSocket 成功回覆過 `Edg/155.0.4283.60`，之後回覆 `.62`；程序在本輪期間由外部換代，並非本工作重啟 |
-| Profile | 使用者回覆只有一個名稱為「公司」的 Profile；尚未完成其 directory/context 的實機綁定 |
+| Profile | 真實 same-socket owned version metadata 觀察 `Default`，source native process/socket/Profile epoch/peer 全流程 PASS；跨重啟設定 pin 待下一次部署保存 |
 | CBM | 既有索引為 2026-10-14；本輪 Edge 新檔未覆蓋、部分檔案 metadata 改變，依 current source 查核；沒有重建索引 |
 
 ## 優先工作清單
@@ -133,3 +133,13 @@ Source 修正只允許本 dispatcher 成功建立的 hidden target 使用 `other
 exact target／session／context／origin，其他 type、未建立 target、context drift 都拒絕。
 下一步建置可追溯候選、確認 NEXT 閒置後沿既有授權部署，再用正式 Broker 完成四站流程。
 GUI 尚未背景重開／原生驗收，GitLab 獨立授權待後續不中斷的 callback 流程。
+
+RC9 真實 Broker connect 約 **1.650 秒**在 `owned_profile_metadata` fail closed；
+hidden target 的 `other` type 相容已實際通過。後續同 socket 有界診斷確認 version 導覽成功、
+無 download，Profile directory=`Default` 且 data root 正確。初期 target URL 尚在過渡，
+原檢查在文件就緒前退出。修正只容許 owned version target 的空 URL 等待；不在空 URL
+evaluate，不放行其他 URL／context。production `dialNativeEdgeConnection` 的真實 source
+qualification **4.13 秒 PASS**，包含 Profile epoch／peer 重驗、owned target cleanup、
+transport close/join。這是 Host 診斷，仍不等於 installed Broker 或公司網站 PASS。
+下一候選部署將沿既有授權把 NEXT 設定保存為已觀察的 `profile_directory: Default`，
+避免跨 Core 重啟再次跟隨 current Profile；不改 Edge 自己的設定。

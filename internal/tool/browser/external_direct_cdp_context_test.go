@@ -208,3 +208,47 @@ func TestDirectCDPOtherTypeRequiresOwnedHiddenTargetAndSameContext(t *testing.T)
 		t.Fatal("uncreated other target accepted")
 	}
 }
+
+func TestDirectCDPProfileWaitsForOwnedVersionDocument(t *testing.T) {
+	for _, transition := range []string{"", "https://unapproved.example/"} {
+		t.Run(transition, func(t *testing.T) {
+			base := contextResponder(t, "company", "/owned/edge/Default")
+			transitionSeen := false
+			d, f := newDispatcherFixture(t, func(f *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
+				if cmd.Method == "Target.getTargetInfo" && !transitionSeen {
+					f.mu.Lock()
+					navigated := f.currentURL == "edge://version/"
+					f.mu.Unlock()
+					if navigated {
+						transitionSeen = true
+						if err := dispatcherReply(c, cmd, map[string]any{"targetInfo": map[string]any{
+							"targetId": "owned-target", "type": "other", "url": transition, "browserContextId": "company",
+						}}); err != nil {
+							t.Error(err)
+						}
+						return true
+					}
+				}
+				return base(f, c, cmd)
+			})
+			ctx := context.Background()
+			if err := d.bindBrowserContext(ctx, "company"); err != nil {
+				t.Fatal(err)
+			}
+			if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+				t.Fatal(err)
+			}
+			profile, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge")
+			if !transitionSeen {
+				t.Fatal("navigation transition not exercised")
+			}
+			if transition == "" {
+				if err != nil || profile != "Default" || commandCount(f.recorded(), "Runtime.evaluate") != 1 {
+					t.Fatal("empty URL did not wait for the owned version document", err)
+				}
+			} else if err == nil || profile != "" || d.live() || commandCount(f.recorded(), "Runtime.evaluate") != 0 {
+				t.Fatal("unapproved document evaluated as Profile metadata")
+			}
+		})
+	}
+}

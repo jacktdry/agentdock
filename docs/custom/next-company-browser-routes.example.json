@@ -7,7 +7,7 @@
       "class": "authenticated-external",
       "user_data_dir": "/Users/wei/Library/Application Support/Microsoft Edge",
       "selected_profile_name": "公司",
-      "bind_current_profile": true
+      "profile_directory": "Default"
     }],
     "connectors": [{
       "id": "company-edge-cdp",

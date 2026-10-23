@@ -1,7 +1,8 @@
 # NEXT 原生公司 Edge Runtime 整合
 
-狀態：正式 Core 呼叫路徑已接入並安裝 RC6／RC7；公司網站 Host UAT 尚未通過。
-90 秒 explicit consent window 修正等待下一個候選驗證。
+狀態：正式 Core 呼叫路徑已接入並安裝至 RC9；公司網站 Host UAT 尚未通過。
+真實 native source qualification 已通過程序／socket／Default Profile／epoch／peer 全流程；
+版本頁導覽的未提交 URL 等待修正待下一候選部署，source 診斷不算 installed Broker UAT。
 這份文件接續 [RC 執行清單](next-local-rc-acceptance.md)，不取代歷史實機證據。
 
 ## 使用流程與界線
@@ -20,7 +21,8 @@
 1. 新 source 只接受 macOS `next`、實際 `~/.agentdock-next`、8767、Browser/ACP enabled、
    非 stdio Core。未配置 native driver 的既有 Managed Chrome 行為保留。
 2. [可審查的設定範例](next-company-browser-routes.example.json) 僅包含四個已核准工作樹及
-   各自的 exact HTTPS origin pair；CMS 可使用兩組。**尚未寫入 live 設定**。
+   各自的 exact HTTPS origin pair；CMS 可使用兩組。live 設定已載入四個 root，
+   原先 current binding 已觀察到 `Default`，下一次授權部署將保存此明確 directory pin。
    既有 private loader 仍要求 home 0700、檔案 0600、owner／非 symlink、嚴格 JSON。
 3. `browser_broker` 的 `connect_external` 加 `workspace_root` 明確啟動連線。
    status、planner、acquire 均不啟動或重建 socket。Edge 原生同意由使用者操作。
@@ -47,6 +49,10 @@ tuple，再使用同一 socket 及 admitted default context 建立 owned hidden 
 首次觀察的 directory 會在此 Core 生命週期內 pin；明確重連也不能跟隨其他 current Profile。
 Core 重啟後需再次明確 connect；要跨 Core 重啟固定 directory，應將實際觀察值存為
 owner-reviewed `profile_directory`，不能把記憶體 pin 說成已持久化。
+2026-10-23 真實 same-socket version metadata 已觀察並核對 `Default`，source native
+qualification 同時通過實際 process/Profile epoch／held socket 重驗；範例已改為此明確 pin。
+Edge 將我們建立的 hidden WebContents 分類為 `other`，只對親自建立的 hidden target
+相容此 type；內部版本頁的未提交空 URL 只等待、不 evaluate，最終仍必須是精確 version URL。
 
 每次 qualification／operation 前後重新觀察 process/Profile epoch 及**這條 held socket**
 的 OS ownership；無法核實即關閉 transport 並隔離結果。五秒 sealed observation 與一次性

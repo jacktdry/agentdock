@@ -40,10 +40,12 @@ func (d *directCDPDispatcher) inspectOwnedEdgeProfile(ctx context.Context, dataR
 	for {
 		info, err := d.targetInfoLocked(ctx)
 		if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) || !d.targetContextMatchesLocked(ctx, info) ||
-			(info.URL != "about:blank" && info.URL != "edge://version/") {
+			(info.URL != "" && info.URL != "about:blank" && info.URL != "edge://version/") {
 			d.Close()
 			return "", errDirectCDPRetired
 		}
+		// A version navigation can briefly have no committed URL. Wait only
+		// on our exact owned target/context; evaluate only the final version URL.
 		// A version navigation can be between documents. Only this fixed,
 		// read-only expression is retried; no company operation is retried.
 		if info.URL == "edge://version/" {
