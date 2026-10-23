@@ -2,9 +2,10 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
+**2026-10-24 00:48 起 NEXT GitLab OAuth／MCP Host PASS：** 使用者完成 NEXT-only `mcp` scope 授權後，`gitlab-company` ready／35 tools；NEXT 8767 真實成功讀取 `official_site/oprueba` 的 Project、Commit、Pipeline、Job、MR、Branch，且沒有從 Stable 借用 grant 或 token。[獨立證據](next-rc11-gitlab-host-uat-2026-10-24.md)。**這不代表額外的 REST read_api/token gate PASS**；此欄以下提及「待 OAuth」是先前歷史 checkpoint。
 **23:58 本日最新：** [RC11 最終正向 Host 證據](next-rc11-host-uat-2026-10-23.md) **四個 exact HTTPS origin 的 navigate／AX／PNG、雙租約與 A release 後 B snapshot／release、網站期間 no-focus 全部實機 PASS**。後續新 negative-only lease 在原連線 peer revalidation 遭拒；禁止 JS／未授權 URL 的獨立負向 gate、Host fresh acquire、GUI／Tray、GitLab OAuth／API 與 live rollback 仍 open。原 socket 已依程序 disconnect、零租約，沒有自動重連或重啟原版；source fixture 新增雙租約全部釋放後 fresh acquire regression，不能代替 Host。
 **23:26 同日最新實機結果：** [RC11 原生同意後兩站真實 UAT／清理及剩餘 gates](next-rc11-host-uat-2026-10-23.md)。此前一次新連線在 `socket_and_websocket` FAIL CLOSED；使用者之後明確確認已按偵錯允許，再次正式 connect 在 **5.523 秒 PASS**。同 socket 的 `oprueba.com`／`homiplay.io` 均已導覽／AX／PNG **PASS**，跨 worktree 拒絕 PASS。失敗 URL 的負向測試使 offending lease fence fail-closed，後續 `www`／sibling release **未完成**；不重連，最後正式 disconnect PASS、leases=0、兩 Core 正常。GitLab local OAuth 待獨立授權。
-**尚未達到 Definition of Done。RC10 Oprueba 截圖曾 FAIL CLOSED，RC11 installed screenshot 現四站 PASS；sibling release 已 Host PASS，但 Host fresh acquire／獨立負向、GitLab、GUI／Tray、live rollback 等仍未通過。沒有正式發布。**
+**尚未達到 Definition of Done。RC11 installed screenshot 現四站 PASS；sibling release、GitLab MCP 唯讀已 Host PASS。但 Host fresh acquire／獨立負向、GUI／Tray、live rollback 等仍未通過。沒有正式發布。**
 最新 [RC11 實機續作](next-rc11-host-uat-2026-10-23.md) 與 [RC10 歷史實機證據](next-rc10-edge-host-uat-2026-10-23.md) 分別保存。
 
 文件／記憶同步複核：**2026-10-23 22:41–22:42 Asia/Taipei**。兩個工作樹乾淨，
@@ -36,7 +37,7 @@ feature HEAD `dc57213f`（本次文件更新前），主線仍為 `7e87605a`。
 | NEXT | 已更新為 `0.9.2-rc.11`／`c331afe47d2e`；App `0.9.2`／`12.0.0`；Core PID 94893 running，未連 Edge；GUI 仍待背景重開／可見畫面驗收 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
 | 公司路由 | NEXT-private file 載入 1 native connector／1 profile／4 exact company policies；正式 connect、雙租約及首站快照 PASS；沒有完整四站 PASS |
-| NEXT MCP | 已新增獨立 `gitlab-company`，direct HTTP `/api/v4/mcp`；真實 refresh 回覆 auth_required，尚無 NEXT grant；未複製原版憑證 |
+| NEXT MCP | NEXT-only `gitlab-company` OAuth **已授權、ready／35 tools**；Project／Commit／Pipeline／Job／MR／Branch 實機唯讀 **PASS**；原版憑證未複製。[UAT](next-rc11-gitlab-host-uat-2026-10-24.md) |
 | Edge | 唯讀 WebSocket 成功回覆過 `Edg/155.0.4283.60`，之後回覆 `.62`；程序在本輪期間由外部換代，並非本工作重啟 |
 | Profile | 真實 same-socket owned version metadata 觀察 `Default`；跨重啟設定 pin 已保存並由 RC10 正式 Runtime 驗證成功 |
 | CBM | 既有索引為 2026-10-14；本輪 Edge 新檔未覆蓋、部分檔案 metadata 改變，依 current source 查核；沒有重建索引 |

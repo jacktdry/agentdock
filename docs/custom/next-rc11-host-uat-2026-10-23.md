@@ -3,6 +3,8 @@
 更新：2026-10-23 23:58 Asia/Taipei。**四個核准 origin／sibling release 真實 Host PASS；RC11 整體仍未達 Definition of Done，沒有合併、push 或公開發布。**
 本文件是 RC10／RC11 續作證據，保留原始 [RC10／RC11 安裝記錄](next-rc10-edge-host-uat-2026-10-23.md) 與 [RC 驗收清單](next-local-rc-acceptance.md)。
 
+**2026-10-24 跨日後續（覆蓋下方歷史 GitLab 待授權狀態）：** [NEXT-only GitLab OAuth／MCP 唯讀 Host 驗收](next-rc11-gitlab-host-uat-2026-10-24.md) **PASS**，connector ready／35 tools，已讀取 Project／Commit／Pipeline／Job／MR／Branch；沒有借用 Stable 憑證，也沒有 GitLab 寫入。獨立 REST `read_api` gate 不包含在這次 MCP 驗收。
+
 **最新 RC11 installed Host checkpoint（23:50 起）：** 修正排序後，**只做一次**正式 NEXT Broker connect，4.495 秒 PASS；在**同一條已授權 Edge socket** 上，兩個獨立租約成功完成 `oprueba.com`、`homiplay.io`、`www.oprueba.com`、`www.homiplay.io` 的真實 navigate／AX RootWebArea（正確站名）／PNG capture。Oprueba A release complete、HomiPlay B **在 A release 後 snapshot 成功**，B release complete、均無 cleanup_error。跨 root 讀他人 lease 正確拒絕。網站流程 206 筆 foreground 取樣均為 Chrome，Edge／NEXT 視窗 ID 集合不變。**四站與 sibling/no-focus 已 Host PASS**；但正向租約全部釋放後，測試要另 acquire 一個負向-only lease 時，又遇 `external peer verification unavailable or mismatched`，負向 `direct_evaluate`／不核准 URL **未執行**，整份腳本 `ok=false`，不能稱全部 gate PASS。原 socket 在確定 0 active 後由正式 `disconnect_external` 成功關閉，沒有重連或改動原版。Source 回歸另新增「兩 lease release 後同 socket 再 acquire」測試，離線 fixture PASS；**不等於 macOS Peer Host 修復**。詳見下方「23:50 最終正向 UAT」。
 
 **最新 Host checkpoint：** 使用者稍後明確確認已按 Edge 原生允許偵錯，下一次**唯一明確發起**的正式 NEXT Broker connect 約 5.523 秒 PASS。沿同一條 Core↔Edge socket 取得兩個不同公司 worktree lease；`https://oprueba.com` 與 `https://homiplay.io` 的實際 navigate、AX snapshot 與 PNG screenshot 都 PASS。跨 worktree 拒絕 PASS；未核准 origin 導覽的負向測試使該 lease fence fail-closed，原腳本後續操作無法延續。`www` 兩站與 sibling release **未通過驗收**；同一 socket 後續 fresh acquire 又回報 peer verification mismatched，**沒有重新 connect**。全部 logical leases complete；最後以正式 `disconnect_external` 關閉唯一 Core-owned socket，原版 8765 與 Edge Profile／程序保留。詳見下方「晚間原生同意後」。
@@ -72,7 +74,7 @@ Source 改動：在 `internal/tool/browser/next_edge_runtime_test.go` 增加 `Te
 
 | Gate | 本輪證據 | 尚未通過 |
 | --- | --- | --- |
-| GitLab NEXT-only MCP OAuth | `gitlab-company` registry 存在；真實 `refresh` 回 `MCP_AUTH_REQUIRED`；`authorize` 發現 `agentdock`／`local` callback，依本機 8767 選定 local 並產生授權頁，等待使用者同意。沒有複製 Stable grant。 | 尚無完成 grant，不能執行 repo／commit／pipeline／job／MR API UAT；MCP `mcp` scope 也不是 GitLab REST `read_api` token |
+| GitLab NEXT-only MCP OAuth | **2026-10-24 新驗收 PASS**：`gitlab-company` ready／35 tools，Project／Commit／Pipeline／Job／MR／Branch 唯讀 Host API PASS，未複製 Stable grant。[詳見](next-rc11-gitlab-host-uat-2026-10-24.md) | GitLab REST `read_api` token／OAuth renew/revoke 或更廣泛權限尚未另外驗收 |
 | native GUI／Tray | NEXT Computer Broker 真實 `capabilities` PASS，`foreground=forbidden`、`focus_changed=false`；`list_windows(app=AgentDock Next)` PASS 但回傳空視窗；`get_app_state` 為 `window_not_found`。一次 `open -g -a` 不改 Edge foreground，也沒有使可見視窗出現；全部 Computer sessions 已 release。 | RC11 可見 GUI／native Menu Bar 實際動作未驗收；Orca provider `supports.surfaces.menubar=false`，不能冒稱 tray PASS |
 | lifecycle／取消／異常 | 新一輪 `go test -race ./internal/tool/browser` 定點測試 **113 PASS／0 FAIL**，包含 native Edge generation／peer loss／lease cleanup。正式失敗後 Browser 實機資源數回零。 | Edge 本次未有已授權租約，故生產四站、雙租約取消／peer loss、跨 Session／crash／恢復仍 open |
 | App／ZIP／DMG／rollback | 安裝來源與 binary hash／signature PASS；`test-next-shared-deploy.py` **29 PASS**、`test-next-shared-package.py <RC11 app>` **9 PASS**，candidate bundle validation PASS；RC10 rollback bundle 確實存在且版本吻合。 | 本輪沒有對 **live RC11** 作實際 post-swap failure／rollback；先前 P11 RC2／RC3 的真實注入回滾不能冒稱為 RC11 live rollback |
