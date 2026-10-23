@@ -6,6 +6,12 @@
 截圖 FAIL CLOSED，尚未完成四站。修正已安裝至 RC11，source 實機截圖成功；RC11 未建立新 Edge 連線，保留單次完整 Host UAT gate。沒有正式發布。**
 最新 [RC10 實際 UAT 與續作證據](next-rc10-edge-host-uat-2026-10-23.md) 優先於歷史記錄。
 
+文件／記憶同步複核：**2026-10-23 22:41–22:42 Asia/Taipei**。兩個工作樹乾淨，
+feature HEAD `dc57213f`（本次文件更新前），主線仍為 `7e87605a`。
+已安裝 24 檔仍與 RC11 候選相符、簽章 PASS；Core PID 94893 top-level running／identity
+相符，沒有對 9222 的 established connection；Browser idle／resources=0、execution active_calls=0。
+原版 health 仍為 1.1.0，Default pin／route SHA 未改。本次只讀查核，沒有重連、重啟或部署。
+
 ## 本輪工作契約
 
 - 使用流程／痛點：ChatGPT 與 ACP 在使用者繼續工作時，共用 NEXT 管理的
@@ -82,11 +88,12 @@
 9. 正式 NEXT Core 經 `next-core-edge-cdp` driver 接入 native provider/backend。
    `browser_broker` 明確 connect／disconnect、exact company worktree selection、scoped
    navigate/snapshot/screenshot 已接上 M8；直接與 ACP 租約共用連線，各自 owned cleanup。
-   Profile current-binding 的首次 directory pin 僅在同 Core 記憶體中保留，跨重啟 pin 尚未自動保存。
+   `bind_current_profile` 的首次 pin 僅在同 Core 記憶體中保留，不自動改寫設定；本機已將
+   same-socket 觀察的 `Default` 明確保存為 `profile_directory`，因此本機跨重啟 pin 已存在。
 10. Broker diagnostics 納入 native logical workers 與 authenticated direct ownership；
     修正直接租約被 GUI 誤算為 unowned/stale，保留未觀察 connector health 的 truthful 狀態。
 
-## 實機授權與失敗記錄
+## RC10 之前的實機授權與失敗記錄（歷史）
 
 - 使用者按過 Edge 的「允許偵錯」，後續握手與 browser metadata **確實成功**。
   失敗位置曾為 hidden target `-32602`，不能當成使用者沒授權。
@@ -95,15 +102,15 @@
   不能告訴使用者按過一次就保證另一條新連線不再需要瀏覽器自身的同意。
 - `Local State` 的 Profile-name metadata 讀取被 macOS 拒絕（EPERM）；已尊重拒絕，
   沒有讀 cookies／憑證、調權限、換 Profile，或透過其他路徑取得該檔內容。
-- 沒有任何四個網站導覽／snapshot／screenshot 的成功實機證據；最後的 full smoke
+- **當時**沒有四個網站導覽／snapshot／screenshot 的成功實機證據；該次 full smoke
   在握手階段便退出。foreground 取樣未變動只覆蓋這個未進入頁面操作的失敗探測，
-  **不算 website no-focus PASS**。
+  **不算 website no-focus PASS**。後來 RC10 首站部分成功與 RC11 待驗收狀態，以頁首及實機證據為準。
 
 ## 驗證
 
 前一 source checkpoint（`b50fdc29`）已執行過完整
 `./internal/tool/browser ./internal/browserpolicy ./internal/config ./internal/app`：
-最終本輪 source **1,639 case PASS、7 個既有 opt-in cases SKIP**。七個跳過項目是 shared real-headless、managed real worker，
+該歷史 source checkpoint 為 **1,639 case PASS、7 個既有 opt-in cases SKIP**。七個跳過項目是 shared real-headless、managed real worker，
 以及四個 Codex adapter/native/containment opt-in；沒有將它們算成 live acceptance。
 
 定點 direct/context/Profile/default-launch/kernel-path/site-smoke synthetic tests 已通過；
@@ -118,7 +125,7 @@ Vitest 有 Node localStorage experimental warning，無測試失敗。本輪未�
 
 RC10 後 navigation readiness／owned viewport source checkpoint：四包完整 Go
 **1,684 PASS、7 opt-in SKIP、0 FAIL**，相關 browser Race selection PASS，四包 vet PASS。
-證據 `go-rc11-tests.jsonl`；尚未將下一候選的 installed Broker 流程算為通過。
+證據 `go-rc11-tests.jsonl`；RC11 已安裝，但 installed Broker 的四站流程尚未驗收通過。
 
 ## 下一個安全步驟
 

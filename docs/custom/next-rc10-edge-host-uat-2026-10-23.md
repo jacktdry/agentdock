@@ -114,3 +114,22 @@ foreground samples 覆蓋及 owned cleanup，再明確 disconnect 收尾。
 RC11 GUI 尚未重開或取得可見畫面；GitLab 獨立 OAuth／API UAT、跨 Session／異常恢復、
 完整 rollback 及主線整合未完成。工作樹維持 `feature/next-edge-rc-20261023`，沒有 push、
 公開 release／tag／feed，也沒有其他正在執行的驗收命令。原生已安裝 NEXT 服務保留運作。
+
+## 文件／記憶同步（2026-10-23 晚間）
+
+- 工作流程／痛點：避免新對話根據歷史 `provider=nil`／RC5 敘述重做整合或反覆要求偵錯同意。
+- 直接改善／最小改動：更新 Backlog／Roadmap 入口與現況文件、標明歷史敘述，保留本文件為
+  RC10／RC11 的可追溯實機證據；記憶只新增可重用經驗的更新筆記，不複製 PID／版本待辦。
+- 實際複核：22:41–22:42 Asia/Taipei，RC11／source c331afe47d2e、24 檔 SHA／簽章、
+  trusted Core PID／top-level running、Default pin／四 policies 與原版 health 均相符；
+  NEXT idle、active_calls=0、沒有 established Edge socket。本次沒有重啟／重連／部署。
+- CBM 只讀查核：mainline `agentdock-custom` index 仍為 2026-10-14T08:53:43Z；
+  `next_edge_runtime.go`／`next_edge_operation.go` coverage missing，docs excluded by design。
+  此 index 不能代表未合併 feature worktree；未改寫共享索引，後續以 current source 查核。
+- 驗證／不做：本次只改文件及獨立記憶更新筆記；檢查 diff／本次改動的相對連結，
+  不重跑產品測試、不重建 RC、不開新 Agent／Edge／GUI、不改原版、不合併或 push。
+
+下一輪先讀 `AGENTS.md`、`next-local-rc-acceptance.md` 與本文件的 RC11 checkpoint，
+再核對 worktree／binary source／服務與 scope。以一條正式 NEXT Broker 連線完成四站、
+負向 scope、sibling release 及 no-focus，再進行 GitLab 獨立 OAuth/API、原生 GUI／
+生命週期／rollback 等剩餘 gates；不得因舊 source 診斷成功就提前宣稱 RC 完成。

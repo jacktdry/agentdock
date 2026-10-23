@@ -1,6 +1,6 @@
 # AgentDock Custom Roadmap
 
-> **2026-10-23 local RC execution:** [Current prioritized acceptance](next-local-rc-acceptance.md) tracks the remaining company Edge, independent GitLab authorization, lifecycle/native UAT and NEXT-only RC gates. No new installed RC or live company-site acceptance is claimed by source diagnostics.
+> **2026-10-23 local RC execution:** RC11 (`c331afe47d2e`) is installed from `feature/next-edge-rc-20261023`, not merged to `custom/main`. RC10 actual Broker connect/two leases/Oprueba navigation+AX passed; screenshot failed. RC11 fixes are installed, with complete four-origin Host UAT still pending. [Current prioritized acceptance](next-local-rc-acceptance.md) owns current state; [RC10/RC11 evidence](next-rc10-edge-host-uat-2026-10-23.md) separates installed acceptance from source diagnostics. Independent GitLab authorization, lifecycle/native GUI, rollback and integration gates remain open; no public release.
 
 > **Current operational entrypoint (2026-10-21):** [NEXT active backlog](next-active-backlog-2026-10-21.md) and [worktree consolidation](worktree-consolidation-2026-10-21.md). Older sections preserve chronological checkpoints and may state pending gates closed by later evidence.
 
