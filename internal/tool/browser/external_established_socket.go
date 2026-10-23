@@ -27,7 +27,10 @@ type edgeSocketEvidence struct {
 // Implementations must honor ctx; native commands and signature workers are
 // bounded. No socket I/O, profile access, CDP discovery or relay wiring occurs.
 type edgeSocketProbe interface {
-	connections(context.Context, int) (string, error)
+	// Only enumerate connections for the already pinned server port. A normal
+	// browser can have hundreds of unrelated HTTPS sockets; a global lsof
+	// catalog can exceed the bounded evidence buffer and mask a valid peer.
+	connections(context.Context, int, int) (string, error)
 	startToken(context.Context, int) (string, error)
 	liveSignature(context.Context, int) error
 }
@@ -80,7 +83,7 @@ func readEdgeEstablishedSocketEvidence(ctx context.Context, conn net.Conn, sourc
 	probeCtx, cancel := context.WithTimeout(ctx, edgeSocketWindow)
 	defer cancel()
 	// Bracket independent epoch/signature observations with two OS socket reads.
-	raw, err := probe.connections(probeCtx, source.pid)
+	raw, err := probe.connections(probeCtx, source.pid, int(server.Port()))
 	if err != nil || probeCtx.Err() != nil || !edgeEstablishedSocketMatches(raw, source.pid, server, client) {
 		return fail()
 	}
@@ -93,7 +96,7 @@ func readEdgeEstablishedSocketEvidence(ctx context.Context, conn net.Conn, sourc
 			return fail()
 		}
 		if i == 0 {
-			raw, err = probe.connections(probeCtx, source.pid)
+			raw, err = probe.connections(probeCtx, source.pid, int(server.Port()))
 			if err != nil || probeCtx.Err() != nil || !edgeEstablishedSocketMatches(raw, source.pid, server, client) {
 				return fail()
 			}

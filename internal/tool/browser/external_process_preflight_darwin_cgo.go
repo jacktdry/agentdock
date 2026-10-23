@@ -100,9 +100,12 @@ func (v *edgeLiveSignatureVerifier) check(ctx context.Context, pid int) error {
 		defer func() {
 			// Native bindings normally return a status; any unexpected Go
 			// panic in the verifier must also release the slot and reject.
+			// Release the slot BEFORE publishing success. Otherwise the next
+			// serial action can observe the completed result while the global
+			// slot is still occupied, spuriously failing peer revalidation.
 			_ = recover()
-			result <- verified
 			<-v.slot
+			result <- verified
 		}()
 		if ctx.Err() == nil {
 			verified = v.verify(pid)

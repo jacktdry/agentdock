@@ -95,7 +95,7 @@ type edgeEvidenceProbe struct {
 	cancel              context.CancelFunc
 }
 
-func (p *edgeEvidenceProbe) connections(ctx context.Context, pid int) (string, error) {
+func (p *edgeEvidenceProbe) connections(ctx context.Context, pid, port int) (string, error) {
 	p.calls += "c"
 	if p.fault == "probe-panic" {
 		panic("private probe canary")
@@ -112,6 +112,9 @@ func (p *edgeEvidenceProbe) connections(ctx context.Context, pid int) (string, e
 		}
 	}
 	server, client := p.server.LocalAddr(), p.server.RemoteAddr()
+	if expected := p.server.LocalAddr().(*net.TCPAddr).Port; port != expected {
+		return "", errors.New("unqualified debug port")
+	}
 	if p.client != nil {
 		// The recording decorator supplies the EXACT client pointer received by
 		// the composition. Generate lsof's reversed tuple from that socket.

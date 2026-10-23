@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-10-24 RC12 source reliability checkpoint：** [Edge pinned-port socket attestation／native signature slot ordering](next-rc12-edge-peer-2026-10-24.md) 的兩項有限修正已完成，四包 Go **1,687 PASS／7 SKIP／0 FAIL**、定點 race **85 PASS**、macOS test-owned socket／`go vet` PASS。**尚未宣稱新版本的真實 Edge fresh-acquire 修復**；RC11 四站與 sibling／no-focus 已 Host PASS、GitLab NEXT-only MCP Host PASS 均繼續保留。下一個 gate 是乾淨 source commit→RC12 本機候選→必要時單次使用者同意的正式安裝／Host UAT。不要自動重連或 touch Stable。
+
 > **2026-10-24 GitLab NEXT-only OAuth／MCP 唯讀 Host PASS：** 使用者完成獨立授權；NEXT 8767 `gitlab-company` 已 `ready`／35 tools，Project／Commit／Pipeline／Job／MR／Branch API 實機查詢全 PASS，沒有借用原版 credential、沒有任何 GitLab 寫入。獨立 GitLab REST token／`read_api`、token renew/revoke 等另需驗收。[GitLab UAT 證據](next-rc11-gitlab-host-uat-2026-10-24.md)。以下保留歷史「待 OAuth」敘述不能當作現況。
 
 > **23:58 最新正向 Host checkpoint：** RC11 在單次正式 Edge Broker 連線完成 **Oprueba／HomiPlay／雙 www 四個核准 origin** 的 navigate／AX／PNG，以及 **A lease release 後 B snapshot 並正常 release**、206 筆網站 no-focus samples PASS；跨 workspace 拒絕 PASS。**最終整份 UAT 尚未全 PASS**：全部釋放後追加 negative-only acquire 於真實 peer revalidation FAIL CLOSED，故 JS／未核准 origin 獨立負向未執行。Socket 已正式 disconnect，0 active，沒有重連、合併、push 或發佈。新增 synthetic CDP fresh-acquire source regression PASS，但並未修正或證明 Host 問題解決。以[最新 RC11 Host 詳細證據](next-rc11-host-uat-2026-10-23.md)為準；以下早一輪的兩站敘述保留當時歷史。

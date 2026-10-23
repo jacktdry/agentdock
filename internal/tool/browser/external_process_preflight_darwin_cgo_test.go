@@ -111,3 +111,25 @@ func TestEdgeLiveSignatureVerifierPanicFailsClosed(t *testing.T) {
 		}
 	}
 }
+
+func TestEdgeLiveSignatureCompletionReleasesSlotBeforeNextAction(t *testing.T) {
+	var calls int
+	v := edgeLiveSignatureVerifier{slot: make(chan struct{}, 1), verify: func(int) bool {
+		calls++
+		return true
+	}}
+	// A real Broker performs serial admissions, page operations and release
+	// using the same native verifier. A successful verification must guarantee
+	// the next one will not be rejected by a stale occupied slot.
+	for i := 0; i < 150; i++ {
+		if err := v.check(context.Background(), 123); err != nil {
+			t.Fatalf("serial peer revalidation %d failed closed spuriously: %v", i, err)
+		}
+		if len(v.slot) != 0 {
+			t.Fatalf("native verification %d returned before disposing its slot", i)
+		}
+	}
+	if calls != 150 {
+		t.Fatal("serial verification skipped a legitimate invocation")
+	}
+}
