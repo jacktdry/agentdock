@@ -262,7 +262,7 @@ func TestNativeEdgeExplicitReconnectPinsProfileAndIsolatesOldGeneration(t *testi
 }
 
 func TestNativeEdgeConnectionFailureStagesExcludeRawDetails(t *testing.T) {
-	for _, stage := range []string{"configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation"} {
+	for _, stage := range []string{"configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation", "connection_admission"} {
 		err := nativeEdgeConnectError(fmt.Errorf("secret-canary: %w", &nativeEdgeConnectFailure{stage: stage}))
 		var reported *Error
 		if !errors.As(err, &reported) || reported.Details.Reason != "company Edge connection unavailable at "+stage || reported.Cause != nil || strings.Contains(err.Error(), "secret-canary") {

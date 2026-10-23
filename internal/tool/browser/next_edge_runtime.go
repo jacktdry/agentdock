@@ -55,7 +55,7 @@ func nativeEdgeConnectError(err error) error {
 	var failure *nativeEdgeConnectFailure
 	if errors.As(err, &failure) {
 		switch failure.stage {
-		case "configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation":
+		case "configuration", "process_preflight", "socket_and_websocket", "dispatcher_attach", "browser_metadata", "profile_context", "owned_target_create", "owned_profile_metadata", "owned_profile_cleanup", "profile_epoch", "peer_revalidation", "connection_admission":
 			return externalLeaseError(ErrRequiredRouteUnavailable, "", "company Edge connection unavailable at "+failure.stage, nil)
 		}
 	}
@@ -214,7 +214,7 @@ func (b *nativeEdgeRuntime) Connect(ctx context.Context, id string) error {
 		if connection.root != nil {
 			connection.root.Close()
 		}
-		return externalPeerVerificationError()
+		return nativeEdgeConnectError(&nativeEdgeConnectFailure{stage: "connection_admission"})
 	}
 	connection.intent = intent
 	b.mu.Lock()
