@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -250,5 +251,74 @@ func TestDirectCDPProfileWaitsForOwnedVersionDocument(t *testing.T) {
 				t.Fatal("unapproved document evaluated as Profile metadata")
 			}
 		})
+	}
+}
+
+func TestDirectCDPNavigationWaitsForCommittedLoader(t *testing.T) {
+	navigating, targetPolls, framePolls := false, 0, 0
+	d, _ := newDispatcherFixture(t, func(_ *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
+		var result any
+		switch cmd.Method {
+		case "Page.navigate":
+			navigating = true
+			result = map[string]any{"loaderId": "new-document"}
+		case "Target.getTargetInfo":
+			u := "about:blank"
+			if navigating {
+				targetPolls++
+				u = "https://example.invalid/final"
+				if targetPolls == 1 {
+					u = ""
+				}
+			}
+			result = map[string]any{"targetInfo": map[string]any{"targetId": "owned-target", "type": "other", "url": u}}
+		case "Page.getFrameTree":
+			framePolls++
+			loader := "old-document"
+			if framePolls > 1 {
+				loader = "new-document"
+			}
+			result = map[string]any{"frameTree": map[string]any{"frame": map[string]any{"loaderId": loader, "url": "https://example.invalid/final"}}}
+		default:
+			return false
+		}
+		if err := dispatcherReply(c, cmd, result); err != nil {
+			t.Error(err)
+		}
+		return true
+	})
+	ctx := context.Background()
+	if err := d.OpenOwnedTarget(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Navigate(ctx, "https://example.invalid/start"); err != nil || d.bootstrap || framePolls != 2 || targetPolls != 3 {
+		t.Fatal("navigation returned before its committed document", err, targetPolls, framePolls)
+	}
+}
+
+func TestDirectCDPNavigationReadinessCancellationRetiresTransport(t *testing.T) {
+	d, _ := newDispatcherFixture(t, func(_ *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
+		if cmd.Method != "Page.navigate" {
+			return false
+		}
+		if err := dispatcherReply(c, cmd, map[string]any{"loaderId": "not-committed"}); err != nil {
+			t.Error(err)
+		}
+		return true
+	})
+	if err := d.OpenOwnedTarget(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if d.Navigate(ctx, "https://example.invalid/") == nil || d.live() {
+		t.Fatal("canceled readiness left an ambiguous transport usable")
+	}
+}
+
+func TestDirectCDPViewportRequiresOwnedTarget(t *testing.T) {
+	d, f := newDispatcherFixture(t, nil)
+	if d.setOwnedViewport(context.Background()) == nil || commandCount(f.recorded(), "Emulation.setDeviceMetricsOverride") != 0 {
+		t.Fatal("viewport changed without an owned hidden target")
 	}
 }

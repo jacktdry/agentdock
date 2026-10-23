@@ -502,6 +502,7 @@ func (d *directCDPDispatcher) Navigate(ctx context.Context, rawURL string) error
 	var result struct {
 		ErrorText  string `json:"errorText"`
 		IsDownload bool   `json:"isDownload"`
+		LoaderID   string `json:"loaderId"`
 	}
 	if err = d.callLocked(ctx, "Page.navigate", d.sessionID, struct {
 		URL string `json:"url"`
@@ -511,6 +512,45 @@ func (d *directCDPDispatcher) Navigate(ctx context.Context, rawURL string) error
 	if result.ErrorText != "" || result.IsDownload {
 		return errDirectCDPAction
 	}
-	d.bootstrap = false
-	return nil
+	// Page.navigate can answer before the new document commits. Drain scoped
+	// Fetch events while observing our exact target, so the following snapshot
+	// does not mistake its transient empty/about:blank URL for identity loss.
+	for {
+		info, err := d.targetInfoLocked(ctx)
+		if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) || !d.targetContextMatchesLocked(ctx, info) {
+			d.Close()
+			return errDirectCDPRetired
+		}
+		ready := d.originScope.Allows(info.URL)
+		if !ready && info.URL != "" && info.URL != "about:blank" {
+			d.Close()
+			return errDirectCDPRetired
+		}
+		if ready && result.LoaderID != "" {
+			var tree struct {
+				FrameTree struct {
+					Frame struct {
+						LoaderID string `json:"loaderId"`
+						URL      string `json:"url"`
+					} `json:"frame"`
+				} `json:"frameTree"`
+			}
+			if err := d.callLocked(ctx, "Page.getFrameTree", d.sessionID, struct{}{}, &tree); err != nil {
+				return err
+			}
+			ready = tree.FrameTree.Frame.LoaderID == result.LoaderID && d.originScope.Allows(tree.FrameTree.Frame.URL)
+		}
+		if ready {
+			d.bootstrap = false
+			return nil
+		}
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			d.Close()
+			return errDirectCDPRetired
+		case <-timer.C:
+		}
+	}
 }

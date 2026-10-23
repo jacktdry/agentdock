@@ -22,6 +22,26 @@ func (d *directCDPDispatcher) ownedTargetTypeMatches(kind string) bool {
 	return kind == "page" || (kind == "other" && d.ownedHiddenTarget)
 }
 
+// Hidden WebContents can start with a 0x0 viewport. Configure only our owned
+// target's virtual renderer size; never resize or activate a native window.
+func (d *directCDPDispatcher) setOwnedViewport(ctx context.Context) error {
+	ctx, unlock, err := d.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if !d.ownedHiddenTarget || d.targetID == "" || d.sessionID == "" {
+		return errDirectCDPAction
+	}
+	if err := d.verifyTargetLocked(ctx); err != nil {
+		return err
+	}
+	var result struct{}
+	return d.callLocked(ctx, "Emulation.setDeviceMetricsOverride", d.sessionID, map[string]any{
+		"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": false,
+	}, &result)
+}
+
 func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTargetInfo, error) {
 	var result struct {
 		TargetInfo directTargetInfo `json:"targetInfo"`

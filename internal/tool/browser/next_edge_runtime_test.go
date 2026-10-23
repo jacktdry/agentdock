@@ -18,6 +18,7 @@ import (
 func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispatcherFixture, string, *atomic.Int32, *atomic.Bool) {
 	t.Helper()
 	urls, sessions := map[string]string{}, map[string]string{}
+	viewports := map[string]bool{}
 	next := 0
 	root, f := newDispatcherFixture(t, func(_ *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
 		var result any
@@ -38,6 +39,9 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 			// Real Edge classifies owned hidden WebContents as "other".
 			result = map[string]any{"targetInfo": map[string]any{"targetId": id, "type": "other", "url": urls[id], "browserContextId": "company"}}
 		case "Page.navigate":
+			if !viewports[cmd.SessionID] {
+				t.Error("company navigation starts with a zero-sized hidden viewport")
+			}
 			urls[sessions[cmd.SessionID]] = cmd.Params["url"].(string)
 			result = map[string]any{}
 		case "Target.closeTarget":
@@ -46,6 +50,12 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 			delete(urls, id)
 			result = map[string]any{"success": exists}
 		case "Fetch.enable":
+			result = map[string]any{}
+		case "Emulation.setDeviceMetricsOverride":
+			if cmd.SessionID == "" || cmd.Params["width"] != float64(1280) || cmd.Params["height"] != float64(800) || cmd.Params["deviceScaleFactor"] != float64(1) || cmd.Params["mobile"] != false {
+				t.Error("native viewport is not fixed and target-session scoped")
+			}
+			viewports[cmd.SessionID] = true
 			result = map[string]any{}
 		default:
 			return false
@@ -125,6 +135,9 @@ func TestNativeEdgeBrokerSharesConnectionAndFencesOwners(t *testing.T) {
 	}
 	if a.WorkerID == acp.WorkerID || a.BrowserLeaseID == acp.BrowserLeaseID || a.PageID != "1" || acp.PageID != "1" {
 		t.Fatal("logical page IDs must be isolated by immutable worker ownership")
+	}
+	if commandCount(f.recorded(), "Emulation.setDeviceMetricsOverride") != 2 {
+		t.Fatal("native hidden pages have no usable virtual viewport")
 	}
 	if err := b.ConnectExternal(ctx, root, true); err == nil || !native.connection.root.live() {
 		t.Fatal("disconnect dropped active sibling leases")

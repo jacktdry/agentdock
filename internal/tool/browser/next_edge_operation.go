@@ -71,6 +71,9 @@ func (w *nativeEdgeWorker) call(ctx context.Context, tool string, args map[strin
 		if err := d.OpenOwnedTarget(ctx, ""); err != nil {
 			return nil, err
 		}
+		if err := d.setOwnedViewport(ctx); err != nil {
+			return nil, err
+		}
 		if err := d.enableOriginPolicy(ctx); err != nil {
 			return nil, err
 		}

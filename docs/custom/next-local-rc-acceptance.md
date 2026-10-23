@@ -2,8 +2,9 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
-**尚未達到 Definition of Done。RC9 已安裝；正式 Broker 尚卡在版本頁就緒檢查。修正後真實 source native qualification 全流程通過，仍未執行四站 installed Broker UAT。沒有正式發布。**
-最新 [RC6 實際建置／安裝／失敗證據](next-rc6-local-candidate-2026-10-23.md) 優先於下列歷史 source checkpoint。
+**尚未達到 Definition of Done。RC10 正式連線、雙租約及 Oprueba 導覽／快照 PASS；
+截圖 FAIL CLOSED，尚未完成四站。source 已定位 0×0 viewport 並取得真實 PNG；停止重複連線，後續先做離線候選。沒有正式發布。**
+最新 [RC10 實際 UAT 與續作證據](next-rc10-edge-host-uat-2026-10-23.md) 優先於歷史記錄。
 
 ## 本輪工作契約
 
@@ -25,12 +26,12 @@
 | 主線 | `custom/main`，起點 `7e87605a91f3a1e48a5879f7e406c3803a06e00c`，開工時乾淨；未 push |
 | 本輪工作樹 | `/Users/wei/sideProject/agentdock-next-edge-rc-20261023`；`feature/next-edge-rc-20261023` |
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
-| NEXT | 已更新為 `0.9.2-rc.9`／`62849e878f94`；App `0.9.2`／`10.0.0`；helper 部署成功，原版未動 |
+| NEXT | 已更新為 `0.9.2-rc.10`／`c389f2361e8a`；App `0.9.2`／`11.0.0`；helper 部署成功，原版未動 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
-| 公司路由 | 已授權寫入 NEXT-private file，載入 1 native connector／1 profile／4 exact company policies；首次 connect 被拒絕，沒有網站 PASS |
+| 公司路由 | NEXT-private file 載入 1 native connector／1 profile／4 exact company policies；正式 connect、雙租約及首站快照 PASS；沒有完整四站 PASS |
 | NEXT MCP | 已新增獨立 `gitlab-company`，direct HTTP `/api/v4/mcp`；真實 refresh 回覆 auth_required，尚無 NEXT grant；未複製原版憑證 |
 | Edge | 唯讀 WebSocket 成功回覆過 `Edg/155.0.4283.60`，之後回覆 `.62`；程序在本輪期間由外部換代，並非本工作重啟 |
-| Profile | 真實 same-socket owned version metadata 觀察 `Default`，source native process/socket/Profile epoch/peer 全流程 PASS；跨重啟設定 pin 待下一次部署保存 |
+| Profile | 真實 same-socket owned version metadata 觀察 `Default`；跨重啟設定 pin 已保存並由 RC10 正式 Runtime 驗證成功 |
 | CBM | 既有索引為 2026-10-14；本輪 Edge 新檔未覆蓋、部分檔案 metadata 改變，依 current source 查核；沒有重建索引 |
 
 ## 優先工作清單
@@ -38,14 +39,14 @@
 | 順序 | 工作 | 狀態／剩餘門檻 |
 | --- | --- | --- |
 | P1 / Phase 1 | 真實 Edge 相容性 | **source 已實作**：一般啟動形狀、kernel executable path、無 suffix 的 WS endpoint、explicit context pin、hidden target 參數修正；尚未完成最終實機流程 |
-| P1 / Phase 1 | 公司 Edge 持續連線 | **正式 Runtime 已部署 RC8**：真實 Broker 通過握手／metadata；owned target type 相容修正仍待下一候選實機驗收；尚無網站 PASS |
+| P1 / Phase 1 | 公司 Edge 持續連線 | **RC10 正式 Runtime connect PASS**：另一個 MCP client 取得雙租約，首站導覽／快照成功；截圖故障隔離，完整 workflow 仍 open |
 | P1 / Phase 1 | ConnectorStatusProvider / ExternalLeaseBackend | **source 已實作並離線整合驗證**：NEXT-only constructor、明確 connect/disconnect、同 socket Profile metadata、epoch/peer/fence、one-shot grant、task/session/worker、TTL／停止；實機 Profile／取消／異常回收仍待驗收。詳見 [Runtime 整合](next-edge-runtime-2026-10-23.md) |
-| P1 / Phase 1 | 四個網站的真正 NEXT Broker UAT | **待實機驗收**：精確工作樹／HTTPS origin pair、owner consent、單一連線、多頁隔離與 owned release；目前沒有網站 UAT PASS |
+| P1 / Phase 1 | 四個網站的真正 NEXT Broker UAT | **部分通過**：Oprueba 導覽／AX snapshot PASS；截圖及其餘三個 origin、負向 scope／sibling release 尚未通過 |
 | P1 / Phase 2 | GitLab 獨立 API 授權 | **NEXT connector 已註冊，待獨立 OAuth**：discovery 200／DCR，refresh 正確要求授權；尚無 repo/commit/pipeline/job/MR API UAT，mcp grant 不等於 REST read_api token |
 | P1 / Phase 3 | Edge/Chrome 與多 Session 生命週期 | **保留既有三真實 Agent 共用 Managed Chrome PASS**；仍需 Edge、macOS no-focus、取消／逾時／crash／恢復及原生程序保護的實機證據 |
-| P1 / Phase 4 | GUI／Tray／OAuth／原生動作 | **保留 RC5 Browser GUI PASS**；廣泛 GUI stale/loading/error、Tray／診斷／開資料夾與原生基本動作仍待針對性查核及 Host UAT |
-| P1 / Phase 4 | Core Skills／CBM/MCP | **保留已安裝 helper isolated bootstrap PASS**；下一 RC 實際更新／bootstrap、並行生命周期與必要 Native UAT 待完成 |
-| Phase 5 | 同 commit App／ZIP／DMG、安裝／回滾 | **RC6 候選建置及授權安裝 PASS**；同 commit archives payload／簽章／Skills PASS，正式 Edge connect fail closed。完整 UAT／live failure recovery 仍未完成；無正式 Tag／Release／feed／push |
+| P1 / Phase 4 | GUI／Tray／OAuth／原生動作 | **NEXT 背景 Computer observe/release、no-focus PASS；保留 RC5 Browser GUI PASS**；目前 GUI 無可見視窗，Tray／新 GUI 與原生動作仍需 Host UAT |
+| P1 / Phase 4 | Core Skills／CBM/MCP | **RC10 真實 helper bootstrap／26 個既有 Skills hash PASS**；CBM 新檔索引與並行生命週期、必要 Native UAT 待完成 |
+| Phase 5 | 同 commit App／ZIP／DMG、安裝／回滾 | **RC10 同 commit 封裝／簽章／授權安裝／Skills PASS**；完整 UAT／live failure recovery 仍未完成；無正式 Tag／Release／feed／push |
 | 暫緩 | P13/P14、NexusDock pairing、付費簽章／公證、Windows 完整 UAT | **明確暫緩**，不納入本機 RC 必要門檻 |
 
 ## 已做的 source 變更與證據界線
@@ -115,7 +116,18 @@ Shared GUI `pnpm typecheck` PASS；Vitest **24 files／176 tests PASS**。
 Vitest 有 Node localStorage experimental warning，無測試失敗。本輪未修改 Vue。
 後續 RC6 App／ZIP／DMG 及安裝檢查已實際完成，見上方最新記錄；原生 GUI、完整 rollback、四站 UAT 仍 open。
 
+RC10 後 navigation readiness／owned viewport source checkpoint：四包完整 Go
+**1,684 PASS、7 opt-in SKIP、0 FAIL**，相關 browser Race selection PASS，四包 vet PASS。
+證據 `go-rc11-tests.jsonl`；尚未將下一候選的 installed Broker 流程算為通過。
+
 ## 下一個安全步驟
+
+**目前：不再建立新 Edge 連線。** 先完成 navigation readiness／自有 target 虛擬 viewport
+的修正、離線回歸及可追溯候選。下一次 Host UAT 應只啟動一條正式 Broker 連線，
+一次完成四站／負向 scope／sibling release／no-focus，不能以重複短 probe 要求同意。
+GitLab 獨立 OAuth、新 GUI 可見畫面與完整回滾仍為 Host gates；未提前合併主線。
+
+下列保留本輪故障定位時間線；最新實機結果見上方 RC10 證據。
 
 RC7 正式連線約 15.484 秒後於 `socket_and_websocket` 結束。使用者確認有按允許，
 並補充剛剛才按；不能歸因於使用者沒有同意。RC8 將 explicit native consent window

@@ -1,8 +1,8 @@
 # NEXT 原生公司 Edge Runtime 整合
 
-狀態：正式 Core 呼叫路徑已接入並安裝至 RC9；公司網站 Host UAT 尚未通過。
-真實 native source qualification 已通過程序／socket／Default Profile／epoch／peer 全流程；
-版本頁導覽的未提交 URL 等待修正待下一候選部署，source 診斷不算 installed Broker UAT。
+狀態：RC10 正式 connect、雙租約、Oprueba 導覽／快照 PASS；截圖 FAIL CLOSED，
+完整四站 UAT 尚未通過。source 已補導覽就緒與自有 hidden target 的固定虛擬 viewport，
+實機 source 診斷截圖成功；尚未以安裝版驗收此修正，停止重複新連線／同意提示。
 這份文件接續 [RC 執行清單](next-local-rc-acceptance.md)，不取代歷史實機證據。
 
 ## 使用流程與界線
@@ -22,7 +22,7 @@
    非 stdio Core。未配置 native driver 的既有 Managed Chrome 行為保留。
 2. [可審查的設定範例](next-company-browser-routes.example.json) 僅包含四個已核准工作樹及
    各自的 exact HTTPS origin pair；CMS 可使用兩組。live 設定已載入四個 root，
-   原先 current binding 已觀察到 `Default`，下一次授權部署將保存此明確 directory pin。
+   已將 same-socket 觀察到的 `Default` 保存為明確 directory pin，RC10 正式驗證成功。
    既有 private loader 仍要求 home 0700、檔案 0600、owner／非 symlink、嚴格 JSON。
 3. `browser_broker` 的 `connect_external` 加 `workspace_root` 明確啟動連線。
    status、planner、acquire 均不啟動或重建 socket。Edge 原生同意由使用者操作。
@@ -70,6 +70,12 @@ grant 不能由 config/status booleans 偽造。停止時若身分已變，不�
 此範圍限制文件導覽與 agent 的唯讀操作，**不是隔離整個網站的 network sandbox**：
 正常網站 scripts/subresources 仍使用該 Profile 的瀏覽器行為。隱藏 target 的原生 popup、
 下載、no-focus 行為需在 Edge 實機驗證，不以 Chromium 結構或 fixture 代替。
+
+真實 Edge 的 hidden WebContents 初始 viewport 為 0×0。native worker 僅在自有 target
+session 設固定虛擬 1280×800／scale=1／mobile=false，再啟用 origin policy／開始導覽；
+不使用 Browser window API、activateTarget 或實體視窗操作。導覽在同 gate 內等待
+approved owned document，有 loaderId 時核對 frame tree 的 loader；過渡空 URL 不授權
+evaluate／快照。這些修正的 installed Broker Host UAT 仍待完成。
 
 ## 離線驗證與剩餘 gate
 
