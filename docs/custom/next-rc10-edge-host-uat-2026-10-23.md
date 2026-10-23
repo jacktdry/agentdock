@@ -78,3 +78,39 @@ Core／Edge 重啟或真正的身分／transport 失效仍須重新明確連線�
 archive/install verification、正式 connect/site 結果、foreground samples、source Host diagnosis
 及 PNG；沒有存放 NEXT／原版憑證。臨時 Host tests 只編譯到私有目錄，source 已移除，
 所有診斷／observer 命令均已退出；沒有建立新 Edge Profile、公司瀏覽器或常駐診斷服務。
+
+## RC11 接續 checkpoint
+
+已沿既有授權，在再次確認 NEXT 閒置後安裝 **0.9.2-rc.11**，沒有執行 Edge connect。
+同 commit App／ZIP／DMG 的 source 為 **`c331afe47d2e144d930266d99486ca1b4f40c335`**，
+候選在 `dist/next-shared-arm64.oSRRh5/package/`，App `0.9.2`／`12.0.0`。
+此後的文件 checkpoint commit 不等於 binary source commit，不能混報。
+
+- ZIP SHA-256 `38d09fc6cb6c04c38e12237c3b98b25ae959677533e88b8bca55f220e16539c9`。
+- DMG SHA-256 `b60e8148e6ecc4f8c844ea99a910f5497ede2328f4aa0de5144a783ffd24568c`。
+- package suite **9 PASS**；兩個 archive 的 24 個 App 檔案均與候選逐一 SHA 相同，
+  唯讀 DMG mount 已卸載、checksum valid；ad-hoc signature PASS。
+- source 四包 Go **1,684 PASS／7 opt-in SKIP／0 FAIL**，相關 browser Race selection PASS，
+  四包 vet PASS，候選建置再次執行 Vue typecheck／Vite build PASS。
+  Vue 未修改，保留本輪先前 Vitest **24 files／176 tests PASS**；未宣稱每個候選都重跑 Vitest。
+- 已安裝 24 檔 SHA 與候選相同、App 根 inode 保留、26 個既有 Skills SHA 未改，
+  NEXT helper bootstrap 成功；RC10 rollback bundle 保留於
+  `/Users/wei/Applications/.agentdock-next-replacement-05ac6r44/AgentDock Next.app`。
+- 真實 Core **PID 94893**、launchd **top-level running + positive matching PID**，
+  helper 再核對 binary／listener identity；runtime version rc.11、private home 正確。
+  該 PID 對 9222 **沒有 established connection**，Broker idle、resources/operations/orphans=0。
+- 原版 health 仍為 `1.1.0`；沒有操作原版服務。全部暫時 Host test／observer process 已退出。
+- live route SHA `83ebae0ebb75d9799f347d5dd8988a42ad9ecc3e3d9f92842f784a49ac5f0053`，
+  Default pin／四 root policies 未改。原版憑證沒有複製至 NEXT。
+
+下一個安全動作：在使用者能處理**一條新連線**的原生同意時，使用 NEXT 自己的 client
+對 Oprueba exact root 呼叫 `browser_broker connect_external`，client timeout=120 秒，
+native consent window=90 秒。成功後**保留 Core／socket**，再執行私有
+`/private/tmp/agentdock-next-edge-verification-y6b6836m/rc11-site-uat.py`。
+此 helper 已 syntax check、**未執行**，有 rc.11 version guard 與逐步 operation evidence，
+不會建立 Edge 連線，也不會自動重連。它會釋放自己取得的租約；最終仍需驗證四站內容、
+foreground samples 覆蓋及 owned cleanup，再明確 disconnect 收尾。
+
+RC11 GUI 尚未重開或取得可見畫面；GitLab 獨立 OAuth／API UAT、跨 Session／異常恢復、
+完整 rollback 及主線整合未完成。工作樹維持 `feature/next-edge-rc-20261023`，沒有 push、
+公開 release／tag／feed，也沒有其他正在執行的驗收命令。原生已安裝 NEXT 服務保留運作。

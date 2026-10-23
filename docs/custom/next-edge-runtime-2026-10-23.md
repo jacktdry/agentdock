@@ -1,8 +1,8 @@
 # NEXT 原生公司 Edge Runtime 整合
 
 狀態：RC10 正式 connect、雙租約、Oprueba 導覽／快照 PASS；截圖 FAIL CLOSED，
-完整四站 UAT 尚未通過。source 已補導覽就緒與自有 hidden target 的固定虛擬 viewport，
-實機 source 診斷截圖成功；尚未以安裝版驗收此修正，停止重複新連線／同意提示。
+完整四站 UAT 尚未通過。導覽就緒／自有 hidden target 虛擬 viewport 修正已安裝 RC11，
+實機 source 診斷截圖成功；RC11 未開新 Edge 連線，保留單次完整 installed Broker UAT gate。
 這份文件接續 [RC 執行清單](next-local-rc-acceptance.md)，不取代歷史實機證據。
 
 ## 使用流程與界線

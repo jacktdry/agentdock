@@ -3,7 +3,7 @@
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
 **尚未達到 Definition of Done。RC10 正式連線、雙租約及 Oprueba 導覽／快照 PASS；
-截圖 FAIL CLOSED，尚未完成四站。source 已定位 0×0 viewport 並取得真實 PNG；停止重複連線，後續先做離線候選。沒有正式發布。**
+截圖 FAIL CLOSED，尚未完成四站。修正已安裝至 RC11，source 實機截圖成功；RC11 未建立新 Edge 連線，保留單次完整 Host UAT gate。沒有正式發布。**
 最新 [RC10 實際 UAT 與續作證據](next-rc10-edge-host-uat-2026-10-23.md) 優先於歷史記錄。
 
 ## 本輪工作契約
@@ -26,7 +26,7 @@
 | 主線 | `custom/main`，起點 `7e87605a91f3a1e48a5879f7e406c3803a06e00c`，開工時乾淨；未 push |
 | 本輪工作樹 | `/Users/wei/sideProject/agentdock-next-edge-rc-20261023`；`feature/next-edge-rc-20261023` |
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
-| NEXT | 已更新為 `0.9.2-rc.10`／`c389f2361e8a`；App `0.9.2`／`11.0.0`；helper 部署成功，原版未動 |
+| NEXT | 已更新為 `0.9.2-rc.11`／`c331afe47d2e`；App `0.9.2`／`12.0.0`；Core PID 94893 running，未連 Edge；GUI 仍待背景重開／可見畫面驗收 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
 | 公司路由 | NEXT-private file 載入 1 native connector／1 profile／4 exact company policies；正式 connect、雙租約及首站快照 PASS；沒有完整四站 PASS |
 | NEXT MCP | 已新增獨立 `gitlab-company`，direct HTTP `/api/v4/mcp`；真實 refresh 回覆 auth_required，尚無 NEXT grant；未複製原版憑證 |
@@ -45,8 +45,8 @@
 | P1 / Phase 2 | GitLab 獨立 API 授權 | **NEXT connector 已註冊，待獨立 OAuth**：discovery 200／DCR，refresh 正確要求授權；尚無 repo/commit/pipeline/job/MR API UAT，mcp grant 不等於 REST read_api token |
 | P1 / Phase 3 | Edge/Chrome 與多 Session 生命週期 | **保留既有三真實 Agent 共用 Managed Chrome PASS**；仍需 Edge、macOS no-focus、取消／逾時／crash／恢復及原生程序保護的實機證據 |
 | P1 / Phase 4 | GUI／Tray／OAuth／原生動作 | **NEXT 背景 Computer observe/release、no-focus PASS；保留 RC5 Browser GUI PASS**；目前 GUI 無可見視窗，Tray／新 GUI 與原生動作仍需 Host UAT |
-| P1 / Phase 4 | Core Skills／CBM/MCP | **RC10 真實 helper bootstrap／26 個既有 Skills hash PASS**；CBM 新檔索引與並行生命週期、必要 Native UAT 待完成 |
-| Phase 5 | 同 commit App／ZIP／DMG、安裝／回滾 | **RC10 同 commit 封裝／簽章／授權安裝／Skills PASS**；完整 UAT／live failure recovery 仍未完成；無正式 Tag／Release／feed／push |
+| P1 / Phase 4 | Core Skills／CBM/MCP | **RC11 真實 helper bootstrap／26 個既有 Skills hash PASS**；CBM 新檔索引與並行生命週期、必要 Native UAT 待完成 |
+| Phase 5 | 同 commit App／ZIP／DMG、安裝／回滾 | **RC11 同 commit 封裝／簽章／授權安裝／Skills PASS**；完整 UAT／live failure recovery 仍未完成；無正式 Tag／Release／feed／push |
 | 暫緩 | P13/P14、NexusDock pairing、付費簽章／公證、Windows 完整 UAT | **明確暫緩**，不納入本機 RC 必要門檻 |
 
 ## 已做的 source 變更與證據界線
@@ -122,10 +122,12 @@ RC10 後 navigation readiness／owned viewport source checkpoint：四包完整 
 
 ## 下一個安全步驟
 
-**目前：不再建立新 Edge 連線。** 先完成 navigation readiness／自有 target 虛擬 viewport
-的修正、離線回歸及可追溯候選。下一次 Host UAT 應只啟動一條正式 Broker 連線，
+**目前：RC11 已安裝並核對，沒有新 Edge 連線或臨時診斷程序。** navigation readiness／
+自有 target viewport 的 source、離線回歸及可追溯 App／ZIP／DMG 均已完成。
+下一次 Host UAT 應只啟動一條正式 Broker 連線，
 一次完成四站／負向 scope／sibling release／no-focus，不能以重複短 probe 要求同意。
 GitLab 獨立 OAuth、新 GUI 可見畫面與完整回滾仍為 Host gates；未提前合併主線。
+詳見 RC10 證據文件尾的 **RC11 接續 checkpoint**，不要直接重跑舊 RC10 helper。
 
 下列保留本輪故障定位時間線；最新實機結果見上方 RC10 證據。
 
