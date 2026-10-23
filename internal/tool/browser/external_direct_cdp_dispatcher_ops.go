@@ -15,6 +15,13 @@ type directTargetInfo struct {
 	BrowserContextID string `json:"browserContextId"`
 }
 
+// Edge can classify hidden WebContents without a native tab as "other".
+// Accept that only after this dispatcher created the hidden target itself;
+// exact target/session/context and origin checks still apply on every use.
+func (d *directCDPDispatcher) ownedTargetTypeMatches(kind string) bool {
+	return kind == "page" || (kind == "other" && d.ownedHiddenTarget)
+}
+
 func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTargetInfo, error) {
 	var result struct {
 		TargetInfo directTargetInfo `json:"targetInfo"`
@@ -34,7 +41,7 @@ func (d *directCDPDispatcher) verifyTargetLocked(ctx context.Context) error {
 		return errDirectCDPRetired
 	}
 	info, err := d.targetInfoLocked(ctx)
-	if err != nil || info.TargetID != d.targetID || info.Type != "page" || d.sessionID == "" ||
+	if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) || d.sessionID == "" ||
 		!d.targetContextMatchesLocked(ctx, info) ||
 		(info.URL == "about:blank" && !d.bootstrap) ||
 		(info.URL != "about:blank" && !d.originScope.Allows(info.URL)) {

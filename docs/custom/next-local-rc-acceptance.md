@@ -2,7 +2,7 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
-**尚未達到 Definition of Done。RC6／RC7 已於 NEXT-only 驗收流程安裝；Edge connect 在 15 秒 handshake window 結束，四站未執行。沒有正式發布。**
+**尚未達到 Definition of Done。RC8 已於 NEXT-only 驗收流程安裝；正式連線已通過握手，隱藏 target 的 `other` type 被舊檢查拒絕，四站未執行。沒有正式發布。**
 最新 [RC6 實際建置／安裝／失敗證據](next-rc6-local-candidate-2026-10-23.md) 優先於下列歷史 source checkpoint。
 
 ## 本輪工作契約
@@ -25,10 +25,10 @@
 | 主線 | `custom/main`，起點 `7e87605a91f3a1e48a5879f7e406c3803a06e00c`，開工時乾淨；未 push |
 | 本輪工作樹 | `/Users/wei/sideProject/agentdock-next-edge-rc-20261023`；`feature/next-edge-rc-20261023` |
 | 原版 | 8765 `/healthz` 回覆 `1.1.0`；沒有修改／重啟／安裝 |
-| NEXT | 已更新為 `0.9.2-rc.7`／`28aef783e0a4`；App `0.9.2`／`8.0.0`；helper 部署成功，原版未動 |
+| NEXT | 已更新為 `0.9.2-rc.8`／`cd1193c802ca`；App `0.9.2`／`9.0.0`；helper 部署成功，原版未動 |
 | NEXT App | `/Users/wei/Applications/AgentDock Next.app`；bundle ID `dev.dropabit.agentdock.next` |
 | 公司路由 | 已授權寫入 NEXT-private file，載入 1 native connector／1 profile／4 exact company policies；首次 connect 被拒絕，沒有網站 PASS |
-| NEXT MCP | Version 2 registry 目前只有 `memory`、`codebase-memory`；沒有 `gitlab` |
+| NEXT MCP | 已新增獨立 `gitlab-company`，direct HTTP `/api/v4/mcp`；真實 refresh 回覆 auth_required，尚無 NEXT grant；未複製原版憑證 |
 | Edge | 唯讀 WebSocket 成功回覆過 `Edg/155.0.4283.60`，之後回覆 `.62`；程序在本輪期間由外部換代，並非本工作重啟 |
 | Profile | 使用者回覆只有一個名稱為「公司」的 Profile；尚未完成其 directory/context 的實機綁定 |
 | CBM | 既有索引為 2026-10-14；本輪 Edge 新檔未覆蓋、部分檔案 metadata 改變，依 current source 查核；沒有重建索引 |
@@ -38,10 +38,10 @@
 | 順序 | 工作 | 狀態／剩餘門檻 |
 | --- | --- | --- |
 | P1 / Phase 1 | 真實 Edge 相容性 | **source 已實作**：一般啟動形狀、kernel executable path、無 suffix 的 WS endpoint、explicit context pin、hidden target 參數修正；尚未完成最終實機流程 |
-| P1 / Phase 1 | 公司 Edge 持續連線 | **正式 Runtime source 已接入**：明確 connect 一次、同 socket／gate／sequence、獨立 target/session/UID/origin、釋放一頁保留 siblings；尚未部署及 Host UAT |
+| P1 / Phase 1 | 公司 Edge 持續連線 | **正式 Runtime 已部署 RC8**：真實 Broker 通過握手／metadata；owned target type 相容修正仍待下一候選實機驗收；尚無網站 PASS |
 | P1 / Phase 1 | ConnectorStatusProvider / ExternalLeaseBackend | **source 已實作並離線整合驗證**：NEXT-only constructor、明確 connect/disconnect、同 socket Profile metadata、epoch/peer/fence、one-shot grant、task/session/worker、TTL／停止；實機 Profile／取消／異常回收仍待驗收。詳見 [Runtime 整合](next-edge-runtime-2026-10-23.md) |
 | P1 / Phase 1 | 四個網站的真正 NEXT Broker UAT | **待實機驗收**：精確工作樹／HTTPS origin pair、owner consent、單一連線、多頁隔離與 owned release；目前沒有網站 UAT PASS |
-| P1 / Phase 2 | GitLab 獨立 API 授權 | **待授權及 NEXT 整合**：原站 `/api/v4/mcp` 回覆 401；OAuth authorization-server／protected-resource discovery 回覆 200，包含 DCR metadata；使用 NEXT 獨立 OAuth storage，不複製原版 Token |
+| P1 / Phase 2 | GitLab 獨立 API 授權 | **NEXT connector 已註冊，待獨立 OAuth**：discovery 200／DCR，refresh 正確要求授權；尚無 repo/commit/pipeline/job/MR API UAT，mcp grant 不等於 REST read_api token |
 | P1 / Phase 3 | Edge/Chrome 與多 Session 生命週期 | **保留既有三真實 Agent 共用 Managed Chrome PASS**；仍需 Edge、macOS no-focus、取消／逾時／crash／恢復及原生程序保護的實機證據 |
 | P1 / Phase 4 | GUI／Tray／OAuth／原生動作 | **保留 RC5 Browser GUI PASS**；廣泛 GUI stale/loading/error、Tray／診斷／開資料夾與原生基本動作仍待針對性查核及 Host UAT |
 | P1 / Phase 4 | Core Skills／CBM/MCP | **保留已安裝 helper isolated bootstrap PASS**；下一 RC 實際更新／bootstrap、並行生命周期與必要 Native UAT 待完成 |
@@ -117,8 +117,19 @@ Vitest 有 Node localStorage experimental warning，無測試失敗。本輪未�
 
 ## 下一個安全步驟
 
-RC7 已保留 finite、安全的 stage 回饋。正式連線約 15.484 秒後於 `socket_and_websocket`
-結束。使用者確認有按允許，並補充是在稍後才按；這時 socket 已超過 15 秒而關閉。
-把 explicit Core connect 的 native consent window 延長為 90 秒；status／admission 的短
-時限與既有 probes 維持不變。下一次使用正式 Runtime 等待同意，成功後保留連線。
-保留原版及 RC5 rollback bundle，不重跑短命 helper 讓使用者反覆按允許。
+RC7 正式連線約 15.484 秒後於 `socket_and_websocket` 結束。使用者確認有按允許，
+並補充剛剛才按；不能歸因於使用者沒有同意。RC8 將 explicit native consent window
+延長為 90 秒，status／admission 短時限不變。RC8 安裝後版本／24 個 App 檔案／簽章／
+26 個既有 Skills／路由 SHA／原版 1.1.0 health 已實際核對相符。
+
+RC8 真正 Broker connect 約 **2.727 秒**在 `owned_target_create` fail closed，已通過
+WebSocket／browser metadata。兩次有界 source Host diagnosis（各一條 90 秒 consent
+window，非 website UAT）定位：create／attach 成功，target type 是 **`other`**、
+ID 完全吻合、URL about:blank、context 存在且等於同 socket 的 selected default；
+兩次均確認只關閉自己建立的 target，relay 已 join。沒有查詢既有 targets 或導覽公司網站。
+這是舊程式只接受 `page` 的相容性錯誤，不是 owner consent 或 Profile context 拒絕。
+
+Source 修正只允許本 dispatcher 成功建立的 hidden target 使用 `other`；每次操作仍核對
+exact target／session／context／origin，其他 type、未建立 target、context drift 都拒絕。
+下一步建置可追溯候選、確認 NEXT 閒置後沿既有授權部署，再用正式 Broker 完成四站流程。
+GUI 尚未背景重開／原生驗收，GitLab 獨立授權待後續不中斷的 callback 流程。

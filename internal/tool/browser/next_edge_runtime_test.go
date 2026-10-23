@@ -35,7 +35,8 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 			result = map[string]any{"sessionId": "session-" + id}
 		case "Target.getTargetInfo":
 			id := cmd.Params["targetId"].(string)
-			result = map[string]any{"targetInfo": map[string]any{"targetId": id, "type": "page", "url": urls[id], "browserContextId": "company"}}
+			// Real Edge classifies owned hidden WebContents as "other".
+			result = map[string]any{"targetInfo": map[string]any{"targetId": id, "type": "other", "url": urls[id], "browserContextId": "company"}}
 		case "Page.navigate":
 			urls[sessions[cmd.SessionID]] = cmd.Params["url"].(string)
 			result = map[string]any{}

@@ -62,6 +62,7 @@ type directCDPDispatcher struct {
 	keepTransportOnRelease                 bool
 	targetID, sessionID                    string
 	opened, closeAttempted, closeConfirmed bool
+	ownedHiddenTarget                      bool
 	closeErr                               error
 	snapshotSeq                            uint64
 	uidToBackend                           map[string]int64
@@ -351,6 +352,7 @@ func (d *directCDPDispatcher) OpenOwnedTarget(ctx context.Context, initialURL st
 		return errDirectCDPRetired
 	}
 	d.targetID = created.TargetID
+	d.ownedHiddenTarget = true
 	var attached struct {
 		SessionID string `json:"sessionId"`
 	}
@@ -372,7 +374,7 @@ func (d *directCDPDispatcher) OpenOwnedTarget(ctx context.Context, initialURL st
 	}
 	d.sessionID = attached.SessionID
 	info, err := d.targetInfoLocked(ctx)
-	if err != nil || info.TargetID != d.targetID || info.Type != "page" ||
+	if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) ||
 		!d.targetContextMatchesLocked(ctx, info) {
 		if d.live() {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), directCDPCallTimeout)

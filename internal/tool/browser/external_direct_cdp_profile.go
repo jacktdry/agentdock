@@ -39,7 +39,7 @@ func (d *directCDPDispatcher) inspectOwnedEdgeProfile(ctx context.Context, dataR
 	}
 	for {
 		info, err := d.targetInfoLocked(ctx)
-		if err != nil || info.TargetID != d.targetID || info.Type != "page" || !d.targetContextMatchesLocked(ctx, info) ||
+		if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) || !d.targetContextMatchesLocked(ctx, info) ||
 			(info.URL != "about:blank" && info.URL != "edge://version/") {
 			d.Close()
 			return "", errDirectCDPRetired

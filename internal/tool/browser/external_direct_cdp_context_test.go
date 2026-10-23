@@ -160,3 +160,51 @@ func TestEdgeProfileDirectoryRejectsTraversalAndGuest(t *testing.T) {
 		t.Fatal("absolute Profile directory admitted")
 	}
 }
+
+func TestDirectCDPOtherTypeRequiresOwnedHiddenTargetAndSameContext(t *testing.T) {
+	for _, kind := range []string{"page", "other", "tab", "iframe", "service_worker"} {
+		for _, contextID := range []string{"company", "wrong-context"} {
+			t.Run(kind+"/"+contextID, func(t *testing.T) {
+				base := contextResponder(t, contextID, "/owned/edge/Default")
+				d, f := newDispatcherFixture(t, func(f *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
+					if cmd.Method != "Target.getTargetInfo" {
+						return base(f, c, cmd)
+					}
+					f.mu.Lock()
+					u := f.currentURL
+					f.mu.Unlock()
+					if err := dispatcherReply(c, cmd, map[string]any{"targetInfo": map[string]any{
+						"targetId": "owned-target", "type": kind, "url": u, "browserContextId": contextID,
+					}}); err != nil {
+						t.Error(err)
+					}
+					return true
+				})
+				ctx := context.Background()
+				if err := d.bindBrowserContext(ctx, "company"); err != nil {
+					t.Fatal(err)
+				}
+				err := d.OpenOwnedTarget(ctx, "")
+				allowed := (kind == "page" || kind == "other") && contextID == "company"
+				if !allowed {
+					if err == nil || d.live() || commandCount(f.recorded(), "Page.navigate") != 0 {
+						t.Fatal("unowned type/context reached navigation")
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if profile, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge"); err != nil || profile != "Default" {
+					t.Fatalf("owned hidden profile: %q %v", profile, err)
+				}
+				if closed, err := d.CloseOwnedTarget(ctx); err != nil || !closed {
+					t.Fatal("owned hidden target not released")
+				}
+			})
+		}
+	}
+	if (&directCDPDispatcher{}).ownedTargetTypeMatches("other") {
+		t.Fatal("uncreated other target accepted")
+	}
+}
