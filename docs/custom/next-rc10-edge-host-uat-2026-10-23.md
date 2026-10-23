@@ -1,5 +1,7 @@
 # NEXT RC10：正式 Edge 連線與部分網站 UAT
 
+> **更新入口（2026-10-23 夜間）：** [RC11 唯一一次正式 Edge connect 失敗及獨立 gates](next-rc11-host-uat-2026-10-23.md)。RC10 的成功導覽／部分截圖故障為歷史證據；RC11 新連線於 socket/WebSocket fail closed，**四站仍未通過，沒有自動重新授權**。
+
 狀態：**安裝及正式 connect PASS；雙租約取得、Oprueba 導覽／AX snapshot PASS；
 安裝版 screenshot FAIL CLOSED，四站完整 UAT 未完成。**
 後續 source Host 診斷已定位 0×0 viewport 並成功截圖，不能替代安裝版 UAT。

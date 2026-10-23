@@ -2,9 +2,10 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
-**尚未達到 Definition of Done。RC10 正式連線、雙租約及 Oprueba 導覽／快照 PASS；
-截圖 FAIL CLOSED，尚未完成四站。修正已安裝至 RC11，source 實機截圖成功；RC11 未建立新 Edge 連線，保留單次完整 Host UAT gate。沒有正式發布。**
-最新 [RC10 實際 UAT 與續作證據](next-rc10-edge-host-uat-2026-10-23.md) 優先於歷史記錄。
+**23:01 同日後續實機結果：** [RC11 單次正式 Edge 連線／GitLab OAuth／GUI／rollback gates](next-rc11-host-uat-2026-10-23.md)。RC11 對 Edge 的唯一一次正式新連線在 `socket_and_websocket` 於 90.892 秒 FAIL CLOSED；未建立 Broker transport、未開始四站操作，沒有重試。獨立 GitLab local OAuth 已啟動、待使用者同意；部署與生命週期離線回歸 PASS，完整 Host gates／合併依然 open。下列 22:42 只讀基線屬於這次連線之前。
+**尚未達到 Definition of Done。RC10 正式連線、雙租約及 Oprueba 導覽／快照曾 PASS，
+截圖 FAIL CLOSED；RC11 已修正安裝，但新一輪正式連線在 socket/WebSocket gate FAIL CLOSED，四站未驗收。沒有正式發布。**
+最新 [RC11 實機續作](next-rc11-host-uat-2026-10-23.md) 與 [RC10 歷史實機證據](next-rc10-edge-host-uat-2026-10-23.md) 分別保存。
 
 文件／記憶同步複核：**2026-10-23 22:41–22:42 Asia/Taipei**。兩個工作樹乾淨，
 feature HEAD `dc57213f`（本次文件更新前），主線仍為 `7e87605a`。
@@ -127,7 +128,7 @@ RC10 後 navigation readiness／owned viewport source checkpoint：四包完整 
 **1,684 PASS、7 opt-in SKIP、0 FAIL**，相關 browser Race selection PASS，四包 vet PASS。
 證據 `go-rc11-tests.jsonl`；RC11 已安裝，但 installed Broker 的四站流程尚未驗收通過。
 
-## 下一個安全步驟
+## RC11 連線之前的原定安全步驟（歷史，已由最新續作取代）
 
 **目前：RC11 已安裝並核對，沒有新 Edge 連線或臨時診斷程序。** navigation readiness／
 自有 target viewport 的 source、離線回歸及可追溯 App／ZIP／DMG 均已完成。

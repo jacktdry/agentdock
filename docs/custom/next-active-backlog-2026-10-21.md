@@ -1,6 +1,6 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
-> **2026-10-23 最新 RC 執行入口：** 已安裝 **RC11／`c331afe47d2e`**，實作在 `feature/next-edge-rc-20261023`，**未合併 `custom/main`**。NEXT-only [Runtime/provider/backend](next-edge-runtime-2026-10-23.md) 已正式接入，Default Profile／四個 exact root policies 已載入。RC10 installed Broker connect、雙租約、Oprueba 導覽／AX snapshot PASS，截圖 fail closed；RC11 已修正 viewport／readiness，但四站完整 UAT 未通過。GitLab NEXT connector 已註冊、待獨立 OAuth。以[目前驗收清單](next-local-rc-acceptance.md)及[實機／RC11 交接](next-rc10-edge-host-uat-2026-10-23.md)為準；停止反覆短 probe／授權提示。
+> **2026-10-23 最新 RC 執行入口：** 已安裝 **RC11／`c331afe47d2e`**，實作在 `feature/next-edge-rc-20261023`，**未合併 `custom/main`**。NEXT-only [Runtime/provider/backend](next-edge-runtime-2026-10-23.md) 已正式接入，Default Profile／四個 exact root policies 已載入。RC10 installed Broker connect、雙租約、Oprueba 導覽／AX snapshot PASS，截圖 fail closed；RC11 viewport／readiness source 修正已安裝，但 10/23 夜間唯一正式 Edge 新連線於 `socket_and_websocket` FAIL CLOSED，並未進入四站，無重試。GitLab NEXT connector local OAuth 已發起，待獨立授權。以[目前驗收清單](next-local-rc-acceptance.md)及[最新 RC11 Host 證據](next-rc11-host-uat-2026-10-23.md)為準；停止反覆短 probe／授權提示。
 
 > Canonical working branch: `custom/main`. **Installed/runtime evidence and source-only proofs are separate.** This short handoff overrides stale progress assertions in older chronological milestone documents; it does not erase their historical evidence.
 
