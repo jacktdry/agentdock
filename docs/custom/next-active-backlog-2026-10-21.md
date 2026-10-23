@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-10-24 RC13 source checkpoint：** [Native Edge sequential verification budget and bounded failure stage](next-rc13-native-peer-2026-10-24.md)；修正 2 個各 2 秒的 OS 證據階段錯被外層 2 秒截斷的可驗證時間預算錯誤，僅 native 增為 5 秒；Planner／lease single-flight 改為先釋放槽再交付成功。有限 failure phase 可區分下一次 Host 的 process／Profile／socket 拒絕，原始 OS 私密資訊不輸出。四包 Go **1,692 PASS／7 SKIP／0 FAIL**、定點 -race 52 PASS、vet PASS。**仍需新版本 installed Host**；RC12 的 Edge 首租約 FAIL CLOSED 不因此變更。尚未合併、push 或發布。
+
 > **2026-10-24 RC12 installed Host latest:** [RC12 安裝與 Host 證據](next-rc12-host-uat-2026-10-24.md)。NEXT 8767 installed rc.12／source `4a8abca7`，App/ZIP/DMG/signature、24-file SHA、NEXT-only deployment PASS；rollback RC11 bundle preserved，Stable 8765 unchanged。正式 Edge connect **PASS 5.649 秒**，但**第一個 direct_acquire peer verification FAIL CLOSED**；沒有租約或頁面操作，不可把 RC11 的四站 PASS 算到 RC12。已 disconnect、零資源。新 GUI PID 52626 載入目前 App，可見主視窗與 ScreenCaptureKit 截圖、no-focus PASS，主要 UI AX／Tray OPEN。GitLab NEXT OAuth 重啟後 refresh 恢復 ready/35。**整體 RC12 DoD／live rollback OPEN、未合併或發布。**
 
 > **2026-10-24 RC12 source reliability checkpoint：** [Edge pinned-port socket attestation／native signature slot ordering](next-rc12-edge-peer-2026-10-24.md) 的兩項有限修正已完成，四包 Go **1,687 PASS／7 SKIP／0 FAIL**、定點 race **85 PASS**、macOS test-owned socket／`go vet` PASS。**尚未宣稱新版本的真實 Edge fresh-acquire 修復**；RC11 四站與 sibling／no-focus 已 Host PASS、GitLab NEXT-only MCP Host PASS 均繼續保留。下一個 gate 是乾淨 source commit→RC12 本機候選→必要時單次使用者同意的正式安裝／Host UAT。不要自動重連或 touch Stable。

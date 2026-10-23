@@ -43,6 +43,11 @@ type nativeEdgeDependencies struct {
 	verify func(context.Context, *nativeEdgeConnection) error
 }
 
+// A native peer proof has two sequential, independently bounded macOS stages:
+// process/signature/Profile evidence and the exact held-socket attestation.
+// Its outer deadline must allow both 2s children to finish, not merely one.
+const nativeEdgePeerVerificationBudget = 5 * time.Second
+
 // Only finite Core-authored stages may reach the operator. Raw CDP, signing,
 // socket or Profile errors must never be included in a connection failure.
 type nativeEdgeConnectFailure struct{ stage string }
@@ -60,6 +65,25 @@ func nativeEdgeConnectError(err error) error {
 		}
 	}
 	return externalPeerVerificationError()
+}
+
+// Finite operator-facing phases: never forward raw macOS, code-signing, CDP
+// or Profile errors. A foreign verifier cannot mint a trusted phase.
+type nativeEdgePeerStageFailure struct{ stage string }
+
+func (e *nativeEdgePeerStageFailure) Error() string {
+	return "native company Edge peer revalidation unavailable"
+}
+
+func safeNativeEdgePeerStage(err error) string {
+	var failure *nativeEdgePeerStageFailure
+	if errors.As(err, &failure) && failure != nil {
+		switch failure.stage {
+		case "transport", "process_epoch", "profile_epoch", "held_socket", "postcondition":
+			return failure.stage
+		}
+	}
+	return ""
 }
 
 type nativeEdgeWorker struct {
@@ -323,9 +347,11 @@ func (b *nativeEdgeRuntime) VerifyExternalPeer(ctx context.Context, peer externa
 	if err != nil || ctx == nil || peer != w.connection.peer {
 		return externalPeerIdentity{}, externalPeerVerificationError()
 	}
-	if b.deps.verify(ctx, w.connection) != nil {
+	if err := b.deps.verify(ctx, w.connection); err != nil {
 		w.connection.root.Close()
-		return externalPeerIdentity{}, externalPeerVerificationError()
+		// The lease manager accepts only the finite safe native phase and
+		// collapses every other provider detail into a generic refusal.
+		return externalPeerIdentity{}, err
 	}
 	b.mu.Lock()
 	same := !b.closed && b.connection == w.connection

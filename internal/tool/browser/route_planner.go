@@ -198,7 +198,13 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	}
 	// Bound the caller's wait independently of provider cooperation. A stuck
 	// provider retains this planner's only slot; never spawn another behind it.
-	statusCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	statusTimeout := 2 * time.Second
+	if plan.Engine == EngineNativeCDP {
+		// macOS native attestation has two sequential bounded OS stages.
+		// Preserve the shorter budget of managed/other connectors.
+		statusTimeout = nativeEdgePeerVerificationBudget
+	}
+	statusCtx, cancel := context.WithTimeout(ctx, statusTimeout)
 	defer cancel()
 	select {
 	case p.statusInFlight <- struct{}{}:
@@ -215,7 +221,6 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	}
 	results := make(chan statusResult, 1)
 	go func() {
-		defer func() { <-p.statusInFlight }()
 		completed := false
 		var result statusResult
 		defer func() {
@@ -225,6 +230,10 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 				_ = recover()
 				result = statusResult{err: errors.New("runtime connector verification unavailable")}
 			}
+			// Dispose the single-flight slot BEFORE returning a ready
+			// observation. The next serial native acquire must not race a
+			// successful provider that has not released its slot yet.
+			<-p.statusInFlight
 			// Buffered so a timed-out consumer cannot prevent slot release.
 			results <- result
 		}()

@@ -104,6 +104,115 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 	return bridge, native, f, workspace, dials, identityLost
 }
 
+func TestNativeEdgePeerBudgetCoversSequentialOSStages(t *testing.T) {
+	// A native peer verifier may validly take longer than ONE 2s child
+	// deadline because it must also inspect the independent held socket.
+	// No Edge process, Profile, user browser or real CDP connection is used.
+	if nativeEdgePeerVerificationBudget <= 2*edgeSocketWindow {
+		t.Fatal("outer native peer budget cannot fit sequential OS checks")
+	}
+	b, native, _, root, _, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	const syntheticOSProof = 2250 * time.Millisecond
+	native.deps.verify = func(ctx context.Context, conn *nativeEdgeConnection) error {
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) < syntheticOSProof || !conn.root.live() {
+			return externalPeerVerificationError()
+		}
+		select {
+		case <-time.After(syntheticOSProof):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	scope, err := b.directScope(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := b.planner.Resolve(ctx, scope, nil)
+	if err != nil || decision.grant == nil {
+		t.Fatalf("native planner rejected a valid sequential proof: %v", err)
+	}
+	if len(b.planner.statusInFlight) != 0 {
+		t.Fatal("native planner returned a proof before releasing the next-admission slot")
+	}
+	worker := WorkerInfo{WorkerID: "synthetic-native-worker", State: WorkerReady}
+	native.mu.Lock()
+	native.workers[worker.WorkerID] = &nativeEdgeWorker{info: worker, connection: native.connection}
+	peer := native.connection.peer
+	native.mu.Unlock()
+	if err := b.external.verifyPeer(ctx, peer, worker); err != nil {
+		t.Fatalf("native lease verifier rejected a valid sequential proof: %v", err)
+	}
+	if len(b.external.verificationInFlight) != 0 {
+		t.Fatal("native lease peer proof returned before releasing its revalidation slot")
+	}
+	native.mu.Lock()
+	delete(native.workers, worker.WorkerID)
+	native.mu.Unlock()
+}
+
+func TestNativeEdgePeerStageOnlyAllowsFiniteDetails(t *testing.T) {
+	for _, stage := range []string{"transport", "process_epoch", "profile_epoch", "held_socket", "postcondition"} {
+		if safeNativeEdgePeerStage(&nativeEdgePeerStageFailure{stage: stage}) != stage {
+			t.Fatal("known native rejection lost its finite stage")
+		}
+		if !strings.Contains(nativePeerVerificationErrorAt(stage).Error(), "at "+stage) {
+			t.Fatal("native rejection not actionable")
+		}
+	}
+	for _, unknown := range []error{nil, errors.New("private path token PID:123"), &nativeEdgePeerStageFailure{stage: "private path token PID:123"}} {
+		if safeNativeEdgePeerStage(unknown) != "" || strings.Contains(nativePeerVerificationErrorAt(safeNativeEdgePeerStage(unknown)).Error(), "private") {
+			t.Fatal("unknown native verifier detail escaped")
+		}
+	}
+}
+
+func TestNativeEdgePeerStageSurvivesLeaseBoundaryWithoutRawErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, stage string
+		err         error
+	}{
+		{"known", "held_socket", &nativeEdgePeerStageFailure{stage: "held_socket"}},
+		{"unknown", "", errors.New("secret Edge profile PID:123 token=private")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, native, _, root, _, _ := nativeRuntimeFixture(t)
+			ctx := directContext("chatgpt")
+			if err := b.ConnectExternal(ctx, root, false); err != nil {
+				t.Fatal(err)
+			}
+			worker := WorkerInfo{WorkerID: "synthetic-native-worker", State: WorkerReady}
+			native.mu.Lock()
+			native.workers[worker.WorkerID] = &nativeEdgeWorker{info: worker, connection: native.connection}
+			peer := native.connection.peer
+			native.mu.Unlock()
+			native.deps.verify = func(context.Context, *nativeEdgeConnection) error { return tc.err }
+			err := b.external.verifyPeer(ctx, peer, worker)
+			if err == nil || !strings.Contains(err.Error(), "external peer verification unavailable") ||
+				strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "token=") {
+				t.Fatalf("native peer error leaked or silently accepted: %v", err)
+			}
+			if tc.stage != "" && !strings.Contains(err.Error(), "at "+tc.stage) {
+				t.Fatalf("safe native failure phase missing: %v", err)
+			}
+			if tc.stage == "" && strings.Contains(err.Error(), " at ") {
+				t.Fatalf("unknown provider error created a false phase: %v", err)
+			}
+			if native.connection.root.live() {
+				t.Fatal("peer identity failure left the owned native transport active")
+			}
+			native.mu.Lock()
+			delete(native.workers, worker.WorkerID)
+			native.mu.Unlock()
+		})
+	}
+}
+
 // A new task must be able to acquire the still-connected Broker after all
 // earlier owners have released their pages. This only tests source and a
 // synthetic CDP server; live macOS Edge peer revalidation is a separate gate.

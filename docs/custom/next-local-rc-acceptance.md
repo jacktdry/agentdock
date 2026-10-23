@@ -2,6 +2,7 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
+**2026-10-24 最新 RC13 source checkpoint：** [根因候選、有限修正及驗證](next-rc13-native-peer-2026-10-24.md)：Native Edge peer 外層 2 秒不足以容納兩段各最多 2 秒的真實獨立 OS 檢查；僅 native 擴至 5 秒，確保正常完成後先釋放 single-flight slot；加上安全的錯誤階段。四包 Go **1,692 PASS／7 SKIP／0 FAIL**、定點 -race 52 PASS。**目前 installed RC12 的 Edge lease Host 仍 FAIL CLOSED**；不得提前宣稱已修復。
 **2026-10-24 RC12 installed Host checkpoint：** [正式記錄](next-rc12-host-uat-2026-10-24.md)。已受控安裝 rc.12（source `4a8abca7`）、App／ZIP／DMG SHA/signature PASS、保留 RC11 rollback bundle；Stable 8765 正常。新 Edge connect **PASS**，但**第一個 direct_acquire 原生 peer verification FAIL CLOSED**，不重連、已 disconnect。GUI 新版可見主窗／擷圖／no-focus PASS，主介面 AX 和 Tray OPEN；GitLab 舊 OAuth grant 經 refresh 可恢復 35 tools。**不可宣稱 RC12 四站、fresh-acquire、完整 GUI 或 live rollback PASS**；以下 RC11 的四站是歷史已安裝 binary 證據。
 **2026-10-24 RC12 source 歷史 checkpoint（安裝之前）：** 已針對 Edge fresh-acquire 可疑的 native verifier slot 結束順序與無關 TCP catalog 過大問題做[有限 source 修正及回歸](next-rc12-edge-peer-2026-10-24.md)，四包 Go 1,687 PASS／7 opt-in SKIP、定點 -race 85 PASS、macOS test-owned lsof PASS。當時仍安裝 RC11；實際安裝後 RC12 Host 結果以上方更新為準。
 **2026-10-24 00:48 起 NEXT GitLab OAuth／MCP Host PASS：** 使用者完成 NEXT-only `mcp` scope 授權後，`gitlab-company` ready／35 tools；NEXT 8767 真實成功讀取 `official_site/oprueba` 的 Project、Commit、Pipeline、Job、MR、Branch，且沒有從 Stable 借用 grant 或 token。[獨立證據](next-rc11-gitlab-host-uat-2026-10-24.md)。**這不代表額外的 REST read_api/token gate PASS**；此欄以下提及「待 OAuth」是先前歷史 checkpoint。

@@ -142,23 +142,23 @@ func dialNativeEdgeConnection(ctx context.Context, connector browserpolicy.Conne
 func verifyNativeEdgeConnection(ctx context.Context, connection *nativeEdgeConnection) error {
 	if ctx == nil || ctx.Err() != nil || connection == nil || connection.root == nil || !connection.root.live() ||
 		!connection.root.relay.MatchesPeer(connection.peer) {
-		return externalPeerVerificationError()
+		return &nativeEdgePeerStageFailure{stage: "transport"}
 	}
-	check, cancel := context.WithTimeout(ctx, 2*time.Second)
+	check, cancel := context.WithTimeout(ctx, nativeEdgePeerVerificationBudget)
 	defer cancel()
 	fresh, err := revalidateEdgeProcessEpoch(check, connection.source, macEdgeProcessProbe{})
 	if err != nil {
-		return externalPeerVerificationError()
+		return &nativeEdgePeerStageFailure{stage: "process_epoch"}
 	}
 	metadata, err := (macEdgeProcessProbe{}).profileMetadata(check, filepath.Join(connection.profile.UserDataDir, connection.profile.ProfileDirectory))
 	if err != nil || metadata != connection.profileEpoch {
-		return externalPeerVerificationError()
+		return &nativeEdgePeerStageFailure{stage: "profile_epoch"}
 	}
 	if _, err := readEdgeEstablishedSocketEvidence(check, connection.root.relay.up.UnderlyingConn(), fresh, macEdgeSocketProbe{}); err != nil {
-		return externalPeerVerificationError()
+		return &nativeEdgePeerStageFailure{stage: "held_socket"}
 	}
 	if check.Err() != nil || !connection.root.relay.MatchesPeer(connection.peer) {
-		return externalPeerVerificationError()
+		return &nativeEdgePeerStageFailure{stage: "postcondition"}
 	}
 	return nil
 }
