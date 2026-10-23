@@ -1,7 +1,9 @@
 # NEXT RC11：2026-10-23 本機實機驗收續作
 
-更新：2026-10-23 23:26 Asia/Taipei。**RC11 尚未達 Definition of Done；沒有合併、push 或公開發布。**
+更新：2026-10-23 23:58 Asia/Taipei。**四個核准 origin／sibling release 真實 Host PASS；RC11 整體仍未達 Definition of Done，沒有合併、push 或公開發布。**
 本文件是 RC10／RC11 續作證據，保留原始 [RC10／RC11 安裝記錄](next-rc10-edge-host-uat-2026-10-23.md) 與 [RC 驗收清單](next-local-rc-acceptance.md)。
+
+**最新 RC11 installed Host checkpoint（23:50 起）：** 修正排序後，**只做一次**正式 NEXT Broker connect，4.495 秒 PASS；在**同一條已授權 Edge socket** 上，兩個獨立租約成功完成 `oprueba.com`、`homiplay.io`、`www.oprueba.com`、`www.homiplay.io` 的真實 navigate／AX RootWebArea（正確站名）／PNG capture。Oprueba A release complete、HomiPlay B **在 A release 後 snapshot 成功**，B release complete、均無 cleanup_error。跨 root 讀他人 lease 正確拒絕。網站流程 206 筆 foreground 取樣均為 Chrome，Edge／NEXT 視窗 ID 集合不變。**四站與 sibling/no-focus 已 Host PASS**；但正向租約全部釋放後，測試要另 acquire 一個負向-only lease 時，又遇 `external peer verification unavailable or mismatched`，負向 `direct_evaluate`／不核准 URL **未執行**，整份腳本 `ok=false`，不能稱全部 gate PASS。原 socket 在確定 0 active 後由正式 `disconnect_external` 成功關閉，沒有重連或改動原版。Source 回歸另新增「兩 lease release 後同 socket 再 acquire」測試，離線 fixture PASS；**不等於 macOS Peer Host 修復**。詳見下方「23:50 最終正向 UAT」。
 
 **最新 Host checkpoint：** 使用者稍後明確確認已按 Edge 原生允許偵錯，下一次**唯一明確發起**的正式 NEXT Broker connect 約 5.523 秒 PASS。沿同一條 Core↔Edge socket 取得兩個不同公司 worktree lease；`https://oprueba.com` 與 `https://homiplay.io` 的實際 navigate、AX snapshot 與 PNG screenshot 都 PASS。跨 worktree 拒絕 PASS；未核准 origin 導覽的負向測試使該 lease fence fail-closed，原腳本後續操作無法延續。`www` 兩站與 sibling release **未通過驗收**；同一 socket 後續 fresh acquire 又回報 peer verification mismatched，**沒有重新 connect**。全部 logical leases complete；最後以正式 `disconnect_external` 關閉唯一 Core-owned socket，原版 8765 與 Edge Profile／程序保留。詳見下方「晚間原生同意後」。
 
@@ -39,6 +41,27 @@
 - 首個成功網站流程的 observer **137 個完整樣本** foreground 均為 `com.google.Chrome`、Edge window ID set 不變；獨立正式 connect 的 observer 16 筆也維持 Chrome foreground，但新增 Edge window ID，不能斷言是何種原生同意 UI；故只把網站操作期間無 foreground change 列為 PASS，不擴大為整體原生 dialog／Tray UAT。
 - 私有原始證據位於 `/private/tmp/agentdock-next-edge-verification-y6b6836m/`：`edge-rc11-confirmed-consent-connect.json`、`edge-runtime-rc11-sites.json`、`rc11-oprueba-snapshot.json`／`rc11-oprueba.png`、`rc11-homiplay-snapshot.json`／`rc11-homiplay.png`、`edge-rc11-www-sibling-result.json`、`edge-rc11-foreground.jsonl`。公司資料沒有寫入網站；不把工作樹／tmp 實物或擷圖放入對話作公開附件。
 
+## 23:50 最終正向 UAT：四站／sibling／網站 no-focus PASS，負向-only acquire OPEN
+
+| Verified installed action | Evidence |
+| --- | --- |
+| `browser_broker connect_external` | **PASS 4.495s**；已安裝 Core `0.9.2-rc.11`／source `c331afe47d2e`，只有一個正式連線，無其他 connect／short probe |
+| `https://oprueba.com` | navigate／AX RootWebArea `O'Prueba`／PNG **302,838 bytes PASS** |
+| `https://homiplay.io` | navigate／AX RootWebArea `HomiPlay`／PNG **336,743 bytes PASS** |
+| `https://www.oprueba.com` | navigate／AX RootWebArea `O'Prueba`／PNG **303,523 bytes PASS** |
+| `https://www.homiplay.io` | navigate／AX RootWebArea `HomiPlay`／PNG **327,591 bytes PASS** |
+| Cross-workspace ownership | HomiPlay root 讀取 Oprueba lease 回 `BROWSER_LEASE_OWNER_MISMATCH`，**正確拒絕 PASS** |
+| Sibling release | Oprueba A release `complete`／無 cleanup_error，HomiPlay B 繼續 snapshot PASS，再 B release `complete`／無 cleanup_error，**PASS** |
+| macOS no-focus | 206 筆完整 foreground samples 均 `com.google.Chrome`；Edge 及 NEXT window IDs 的 set 未改，**網站工作期間 PASS**，不涵蓋 native Tray |
+| Fresh acquisition after both released | **FAIL CLOSED**：額外 negative-only lease 的 `direct_acquire` 回 `external peer verification unavailable or mismatched`；先前正向結果不撤銷，但故障階段未定位，不可宣稱最後兩項負向已執行 |
+| Owned cleanup | Broker owners／leases／workers／active／queued／orphans 全 0；`disconnect_external` 真實 PASS，Core PID 94893 對 9222 不再有 socket；NEXT 8767／Stable 8765 health 均 PASS |
+
+原始證據：`/private/tmp/agentdock-next-edge-verification-y6b6836m/edge-rc11-final-connect-result.json`、`edge-rc11-final-positive-first-result.json`、`edge-rc11-final-foreground.jsonl`、四組 `final-rc11-*-snapshot.json`／`.png`，原檔 0600、沒有覆蓋前輪 RC11 證據。**不把 PNG 圖片嵌入 commit 或公開分享。**
+
+Source 改動：在 `internal/tool/browser/next_edge_runtime_test.go` 增加 `TestNativeEdgeFreshLeaseAfterAllOwnersRelease`：兩個 owner 的頁面全部釋放後，以原連線建立第三個獨立 lease，確認沒有重新 dial、頁面 cleanup 次數及無外部程序終止。既有 source tests 與該定點測試、相關 `-race` selection **4 PASS**；它使用合成 CDP peer，**不能證明 Host 上 release 後再次 acquire 的原生驗證已修復**。
+
+**Source 完整回歸：** 同輪 `GOMAXPROCS=2 GOFLAGS=-p=2 go test ./internal/tool/browser ./internal/browserpolicy ./internal/config ./internal/app -count=1 -json` 結果 **1,685 PASS、7 個既有 opt-in SKIP、0 FAIL**，定點 native fresh acquire／peer loss／共享連線／explicit reconnect 的 `-race` selection **PASS**，`git diff --check` PASS。證據 `/private/tmp/agentdock-next-edge-verification-y6b6836m/rc11-final-source-tests.jsonl`。新增 regression 是 source 測試變更；**目前已安裝 RC11 仍來自 c331afe47d2e，沒有重建／升版／重啟**。
+
 ### 下次 Host UAT 正確排序
 
 在**再次取得明確授權且真實連線成功**前，先從 source／離線測試改正驗收腳本的排序。用同一 Broker/socket 先完成四個已核准 origin 的 navigate／AX／PNG、A release 後 B snapshot／release，再在專用 lease 上做會不可逆 retire series 的失敗操作。跨 owner、未核准 URL 及禁止 JavaScript 要分別記錄；一個失敗 lease 不得被重用來做其他 gate。不得為補救錯誤腳本而自動重連或反覆跳出原生授權。成功連線後才能重新做跨 session、取消／故障與 native no-focus。
@@ -57,7 +80,7 @@
 
 ## 下一步（只在真正前置條件成立時）
 
-1. **原生同意後的兩個主站已 PASS**；私有 `rc11-site-uat.py` 的危險負向測試排序已修正並語法驗證。後續若有再次明確授權及獨立正式連線，可沿單一 socket 做 `www` 正向、A release 後 B snapshot、分離的負向測試及 no-focus；**不要以失敗為由背景輪詢 connect 或短 probe**。
+1. **四站／sibling／網站 no-focus 已 Host PASS**；不要重做已成功的項目。優先定位**最後一個 lease 正常 release 後，新的負向-only acquire 在真實 macOS peer revalidation 失敗**；source fixture 仍 PASS，不能把該結果當成 Host 修復。日後再做獨立禁止 JS／未授權 URL 負向 gate，不能以失敗為由背景輪詢 connect 或短 probe。
 2. 等使用者完成 NEXT-only GitLab local OAuth callback，再用該獨立 grant 驗證唯讀 MCP API；GitLab REST 如需 `read_api` 需獨立授權，不借原版憑證。
 3. GUI 實機需要可見視窗的明確非搶焦點驗收路徑；目前無法在 Orca 無 menubar 能力下宣稱 Tray。
 4. 在真正 NEXT 閒置、授權互動已結束後，安排 NEXT-only live failure rollback 與 recovery。完成必需 Host gates 才進行整合／合併，**不 push**。

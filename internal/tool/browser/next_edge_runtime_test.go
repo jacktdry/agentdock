@@ -104,6 +104,47 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 	return bridge, native, f, workspace, dials, identityLost
 }
 
+// A new task must be able to acquire the still-connected Broker after all
+// earlier owners have released their pages. This only tests source and a
+// synthetic CDP server; live macOS Edge peer revalidation is a separate gate.
+func TestNativeEdgeFreshLeaseAfterAllOwnersRelease(t *testing.T) {
+	b, native, f, root, dials, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	first, err := b.DirectAcquire(ctx, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := b.DirectAcquire(ctx, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lease := range []LeaseMetadata{first, second} {
+		meta, err := b.DirectRelease(ctx, root, lease.BrowserLeaseID)
+		if err != nil || meta.CleanupState != CleanupComplete || meta.CleanupError != "" {
+			t.Fatalf("first generation release: %+v, %v", meta, err)
+		}
+	}
+	if len(native.workers) != 0 || !native.connection.root.live() || dials.Load() != 1 {
+		t.Fatal("releasing the last owner retired the shared connection")
+	}
+	third, err := b.DirectAcquire(ctx, root, "")
+	if err != nil {
+		t.Fatalf("fresh lease on the same approved connection failed: %v", err)
+	}
+	if third.BrowserLeaseID == first.BrowserLeaseID || third.BrowserLeaseID == second.BrowserLeaseID ||
+		f.connections.Load() != 1 || dials.Load() != 1 {
+		t.Fatal("new owner did not reuse the one connected transport")
+	}
+	meta, err := b.DirectRelease(ctx, root, third.BrowserLeaseID)
+	if err != nil || meta.CleanupState != CleanupComplete || meta.CleanupError != "" ||
+		len(native.workers) != 0 || commandCount(f.recorded(), "Target.closeTarget") != 3 {
+		t.Fatalf("fresh lease cleanup did not close only owned targets: %+v, %v", meta, err)
+	}
+}
+
 func TestNativeEdgeBrokerSharesConnectionAndFencesOwners(t *testing.T) {
 	b, native, f, root, dials, _ := nativeRuntimeFixture(t)
 	ctx := directContext("chatgpt")

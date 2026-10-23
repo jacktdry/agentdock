@@ -2,8 +2,9 @@
 
 更新：2026-10-23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
+**23:58 本日最新：** [RC11 最終正向 Host 證據](next-rc11-host-uat-2026-10-23.md) **四個 exact HTTPS origin 的 navigate／AX／PNG、雙租約與 A release 後 B snapshot／release、網站期間 no-focus 全部實機 PASS**。後續新 negative-only lease 在原連線 peer revalidation 遭拒；禁止 JS／未授權 URL 的獨立負向 gate、Host fresh acquire、GUI／Tray、GitLab OAuth／API 與 live rollback 仍 open。原 socket 已依程序 disconnect、零租約，沒有自動重連或重啟原版；source fixture 新增雙租約全部釋放後 fresh acquire regression，不能代替 Host。
 **23:26 同日最新實機結果：** [RC11 原生同意後兩站真實 UAT／清理及剩餘 gates](next-rc11-host-uat-2026-10-23.md)。此前一次新連線在 `socket_and_websocket` FAIL CLOSED；使用者之後明確確認已按偵錯允許，再次正式 connect 在 **5.523 秒 PASS**。同 socket 的 `oprueba.com`／`homiplay.io` 均已導覽／AX／PNG **PASS**，跨 worktree 拒絕 PASS。失敗 URL 的負向測試使 offending lease fence fail-closed，後續 `www`／sibling release **未完成**；不重連，最後正式 disconnect PASS、leases=0、兩 Core 正常。GitLab local OAuth 待獨立授權。
-**尚未達到 Definition of Done。RC10 Oprueba 截圖曾 FAIL CLOSED，RC11 的兩個主站 installed screenshot 現已 PASS；但四站、sibling release 與其餘 Host gates 仍未通過。沒有正式發布。**
+**尚未達到 Definition of Done。RC10 Oprueba 截圖曾 FAIL CLOSED，RC11 installed screenshot 現四站 PASS；sibling release 已 Host PASS，但 Host fresh acquire／獨立負向、GitLab、GUI／Tray、live rollback 等仍未通過。沒有正式發布。**
 最新 [RC11 實機續作](next-rc11-host-uat-2026-10-23.md) 與 [RC10 歷史實機證據](next-rc10-edge-host-uat-2026-10-23.md) 分別保存。
 
 文件／記憶同步複核：**2026-10-23 22:41–22:42 Asia/Taipei**。兩個工作樹乾淨，
