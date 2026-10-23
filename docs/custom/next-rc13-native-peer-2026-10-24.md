@@ -1,6 +1,6 @@
 # NEXT RC13 source checkpoint — Native Edge verification budget (2026-10-24)
 
-**Status: source fix + full Go regression PASS; RC13 not yet built or installed. RC12 installed Host Edge lease admission remains FAIL CLOSED.**
+**Status updated after installation:** RC13 source fix/full Go regression and macOS build/install PASS. The [installed RC13 Host attempt](next-rc13-host-uat-2026-10-24.md) made exactly one preannounced `connect_external`, which **timed out at the client before a lease could start**; no peer admission result was obtained. Core's pending 9222 socket later closed without retry. Thus this fix remains **Host-unconfirmed**; RC12's first-lease FAIL CLOSED is separate earlier evidence.
 
 ## User workflow and observed problem
 
