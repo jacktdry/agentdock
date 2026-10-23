@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-10-24 RC12 installed Host latest:** [RC12 安裝與 Host 證據](next-rc12-host-uat-2026-10-24.md)。NEXT 8767 installed rc.12／source `4a8abca7`，App/ZIP/DMG/signature、24-file SHA、NEXT-only deployment PASS；rollback RC11 bundle preserved，Stable 8765 unchanged。正式 Edge connect **PASS 5.649 秒**，但**第一個 direct_acquire peer verification FAIL CLOSED**；沒有租約或頁面操作，不可把 RC11 的四站 PASS 算到 RC12。已 disconnect、零資源。新 GUI PID 52626 載入目前 App，可見主視窗與 ScreenCaptureKit 截圖、no-focus PASS，主要 UI AX／Tray OPEN。GitLab NEXT OAuth 重啟後 refresh 恢復 ready/35。**整體 RC12 DoD／live rollback OPEN、未合併或發布。**
+
 > **2026-10-24 RC12 source reliability checkpoint：** [Edge pinned-port socket attestation／native signature slot ordering](next-rc12-edge-peer-2026-10-24.md) 的兩項有限修正已完成，四包 Go **1,687 PASS／7 SKIP／0 FAIL**、定點 race **85 PASS**、macOS test-owned socket／`go vet` PASS。**尚未宣稱新版本的真實 Edge fresh-acquire 修復**；RC11 四站與 sibling／no-focus 已 Host PASS、GitLab NEXT-only MCP Host PASS 均繼續保留。下一個 gate 是乾淨 source commit→RC12 本機候選→必要時單次使用者同意的正式安裝／Host UAT。不要自動重連或 touch Stable。
 
 > **2026-10-24 GitLab NEXT-only OAuth／MCP 唯讀 Host PASS：** 使用者完成獨立授權；NEXT 8767 `gitlab-company` 已 `ready`／35 tools，Project／Commit／Pipeline／Job／MR／Branch API 實機查詢全 PASS，沒有借用原版 credential、沒有任何 GitLab 寫入。獨立 GitLab REST token／`read_api`、token renew/revoke 等另需驗收。[GitLab UAT 證據](next-rc11-gitlab-host-uat-2026-10-24.md)。以下保留歷史「待 OAuth」敘述不能當作現況。

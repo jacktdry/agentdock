@@ -1,6 +1,6 @@
 # NEXT RC12 候選前置：Edge peer revalidation 可靠性修正（2026-10-24）
 
-狀態：**source 實作與完整回歸 PASS；尚未建置或安裝 RC12，未取得修正版的 Edge Host 證據。** 本輪不修改 Stable 8765／Edge Profile，也不因失敗重複偵錯同意。
+狀態更新（2026-10-24）：**RC12 source、封裝與 NEXT-only 安裝 PASS，但修正版的 Edge Host lease admission FAIL CLOSED。** 早先 source-only 設計與測試記錄仍保留；已安裝實機證據詳見 [RC12 Host checkpoint](next-rc12-host-uat-2026-10-24.md)。Stable 8765／Edge Profile 沒有修改，也沒有重複偵錯連線。
 
 ## 產品問題與驗收契約
 
