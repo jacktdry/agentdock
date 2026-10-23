@@ -43,6 +43,8 @@
 
 在**再次取得明確授權且真實連線成功**前，先從 source／離線測試改正驗收腳本的排序。用同一 Broker/socket 先完成四個已核准 origin 的 navigate／AX／PNG、A release 後 B snapshot／release，再在專用 lease 上做會不可逆 retire series 的失敗操作。跨 owner、未核准 URL 及禁止 JavaScript 要分別記錄；一個失敗 lease 不得被重用來做其他 gate。不得為補救錯誤腳本而自動重連或反覆跳出原生授權。成功連線後才能重新做跨 session、取消／故障與 native no-focus。
 
+**續作實作：** 已在原有私有 `/private/tmp/agentdock-next-edge-verification-y6b6836m/rc11-site-uat.py` 直接修正測試排序：四個正向站點優先，接著 cross-owner 拒絕、A release→B snapshot→B release，最後對禁止 JavaScript 與不核准 origin **各使用一個專用 negative-only lease**；不再於失效 lease 上測 `www`。已執行 Python AST syntax check PASS、檔案保持 0600；**尚未執行新排序的 Host UAT**，不將語法驗證當成實機 PASS，也不會自動 connect。
+
 ## 獨立 gates：真實／source 不混淆
 
 | Gate | 本輪證據 | 尚未通過 |
@@ -55,7 +57,7 @@
 
 ## 下一步（只在真正前置條件成立時）
 
-1. **原生同意後的兩個主站已 PASS**；先更正 `rc11-site-uat.py` 的危險負向測試順序。後續若有再次明確授權及獨立正式連線，可沿單一 socket 做 `www` 正向、A release 後 B snapshot、分離的負向測試及 no-focus；**不要以失敗為由背景輪詢 connect 或短 probe**。
+1. **原生同意後的兩個主站已 PASS**；私有 `rc11-site-uat.py` 的危險負向測試排序已修正並語法驗證。後續若有再次明確授權及獨立正式連線，可沿單一 socket 做 `www` 正向、A release 後 B snapshot、分離的負向測試及 no-focus；**不要以失敗為由背景輪詢 connect 或短 probe**。
 2. 等使用者完成 NEXT-only GitLab local OAuth callback，再用該獨立 grant 驗證唯讀 MCP API；GitLab REST 如需 `read_api` 需獨立授權，不借原版憑證。
 3. GUI 實機需要可見視窗的明確非搶焦點驗收路徑；目前無法在 Orca 無 menubar 能力下宣稱 Tray。
 4. 在真正 NEXT 閒置、授權互動已結束後，安排 NEXT-only live failure rollback 與 recovery。完成必需 Host gates 才進行整合／合併，**不 push**。
