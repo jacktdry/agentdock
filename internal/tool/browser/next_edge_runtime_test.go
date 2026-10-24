@@ -254,6 +254,80 @@ func TestNativeEdgeFreshLeaseAfterAllOwnersRelease(t *testing.T) {
 	}
 }
 
+// A one-shot grant authorizes STARTING native admission, not the time spent
+// checking the same peer through each subsequent target creation step.
+func TestNativeEdgeAdmissionContinuesAfterConsumedGrantExpiry(t *testing.T) {
+	b, _, _, root, dials, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	scope, err := b.directScope(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := b.planner.Resolve(ctx, scope, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalVerifier := b.external.verifier
+	var checks int
+	b.external.verifier = testExternalPeerVerifier(func(ctx context.Context, expected externalPeerIdentity, info WorkerInfo) (externalPeerIdentity, error) {
+		checks++
+		// Simulates grant expiry during an already-started operation;
+		// the native process, Profile and owned socket are still valid.
+		if checks == 2 {
+			decision.grant.expiresAt = time.Now().UTC().Add(-time.Second)
+		}
+		return originalVerifier.VerifyExternalPeer(ctx, expected, info)
+	})
+	meta, _, err := b.external.Acquire(ctx, decision, "")
+	if err != nil {
+		t.Fatalf("consumed grant expired despite continued native peer proof (checks=%d): %v", checks, err)
+	}
+	if checks < 3 || dials.Load() != 1 || !decision.grant.used.Load() || !decision.grant.started.Load() {
+		t.Fatal("admission skipped the one-shot grant, independent checks, or retained connection")
+	}
+	if _, err := b.external.Release(ctx, scope, meta.BrowserLeaseID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNativeEdgeExpiredGrantCannotStartOrReplay(t *testing.T) {
+	b, native, _, root, dials, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	scope, err := b.directScope(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := b.planner.Resolve(ctx, scope, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision.grant.expiresAt = time.Now().UTC().Add(-time.Second)
+	if _, _, err := b.external.Acquire(ctx, decision, ""); err == nil {
+		t.Fatal("expired native grant started a worker")
+	}
+	if decision.grant.started.Load() || len(native.workers) != 0 || dials.Load() != 1 {
+		t.Fatal("expired native grant created work or a new connection")
+	}
+	// Even if admission consumes the grant before an unusual scheduling
+	// delay, the native StartExternal boundary rejects expiration.
+	fresh, err := b.planner.Resolve(ctx, scope, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh.grant.used.Store(true)
+	fresh.grant.expiresAt = time.Now().UTC().Add(-time.Second)
+	if _, err := native.StartExternal(ctx, ExternalWorkerOptions{Cwd: scope.CanonicalWorkspaceRoot, Route: fresh}); err == nil ||
+		fresh.grant.started.Load() || len(native.workers) != 0 || dials.Load() != 1 {
+		t.Fatal("native worker started after grant expiry")
+	}
+}
+
 // Real RC13 Host evidence: two different leases work, sibling release works,
 // but an additional lease after both releases fails at ConnectorStatus. This
 // regression checks that the exact native rejection phase now survives the

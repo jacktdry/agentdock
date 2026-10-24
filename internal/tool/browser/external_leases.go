@@ -76,6 +76,14 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if ctx.Err() != nil || !consumeExternalRouteGrant(route) {
 		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrRequiredRouteUnavailable, "", "external route admission unavailable", nil)
 	}
+	if start.Engine == EngineNativeCDP {
+		// The five-second one-shot grant authorizes starting this admission,
+		// not every subsequent independently verified OS and CDP step.
+		// Bound the whole procedure even when the caller has no deadline.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 35*time.Second)
+		defer cancel()
+	}
 	// Consume admission once even when the required transport is unavailable.
 	// Do not start a legacy connector or touch any browser without this fence.
 	if _, ok := m.backend.(externalTransportFence); !ok {

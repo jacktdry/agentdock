@@ -297,7 +297,7 @@ func (b *nativeEdgeRuntime) ConnectorStatus(ctx context.Context, id string) (Con
 
 func (b *nativeEdgeRuntime) StartExternal(ctx context.Context, options ExternalWorkerOptions) (WorkerInfo, error) {
 	route := options.Route
-	if ctx == nil || ctx.Err() != nil || validateExternalStart(route) != nil || route.Start.Engine != EngineNativeCDP || route.grant == nil ||
+	if ctx == nil || ctx.Err() != nil || validateExternalStart(route) != nil || route.Start.Engine != EngineNativeCDP || route.grant == nil || !route.grant.fresh() ||
 		!route.grant.used.Load() || !route.grant.started.CompareAndSwap(false, true) {
 		return WorkerInfo{}, externalTransportFenceError()
 	}

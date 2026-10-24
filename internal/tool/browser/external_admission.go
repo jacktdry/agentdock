@@ -69,16 +69,29 @@ func consumeExternalRouteGrant(d RouteDecision) bool {
 const externalPeerVerificationTimeout = 2 * time.Second
 
 func (m *ExternalLeaseManager) verifyAdmissionPeer(ctx context.Context, g *externalRouteGrant, worker WorkerInfo) error {
-	if !g.fresh() {
+	if !m.admissionGrantValid(g) {
 		return externalPeerVerificationError()
 	}
 	if err := m.verifyPeer(ctx, g.peer, worker); err != nil {
 		return err
 	}
-	if !g.fresh() {
+	if !m.admissionGrantValid(g) {
 		return externalPeerVerificationError()
 	}
 	return nil
+}
+
+func (m *ExternalLeaseManager) admissionGrantValid(g *externalRouteGrant) bool {
+	if g == nil {
+		return false
+	}
+	if _, native := m.backend.(*nativeEdgeRuntime); native {
+		// A fresh grant must have been consumed exactly once by the native
+		// worker start. During bounded Acquire the live peer is independently
+		// rechecked at every admission/operation boundary.
+		return g.used.Load() && g.started.Load()
+	}
+	return g.fresh()
 }
 
 func externalPeerVerificationError() error {
