@@ -1,6 +1,28 @@
 # AgentDock NEXT RC13 — Installed Host checkpoint (2026-10-24)
 
-**Release status: RC13 source/packaging/NEXT-only install PASS; real Edge lease admission NOT VERIFIED because the sole official connect timed out. Native GUI window/screenshot/AX basic observation PASS, full GUI/Tray and failed-update rollback OPEN. No merge, push, tag, public release or feed.**
+## 09:49–09:50 新一輪 Edge 正式 Host 驗收（目前最新結果）
+
+使用者明確表示 **「Edge 已重開」**，此前早上第一次前置檢查因 Edge `proc_pidpath` 指向系統 `code_sign_clone` clone 而於 `process_preflight` fail-closed。使用者自行重新開啟 Edge 後，真實 listener PID **71117** 指向 `/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`，`proc_pidpath` 路徑 exact PASS，Microsoft bundle code signature PASS，9222 loopback listener PASS；NEXT 8767 rc.13／Stable 8765 1.1.0 health PASS，Broker／ACP／Computer 閒置、0 租約、0 pending／orphan。
+
+明確預告 Edge 原生「允許偵錯」後，**只執行一次正式 `browser_broker(connect_external)`**（5.167 秒 PASS），於**同一個已授權 Core↔Edge socket** 上實機執行：
+
+| Gate | 真實 Host 結果 |
+| --- | --- |
+| Oprueba A `direct_acquire` | **PASS 4.487 秒** |
+| HomiPlay B `direct_acquire`，不同 lease | **PASS 4.452 秒** |
+| B `direct_navigate('https://homiplay.io')` | **PASS 4.126 秒** |
+| A `direct_release` | **PASS 4.361 秒**，cleanup_state `complete`，沒有 cleanup_error |
+| A release 後 B `direct_snapshot`，內容確認 HomiPlay | **PASS 3.633 秒**，證明 sibling 尚可操作 |
+| B `direct_release` | **PASS 4.793 秒**，cleanup_state `complete`，沒有 cleanup_error |
+| 兩個租約皆釋放後的新 `direct_acquire` | **FAIL CLOSED**：`BROWSER_REQUIRED_ROUTE_UNAVAILABLE: external peer verification unavailable or mismatched`；此項仍未修復 |
+| Fresh lease 下 Oprueba navigate／AX／PNG、獨立 negative JS／未核准 URL | **NOT RUN**，因 fresh acquire 被拒絕而中止，不能標記通過 |
+| Cleanup | 正式 `disconnect_external` **PASS 0.004 秒**，前後 Broker idle、0 owners／leases／workers／queued／active／orphans，Core PID 92402 對 9222 **無殘留 TCP socket**，Stable 8765／user Edge Profile 未變 |
+
+工作流程 100 筆 foreground sampling 均為 `jp.naver.line.mac`，沒有主動爭取使用者焦點；Edge 原生視窗集合曾改變，**不能推論使用者授權視窗的確切內容**。這一次已得到真正 RC13 正向 lease Host 證據，但**尚未通過全部 release 後 fresh acquire**；也不能把同輪沒有執行的負向驗收宣稱通過。私有證據 `/private/tmp/agentdock-next-edge-verification-y6b6836m/rc13-edge-reopened-result.json`／`rc13-edge-reopened-foreground.jsonl`，原始內容未納入 commit。此結果覆蓋下方 01:46 的「單次 connect 逾時」歷史狀態；前一輪逾時是真實歷史，**本輪已成功 connect 與雙租約，不應再說 RC13 從未到達第一個 lease**。
+
+**後續應聚焦**最後一個 lease `direct_release` 完成後的 shared connection / `ConnectorStatus` 再驗證生命週期。既有 synthetic/CDP 測試雖然 PASS，仍不能替代此已觀察到的 macOS 實際 fail-closed。不要重新短 probe 或連續要求原生偵錯同意；保留安裝版 rc.13 與 RC12 rollback。整體 DoD 仍 OPEN，沒有合併、push 或發布。
+
+**Earlier 01:46 historical checkpoint only (superseded by 09:50 Host results above):** RC13 source/packaging/NEXT-only install PASS; then-official Edge connect timed out and never reached lease admission. The later 09:50 re-opened Edge workflow **did reach and pass two independent leases and sibling cleanup**, but fresh-acquire still FAIL CLOSED. Native GUI window/screenshot/AX basic observation PASS; full GUI/Tray and failed-update rollback OPEN. No merge, push, tag, public release or feed.
 
 ## Identity, build and rollback
 
