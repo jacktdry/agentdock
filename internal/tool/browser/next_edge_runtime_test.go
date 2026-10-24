@@ -293,6 +293,41 @@ func TestNativeEdgeAdmissionContinuesAfterConsumedGrantExpiry(t *testing.T) {
 	}
 }
 
+// A contract-level refusal must happen before creating a fenced CDP action.
+// A JS or out-of-scope URL attempt must not retire the otherwise healthy
+// native lease or hide policy denial behind a transport-fence error.
+func TestNativeEdgeDirectPolicyDenialPreservesLease(t *testing.T) {
+	b, native, f, root, dials, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	meta, err := b.DirectAcquire(ctx, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.recorded())
+	for _, tc := range []struct {
+		name, tool string
+		args       map[string]any
+	}{
+		{"forbidden_javascript", "evaluate_script", map[string]any{"function": "() => 1"}},
+		{"unapproved_origin", "navigate_page", map[string]any{"url": "https://not-approved.example.invalid"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := b.DirectCall(ctx, root, meta.BrowserLeaseID, tc.tool, tc.args)
+			assertBrowserCode(t, err, ErrActionInvalid)
+			if len(f.recorded()) != before || !native.connection.root.live() || dials.Load() != 1 {
+				t.Fatal("policy denial wrote CDP, retired the lease transport or reconnected")
+			}
+		})
+	}
+	m, err := b.DirectRelease(ctx, root, meta.BrowserLeaseID)
+	if err != nil || m.CleanupState != CleanupComplete || m.CleanupError != "" {
+		t.Fatalf("valid owned target release after refusals failed: %+v, %v", m, err)
+	}
+}
+
 func TestNativeEdgeExpiredGrantCannotStartOrReplay(t *testing.T) {
 	b, native, _, root, dials, _ := nativeRuntimeFixture(t)
 	ctx := directContext("chatgpt")

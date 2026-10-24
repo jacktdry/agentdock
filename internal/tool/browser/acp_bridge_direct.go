@@ -98,6 +98,23 @@ func (b *ACPBridge) DirectCall(ctx context.Context, root, id, tool string, args 
 	if entry.route == browserpolicy.RouteManaged {
 		return b.managed.Call(ctx, scope, id, tool, args)
 	}
+	// The company Edge direct contract is intentionally read-only. Reject a
+	// forbidden action before opening a fenced CDP operation: a known policy
+	// denial is not transport identity loss and must not retire a healthy
+	// owned lease. Principal and exact lease ownership were verified above.
+	if tool == "evaluate_script" {
+		return nil, leaseError(ErrActionInvalid, id, "company Edge does not permit JavaScript evaluation", nil)
+	}
+	if tool == "navigate_page" {
+		plan, err := b.planner.Plan(scope, nil)
+		if err != nil {
+			return nil, err
+		}
+		u, ok := args["url"].(string)
+		if plan.Engine != EngineNativeCDP || plan.Route != entry.route || !ok || !plan.OriginScope.Allows(u) {
+			return nil, leaseError(ErrActionInvalid, id, "company Edge URL outside approved origins", nil)
+		}
+	}
 	return b.external.Call(ctx, scope, id, tool, args)
 }
 
