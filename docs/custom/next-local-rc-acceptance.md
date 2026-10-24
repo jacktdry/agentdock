@@ -1,5 +1,7 @@
 # NEXT 本機 RC：目前執行與驗收狀態
 
+**2026-10-25 Native Codex MCP source-only Session cleanup／並行隔離：** [有界衝突 rollback、失敗 pending 與不同 Session 不中斷](next-native-mcp-session-collision-2026-10-25.md)。同名 instrumented MCP 原本在 Host 配置後直接拒絕卻不 release；現在首次衝突只回收該 Session，取消時仍有界清理、失敗時保留 pending，按 Session gate 避免鎖住其他 Session。**14 項 focused 與 14 項 race PASS；完整 internal/acp、關聯 app/tool/acp/permission/launchregistry Go test＋vet PASS。** RC19 GUI 唯讀 AX46/no-focus PASS，但 Connection 真實拒絕跨頁、Tray 真實身份/點擊、Native Codex MCP trusted operator/Host 均 **OPEN**；Stable 1.1.0 沒動，未安裝/合併/push/發布。
+
 **2026-10-25 最新 Connection fail-closed source：** [Core 失聯時 Port 預檢／公開端點觀測失效與雙錯誤可見性修正](next-connection-failclosed-2026-10-25.md)。`snapshot` 不可用時一併清除快取 preflight 和 publicEndpoint，不再顯示舊的 reachable 或誤稱 not_configured；過期預檢回應與錯誤不能蓋掉較新的 Core 失敗；Connection 和 Overview 可同時揭露 mutation rejection 與 read failure。**184 全套 Vitest PASS，vue-tsc 與 Vite build PASS；Source-only，未安裝到執行中的 NEXT RC19**。Tray AX 身分／選單互動、真實 GUI 失敗操作、native MCP 生命週期仍 OPEN；Stable Core 8765 不動，不合併／push／發佈。
 
 **2026-10-24 深夜 native Tray 已限縮缺口：** [實機 NEXT vs Stable `AXExtrasMenuBar` 同機對照](next-rc19-tray-ax-contrast-2026-10-24.md)。NEXT-scoped 1 項 AX 代理 `x=957` **未暴露任何 NEXT/AgentDock 文字名稱**；相鄰 Stable-scoped `x=995` 的 Description 有 AgentDock。原生 RC19 的 `NSStatusItem.variableLength`／button title `NEXT`／label 已在原始碼及建置驗證，仍無法在 OS 代理驗證 AX，主 App 選單的品牌文字不等於 Tray。沒有點擊或更動 UI/preferences。可存取性與實際選單操作保持 OPEN；不要以此再盲做 RC20、也不操作無標籤的座標。其餘 NEXT RC19／Stable 1.1.0 服務正常，非公開候選。
