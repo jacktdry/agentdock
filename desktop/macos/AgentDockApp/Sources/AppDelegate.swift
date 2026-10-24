@@ -414,6 +414,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.image?.isTemplate = true
                 button.setAccessibilityLabel(appName)
                 button.toolTip = appName
+                if !AppIdentity.current.menuBarShortLabel.isEmpty {
+                    // macOS may expose an image-only status item with blank
+                    // Title/Description even after setAccessibilityLabel.
+                    // A short visible title identifies Next without relying
+                    // on Accessibility proxy forwarding.
+                    button.title = AppIdentity.current.menuBarShortLabel
+                    button.imagePosition = .imageLeading
+                }
             }
             statusItem = item
             return

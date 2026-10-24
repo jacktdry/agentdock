@@ -1,5 +1,7 @@
 # AgentDock NEXT RC17 — Installed Tray/GUI Host UAT (2026-10-24)
 
+> **Follow-up source-only correction after RC17 Host:** Because the actual macOS `AXExtrasMenuBar` proxy still showed empty title/description/help, a further **not-yet-built or installed** patch now displays a short visible **`NEXT`** label next to the status icon **only for the validated NEXT variant**. Stable remains icon-only. `AppIdentity.stable/next` runtime assertion and `NSStatusBarButton.title/imagePosition` Swift typecheck PASS. **The installed RC17 remains unchanged; actual macOS AX/UI behavior of this follow-up is NOT Host verified.** No additional GUI restart or Edge authorization performed.
+
 **Verdict: RC17 macOS source/build/signing/install PASS; background GUI swap PASS with no NEXT focus observed; a real enabled NEXT status-bar item exists; correct status-item AX label is STILL NOT VERIFIED. Full menu click, ACP crash/cancel and live rollback OPEN. Do not merge/push/release.**
 
 ## Product workflow and why it matters

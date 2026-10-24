@@ -20,6 +20,7 @@ func testAppIdentity(root: URL) throws {
         // Used by the native status item accessibility label and tooltip.
         // Stable and Next must remain distinguishable when running together.
         precondition(identity.name == name)
+        precondition(identity.menuBarShortLabel == (identity == .next ? "NEXT" : ""))
         precondition(identity.bundleID == bundleID && identity.appFilename == name + ".app")
         precondition(identity.coreLabel == bundleID + ".core")
         precondition(identity.tunnelLabel == bundleID + ".tunnel")
