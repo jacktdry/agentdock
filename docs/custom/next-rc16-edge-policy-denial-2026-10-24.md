@@ -1,6 +1,6 @@
 # NEXT RC16 source checkpoint — 公司 Edge 負向權限拒絕與租約保全（2026-10-24）
 
-**狀態：source 修正 PASS，RC16 尚未 build／install；目前安裝仍為 RC15 `0.9.2-rc.15`，Stable 8765 1.1.0 未更動。**
+**狀態（2026-10-24 13:09）：source 與 RC16 本機候選封裝均 PASS；RC16 尚未安裝或執行真實 Edge Host UAT。** 目前安裝仍為 RC15 `0.9.2-rc.15`，Stable 8765 1.1.0 未更動，release_ready=false。
 
 ## 產品工作流程與 RC15 Host 剩餘差異
 
@@ -16,6 +16,13 @@
 
 ## 仍需驗證／不做
 
-安裝版 RC15 尚無上述修正，**RC15 的 negative gate 仍 OPEN**。下個真正版本需先完成固定 HEAD 的 manifest、macOS App/ZIP/DMG 簽章，再在 NEXT-only 閒置且不干擾使用者時部署，透過**一條**正式使用者同意的 Edge 連線核對 JavaScript 與未核准 URL 各自明確拒絕、合法租約可繼續操作／清理、沒有 focus steal 或殘留，才能認列 Host PASS。沒有實機 UAT 不合併、push、tag 或發布。
+### 固定 RC16 本機候選已完成（尚未部署）
+
+- Branch `feature/next-edge-rc-20261023`、source commit `d51f1bc4e327a7d198a6e8b91c1aff7e5e849020`、Core `0.9.2-rc.16`、bundle `17.0.0`，canonical manifest `/private/tmp/agentdock-next-edge-verification-y6b6836m/next-rc16-candidate.json`（`release_ready=false`）。
+- App、ZIP、DMG 位於 `dist/next-shared-arm64.pQhkiC/package/`，macOS arm64 App／Core／Vue typecheck／Vite production build／Core Skills／9 個 package tests 全 PASS。App `codesign --verify --deep --strict` PASS，DMG checksum VALID。
+- 候選 App／ZIP／DMG **24 個 regular files SHA-256 全部相同**，唯讀 DMG 驗證後已卸載；ZIP SHA-256 `90ba217cf67f1ab2ebf6f9487137ce9568436e7046886f5f6b986a906683595c`，DMG SHA-256 `720ecb8aab80839d16dc74f7740ecf6c36aaab0a4a8431184bc6b66884c5adb8`。
+- 有界下一步的 Host 腳本已準備在私人測試目錄 `/private/tmp/agentdock-next-edge-verification-y6b6836m/rc16-negative-host.py`，但**沒有執行**；它只會進行一次正式 connect，在兩筆獨立租約上分別驗證 JS／未核准 URL 明確拒絕、拒絕後正常導覽／AX／無 cleanup_error、最後新租約／正式 disconnect／no-focus。
+
+安裝版 RC15 尚無上述修正，**RC15 的 negative gate 仍 OPEN**。RC16 已完成固定 HEAD 的 manifest、macOS App/ZIP/DMG 簽章，但只在 NEXT-only 閒置且不干擾使用者時才能部署，透過**一條**正式使用者同意的 Edge 連線核對 JavaScript 與未核准 URL 各自明確拒絕、合法租約可繼續操作／清理、沒有 focus steal 或殘留，才能認列 Host PASS。沒有實機 UAT 不合併、push、tag 或發布。
 
 不更動 Stable 8765、現有 Edge/公司 Profile、OAuth grants、Managed Chrome 權限、不新增 daemon、不反覆要求原生偵錯同意；其他 GUI／Tray、跨 session crash/cancel cleanup 與故障 rollback gates 維持 OPEN。
