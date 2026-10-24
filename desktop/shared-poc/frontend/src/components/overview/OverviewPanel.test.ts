@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     snapshot: null as null | { coreRunning: boolean; publicMCPURL: string },
     busy: false,
     error: null as null | { code: string; category: string; message: string; retryable: boolean },
+    actionError: null as null | { code: string; category: string; message: string; retryable: boolean },
     operationError: null as null | { code: string; category: string; message: string; retryable: boolean },
     refresh: vi.fn(),
   },
@@ -27,6 +28,7 @@ beforeEach(() => {
   mocks.connection.snapshot = { coreRunning: true, publicMCPURL: 'https://next.example.test/mcp' }
   mocks.connection.busy = false
   mocks.connection.error = null
+  mocks.connection.actionError = null
   mocks.connection.operationError = null
 })
 
@@ -47,6 +49,21 @@ describe('Overview connection mutation feedback', () => {
     }
     mocks.connection.operationError = mocks.connection.error
     const html = await renderToString(createSSRApp(OverviewPanel))
+    expect(html).toContain('connection_snapshot_failed')
+    expect(html).not.toContain('https://next.example.test/mcp')
+  })
+
+  it('shows both a rejected action and the later Core read failure without exposing an unverified endpoint', async () => {
+    mocks.connection.snapshot = null
+    mocks.connection.actionError = {
+      code: 'connection_action_rejected', category: 'operation', retryable: true, message: '',
+    }
+    mocks.connection.operationError = mocks.connection.actionError
+    mocks.connection.error = {
+      code: 'connection_snapshot_failed', category: 'unavailable', retryable: true, message: '',
+    }
+    const html = await renderToString(createSSRApp(OverviewPanel))
+    expect(html).toContain('connection_action_rejected')
     expect(html).toContain('connection_snapshot_failed')
     expect(html).not.toContain('https://next.example.test/mcp')
   })

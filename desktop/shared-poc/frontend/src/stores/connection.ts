@@ -29,7 +29,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const phase = shallowRef('')
 
   const publicEndpointState = computed(
-    () => publicEndpoint.value?.state ?? snapshot.value?.tunnel.public_endpoint ?? 'not_configured',
+    () => publicEndpoint.value?.state ?? snapshot.value?.tunnel.public_endpoint ?? 'unknown',
   )
 
   function capability(name: string): OperationCapability | undefined {
@@ -71,11 +71,19 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
+  function invalidateSnapshotObservations() {
+    snapshot.value = null
+    // A previous "reachable" endpoint or available port is not evidence of
+    // current connectivity when the authoritative Core snapshot is unavailable.
+    preflight.value = null
+    publicEndpoint.value = null
+  }
+
   async function readSnapshot(): Promise<boolean> {
     const result = await desktopApi.connectionSnapshot()
     error.value = result.error ?? null
     if (error.value || !result.snapshot) {
-      snapshot.value = null
+      invalidateSnapshotObservations()
       return false
     }
     syncSnapshot(result.snapshot)
@@ -94,7 +102,7 @@ export const useConnectionStore = defineStore('connection', () => {
     try {
       await readSnapshot()
     } catch (caught) {
-      snapshot.value = null
+      invalidateSnapshotObservations()
       error.value = clientError('connection_snapshot_call_failed', caught)
     } finally {
       busy.value = false
@@ -103,23 +111,32 @@ export const useConnectionStore = defineStore('connection', () => {
 
   async function preflightPort(candidatePort: number) {
     if (preflightBusy.value || !snapshot.value) return
+    const revision = snapshot.value.configRevision
     preflightBusy.value = true
     error.value = null
     try {
       const result = await desktopApi.connectionPreflightPort(candidatePort)
+      // A late result from a previous Core snapshot must never overwrite a
+      // newer snapshot failure or resurrect its port observation.
+      if (!snapshot.value || snapshot.value.configRevision !== revision) {
+        preflight.value = null
+        return
+      }
       if (result.error) {
         error.value = result.error
         preflight.value = null
         return
       }
-      if (result.observation.configRevision !== snapshot.value.configRevision) {
+      if (result.observation.configRevision !== revision) {
         preflight.value = null
         return
       }
       preflight.value = result.observation
     } catch (caught) {
       preflight.value = null
-      error.value = clientError('connection_port_preflight_call_failed', caught)
+      if (snapshot.value?.configRevision === revision) {
+        error.value = clientError('connection_port_preflight_call_failed', caught)
+      }
     } finally {
       preflightBusy.value = false
     }
@@ -141,7 +158,7 @@ export const useConnectionStore = defineStore('connection', () => {
         const refreshed = await readSnapshot()
         completed.value = !actionError.value && refreshed
       } catch (caught) {
-        snapshot.value = null
+        invalidateSnapshotObservations()
         error.value = clientError('connection_snapshot_call_failed', caught)
       }
       return completed.value
@@ -150,7 +167,7 @@ export const useConnectionStore = defineStore('connection', () => {
       try {
         await readSnapshot()
       } catch (refreshError) {
-        snapshot.value = null
+        invalidateSnapshotObservations()
         error.value = clientError('connection_snapshot_call_failed', refreshError)
       }
       return false

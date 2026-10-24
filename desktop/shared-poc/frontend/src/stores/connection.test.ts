@@ -210,6 +210,75 @@ describe('Connection store secret and revision boundaries', () => {
 
 
 describe('Connection mutation truthfulness', () => {
+  it('invalidates a previously reachable endpoint and port preflight when Core status becomes unknown', async () => {
+    const store = useConnectionStore()
+    await store.refresh()
+    mocks.preflight.mockResolvedValueOnce({
+      observation: {
+        ...snapshot().portObservation,
+        observedPort: 19000,
+        state: PortState.PortAvailable,
+      },
+    })
+    await store.preflightPort(19000)
+    await store.testPublicEndpoint()
+    expect(store.preflight).not.toBeNull()
+    expect(store.publicEndpointState).toBe('reachable')
+
+    mocks.snapshot.mockResolvedValueOnce({
+      error: { code: 'connection_refresh_failed', message: '', category: 'unavailable', retryable: true },
+    })
+    await store.refresh()
+    expect(store.snapshot).toBeNull()
+    expect(store.preflight).toBeNull()
+    expect(store.publicEndpoint).toBeNull()
+    expect(store.publicEndpointState).toBe('unknown')
+
+    // A reconnection with the same revision cannot resurrect old observations.
+    await store.refresh()
+    expect(store.snapshot).not.toBeNull()
+    expect(store.preflight).toBeNull()
+    expect(store.publicEndpoint).toBeNull()
+  })
+
+  it('ignores a delayed preflight response when the Core snapshot is lost mid-request', async () => {
+    const store = useConnectionStore()
+    await store.refresh()
+    let resolveObservation!: (value: unknown) => void
+    mocks.preflight.mockImplementationOnce(() => new Promise((resolve) => { resolveObservation = resolve }))
+    const pending = store.preflightPort(19000)
+    mocks.snapshot.mockRejectedValueOnce(new Error('Core unavailable'))
+    await store.refresh()
+    resolveObservation({
+      observation: { ...snapshot().portObservation, observedPort: 19000, state: PortState.PortAvailable },
+    })
+    await pending
+    expect(store.snapshot).toBeNull()
+    expect(store.preflight).toBeNull()
+    expect(store.error?.code).toBe('connection_snapshot_call_failed')
+    expect(store.publicEndpointState).toBe('unknown')
+  })
+
+  it('does not replace a recent Core read failure with a delayed preflight rejection', async () => {
+    const store = useConnectionStore()
+    await store.refresh()
+    let resolveObservation!: (value: unknown) => void
+    mocks.preflight.mockImplementationOnce(() => new Promise((resolve) => { resolveObservation = resolve }))
+    const pending = store.preflightPort(19000)
+
+    mocks.snapshot.mockResolvedValueOnce({
+      error: { code: 'connection_refresh_failed', message: '', category: 'unavailable', retryable: true },
+    })
+    await store.refresh()
+    resolveObservation({
+      error: { code: 'stale_preflight_rejected', message: '', category: 'validation', retryable: false },
+    })
+    await pending
+    expect(store.snapshot).toBeNull()
+    expect(store.preflight).toBeNull()
+    expect(store.error?.code).toBe('connection_refresh_failed')
+  })
+
   it('retains a rejected action across a passive refresh and clears it only on the next action', async () => {
     const store = useConnectionStore()
     await store.refresh()
