@@ -1,5 +1,7 @@
 # AgentDock NEXT RC17 — Installed Tray/GUI Host UAT (2026-10-24)
 
+> **後續 RC18 installed（此文件為 RC17 歷史）：** [RC18 實機 GUI／Tray 結果](next-rc18-tray-host-2026-10-24.md)。已安裝 RC18、新版 GUI 背景重啟 no-focus 95/95 PASS、RC17 rollback 保留。但 `AXExtrasMenuBar` 代理的空白 Title/Description/Help 仍未改善，裁切選單列亦未確認可見 `NEXT`；疑似並非唯一對應 NEXT 的 item。暫停 cosmetic RC 反覆版本，Tray 名稱與實際選單操作仍 OPEN。
+
 > **Follow-up source-only correction after RC17 Host:** Because the actual macOS `AXExtrasMenuBar` proxy still showed empty title/description/help, a further **not-yet-built or installed** patch now displays a short visible **`NEXT`** label next to the status icon **only for the validated NEXT variant**. Stable remains icon-only. `AppIdentity.stable/next` runtime assertion and `NSStatusBarButton.title/imagePosition` Swift typecheck PASS. **The installed RC17 remains unchanged; actual macOS AX/UI behavior of this follow-up is NOT Host verified.** No additional GUI restart or Edge authorization performed.
 
 **Verdict: RC17 macOS source/build/signing/install PASS; background GUI swap PASS with no NEXT focus observed; a real enabled NEXT status-bar item exists; correct status-item AX label is STILL NOT VERIFIED. Full menu click, ACP crash/cancel and live rollback OPEN. Do not merge/push/release.**
