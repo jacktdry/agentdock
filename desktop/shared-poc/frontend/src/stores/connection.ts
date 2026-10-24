@@ -88,7 +88,9 @@ export const useConnectionStore = defineStore('connection', () => {
     completed.value = false
     phase.value = ''
     error.value = null
-    actionError.value = null
+    // Passive reads (including Overview/Connection page navigation) must not
+    // erase the last mutation failure. Only a new mutation supersedes it.
+    // The connection snapshot itself still fails closed on read errors.
     try {
       await readSnapshot()
     } catch (caught) {

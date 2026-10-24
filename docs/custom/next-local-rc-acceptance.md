@@ -1,5 +1,7 @@
 # NEXT 本機 RC：目前執行與驗收狀態
 
+**2026-10-24 晚間最新 UX-S1 原始碼修復：** [Connection mutation 回饋不再因被動刷新／切回總覽消失](next-uxs1-connection-feedback-2026-10-24.md)。切回 Overview/Connection 會觸發 `refresh`，原先不當清掉上一個 `actionError`；已保留直到下一次明確動作，Overview 改讀原有 `operationError`。讀取 Core 失敗仍 fail-closed 清掉敏感 `snapshot`。新增 store/SSR 測試，**12 focused / 180 full tests PASS**、vue-tsc 與 production build PASS。**未重新安裝或驗證 native UI 的實機顯示**，RC18 仍為目前執行版；Tray 選單和尚未發布的 native MCP 生命週期仍 OPEN。
+
 **2026-10-24 晚間最新：** [RC18 第一方 ChatGPT Broker 實機回歸＋原生選單身份辨識 source](next-rc18-first-party-p8-native-menu-2026-10-24.md)。目前直接連線的 NEXT `browser_broker` 已真實完成 `about:blank` direct acquire → evaluate title → snapshot 確認 → release `complete`，無其他 Profile／焦點動作。10/14 真實三方共享 Chrome PASS 應保留，不重測相同案例，明確的共享模式 opt-in 當時已恢復 off。NEXT native Tray menu 仍顯示原版 `AgentDock` 的更新、狀態和服務動作名稱，新增使用通過 bundle 驗證的 `AppIdentity.current` 將 NEXT 動作顯示為 `AgentDock Next`（Stable 不變），16 組 Swift 身分 runtime PASS、34 source typecheck PASS，僅原有 weak-capture compiler warning。**修正尚未安裝 RC18 GUI，native Tray 的 AX 實際顯示/選單 click 仍 OPEN**。不製作新 RC／不影響原版／不合併發布。
 
 更新：2026-10-24 13:23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
