@@ -1,5 +1,7 @@
 # NEXT 本機 RC：目前執行與驗收狀態
 
+**2026-10-24 晚間最新：** [RC18 第一方 ChatGPT Broker 實機回歸＋原生選單身份辨識 source](next-rc18-first-party-p8-native-menu-2026-10-24.md)。目前直接連線的 NEXT `browser_broker` 已真實完成 `about:blank` direct acquire → evaluate title → snapshot 確認 → release `complete`，無其他 Profile／焦點動作。10/14 真實三方共享 Chrome PASS 應保留，不重測相同案例，明確的共享模式 opt-in 當時已恢復 off。NEXT native Tray menu 仍顯示原版 `AgentDock` 的更新、狀態和服務動作名稱，新增使用通過 bundle 驗證的 `AppIdentity.current` 將 NEXT 動作顯示為 `AgentDock Next`（Stable 不變），16 組 Swift 身分 runtime PASS、34 source typecheck PASS，僅原有 weak-capture compiler warning。**修正尚未安裝 RC18 GUI，native Tray 的 AX 實際顯示/選單 click 仍 OPEN**。不製作新 RC／不影響原版／不合併發布。
+
 更新：2026-10-24 13:23。這是本輪 RC 工作的現況與排序；歷史里程碑證據仍由
 [原 Active Backlog](next-active-backlog-2026-10-21.md) 及其連結保存。
 **2026-10-24 16:15+ ACP 持有 Browser/Computer leases 異常退出、逐一回收最新 Host：** [RC18 真實 Agent MCP 呼叫和分別的故障注入驗收](next-rc18-acp-owned-leases-host-2026-10-24.md)。Computer：兩個真實 ACP Session，各自 owner 的 2 observe-only leases，NEXT Adapter PID **55599→60467**，A close 後 B 還在，B close 後 0；Browser：單個真實 `managed-isolated` 背景 Chrome lease/worker，Adapter PID **60467→65012**，ACP close 後的 Browser 清理**非同步**，剛關閉有歷史 lease/worker 尚未止息，後續正式 live snapshot **idle、0 owners/leases/workers/orphans**，舊 worker PID 62309 不存在。測試 Sessions close/delete、ACP ready/running/loaded/managed=0，原版與 NEXT 均健康。**兩個不同 ACP Session 共用一個 Chrome 的 shared-worker UAT 尚未驗證**；Tray 可見/無障礙與選單功能仍 OPEN，RC18 `release_ready=false`，勿把這兩種單獨驗收誤稱整個產品已可發布。
