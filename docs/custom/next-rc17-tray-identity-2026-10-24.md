@@ -1,5 +1,7 @@
 # NEXT RC17 — Tray identity and two-client Computer Host checkpoint (2026-10-24)
 
+> **後續已安裝 RC17 的最新結果：** [實機建置、GUI／Tray 驗收](next-rc17-installed-gui-uat-2026-10-24.md)。`0.9.2-rc.17` 已受控安裝、App/ZIP/DMG SHA 與簽章 PASS，保留 RC16 rollback；GUI 背景重啟 120 個 sample 前景全部 LINE 通話、無 NEXT 搶焦點，單窗／AX46／ScreenCaptureKit capture PASS。**但 NEXT 原生 Tray 的 AX Title／Description／Help 仍空白，新的 setAccessibilityLabel 實機不能稱之為已被系統代理正確暴露**；Tray 展開及按鈕仍 OPEN。下文的 source-only 狀態是本次安裝前的歷史。
+
 ## User workflow and observed gap
 
 Stable AgentDock and AgentDock NEXT intentionally run side-by-side. A user working in Chrome must be able to identify **which menu-bar icon controls which Core** without risking a click on the wrong one. On installed NEXT RC16, a native, **read-only** macOS Accessibility survey confirmed `AXExtrasMenuBar` with exactly **one enabled `AXMenuBarItem`**; it advertised `AXPress`, had valid size/position, and NEXT's app menu separately used the correct `AgentDock Next` name. **However the Tray status item had no accessible Title or Description**, while `AppDelegate.setStatusItemVisible` hard-coded the status image's accessibility description to `AgentDock`, the **Stable** product's name. This is a concrete accessibility/identity mismatch when both Apps are installed.
