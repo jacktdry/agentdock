@@ -1,5 +1,7 @@
 # NEXT RC16 source checkpoint — 公司 Edge 負向權限拒絕與租約保全（2026-10-24）
 
+> **2026-10-24 13:23 後續正式安裝／Host 結果：** [RC16 Host 驗收完整記錄](next-rc16-host-uat-2026-10-24.md)。RC16 NEXT-only 安裝 PASS；2/2 獨立 JS 與越界 URL `ACTION_INVALID`、拒絕後正常導覽／AX、3/3 clean release、第三 fresh acquire、單次 connect／正式 disconnect、134 Chrome foreground samples、0 orphan／0 held socket 均 **真實 Host PASS，整輪 `ok=true`**；原版 8765 仍是 1.1.0、RC15 rollback 已保留。**下文「尚未安裝／待 Host」為候選階段歷史，請以此最新記錄為準；GUI／Tray、crash/cancel、live rollback 仍 OPEN。**
+
 **狀態（2026-10-24 13:09）：source 與 RC16 本機候選封裝均 PASS；RC16 尚未安裝或執行真實 Edge Host UAT。** 目前安裝仍為 RC15 `0.9.2-rc.15`，Stable 8765 1.1.0 未更動，release_ready=false。
 
 ## 產品工作流程與 RC15 Host 剩餘差異
