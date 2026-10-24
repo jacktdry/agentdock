@@ -406,8 +406,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.autosaveName = "AgentDockMenuBarItem"
             item.isVisible = true
             if let button = item.button {
-                button.image = NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: "AgentDock")
+                // Stable and Next can run concurrently. Identify the actual,
+                // validated bundle so assistive technology and pointer users
+                // do not mistake Next's service controls for Stable's.
+                let appName = AppIdentity.current.name
+                button.image = NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: appName)
                 button.image?.isTemplate = true
+                button.setAccessibilityLabel(appName)
+                button.toolTip = appName
             }
             statusItem = item
             return

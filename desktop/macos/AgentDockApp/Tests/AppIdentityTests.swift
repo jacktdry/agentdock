@@ -17,6 +17,9 @@ func testAppIdentity(root: URL) throws {
         ]
         let loaded = try AppIdentity.load(metadata: metadata)
         precondition(loaded == identity)
+        // Used by the native status item accessibility label and tooltip.
+        // Stable and Next must remain distinguishable when running together.
+        precondition(identity.name == name)
         precondition(identity.bundleID == bundleID && identity.appFilename == name + ".app")
         precondition(identity.coreLabel == bundleID + ".core")
         precondition(identity.tunnelLabel == bundleID + ".tunnel")
