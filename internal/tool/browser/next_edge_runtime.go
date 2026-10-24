@@ -270,8 +270,15 @@ func (b *nativeEdgeRuntime) ConnectorStatus(ctx context.Context, id string) (Con
 	if ctx == nil || ctx.Err() != nil || closed || connection == nil || connection.connector.ID != id {
 		return ConnectorRuntimeStatus{}, externalPeerVerificationError()
 	}
-	if b.deps.verify(ctx, connection) != nil {
+	if err := b.deps.verify(ctx, connection); err != nil {
 		connection.root.Close()
+		// Only the finite native phase can cross into the private planner;
+		// raw macOS, signer, Profile, CDP or filesystem errors never can.
+		if ctx.Err() == nil {
+			if stage := safeNativeEdgePeerStage(err); stage != "" {
+				return ConnectorRuntimeStatus{}, &nativeEdgePeerStageFailure{stage: stage}
+			}
+		}
 		return ConnectorRuntimeStatus{}, externalPeerVerificationError()
 	}
 	b.mu.Lock()

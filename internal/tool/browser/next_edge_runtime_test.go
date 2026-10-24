@@ -254,6 +254,91 @@ func TestNativeEdgeFreshLeaseAfterAllOwnersRelease(t *testing.T) {
 	}
 }
 
+// Real RC13 Host evidence: two different leases work, sibling release works,
+// but an additional lease after both releases fails at ConnectorStatus. This
+// regression checks that the exact native rejection phase now survives the
+// planner boundary, with NO re-dial or fallback after the rejected admission.
+// A genuine macOS Edge run is still required to identify the failing phase.
+func TestNativeEdgePostReleaseConnectorFailurePhase(t *testing.T) {
+	for _, tc := range []struct {
+		name, stage string
+		err         error
+	}{
+		{"transport", "transport", &nativeEdgePeerStageFailure{stage: "transport"}},
+		{"process_epoch", "process_epoch", &nativeEdgePeerStageFailure{stage: "process_epoch"}},
+		{"profile_epoch", "profile_epoch", &nativeEdgePeerStageFailure{stage: "profile_epoch"}},
+		{"held_socket", "held_socket", &nativeEdgePeerStageFailure{stage: "held_socket"}},
+		{"postcondition", "postcondition", &nativeEdgePeerStageFailure{stage: "postcondition"}},
+		{"unknown_provider_error", "", errors.New("private token=/secret/path PID=111")},
+		{"unknown_stage", "", &nativeEdgePeerStageFailure{stage: "private token=/secret/path"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, native, _, root, dials, _ := nativeRuntimeFixture(t)
+			ctx := directContext("chatgpt")
+			if err := b.ConnectExternal(ctx, root, false); err != nil {
+				t.Fatal(err)
+			}
+			a, err := b.DirectAcquire(ctx, root, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := b.DirectAcquire(ctx, root, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, lease := range []LeaseMetadata{a, second} {
+				m, err := b.DirectRelease(ctx, root, lease.BrowserLeaseID)
+				if err != nil || m.CleanupState != CleanupComplete || m.CleanupError != "" {
+					t.Fatalf("expected clean sibling release: %+v, %v", m, err)
+				}
+			}
+			if !native.connection.root.live() || len(native.workers) != 0 {
+				t.Fatal("fixture prematurely lost the shared transport or workers")
+			}
+			native.deps.verify = func(context.Context, *nativeEdgeConnection) error { return tc.err }
+			_, err = b.DirectAcquire(ctx, root, "")
+			if err == nil || dials.Load() != 1 || len(native.workers) != 0 || native.connection.root.live() {
+				t.Fatalf("unsafe fresh lease admitted or transport not quarantined: %v", err)
+			}
+			msg := err.Error()
+			if strings.Contains(msg, "private") || strings.Contains(msg, "/secret") ||
+				strings.Contains(msg, "PID=") {
+				t.Fatal("raw provider evidence escaped the native planner")
+			}
+			if tc.stage != "" {
+				if !strings.Contains(msg, "native Edge peer verification unavailable at "+tc.stage) {
+					t.Fatalf("native phase lost after two releases: %v", err)
+				}
+			} else if strings.Contains(msg, " at ") {
+				t.Fatalf("untrusted provider phase accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestNativeEdgePlannerRejectsSpoofedStatusPhase(t *testing.T) {
+	b, native, _, root, _, _ := nativeRuntimeFixture(t)
+	ctx := directContext("chatgpt")
+	if err := b.ConnectExternal(ctx, root, false); err != nil {
+		t.Fatal(err)
+	}
+	// Even a package-local provider able to return the internal error type
+	// cannot impersonate the designated native Runtime in the planner.
+	b.planner.status = testConnectorStatus(func(context.Context, string) (ConnectorRuntimeStatus, error) {
+		return ConnectorRuntimeStatus{}, &nativeEdgePeerStageFailure{stage: "held_socket"}
+	})
+	_, err := b.DirectAcquire(ctx, root, "")
+	var routeErr *Error
+	if err == nil || !errors.As(err, &routeErr) || routeErr.Details == nil ||
+		strings.Contains(err.Error(), "held_socket") ||
+		routeErr.Details.Reason != "runtime connector verification unavailable" {
+		t.Fatalf("untrusted connector supplied a native reason: %v", err)
+	}
+	if !native.connection.root.live() {
+		t.Fatal("spoofed provider must not affect the native runtime")
+	}
+}
+
 func TestNativeEdgeBrokerSharesConnectionAndFencesOwners(t *testing.T) {
 	b, native, f, root, dials, _ := nativeRuntimeFixture(t)
 	ctx := directContext("chatgpt")

@@ -252,6 +252,20 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
 	}
 	if result.err != nil {
+		// Only the exact native runtime can provide reviewed finite Edge
+		// diagnostics. Other providers may never mint a trusted reason even
+		// when they return an error wrapping the native internal type.
+		if plan.Engine == EngineNativeCDP {
+			if _, native := p.status.(*nativeEdgeRuntime); native {
+				if stage := safeNativeEdgePeerStage(result.err); stage != "" {
+					// Error.Message is the caller-visible portion; Details.Reason
+					// alone is not rendered by Browser Broker tool errors.
+					message := "native Edge peer verification unavailable at " + stage
+					return RouteDecision{}, browserError(ErrRequiredRouteUnavailable, message, "routing",
+						&ErrorDetails{WorkspaceID: plan.Scope.WorkspaceID, ConnectorID: plan.ConnectorID, Reason: message}, nil)
+				}
+			}
+		}
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector verification unavailable")
 	}
 	status := result.status
