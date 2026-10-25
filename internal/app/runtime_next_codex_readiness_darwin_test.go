@@ -10,7 +10,7 @@ import (
 
 func TestNextCodexReadinessNeverStartsNative(t *testing.T) {
 	rt, _, _, _ := nextCodexAuthorizationFixture(t)
-	if got := rt.NextCodexMCPReadiness()["state"]; got != "operator_setup_required" {
+	if got := rt.NextCodexMCPReadiness()["state"]; got != "launcher_unavailable" {
 		t.Fatalf("initial private readiness = %v", got)
 	}
 	if rt.nextCodexStartupLock != nil || rt.nextCodexRegistry != nil {

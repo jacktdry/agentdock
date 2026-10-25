@@ -259,8 +259,11 @@
   <data name="acp.native_mcp_intro" xml:space="preserve">
     <value>透過已驗證的 NEXT Core 讀取唯讀狀態。不會授權、登入、啟動或啟用原生 MCP。</value>
   </data>
+  <data name="acp.native_mcp_launcher_unavailable" xml:space="preserve">
+    <value>NEXT Core 無法驗證套件內的已簽章 MCP 啟動器。需要含此啟動器且通過驗證的 NEXT 套件；功能仍未啟用。</value>
+  </data>
   <data name="acp.native_mcp_operator_setup_required" xml:space="preserve">
-    <value>Core 狀態檢查已可用，但可信任操作入口與執行檔允許清單尚未整合。</value>
+    <value>套件內的已簽章啟動器已通過本次唯讀檢查。仍需可信任操作入口與後端執行檔允許清單；功能仍未啟用。</value>
   </data>
   <data name="acp.native_mcp_owner_unavailable" xml:space="preserve">
     <value>NEXT Core 無法取得獨佔的權限管理所有權。</value>

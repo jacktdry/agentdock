@@ -259,8 +259,11 @@
   <data name="acp.native_mcp_intro" xml:space="preserve">
     <value>Read-only status from the verified NEXT Core. This does not authorize, sign in to, start, or enable native MCP.</value>
   </data>
+  <data name="acp.native_mcp_launcher_unavailable" xml:space="preserve">
+    <value>NEXT Core cannot verify its bundled signed MCP launcher. A verified NEXT package with the launcher is required; activation remains off.</value>
+  </data>
   <data name="acp.native_mcp_operator_setup_required" xml:space="preserve">
-    <value>Core preflight is available, but the trusted operator action and executable allowlist are not yet integrated.</value>
+    <value>The bundled signed launcher passed this read-only check. The trusted operator action and backend executable allowlist are still required; activation remains off.</value>
   </data>
   <data name="acp.native_mcp_owner_unavailable" xml:space="preserve">
     <value>NEXT Core cannot establish exclusive permission authority.</value>

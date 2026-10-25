@@ -12,15 +12,17 @@ import (
 
 func TestACPNativeCodexReadinessRedactedAndFailClosed(t *testing.T) {
 	s := NewACPService(t.TempDir())
-	s.nativeCodexReadiness = func(_ context.Context, root string) (desktopruntime.NativeCodexReadiness, error) {
-		if root != s.runtimeRoot {
-			t.Fatal("runtime root substitution")
+	for _, state := range []string{"recovery_required", "launcher_unavailable", "operator_setup_required"} {
+		s.nativeCodexReadiness = func(_ context.Context, root string) (desktopruntime.NativeCodexReadiness, error) {
+			if root != s.runtimeRoot {
+				t.Fatal("runtime root substitution")
+			}
+			return desktopruntime.NativeCodexReadiness{OK: true, State: state}, nil
 		}
-		return desktopruntime.NativeCodexReadiness{OK: true, State: "recovery_required"}, nil
-	}
-	result := s.NativeCodexReadiness(context.Background())
-	if result.Error != nil || result.State != "recovery_required" {
-		t.Fatalf("valid state %v", result)
+		result := s.NativeCodexReadiness(context.Background())
+		if result.Error != nil || result.State != state {
+			t.Fatalf("valid state %v", result)
+		}
 	}
 	for _, scenario := range []struct {
 		reply desktopruntime.NativeCodexReadiness

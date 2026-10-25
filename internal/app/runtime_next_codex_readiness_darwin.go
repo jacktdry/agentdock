@@ -13,9 +13,23 @@ import (
 // preflight. It is served only over the existing local native control socket;
 // it never bootstraps an Adapter, unlocks a journal or grants authorization.
 func (r *Runtime) NextCodexMCPReadiness() Result {
+	state := r.nextCodexMCPReadinessState()
+	if state == "operator_setup_required" {
+		// codesign/plutil must not hold lifecycleMu: Close and private B6
+		// registration need the writer lock. Never cache a successful preflight.
+		_, err := selectNextCodexSignedLauncher()
+		state = r.nextCodexMCPReadinessState()
+		if state == "operator_setup_required" && err != nil {
+			state = "launcher_unavailable"
+		}
+	}
+	return Result{"ok": true, "state": state}
+}
+
+func (r *Runtime) nextCodexMCPReadinessState() string {
 	state := "disabled"
 	if r == nil || !nextCodexExclusiveAuthorityEnabled(r.cfg) {
-		return Result{"ok": true, "state": state}
+		return state
 	}
 	r.lifecycleMu.RLock()
 	defer r.lifecycleMu.RUnlock()
@@ -47,5 +61,5 @@ func (r *Runtime) NextCodexMCPReadiness() Result {
 			state = "operator_setup_required"
 		}
 	}
-	return Result{"ok": true, "state": state}
+	return state
 }

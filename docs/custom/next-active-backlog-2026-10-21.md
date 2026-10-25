@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+**2026-10-25 NEXT Core Signed MCP Launcher Preflight（source-only）：** [Core 固定 Bundle 路徑與簽章驗證](next-native-mcp-core-signed-launcher-preflight-2026-10-25.md)。ACP Readiness 新增 `launcher_unavailable` 與本地化提示；驗證前後無 Core/Native 啟動、Stage/Stable service 變動。本地 Core signed fixture 正反向 PASS；Backend argv allowlist、可信 Desktop operator/M8、Native installed Host 仍 OPEN。Connection GUI 失敗跨頁與 Tray 真實 identity/mutation Host 亦 OPEN。
+
 **2026-10-25 NEXT Native MCP Signed Launcher Package（source-only）：** [NEXT Shared arm64 包新增 signed launcher 與拒絕驗證](next-native-mcp-signed-launcher-package-2026-10-25.md)。15 項打包/Installer fixture PASS，確切 launcher Go arm64 build/test/vet PASS；未建置正式整包、未安裝或啟用 Native MCP。Core-owned allowlist、可信 Desktop operator/M8、完整 installed Host、Connection/Tray Host 仍 OPEN。
 
 **2026-10-25 NEXT Native Codex Desktop preflight（source-only）：** [可信 Core-read-only 狀態入口與 ACP UI](next-native-mcp-desktop-readiness-2026-10-25.md)。Native IPC 經 Next 核心程序／PID／UID 身分驗證回報固定狀態，未結啟動紀錄不能被讀取操作清除；沒有 Native MCP 啟動或使用者授權入口，正式 Core allowlist/M8 operator route 仍 OPEN。Connection GUI 與 Tray Host gate 亦 OPEN。
