@@ -1,5 +1,7 @@
 # NEXT 本機 RC：目前執行與驗收狀態
 
+**2026-10-25 Native Codex MCP Desktop Policy Dispatch Fence（source-only）：** [NEXT-only Desktop 政策更新／工作區批准與 Native MCP 啟動互斥](next-native-mcp-policy-dispatch-fence-2026-10-25.md)。M8 admission 與操作者確認維持鎖外，只有確認後、會改變政策 Revision 的兩種操作使用 Native `lifecycleMu`；等待取消不提交，關閉拒絕寫入，Stable／一般 NEXT 不受影響。使用真實 Desktop confirmation 與可信 metadata fixture 驗證，不弱化 workspace eligibility。**Source-only；正式 Desktop operator/Host Native MCP、Connection 失敗跨頁與 Tray 實機均 OPEN**。沒有啟動 Native MCP、安裝新候選、合併或發佈。
+
 **2026-10-25 Native Codex MCP source-only Session cleanup／並行隔離：** [有界衝突 rollback、失敗 pending 與不同 Session 不中斷](next-native-mcp-session-collision-2026-10-25.md)。同名 instrumented MCP 原本在 Host 配置後直接拒絕卻不 release；現在首次衝突只回收該 Session，取消時仍有界清理、失敗時保留 pending，按 Session gate 避免鎖住其他 Session。**14 項 focused 與 14 項 race PASS；完整 internal/acp、關聯 app/tool/acp/permission/launchregistry Go test＋vet PASS。** RC19 GUI 唯讀 AX46/no-focus PASS，但 Connection 真實拒絕跨頁、Tray 真實身份/點擊、Native Codex MCP trusted operator/Host 均 **OPEN**；Stable 1.1.0 沒動，未安裝/合併/push/發布。
 
 **2026-10-25 最新 Connection fail-closed source：** [Core 失聯時 Port 預檢／公開端點觀測失效與雙錯誤可見性修正](next-connection-failclosed-2026-10-25.md)。`snapshot` 不可用時一併清除快取 preflight 和 publicEndpoint，不再顯示舊的 reachable 或誤稱 not_configured；過期預檢回應與錯誤不能蓋掉較新的 Core 失敗；Connection 和 Overview 可同時揭露 mutation rejection 與 read failure。**184 全套 Vitest PASS，vue-tsc 與 Vite build PASS；Source-only，未安裝到執行中的 NEXT RC19**。Tray AX 身分／選單互動、真實 GUI 失敗操作、native MCP 生命週期仍 OPEN；Stable Core 8765 不動，不合併／push／發佈。
