@@ -1,5 +1,7 @@
 # NEXT 本機 RC：目前執行與驗收狀態
 
+**2026-10-25 NEXT Core-owned Native backend catalog（source-only）：** [Signed NEXT Shared catalog 與 Core ID-only resolver](next-native-mcp-core-owned-backend-catalog-2026-10-25.md)。預設為空清單、未開啟任何 backend；19 項 package fixtures PASS、Go signed resolver/未知 ID/權限/竄改拒絕 PASS。真正 backend 封裝、可信任 Desktop operator／M8 route、Native installed Session Host、Connection GUI 和 Tray Host 仍 OPEN。
+
 **2026-10-25 NEXT Core Signed MCP Launcher Preflight（source-only）：** [Core 固定 Bundle 路徑與簽章驗證](next-native-mcp-core-signed-launcher-preflight-2026-10-25.md)。ACP Readiness 新增 `launcher_unavailable` 與本地化提示；驗證前後無 Core/Native 啟動、Stage/Stable service 變動。本地 Core signed fixture 正反向 PASS；Backend argv allowlist、可信 Desktop operator/M8、Native installed Host 仍 OPEN。Connection GUI 失敗跨頁與 Tray 真實 identity/mutation Host 亦 OPEN。
 
 **2026-10-25 NEXT Native MCP Signed Launcher Package（source-only）：** [NEXT Shared arm64 包新增 signed launcher 與拒絕驗證](next-native-mcp-signed-launcher-package-2026-10-25.md)。15 項打包/Installer fixture PASS，確切 launcher Go arm64 build/test/vet PASS；未建置正式整包、未安裝或啟用 Native MCP。Core-owned allowlist、可信 Desktop operator/M8、完整 installed Host、Connection/Tray Host 仍 OPEN。

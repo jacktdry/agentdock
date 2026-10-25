@@ -340,6 +340,11 @@ if [[ -n "$SHARED_EXECUTABLE" ]]; then
 {"schema_version":1,"product_name":"$APP_NAME","desktop_variant":"$APP_VARIANT","ui":"shared-wails"}
 JSON
   chmod 0644 "$RESOURCES_DIR/desktop-product.json"
+  # Sealed, inactive by default. No caller/env catalog or backend override.
+  cat > "$RESOURCES_DIR/native-mcp-servers.json" <<JSON
+{"schema_version":1,"servers":[]}
+JSON
+  chmod 0644 "$RESOURCES_DIR/native-mcp-servers.json"
 fi
 
 sign_macos_code() {

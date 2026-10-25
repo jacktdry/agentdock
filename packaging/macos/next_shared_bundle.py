@@ -3,12 +3,19 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import stat
+import struct
 import subprocess
 
 NAME = "AgentDock Next"
 BUNDLE_ID = "dev.dropabit.agentdock.next"
 MCP_LAUNCHER = "Helpers/agentdock-next-mcp-launch"
+MCP_CATALOG = "Resources/native-mcp-servers.json"
+MCP_CATALOG_LIMIT = 64 * 1024
+MCP_SERVER_ID = re.compile(r"[a-z][a-z0-9-]{0,62}", re.ASCII)
+MCP_INTERPRETERS = {"sh", "bash", "zsh", "dash", "fish", "csh", "tcsh", "env",
+                    "python", "python3", "perl", "ruby", "node", "osascript"}
 
 
 def require(condition, message):
@@ -21,6 +28,90 @@ def no_symlinks(path):
     for item in (path, *path.parents):
         require(not item.is_symlink(), f"Symlink refused: {item}")
     return path
+
+
+def strict_json(raw):
+    require(len(raw) <= MCP_CATALOG_LIMIT, "Oversized native MCP JSON")
+    def object_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, "Duplicate native MCP JSON key")
+            result[key] = value
+        return result
+    def invalid_constant(value):
+        raise ValueError("Invalid native MCP JSON number")
+    value = json.loads(raw.decode("utf-8"), object_pairs_hook=object_pairs,
+                       parse_constant=invalid_constant)
+    def check(item, depth=0):
+        require(depth <= 8, "Nested native MCP JSON")
+        if isinstance(item, str):
+            item.encode("utf-8", errors="strict")
+            require("\ufffd" not in item, "Invalid native MCP Unicode")
+        elif isinstance(item, dict):
+            for key, value in item.items():
+                check(key, depth + 1)
+                check(value, depth + 1)
+        elif isinstance(item, list):
+            for value in item:
+                check(value, depth + 1)
+    check(value)
+    return value
+
+
+def parse_native_mcp_catalog(raw):
+    catalog = strict_json(raw)
+    require(isinstance(catalog, dict) and set(catalog) == {"schema_version", "servers"}
+            and type(catalog["schema_version"]) is int and catalog["schema_version"] == 1,
+            "Invalid native MCP catalog schema")
+    servers = catalog["servers"]
+    require(isinstance(servers, list) and len(servers) <= 32, "Invalid native MCP servers")
+    seen = set()
+    for entry in servers:
+        require(isinstance(entry, dict) and {"id", "executable"} <= set(entry)
+                <= {"id", "executable", "args"}, "Invalid native MCP server fields")
+        server_id = entry["id"]
+        require(isinstance(server_id, str) and MCP_SERVER_ID.fullmatch(server_id)
+                and server_id not in seen and server_id not in MCP_INTERPRETERS,
+                "Invalid or duplicate native MCP server ID")
+        seen.add(server_id)
+        require(entry["executable"] == "Helpers/native-mcp/" + server_id,
+                "Invalid native MCP executable path")
+        args = entry.get("args", [])
+        require(isinstance(args, list) and len(args) <= 64, "Invalid native MCP argv")
+        for arg in args:
+            require(isinstance(arg, str) and len(arg.encode("utf-8")) <= 1024
+                    and not any(c in arg for c in "\x00\r\n"), "Invalid native MCP argument")
+    return servers
+
+
+def native_mcp_private_entry(target, bundle):
+    for path in (target, *target.parents):
+        info = path.lstat()
+        require((stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+                and info.st_uid == os.getuid() and info.st_mode & 0o6022 == 0
+                and (not stat.S_ISREG(info.st_mode) or info.st_nlink == 1),
+                "Unsafe native MCP bundle entry")
+        if path == bundle:
+            break
+
+
+def native_mcp_catalog_targets(bundle):
+    manifest = bundle / "Contents" / MCP_CATALOG
+    require(manifest.is_file(), "Missing native MCP catalog")
+    native_mcp_private_entry(manifest, bundle)
+    with manifest.open("rb") as file:
+        servers = parse_native_mcp_catalog(file.read(MCP_CATALOG_LIMIT + 1))
+    targets = {}
+    for entry in servers:
+        target = bundle / "Contents" / entry["executable"]
+        require(target.is_file() and os.access(target, os.X_OK), "Missing native MCP backend")
+        native_mcp_private_entry(target, bundle)
+        with target.open("rb") as file:
+            header = file.read(16)
+        require(len(header) == 16 and struct.unpack("<IIII", header)[:2] == (0xfeedfacf, 0x100000c)
+                and struct.unpack("<IIII", header)[3] == 2, "Native MCP backend must be arm64 Mach-O executable")
+        targets[entry["executable"]] = BUNDLE_ID + ".mcp-server." + entry["id"]
+    return targets
 
 
 def validate_bundle(path, *, shared=False, signatures=True):
@@ -69,6 +160,7 @@ def validate_bundle(path, *, shared=False, signatures=True):
     }
     if shared:
         targets["MacOS/AgentDockServiceRegistrar"] = BUNDLE_ID + ".service-registrar"
+        targets.update(native_mcp_catalog_targets(path))
     # Existing native/older Next destinations may omit it; every new Shared
     # package requires it, and any included launcher must retain Next identity.
     if shared or (contents / MCP_LAUNCHER).exists():

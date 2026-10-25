@@ -13,7 +13,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packaging/macos"))
-from next_shared_bundle import BUNDLE_ID, MCP_LAUNCHER, validate_bundle
+from next_shared_bundle import (BUNDLE_ID, MCP_LAUNCHER, MCP_CATALOG,
+                                parse_native_mcp_catalog, validate_bundle)
 
 spec = importlib.util.spec_from_file_location("installer", ROOT / "packaging/macos/install-next-shared.py")
 installer = importlib.util.module_from_spec(spec)
@@ -59,6 +60,7 @@ class NextPackageTests(unittest.TestCase):
 
     def test_legacy_nonshared_next_destination_without_launcher(self):
         self.assertFalse((self.app / "Contents" / MCP_LAUNCHER).exists())
+        self.assertFalse((self.app / "Contents" / MCP_CATALOG).exists())
         validate_bundle(self.app, signatures=False)
         installer.validate_destination(self.app, self.home)
 
@@ -71,6 +73,77 @@ class NextPackageTests(unittest.TestCase):
         (contents / "Resources/desktop-product.json").write_text(json.dumps({
             "schema_version": 1, "product_name": "AgentDock Next",
             "desktop_variant": "next", "ui": "shared-wails",
+        }))
+        (contents / MCP_CATALOG).write_text('{"schema_version":1,"servers":[]}\n')
+
+    def test_native_mcp_catalog_strict_schema(self):
+        entry = {"id": "fixture", "executable": "Helpers/native-mcp/fixture"}
+        valid = {"schema_version": 1, "servers": [entry]}
+        self.assertEqual(parse_native_mcp_catalog(json.dumps(valid).encode()), [entry])
+        negatives = [
+            b'{"schema_version":1,"servers":[],"servers":[]}',
+            b'{"schema_version":1,"servers":[{"id":"a","id":"b","executable":"Helpers/native-mcp/b"}]}',
+            b'{"schema_version":1,"servers":[]} {}',
+            b'{"schema_version":1,"servers":[],"bad":"\xff"}',
+            b'{"schema_version":1,"servers":[{"id":"fixture","executable":"Helpers/native-mcp/fixture","args":["\\ud800"]}]}',
+            b' ' * (64 * 1024 + 1),
+        ]
+        for extra in ({"env": {}}, {"Schema_version": 1}, {"schema_version": 2},
+                      {"schema_version": 1.0}, {"schema_version": True}, {"servers": None},
+                      {"servers": [entry, entry]}, {"servers": [entry] * 33}):
+            negatives.append(json.dumps({**valid, **extra}).encode())
+        for override in (
+            {"executable": "/bin/echo"}, {"executable": "Helpers/native-mcp/../fixture"},
+            {"executable": "Helpers/native-mcp/%2e%2e/fixture"},
+            {"executable": "Helpers/native-mcp/fixture.sh"},
+            {"id": "sh", "executable": "Helpers/native-mcp/sh"},
+            {"env": {}}, {"config_digest": "caller"}, {"args": None},
+            {"args": ["nul\x00"]}, {"args": ["line\n"]},
+            {"args": ["x" * 1025]}, {"args": [""] * 65},
+        ):
+            negatives.append(json.dumps({**valid, "servers": [{**entry, **override}]}).encode())
+        for raw in negatives:
+            with self.subTest(raw=repr(raw[:160])):
+                with self.assertRaises(ValueError):
+                    parse_native_mcp_catalog(raw)
+
+    def test_shared_catalog_required_and_private(self):
+        self.shared_fixture()
+        catalog = self.app / "Contents" / MCP_CATALOG
+        catalog.unlink()
+        with self.assertRaisesRegex(ValueError, "Missing native MCP catalog"):
+            validate_bundle(self.app, shared=True, signatures=False)
+        catalog.write_text('{"schema_version":1,"servers":[]}')
+        catalog.chmod(0o666)
+        with self.assertRaisesRegex(ValueError, "Unsafe native MCP bundle entry"):
+            validate_bundle(self.app, shared=True, signatures=False)
+        catalog.chmod(0o644)
+        os.link(catalog, self.home / "catalog-alias")
+        with self.assertRaisesRegex(ValueError, "Hardlink refused"):
+            validate_bundle(self.app, shared=True, signatures=False)
+
+    def test_shared_catalog_symlink_and_script_refused(self):
+        self.shared_fixture()
+        catalog = self.app / "Contents" / MCP_CATALOG
+        saved = self.home / "catalog"
+        catalog.rename(saved)
+        catalog.symlink_to(saved)
+        with self.assertRaisesRegex(ValueError, "Non-regular bundle entry"):
+            validate_bundle(self.app, shared=True, signatures=False)
+        catalog.unlink()
+        saved.rename(catalog)
+        self.write_backend_catalog()
+        backend = self.app / "Contents/Helpers/native-mcp/fixture"
+        backend.parent.mkdir()
+        backend.write_text("#!/bin/sh\nexit 0\n")
+        backend.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, "arm64 Mach-O executable"):
+            validate_bundle(self.app, shared=True, signatures=False)
+
+    def write_backend_catalog(self):
+        (self.app / "Contents" / MCP_CATALOG).write_text(json.dumps({
+            "schema_version": 1, "servers": [{"id": "fixture",
+                "executable": "Helpers/native-mcp/fixture", "args": ["--stdio"]}],
         }))
 
     @staticmethod
@@ -127,6 +200,7 @@ class NextPackageTests(unittest.TestCase):
         contents = output / "AgentDock.app/Contents"
         self.assertEqual(plistlib.loads((contents / "Info.plist").read_bytes())["CFBundleIdentifier"], "com.uvwt.agentdock")
         self.assertFalse((contents / MCP_LAUNCHER).exists())
+        self.assertFalse((contents / MCP_CATALOG).exists())
 
     def test_stable_identity_refused(self):
         info = self.app / "Contents/Info.plist"
@@ -230,6 +304,34 @@ class NextPackageTests(unittest.TestCase):
             return self.go_metadata(command, **kwargs) if command[0] == "go" else real_output(command, **kwargs)
         with mock.patch("next_shared_bundle.subprocess.check_output", side_effect=inspect):
             validate_bundle(self.app, shared=True)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Native signature fixtures require macOS")
+    def test_signed_native_backend_identity_and_catalog_seal(self):
+        self.signed_fixture()
+        self.write_backend_catalog()
+        backend = self.app / "Contents/Helpers/native-mcp/fixture"
+        backend.parent.mkdir()
+        backend.write_bytes((self.home / "stub").read_bytes())
+        backend.chmod(0o755)
+        self.sign(backend, BUNDLE_ID + ".mcp-server.fixture")
+        self.sign(self.app, BUNDLE_ID)
+        real_output = subprocess.check_output
+        def inspect(command, **kwargs):
+            return self.go_metadata(command, **kwargs) if command[0] == "go" else real_output(command, **kwargs)
+        with mock.patch("next_shared_bundle.subprocess.check_output", side_effect=inspect):
+            validate_bundle(self.app, shared=True)
+            for identifier in ("com.uvwt.agentdock.mcp-server.fixture", BUNDLE_ID + ".mcp-server.other"):
+                self.sign(backend, identifier)
+                self.sign(self.app, BUNDLE_ID)
+                with self.assertRaisesRegex(ValueError, "Wrong signing identity: Helpers/native-mcp/fixture"):
+                    validate_bundle(self.app, shared=True)
+            self.sign(backend, BUNDLE_ID + ".mcp-server.fixture")
+            self.sign(self.app, BUNDLE_ID)
+            # Syntactically valid fixed argv change must still break the seal.
+            catalog = self.app / "Contents" / MCP_CATALOG
+            catalog.write_text(catalog.read_text().replace("--stdio", "--changed"))
+            with self.assertRaises(subprocess.CalledProcessError):
+                validate_bundle(self.app, shared=True)
 
     @unittest.skipUnless(sys.platform == "darwin", "Native signature fixtures require macOS")
     def test_launcher_identity_and_architecture_refusals(self):
