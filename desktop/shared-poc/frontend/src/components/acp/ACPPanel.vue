@@ -151,6 +151,14 @@ onMounted(async () => {
       <div v-if="!store.status?.profiles?.length" class="panel"><p>{{ t('acp.runtime_empty') }}</p></div>
     </section>
 
+    <section class="panel" aria-labelledby="acp-native-codex-title">
+      <h3 id="acp-native-codex-title">{{ t('acp.native_mcp_title') }}</h3>
+      <p class="execution-meta">{{ t('acp.native_mcp_intro') }}</p>
+      <p role="status" aria-live="polite">
+        {{ t(('acp.native_mcp_' + (store.nativeCodexReadiness?.error ? 'unavailable' : (store.nativeCodexReadiness?.state ?? 'unavailable'))) as any) }}
+      </p>
+    </section>
+
     <section aria-labelledby="acp-diagnostics-title" class="feature-stack">
       <div class="panel"><h3 id="acp-diagnostics-title">{{ t('acp.diagnostics') }}</h3></div>
       <SharedMemoryCard v-if="store.status" :memory="store.status.memory" />

@@ -8,6 +8,7 @@ import type {
   ACPMutationResult,
   ACPSettingsMutationResult,
   ACPStatusResult,
+  ACPNativeCodexReadinessResult,
   APIError,
 } from '../../bindings/github.com/uvwt/agentdock/internal/desktopapi/models'
 import type { ACPProfileSettings } from '../../bindings/github.com/uvwt/agentdock/internal/desktopruntime/models'
@@ -29,6 +30,7 @@ function editableProfile(profile: ACPManagedProfile): ACPProfileSettings {
 export const useACPStore = defineStore('acp', () => {
   const contract = useContractStore()
   const status = ref<ACPStatusResult | null>(null)
+  const nativeCodexReadiness = ref<ACPNativeCodexReadinessResult | null>(null)
   const settings = ref<ACPManagerSnapshot | null>(null)
   const loading = ref(false)
   const pending = ref(false)
@@ -93,6 +95,18 @@ export const useACPStore = defineStore('acp', () => {
     }
   }
 
+  async function readNativeCodexReadiness() {
+    // Never retain a previous Core's readiness when contract/identity is lost.
+    nativeCodexReadiness.value = { state: 'unavailable' }
+    if (!contract.canInvoke(Domain.DomainACP, 'nativeCodexReadiness')) return
+    try {
+      const result = await ACPService.NativeCodexReadiness()
+      nativeCodexReadiness.value = result
+    } catch {
+      nativeCodexReadiness.value = { state: 'unavailable' }
+    }
+  }
+
   async function readSettings() {
     if (!canReadSettings.value) return
     try {
@@ -112,7 +126,7 @@ export const useACPStore = defineStore('acp', () => {
     mutationError.value = null
     completed.value = false
     try {
-      await Promise.all([readSettings(), readStatus()])
+      await Promise.all([readSettings(), readStatus(), readNativeCodexReadiness()])
     } finally {
       loading.value = false
     }
@@ -313,6 +327,7 @@ export const useACPStore = defineStore('acp', () => {
   const updateLifecycle = (update: ACPLifecycleUpdate) => mutate('updateLifecycle', () => ACPService.UpdateLifecycle(update))
 
   return {
+    nativeCodexReadiness,
     status,
     settings,
     loading,

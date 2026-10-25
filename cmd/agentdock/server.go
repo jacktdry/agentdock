@@ -159,6 +159,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			if request.Method == "browser.snapshot" {
 				return runtime.RuntimeBrowserDesktop(), nil
 			}
+			if request.Method == "next_codex.readiness" {
+				return runtime.NextCodexMCPReadiness(), nil
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,

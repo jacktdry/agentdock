@@ -21,6 +21,14 @@ export function Close(profileID: string, sessionID: string): $CancellablePromise
     return $Call.ByID(2847673345, profileID, sessionID);
 }
 
+/**
+ * NativeCodexReadiness fails closed if the selected Core's native identity,
+ * status contract, or local IPC peer cannot be verified. No bearer is read.
+ */
+export function NativeCodexReadiness(): $CancellablePromise<$models.ACPNativeCodexReadinessResult> {
+    return $Call.ByID(1383158181);
+}
+
 export function ProbeProfile(profileID: string): $CancellablePromise<$models.ACPProfileProbeResult> {
     return $Call.ByID(1534005872, profileID);
 }

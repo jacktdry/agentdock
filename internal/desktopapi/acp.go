@@ -125,23 +125,50 @@ type ACPLifecycleUpdate struct {
 	IdleCloseAfterMS int64  `json:"idleCloseAfterMs,omitempty"`
 }
 
+// ACPNativeCodexReadinessResult is a read-only operator preflight, never
+// authorization to start Codex or install an MCP server.
+type ACPNativeCodexReadinessResult struct {
+	State string    `json:"state"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+// NativeCodexReadiness fails closed if the selected Core's native identity,
+// status contract, or local IPC peer cannot be verified. No bearer is read.
+func (s *ACPService) NativeCodexReadiness(ctx context.Context) ACPNativeCodexReadinessResult {
+	unavailable := ACPNativeCodexReadinessResult{
+		State: "unavailable",
+		Error: NewError("NATIVE_CODEX_READINESS_UNAVAILABLE", "Native Codex readiness is unavailable", ErrorCategoryUnavailable, false, nil),
+	}
+	if s == nil || s.rootError != nil || s.nativeCodexReadiness == nil || ctx == nil || ctx.Err() != nil {
+		return unavailable
+	}
+	scoped, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	status, err := s.nativeCodexReadiness(scoped, s.runtimeRoot)
+	if err != nil || !status.OK || !desktopruntime.ValidNativeCodexState(status.State) {
+		return unavailable
+	}
+	return ACPNativeCodexReadinessResult{State: status.State}
+}
+
 type ACPMutationResult struct {
 	Completed bool      `json:"completed"`
 	Error     *APIError `json:"error,omitempty"`
 }
 
 type ACPService struct {
-	runtimeRoot       string
-	rootError         error
-	readSettings      func(context.Context, string) (desktopruntime.ACPSettings, error)
-	readConfiguration func(context.Context, string) (desktopruntime.ACPConfiguration, error)
-	saveConfiguration func(context.Context, string, string, desktopruntime.ACPSettings) (desktopruntime.ACPConfiguration, error)
-	readAccess        func(context.Context, string) (desktopruntime.LocalCoreAccess, error)
-	call              func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
-	updateClient      *http.Client
-	updateSource      desktopruntime.ACPUpdateSource
-	applyUpdate       func(context.Context, *http.Client, desktopruntime.ACPUpdateSource, string, desktopruntime.ACPAdapterUpdate) error
-	memoryURL         string
+	runtimeRoot          string
+	rootError            error
+	readSettings         func(context.Context, string) (desktopruntime.ACPSettings, error)
+	readConfiguration    func(context.Context, string) (desktopruntime.ACPConfiguration, error)
+	saveConfiguration    func(context.Context, string, string, desktopruntime.ACPSettings) (desktopruntime.ACPConfiguration, error)
+	readAccess           func(context.Context, string) (desktopruntime.LocalCoreAccess, error)
+	call                 func(context.Context, mcpclient.ServerConfig, string, map[string]any) (map[string]any, error)
+	updateClient         *http.Client
+	updateSource         desktopruntime.ACPUpdateSource
+	applyUpdate          func(context.Context, *http.Client, desktopruntime.ACPUpdateSource, string, desktopruntime.ACPAdapterUpdate) error
+	memoryURL            string
+	nativeCodexReadiness func(context.Context, string) (desktopruntime.NativeCodexReadiness, error)
 }
 
 func NewACPService(root string) *ACPService {
@@ -151,8 +178,9 @@ func NewACPService(root string) *ACPService {
 		readSettings: desktopruntime.ReadACPSettings, readConfiguration: desktopruntime.ReadACPConfiguration, saveConfiguration: desktopruntime.SaveACPSettings,
 		readAccess: desktopruntime.ReadLocalCoreAccess, call: mcpclient.CallRemoteTool,
 		updateClient: &http.Client{Timeout: 2 * time.Minute}, updateSource: desktopruntime.DefaultACPUpdateSource(),
-		applyUpdate: desktopruntime.ApplyACPProfileUpdate,
-		memoryURL:   defaultSharedMemoryMCPURL,
+		applyUpdate:          desktopruntime.ApplyACPProfileUpdate,
+		memoryURL:            defaultSharedMemoryMCPURL,
+		nativeCodexReadiness: desktopruntime.ReadVerifiedNextNativeCodexReadiness,
 	}
 }
 

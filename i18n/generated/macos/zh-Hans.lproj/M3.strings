@@ -82,6 +82,17 @@
 "acp.minutes" = "{count, number} 分钟";
 "acp.move_argument_down" = "将参数 {index} 下移";
 "acp.move_argument_up" = "将参数 {index} 上移";
+"acp.native_mcp_core_closing" = "NEXT Core 正在关闭，无法启用。";
+"acp.native_mcp_disabled" = "尚未启用：可信任的操作者启用入口尚未发布。";
+"acp.native_mcp_intro" = "通过已验证的 NEXT Core 读取只读状态。不会授权、登录、启动或启用原生 MCP。";
+"acp.native_mcp_operator_setup_required" = "Core 状态检查已可用，但可信任操作入口与可执行文件允许列表尚未集成。";
+"acp.native_mcp_owner_unavailable" = "NEXT Core 无法取得独占的权限管理所有权。";
+"acp.native_mcp_recovery_required" = "存在未结清的原生进程记录，必须另行授权恢复，不会自动清除。";
+"acp.native_mcp_registration_present" = "检测到仅供源码验证的原生注册，尚未通过正式发布验收。";
+"acp.native_mcp_startup_unresolved" = "存在已保留或未结清的原生启动作业，禁止再次启动。";
+"acp.native_mcp_state_untrusted" = "无法验证原生启动状态，已阻止启动。";
+"acp.native_mcp_title" = "Codex 原生 MCP · 启用前检查";
+"acp.native_mcp_unavailable" = "不可用：NEXT Core 身份或原生状态未通过验证。";
 "acp.no_profiles" = "目前还没有 ACP 配置文件。";
 "acp.observe" = "计算机观察会话";
 "acp.package" = "软件包";

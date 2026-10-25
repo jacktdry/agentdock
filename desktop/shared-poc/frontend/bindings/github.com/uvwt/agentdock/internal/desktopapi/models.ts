@@ -99,6 +99,15 @@ export interface ACPMutationResult {
     "error"?: APIError | null;
 }
 
+/**
+ * ACPNativeCodexReadinessResult is a read-only operator preflight, never
+ * authorization to start Codex or install an MCP server.
+ */
+export interface ACPNativeCodexReadinessResult {
+    "state": string;
+    "error"?: APIError | null;
+}
+
 export interface ACPProcessStatus {
     "rootPid": number;
     "alive": boolean | null;

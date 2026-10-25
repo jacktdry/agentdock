@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+**2026-10-25 NEXT Native Codex Desktop preflight（source-only）：** [可信 Core-read-only 狀態入口與 ACP UI](next-native-mcp-desktop-readiness-2026-10-25.md)。Native IPC 經 Next 核心程序／PID／UID 身分驗證回報固定狀態，未結啟動紀錄不能被讀取操作清除；沒有 Native MCP 啟動或使用者授權入口，正式 Core allowlist/M8 operator route 仍 OPEN。Connection GUI 與 Tray Host gate 亦 OPEN。
+
 **2026-10-25 Native Codex MCP Desktop Policy Dispatch Fence（source-only）：** [NEXT-only Desktop 政策更新／工作區批准與 Native MCP 啟動互斥](next-native-mcp-policy-dispatch-fence-2026-10-25.md)。M8 admission 與操作者確認維持鎖外，只有確認後、會改變政策 Revision 的兩種操作使用 Native `lifecycleMu`；等待取消不提交，關閉拒絕寫入，Stable／一般 NEXT 不受影響。使用真實 Desktop confirmation 與可信 metadata fixture 驗證，不弱化 workspace eligibility。**Source-only；正式 Desktop operator/Host Native MCP、Connection 失敗跨頁與 Tray 實機均 OPEN**。沒有啟動 Native MCP、安裝新候選、合併或發佈。
 
 **2026-10-25 Native Codex MCP source-only Session cleanup／並行隔離：** [有界衝突 rollback、失敗 pending 與不同 Session 不中斷](next-native-mcp-session-collision-2026-10-25.md)。同名 instrumented MCP 原本在 Host 配置後直接拒絕卻不 release；現在首次衝突只回收該 Session，取消時仍有界清理、失敗時保留 pending，按 Session gate 避免鎖住其他 Session。**14 項 focused 與 14 項 race PASS；完整 internal/acp、關聯 app/tool/acp/permission/launchregistry Go test＋vet PASS。** RC19 GUI 唯讀 AX46/no-focus PASS，但 Connection 真實拒絕跨頁、Tray 真實身份/點擊、Native Codex MCP trusted operator/Host 均 **OPEN**；Stable 1.1.0 沒動，未安裝/合併/push/發布。
