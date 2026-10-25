@@ -23,6 +23,12 @@ if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
 fi
 # Only the Next product packager may supply a Shared Desktop entrypoint.
 SHARED_EXECUTABLE="${AGENTDOCK_MACOS_SHARED_EXECUTABLE:-}"
+NEXT_MCP_LAUNCHER="${AGENTDOCK_MACOS_NEXT_MCP_LAUNCHER:-}"
+if [[ -n "$NEXT_MCP_LAUNCHER" ]]; then
+  [[ "$APP_VARIANT" == next && -n "$SHARED_EXECUTABLE" && "$ARCH_LIST" == arm64 ]] || {
+    print -u2 -- "MCP launcher requires Next arm64 Shared Desktop"; exit 1
+  }
+fi
 if [[ -n "$SHARED_EXECUTABLE" ]]; then
   [[ "$APP_VARIANT" == next && "$ARCH_LIST" == arm64 && -f "$SHARED_EXECUTABLE" && ! -L "$SHARED_EXECUTABLE" ]] || {
     print -u2 -- "Shared executable requires Next arm64 and a regular file"; exit 1
@@ -31,6 +37,10 @@ if [[ -n "$SHARED_EXECUTABLE" ]]; then
   [[ -f "$SERVICE_REGISTRAR_SOURCE" && ! -L "$SERVICE_REGISTRAR_SOURCE" ]] || {
     print -u2 -- "Shared executable requires the native service registrar source"; exit 1
   }
+  [[ -f "$NEXT_MCP_LAUNCHER" && ! -L "$NEXT_MCP_LAUNCHER" && -x "$NEXT_MCP_LAUNCHER" ]] || {
+    print -u2 -- "Shared executable requires the Next MCP launcher"; exit 1
+  }
+  [[ "$(file "$NEXT_MCP_LAUNCHER")" == *"Mach-O 64-bit executable arm64"* && "$(lipo -archs "$NEXT_MCP_LAUNCHER")" == arm64 ]] || exit 1
 fi
 if [[ "${1:-}" == "--metadata-only" ]]; then
   [[ $# == 2 ]] || { print -u2 -- "Usage: build-app.sh --metadata-only OUTPUT"; exit 1; }
@@ -219,6 +229,10 @@ fi
 if (( ${#service_registrar_binaries[@]} > 0 )); then
   chmod 0755 "$SERVICE_REGISTRAR"
 fi
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  cp "$NEXT_MCP_LAUNCHER" "$HELPERS_DIR/agentdock-next-mcp-launch"
+  chmod 0755 "$HELPERS_DIR/agentdock-next-mcp-launch"
+fi
 
 ICONSET_DIR="$TMP_DIR/AgentDock.iconset"
 mkdir -p "$ICONSET_DIR"
@@ -357,6 +371,7 @@ sign_macos_code "$CLOUDFLARED_SIGN_ID" "$HELPERS_DIR/cloudflared"
 sign_macos_code "$ARBITER_SIGN_ID" "$HELPERS_DIR/agentdock-arbiter"
 if [[ -n "$SHARED_EXECUTABLE" ]]; then
   sign_macos_code "$REGISTRAR_SIGN_ID" "$SERVICE_REGISTRAR"
+  sign_macos_code "$BUNDLE_ID.mcp-launch" "$HELPERS_DIR/agentdock-next-mcp-launch"
 fi
 # 嵌套代码先分别签名，再签外层 App。不要用 --deep 做签名操作，否则会重新签
 # Core/cloudflared 并破坏它们的稳定代码身份；--deep 只用于最终递归验证。

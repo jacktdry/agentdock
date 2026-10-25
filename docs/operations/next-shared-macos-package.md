@@ -20,6 +20,16 @@ Core and arbiter are compiled from this checkout; core-skills come from this
 repository. Source commit/date are embedded in Core. No installed AgentDock app
 or runtime state supplies packaging inputs.
 
+The Next Shared package also builds the dedicated **source-only, disabled-by-default**
+`agentdock-next-mcp-launch` from this repository into
+`Contents/Helpers/agentdock-next-mcp-launch` and signs it with the isolated
+`dev.dropabit.agentdock.next.mcp-launch` identifier. The bundle validator
+checks arm64-only architecture, exact Go command identity, signature, and
+outer seal before installation. **Bundling it does not enable Native Codex MCP**;
+operator authorization, immutable Core-selected backend allowlist, recovery,
+and installed Host UAT remain separate release requirements. Older non-Shared
+Next packages retain their prior validation behavior.
+
 Every invocation uses a fresh `dist/next-shared-arm64.XXXXXX/` directory and prints
 the final `package/AgentDock Next.app` path. The existing builder also emits ZIP
 and DMG files. Their historical `macos-universal` names are retained for the

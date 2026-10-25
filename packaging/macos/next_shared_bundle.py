@@ -8,6 +8,7 @@ import subprocess
 
 NAME = "AgentDock Next"
 BUNDLE_ID = "dev.dropabit.agentdock.next"
+MCP_LAUNCHER = "Helpers/agentdock-next-mcp-launch"
 
 
 def require(condition, message):
@@ -68,15 +69,29 @@ def validate_bundle(path, *, shared=False, signatures=True):
     }
     if shared:
         targets["MacOS/AgentDockServiceRegistrar"] = BUNDLE_ID + ".service-registrar"
+    # Existing native/older Next destinations may omit it; every new Shared
+    # package requires it, and any included launcher must retain Next identity.
+    if shared or (contents / MCP_LAUNCHER).exists():
+        targets[MCP_LAUNCHER] = BUNDLE_ID + ".mcp-launch"
     for relative, identifier in targets.items():
         target = contents / relative
         require(target.is_file() and os.access(target, os.X_OK), f"Missing executable: {relative}")
         if signatures:
             description = subprocess.check_output(["/usr/bin/file", str(target)], text=True)
             require("Mach-O" in description and "arm64" in description, f"Wrong executable type: {relative}")
+            if relative == MCP_LAUNCHER:
+                arches = subprocess.check_output(["/usr/bin/lipo", "-archs", str(target)], text=True)
+                require(arches.split() == ["arm64"], "Next MCP launcher must be arm64 only")
             subprocess.run(["/usr/bin/codesign", "--verify", "--strict", str(target)], check=True)
             result = subprocess.run(["/usr/bin/codesign", "-dv", str(target)], capture_output=True, text=True, check=True)
             require(f"Identifier={identifier}" in result.stderr.splitlines(), f"Wrong signing identity: {relative}")
+            if relative == MCP_LAUNCHER:
+                metadata = subprocess.check_output(["go", "version", "-m", str(target)], text=True)
+                for entry in (
+                    "\tpath\tgithub.com/uvwt/agentdock/cmd/agentdock-next-mcp-launch",
+                    "\tbuild\tGOOS=darwin", "\tbuild\tGOARCH=arm64",
+                ):
+                    require(entry in metadata.splitlines(), "Wrong Next MCP launcher build")
     if signatures:
         subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(path)], check=True)
     if shared:
