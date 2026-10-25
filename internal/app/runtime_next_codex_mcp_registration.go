@@ -16,6 +16,7 @@ import (
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/desktopcontrol"
 	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/mcp/launchregistry"
 	"github.com/uvwt/agentdock/internal/permission"
@@ -370,4 +371,35 @@ func (r *Runtime) reconcileNextCodexAfterReboot(ctx context.Context) (retErr err
 		return errNextCodexRegistryUnavailable
 	}
 	return nil
+}
+
+// NextCodexOperatorIdentity is a finite, redacted, read-only preflight. A
+// desktop_peer_verified state means OS peer + bundle provenance only. Human
+// confirmation and M8 admission remain separate; this is never cached/granted.
+func (r *Runtime) NextCodexOperatorIdentity(ctx context.Context) Result {
+	state := r.nextOperatorIdentityState()
+	if state == "desktop_peer_unverified" && desktopcontrol.VerifiedNextSender(ctx) {
+		// Expensive signature checks run without lifecycleMu. Recheck ownership
+		// after them so concurrent Close cannot publish a ready operator.
+		state = r.nextOperatorIdentityState()
+		if state == "desktop_peer_unverified" {
+			state = "desktop_peer_verified"
+		}
+	}
+	return Result{"ok": true, "state": state}
+}
+
+func (r *Runtime) nextOperatorIdentityState() string {
+	if r == nil || !nextCodexExclusiveAuthorityEnabled(r.cfg) {
+		return "disabled"
+	}
+	r.lifecycleMu.RLock()
+	defer r.lifecycleMu.RUnlock()
+	if r.closing {
+		return "core_closing"
+	}
+	if r.nextPermissionOwner == nil || r.acp == nil || r.permissions == nil {
+		return "owner_unavailable"
+	}
+	return "desktop_peer_unverified"
 }

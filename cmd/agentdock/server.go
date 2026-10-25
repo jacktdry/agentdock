@@ -162,6 +162,12 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			if request.Method == "next_codex.readiness" {
 				return runtime.NextCodexMCPReadiness(), nil
 			}
+			if request.Method == "next_codex.operator_identity" {
+				if params := strings.TrimSpace(string(request.Params)); params != "" && params != "{}" && params != "null" {
+					return nil, errors.New("operator identity does not accept parameters")
+				}
+				return runtime.NextCodexOperatorIdentity(controlCtx), nil
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,

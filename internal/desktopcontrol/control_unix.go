@@ -18,7 +18,7 @@ func endpointPath(runtimeRoot string) string {
 	return filepath.Join(runtimeRoot, "control.sock")
 }
 
-func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) []byte) error {
+func servePlatform(ctx context.Context, runtimeRoot string, handle func(context.Context, []byte) []byte) error {
 	if err := os.MkdirAll(runtimeRoot, 0o700); err != nil {
 		return fmt.Errorf("create desktop control directory: %w", err)
 	}
@@ -54,18 +54,20 @@ func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) 
 			}
 			return fmt.Errorf("accept desktop control connection: %w", acceptErr)
 		}
-		go serveConnection(ctx, connection, handle)
+		// Capture before reading any caller-controlled bytes or invoking a handler.
+		peerCtx := acceptedPeerContext(ctx, connection)
+		go serveConnection(peerCtx, connection, handle)
 	}
 }
 
-func serveConnection(ctx context.Context, connection net.Conn, handle func([]byte) []byte) {
+func serveConnection(ctx context.Context, connection net.Conn, handle func(context.Context, []byte) []byte) {
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(30 * time.Second))
 	data, err := io.ReadAll(io.LimitReader(connection, maxMessageBytes+1))
 	if err != nil || len(data) > maxMessageBytes {
 		return
 	}
-	_, _ = connection.Write(handle(data))
+	_, _ = connection.Write(handle(ctx, data))
 }
 
 func callPlatform(ctx context.Context, runtimeRoot string, data []byte) ([]byte, error) {
