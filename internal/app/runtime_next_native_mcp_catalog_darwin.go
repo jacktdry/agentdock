@@ -13,8 +13,8 @@ import (
 
 // Core-local, read-only selection. The ONLY caller input is a registered ID;
 // paths, argv and digest come from our own sealed NEXT Shared bundle. This is
-// not launch authority: a future operator/M8 start owner must revalidate it.
-// Deliberately not wired to B6 prepare/attach or any production start route.
+// not launch authority: the private server-ID Prepare/Attach revalidate it and
+// still require genuine M8 admission. There is no production start route.
 func resolveNextNativeMCPServer(id string) (nextCodexMCPConfig, error) {
 	executable, err := os.Executable()
 	if err != nil {

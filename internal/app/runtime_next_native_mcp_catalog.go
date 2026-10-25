@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -18,6 +19,12 @@ var nextNativeMCPServerID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 type nextNativeMCPServer struct {
 	id, executable string
 	args           []string
+}
+
+func sameNextNativeMCPConfig(a, b nextCodexMCPConfig) bool {
+	return a.ServerID == b.ServerID && a.ConfigDigest == b.ConfigDigest &&
+		a.WrapperExecutable == b.WrapperExecutable && a.BackendExecutable == b.BackendExecutable &&
+		slices.Equal(a.BackendArgs, b.BackendArgs)
 }
 
 // Version 1 deliberately has one executable namespace: Helpers/native-mcp/<id>.

@@ -61,6 +61,12 @@ func (r *Runtime) nextCodexMCPRegistrarScopeProvider(profile config.ACPProfile, 
 // route exists. A caller checksum is only input integrity, never authorization.
 // Admission precedes both the cross-Core reservation and native Adapter startup.
 func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile config.ACPProfile, keyHex string, c nextCodexMCPConfig) (socket string, retErr error) {
+	return r.prepareNextCodexMCPRegistryChecked(ctx, profile, keyHex, c, nil)
+}
+
+// reverify, when present, checks the Core-owned signed selection after M8 Allow.
+// It must run outside lifecycleMu: codesign/plutil must never hold that lock.
+func (r *Runtime) prepareNextCodexMCPRegistryChecked(ctx context.Context, profile config.ACPProfile, keyHex string, c nextCodexMCPConfig, reverify func() error) (socket string, retErr error) {
 	c.BackendArgs = slices.Clone(c.BackendArgs)
 	principal, ok := requestmeta.AuthPrincipalFromContext(ctx)
 	if r == nil || ctx == nil || ctx.Err() != nil || !ok || !validNextCodexMCPConfig(c) {
@@ -86,6 +92,11 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 		return "", err
 	}
 	defer func() { finish(retErr) }()
+	if reverify != nil {
+		if err := reverify(); err != nil {
+			return "", err
+		}
+	}
 	key, _ := hex.DecodeString(keyHex)
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
@@ -139,6 +150,9 @@ func (r *Runtime) prepareNextCodexMCPRegistry(ctx context.Context, profile confi
 	r.nextCodexRegisteredDigest = c.ConfigDigest
 	r.nextCodexPrincipal = principal
 	r.nextCodexPolicyRevision = revision
+	if reverify != nil {
+		r.nextNativeMCPPrepared = &c
+	}
 	return svc.SocketPath(), nil
 }
 
@@ -221,6 +235,10 @@ func validNextCodexMCPConfig(c nextCodexMCPConfig) bool {
 // attachNextCodexInstrumentedMCP requires a fresh M8 Allow, same principal,
 // unchanged policy and immutable prepared configuration. No production hook.
 func (r *Runtime) attachNextCodexInstrumentedMCP(ctx context.Context, c nextCodexMCPConfig) (retErr error) {
+	return r.attachNextCodexInstrumentedMCPChecked(ctx, c, nil)
+}
+
+func (r *Runtime) attachNextCodexInstrumentedMCPChecked(ctx context.Context, c nextCodexMCPConfig, reverify func() error) (retErr error) {
 	c.BackendArgs = slices.Clone(c.BackendArgs)
 	principal, ok := requestmeta.AuthPrincipalFromContext(ctx)
 	if r == nil || ctx == nil || ctx.Err() != nil || !ok || r.acp == nil || !validNextCodexMCPConfig(c) {
@@ -231,12 +249,21 @@ func (r *Runtime) attachNextCodexInstrumentedMCP(ctx context.Context, c nextCode
 		return err
 	}
 	defer func() { finish(retErr) }()
+	if reverify != nil {
+		if err := reverify(); err != nil {
+			return err
+		}
+	}
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
 	if r.closing || ctx.Err() != nil || r.permissions.VerifyDiskState() != nil || r.nextCodexRegistry == nil || r.nextCodexPin == nil || r.nextCodexStartupLock == nil || r.nextCodexStartupLock.validate() != nil || r.nextCodexPrincipal != principal || r.nextCodexPolicyRevision != revision || r.permissions.Policy().Revision != revision || r.nextCodexRegisteredID != c.ServerID || r.nextCodexRegisteredDigest != c.ConfigDigest {
 		return errNextCodexRegistryUnavailable
 	}
 	if !validNextCodexMCPConfig(c) {
+		return errNextCodexRegistryUnavailable
+	}
+	// A server-ID preparation cannot fall back to the raw B6 config seam.
+	if r.nextNativeMCPPrepared != nil && (reverify == nil || !sameNextNativeMCPConfig(*r.nextNativeMCPPrepared, c)) {
 		return errNextCodexRegistryUnavailable
 	}
 	if _, err := r.nextCodexPin.Scope(ctx); err != nil {
