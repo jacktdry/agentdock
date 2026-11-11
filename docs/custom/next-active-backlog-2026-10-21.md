@@ -1,5 +1,8 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 RC21 正式停止延伸驗收、P8 核心 Actor 流程已 PASS：**[RC21 產品結案與 P8 真正續做事項](next-rc21-product-closeout-and-p8-resume-2026-11-11.md)。H02 Tray 辨識 DONE、H04 原始 Race fixture 修正 DONE（高負載測試逾時列風險）、RC21 NEXT-only 本機候選及安裝 DONE；不再要求額外 Tray AXPress、回滾演練或全場景焦點監測。管理者權限提示尚無來源證據且可能跨 Session，**不是 NEXT 已確認缺陷**。P8 **2026-10-14 三真實 Actor ChatGPT＋Codex＋AGY 一個 Chrome 並發、lease/page 隔離與獨立 release 已 PASS**（參考 P8 §52），不可重複驗收。當前 shared 是 NEXT 明確臨時 opt-in，預設仍 exclusive，後續僅處理這個真正使用入口與安全啟用缺口。不修改 Stable/Original 或使用者 Edge。
+
+
 > **2026-11-11 最新交接：P0 先找管理者授權彈窗來源。** [RC21 權限／背景啟動／Tray 進度與 P0-P6](next-rc21-admin-auth-tray-handoff-2026-11-11.md)。Installed RC21/Original Core 與 RC20 rollback 有前次 PASS 證據；Source 已支援 -background，但之前 installed open -g 沒有傳，隔離版帶入時 NEXT 未活化（PARTIAL PASS），同時仍看到 macOS SecurityAgent 活化；**未知實際提權命令，不可宣稱零彈窗或根因已修**。Installed NEXT Tray AX 已讀到狀態、檢查、開啟、結束與兩分隔（結構 PASS），沒有點擊。接續 P0 唯讀歸因→P1 僅修不必要提權→P2 安裝版無干擾啟動→P3 Tray 實際安全操作→P4 H01→P5 H04 高負載→P6 R01 CI/Release。這次只提交文件，本機 Git、不改已安裝程序、不 Push。
 
 
