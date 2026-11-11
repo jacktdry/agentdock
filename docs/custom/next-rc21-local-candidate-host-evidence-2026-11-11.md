@@ -47,6 +47,10 @@ H02 exact Wails SetLabel(NEXT) AX result: ISOLATED HOST PASS. Visual icon, notch
 - Original 8765 health HTTP 200 version 1.1.1; NEXT 8767 HTTP 200 version 0.9.2-rc.20; original GUI PIDs unchanged; installed NEXT bundle still 21.0.0. Both signed RC20 and RC19 backup exist, but real RC21 rollback not run.
 - Candidate source Git checkout remains clean, no ACL/TCC change, no background owned process left.
 
+## Verified RC20 fallback snapshot (pre-deploy, no restore run)
+
+The currently installed and deep-strict signed RC20 bundle was copied read-only with ditto to the source worktree ignored path dist/rc21-20261111-local/rollback/AgentDock Next RC20.app. Source vs copy fingerprint of all **26 regular files** (path, size, SHA256) was **26/26 exact match PASS**, and backup deep-strict codesign verification PASS. The installed bundle remains version 21.0.0; no launch or restore was performed. This is a verified local restore input, **not proof that a real rollback transaction has been exercised**.
+
 ## Next milestone and blockers
 
 NEXT-only RC21 deployment requires preserving a byte-verified RC20 restore point, checking non-interruption / safe foreground window, limiting replacement to installed NEXT bundle / 8767, verifying rollback, and performing installed H02 Tray visual/AX/menu tests without touching Original or existing user sessions. This task authorized local candidate Build and isolated Host, not actual RC20 replacement.
