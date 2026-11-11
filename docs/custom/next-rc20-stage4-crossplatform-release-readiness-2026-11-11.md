@@ -103,3 +103,13 @@
 **驗收拆層：**本次 = Local workflow/source contract **PASS**、最小設計與人工 gate **COMPLETE**；Hosted macOS CI **OPEN**、Developer ID/Notary **OPEN**、RC20 real rollback **OPEN**、發行核准/Feed **BLOCKED（未授權）**。不會因既有本機 ad-hoc hash/RC19 備份或 CI 規劃而把 `release_ready` 設為 true。
 
 **後續允許改檔：**`.github/workflows/next-release-preflight.yml` 及必要時新增**一個**明確命名的 NEXT 發行 Workflow、對應 `tools/release/*` 測試與 `packaging/macos/build-next-shared.sh` 參數契約；不得改 `.github/workflows/release.yml` Stable 身分、`packaging/windows/NextAgentDock.iss`、Source signed RC20 commit 或任何 live Apple/Credentials。先在隔離 PR 作 fail-closed negative tests（錯誤 tag/SHA、非 canonical JSON、dirty checkout、缺簽章/公證、錯用 Original feed/identity、被覆寫 artifact），再要求 Hosted proof。原始 Wails 3 upstream release 最新資訊只作升級評估，不是本輪發版依據。
+
+
+## R01 — 非 ACP 實作補驗（2026-11-11 晚間；候選 CI Source，未執行 Hosted）
+
+原本上述 R01 是計畫；現在在隔離分支 fix/next-rc20-h04-h02-r01-20261111 實作 .github/workflows/next-unpublished-candidate.yml 及 scripts/release/next-unpublished-candidate-macos.sh。PR .github/workflows/next-release-preflight.yml 仍保留 Source-only PR Smoke，但已移除固定的舊 0.9.1-rc.1 環境變數，從現有 Stable Version 衍生明確標示為 synthetic 的 RC1 測試 Fixture，絕不把它宣稱是 NEXT RC20 或發布用版本；增列 Desktop、NEXT CI、Script 路徑觸發。
+
+- 新 Workflow 僅手動 workflow_dispatch，且只有 contents:read 權限；需要明確 NEXT RC Version、Bundle ordinal、40 字元 Source SHA、固定 cloudflared 上游版本與已核實的 ARM64 tarball SHA256。先做 Git HEAD/clean 校對，再生成精確 Canonical Manifest 並以 Next Candidate CLI 校驗來源、Identity、Release Gate；不可沿用舊 RC20 signed manifest。
+- 既有 Go release/updateidentity 和 H04 七項 -race×10、Windows metadata fixtures、Shared Vue Typecheck/Vitest；只下載 pinned cloudflared，驗證 SHA256/架構/簽章，安全檢查 tar 成員，再用既有 packaging/macos/build-next-shared.sh 產生 ad-hoc NEXT App、ZIP、DMG。驗證 Bundle ID 與 Bundle Build、Core version/commit/date/platform、App codesign、ZIP CRC、DMG verify、SHA sidecar、Next Artifact Canonical inventory。Windows Installer 保持停用，Stable .github/workflows/release.yml 不修改。
+- 未經批准不得 Tag、Release、正式 Developer ID 簽章、公證、安裝、更新 Feed。Manifest 的 release_ready=false、update_feed=disabled/unpublished 始終不變；候選 Artifact 只在私有儲存庫的 Actions 中保留 14 天，公開儲存庫不執行 upload-artifact（避免未發布 App 外洩）。Host/Hosted Mac Runner 是否通過仍 OPEN；GitHub 來源 Branch 未 Push，Workflow 尚不能視為 Hosted PASS。
+- 本地來源驗證包含 YAML parse、Bash -n、Go Release/UpdateIdentity tests PASS；有 NEXT_CANDIDATE_VERIFY_ONLY=1 的純 Manifest/SHA/身份測試入口，方便不下載、不封裝的離線正反向驗證。此模式不是 Hosted 完整發行測試，不可代替 Developer ID、Notary、人工 Release Owner approval 或 NEXT-only 真實 Rollback。

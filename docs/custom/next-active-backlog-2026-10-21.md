@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 晚間 H04/H02/R01 無 ACP 實作更新（較上方歷史 A～F 文檔結論為新）：**隔離分支 fix/next-rc20-h04-h02-r01-20261111 已實作 H04 128 KiB Race Fixture+雙重阻塞斷言（正式 Source 七項 -race×10 PASS）；H02 Darwin Wails Tray SetLabel NEXT（Shared Desktop 測試 + arm64 Mach-O Source Build PASS，AX Host OPEN）；R01 新增 NEXT-only 手動 unpublished Candidate CI + 帶完整 Source SHA / Cloudflared SHA256 的候選封裝與清單驗證（Hosted CI OPEN，未發布）。見 [H04/H02 後續證據](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)、[R01 實作](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)。Original / NEXT 未替換、不發版、不啟用 Update Feed；既有 signed RC20 歷史記錄不覆寫。
+
 
 > **2026-11-11 A～F 非 Codex ACP 後續收斂（文件／離線，非發版）：**[Stage5 A～F 狀態與下一個真正寫碼 Session 入口](next-rc20-stage5-codex-resume-workpacks-2026-11-11.md)。A H01 非干擾 GUI（本輪 AXWindows=0、Source 契約已核、真實拒絕跨頁 OPEN）；B H02 Wails `SetLabel("NEXT")` 零 fork 修正規格；C H04 兩個 128 KiB Fixture 與阻塞斷言精準變更規格（舊 RC20 Race 仍 FAIL）；D R01 NEXT-only macOS arm64 CI／Developer ID／人工 Release/Feed 保護計畫；E R04 [11/02 Tunnel＋11/05 Candidate 歷史 Appendix](next-stage1-branch-milestone-inventory-2026-11-11.md)；F N00 [首個 Native Backend 產品 NO-GO、繼續 disabled](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)。本輪僅文件，不改正式程式／安裝版／Original／M8；不使用 ACP、不 Push/Merge/Tag/Release。維持 `release_ready=false` 與 Feed off。詳細 B/C 見[根因報告追加規格](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)，R01 見[Stage4 追加發行契約](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)。
 

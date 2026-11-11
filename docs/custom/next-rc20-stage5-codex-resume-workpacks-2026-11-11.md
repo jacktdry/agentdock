@@ -73,3 +73,12 @@
 | **F N00** | [Native MCP Backend 產品決策：NO-GO／維持停用](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)；既有 Mac-Dev/ACP/Plugin 足以完成目前實際工作 | 具 3 個重複且阻塞實際任務的 Pilot 證據前，不排 N01–N03 |
 
 **重要保留：**簽章來源 `704bb40d` 與文檔 compat branch HEAD 不同；Original `8765` 不動、NEXT `8767` 不更新、`release_ready=false`、Update Feed off、Codex ACP 完全沒有使用。A～F 的文件調查/規格完成**不等於**以上產品修改或 Host Gate 通過。
+
+
+## 新一輪無 Codex ACP 來源實作狀態（2026-11-11 晚間）
+
+此段更新上面 A～F 文件盤點時的 H02/H04/R01 Source OPEN，不變更 H01/H03/N00 或真實 Host Gate。獨立 Worktree：/Users/wei/sideProject/agentdock-next-h04-h02-r01-20261111；Branch：fix/next-rc20-h04-h02-r01-20261111；原已簽署 RC20 Source 704bb40d 未修改。
+
+- H04：兩處正式 Fixture 與真正 active blocking checks 實作完成，正式 Source 七項 focused Race -count=10 PASS。Windows Pipe/真實 ACP 使用仍待平台驗收。
+- H02：零 fork Wails Tray NEXT native label 寫入，Desktop Go tests PASS，macOS arm64 Source-only production binary Build PASS。未執行 GUI，AXTitle/Notch/原版不干擾 Host OPEN。
+- R01：已新增單獨 unpublished NEXT-only 手動 Source SHA pinned candidate workflow、bundle/manifest/ZIP/DMG/inventory 檢查與人工正式發行禁令；舊 PR smoke 去硬編碼歷史 RC，但保留合成版本 Fixture。Hosted CI、Developer ID、Notary、真實 NEXT rollback 和發行均未驗收，不設定 release_ready=true、不啟用 Feed。變更僅本地、無 ACP、無安裝版/Original 修改。

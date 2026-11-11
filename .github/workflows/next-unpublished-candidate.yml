@@ -1,0 +1,94 @@
+name: Next macOS arm64 candidate (unpublished)
+
+# Explicit operator inputs, immutable source SHA, no signing secrets or release.
+on:
+  workflow_dispatch:
+    inputs:
+      next_version:
+        description: 'NEXT canonical RC version (e.g. 0.9.2-rc.21)'
+        type: string
+        required: true
+      bundle_build:
+        description: 'NEXT bundle build ordinal 1..9999'
+        type: string
+        required: true
+      source_sha:
+        description: 'Full 40-character lowercase source commit SHA'
+        type: string
+        required: true
+      cloudflared_version:
+        description: 'Pinned Cloudflare release (e.g. 2026.10.7)'
+        type: string
+        required: true
+      cloudflared_archive_sha256:
+        description: 'Verified SHA256 of cloudflared-darwin-arm64.tgz'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: next-unpublished-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: NEXT macOS arm64 source/package gate (ad-hoc only)
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      NEXT_VERSION: ${{ inputs.next_version }}
+      BUNDLE_BUILD: ${{ inputs.bundle_build }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      CLOUDFLARED_VERSION: ${{ inputs.cloudflared_version }}
+      CLOUDFLARED_ARCHIVE_SHA256: ${{ inputs.cloudflared_archive_sha256 }}
+    steps:
+      - name: Check requested source and pinned dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ && "$SOURCE_SHA" != 0000000000000000000000000000000000000000 ]]
+          [[ "$NEXT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.([1-9][0-9]*)$ ]]
+          [[ "$BUNDLE_BUILD" =~ ^[1-9][0-9]{0,3}$ ]]
+          [[ "$CLOUDFLARED_VERSION" =~ ^[0-9]{4}\.[0-9]{1,2}\.[0-9]+$ ]]
+          [[ "$CLOUDFLARED_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.24.0'
+          run_install: false
+      - name: Run NEXT-only tests and build unpublished candidate
+        shell: bash
+        run: bash scripts/release/next-unpublished-candidate-macos.sh
+      # GitHub Actions artifacts on a public repository are not private.
+      # Never upload the unreleased App/ZIP/DMG unless the repository is private.
+      - name: Retain candidate only in a private repository (NOT GitHub Release)
+        if: ${{ github.event.repository.private == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-unpublished-${{ inputs.source_sha }}
+          path: |
+            ${{ runner.temp }}/next-candidate.json
+            ${{ runner.temp }}/next-inventory.json
+            ${{ runner.temp }}/next-status.txt
+            ${{ runner.temp }}/AgentDock-Next-macos-arm64.zip
+            ${{ runner.temp }}/AgentDock-Next-macos-arm64.dmg
+            ${{ runner.temp }}/AgentDock-Next-macos-arm64.zip.sha256
+            ${{ runner.temp }}/AgentDock-Next-macos-arm64.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: false
+          compression-level: 0
+      - name: Formal publication remains disabled
+        run: echo 'NEXT candidate only. Developer ID, notarization, tag, public Release, installation, and Update Feed require separate human-approved gates.' >> "$GITHUB_STEP_SUMMARY"

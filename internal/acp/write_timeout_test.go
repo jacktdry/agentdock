@@ -80,7 +80,7 @@ func TestBlockedWriteHonorsRequestContext(t *testing.T) {
 	for _, timeout := range []bool{false, true} {
 		t.Run(map[bool]string{false: "cancel", true: "deadline"}[timeout], func(t *testing.T) {
 			connection, _, started := newBlockedWriteConnection(t)
-			prompt := strings.Repeat("x", 1<<20)
+			prompt := strings.Repeat("x", 1<<17)
 			ctx, cancel := context.WithCancel(context.Background())
 			cause := context.Canceled
 			if timeout {
@@ -114,13 +114,26 @@ func TestBlockedWriteHonorsRequestContext(t *testing.T) {
 func TestQueuedWriteTimeoutPreservesActiveWrite(t *testing.T) {
 	connection, peerReader, started := newBlockedWriteConnection(t)
 	first := make(chan error, 1)
-	go func() { first <- connection.Notify("large", strings.Repeat("x", 1<<20)) }()
+	go func() { first <- connection.Notify("large", strings.Repeat("x", 1<<17)) }()
 	awaitACPWrite(t, started)
+	// Confirm the active frame still requires peer drainage. The fixture must
+	// not silently become a fully buffered write on another platform.
+	select {
+	case err := <-first:
+		t.Fatalf("active frame finished before queued request: %v", err)
+	default:
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	second := make(chan error, 1)
 	go func() { second <- connection.Request(ctx, "queued", nil, nil) }()
 	requireACPWriteError(t, awaitACPWriteResult(t, second), "ACP_REQUEST_CANCELLED", context.DeadlineExceeded)
+	// Queued cancellation must not unblock or truncate the active frame.
+	select {
+	case err := <-first:
+		t.Fatalf("active frame finished without peer draining: %v", err)
+	default:
+	}
 	select {
 	case <-connection.Closed():
 		t.Fatal("queued cancellation invalidated another active write")

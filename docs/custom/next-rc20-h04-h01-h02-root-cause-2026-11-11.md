@@ -89,3 +89,11 @@
 5. Source 提交後在**正式修正 source，非 Overlay**執行七項 focused `go test -mod=readonly -race -count=10 -timeout=140s -run '^Test(BlockedWriteHonorsRequestContext|QueuedWriteTimeoutPreservesActiveWrite|AlreadyCancelledWriteDoesNotTouchHealthyConnection|WriteFailureClosesFramingAndKeepsClassification|CloseReleasesBlockedAndQueuedWrites|CancelledRequestDoesNotWaitForCancelNotification|BlockedNotifyHonorsWriteDeadline)$' ./internal/acp`，再完整 `go test -race ./internal/acp`、Go vet、必要的 Windows native Pipe 測試及 Original/NEXT 健康、Session ownership；失敗時不得刷掉 FAIL。
 
 **已確定且不需 Codex 重做的根因：**兩處 1 MiB Fixture × Race 下高 Marshal/Decoder/Pipe 壓力與短 deadline 的測試同步不穩，縮小 Fixture 且驗證實際阻塞的臨時 Overlay 七項×十次 PASS。**原簽章 RC20 Source Race 仍 FAIL、正式修正/跨平台 Host OPEN**，不因此重寫 ACP pipeline。
+
+
+## 後續 Source 修復：H04 與 H02（2026-11-11 晚間）
+
+此段是先前根因與規格完成後的較新實作結果，不改寫上文原始 signed RC20 704bb40d 的 FAIL 歷史。開發樹：/Users/wei/sideProject/agentdock-next-h04-h02-r01-20261111，分支 fix/next-rc20-h04-h02-r01-20261111，從文件 compat HEAD 297b26b2 分支建立；無 Codex ACP、沒有動現役 Core/GUI 或 Original。
+
+- H04：正式修改 internal/acp/write_timeout_test.go，兩個 1 MiB Fixture 改 128 KiB，新增 active write 在 queued 前和 queued timeout 後、peer drain 前仍被阻塞的負向斷言。原有 1 秒 watchdog、cancel/code、完整 JSON Frame、healthy reuse、pending/Closed checks 全部保留。針對正式修正 source 的七項 Go Race -count=10 PASS（18.658s），不是舊診斷 Overlay 充數。Runtime Pipe、Windows native 和真實 Host UAT 沒有因此被宣告 PASS。
+- H02：正式修改 desktop/shared-poc/main.go 只在 Darwin 對 NEXT Tray 加 SetLabel("NEXT")，不改 Template Icon、選單、Original、Wails module cache。Shared Desktop Go 測試 PASS，使用簽章 RC20 相同的 Frontend dist（來源檔已比對相同）離線編譯 arm64 Mach-O PASS；SHA256 fcaea02753eb4fd0ba072565b294f52968c17f56e8ff2bd3f6917c5a6a9e58f2。沒有啟動新 GUI、不偷焦點；安裝版 AXTitle、Tray 外觀、Notch 和操作 Host 依然 OPEN。

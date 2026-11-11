@@ -5,6 +5,10 @@ on:
     paths:
       - 'cmd/**'
       - 'internal/**'
+      - 'desktop/shared-poc/**'
+      - 'packaging/macos/build-next-shared.sh'
+      - 'scripts/release/next-unpublished-candidate-macos.sh'
+      - '.github/workflows/next-unpublished-candidate.yml'
       - 'go.mod'
       - 'go.sum'
       - 'tools/release/**'
@@ -34,13 +38,14 @@ jobs:
         run: go test ./tools/release ./internal/buildinfo -count=1
       - name: Offline Windows Next metadata fixtures (no installer)
         run: python3 scripts/test/test-next-windows-packaging.py -v
-      - name: Generate and verify source-only candidate manifest
-        env:
-          RC_VERSION: '0.9.1-rc.1'
-          BUNDLE_BUILD: '1'
+      - name: Generate and verify synthetic source-only contract fixture
+        # PR smoke derives a placeholder version from the stable base; it is NOT
+        # a NEXT RC version or evidence for a candidate publication.
         shell: bash
         run: |
           set -euo pipefail
+          RC_VERSION="$(go run -mod=readonly ./tools/release version)-rc.1"
+          BUNDLE_BUILD=1  # synthetic, source-only fixture; never a real release version
           commit="$(git rev-parse HEAD)"
           stamp="$(git show -s --format=%ct HEAD)"
           build_date="$(date -u -d "@$stamp" +%Y-%m-%dT%H:%M:%SZ)"
@@ -81,8 +86,6 @@ jobs:
         env:
           TARGET_OS: ${{ matrix.goos }}
           TARGET_ARCH: ${{ matrix.goarch }}
-          RC_VERSION: '0.9.1-rc.1'
-          BUNDLE_BUILD: '1'
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -108,11 +111,12 @@ jobs:
           commit = read('git', 'rev-parse', 'HEAD')
           stamp = int(read('git', 'show', '-s', '--format=%ct', 'HEAD'))
           date = datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-          version = os.environ['RC_VERSION']
+          # PR-only synthetic version; the real NEXT candidate uses explicit operator input.
+          version = read('go', 'run', '-mod=readonly', './tools/release', 'version') + '-rc.1'
           manifest = Path(os.environ['RUNNER_TEMP']) / 'next-core-candidate.json'
           args = ['go', 'run', '-mod=readonly', './tools/release', 'next-preflight',
                   '--version', version, '--tag', 'next-v' + version, '--commit', commit,
-                  '--build-date', date, '--bundle-build', os.environ['BUNDLE_BUILD']]
+                  '--build-date', date, '--bundle-build', '1']
           # Preserve exact canonical bytes on Windows too (no CRLF translation).
           manifest.write_bytes(subprocess.check_output(args))
           subprocess.run(args + ['--verify', str(manifest)], check=True)
