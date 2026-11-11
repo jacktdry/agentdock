@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 RC20 Native MCP 第三階段安全盤點：** [安裝版 signed Launcher＋空 Catalog、Desktop 唯讀 Core IPC、ID-only M8 source 回歸及真正缺少的 Trusted Operator／Backend](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)。定點安全測試通過，但 Native tool model-to-backend Host **OPEN**，無 Codex ACP、無部署／啟動 Backend。
+
 > **2026-11-11 RC20 Connection／Tray 無搶焦點實機盤點：** [真實 Wails 主視窗空白擷取、Connection 16/16 source tests、RC20 Tray AX 未命名及 Shared Wails／Swift 來源差異](next-rc20-connection-tray-nofocus-host-2026-11-11.md)。Connection 拒絕後跨頁實機與 Tray 可辨識選單**仍 OPEN**；本輪未搶焦點／點擊／操作 Stable。
 
 > **2026-11-11 分支／Milestone 整合盤點：**[19 個 worktree、RC20/compat fast-forward 54 commits、遠端落後 312 commits、dirty 舊樹與 P13/P14 範圍](next-stage1-branch-milestone-inventory-2026-11-11.md)。這是唯讀查證後的交接，非已執行 merge／push／release；下面 RC20 installed Host 才是運行證據。
