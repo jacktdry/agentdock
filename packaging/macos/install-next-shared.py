@@ -52,7 +52,7 @@ def main():
     destination = validate_destination(home / "Applications" / f"{NAME}.app", home)
     source = validate_bundle(sys.argv[1], shared=True)
     require(source != destination and not os.path.samefile(source, destination), "Source must differ from destination")
-    validate_bundle(destination)
+    validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True)
 
     # SMAppService tracks the parent application bundle. Replacing the top-level
     # .app directory can make that registration follow the old inode to a backup
@@ -70,7 +70,7 @@ def main():
         validate_bundle(candidate, shared=True)
 
         validate_destination(destination, home)
-        validate_bundle(destination)
+        validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True)
         current = destination.stat()
         require((current.st_dev, current.st_ino) == (original.st_dev, original.st_ino), "Destination changed during staging")
 
@@ -86,7 +86,7 @@ def main():
             # Contents before surfacing the error.
             rename_swap(candidate_contents, destination_contents)
             swapped = False
-            validate_bundle(destination)
+            validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True)
             raise
 
         print(f"Replaced Contents in {destination}; previous Next Contents retained at {candidate_contents}")

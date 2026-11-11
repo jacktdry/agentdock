@@ -114,7 +114,7 @@ def native_mcp_catalog_targets(bundle):
     return targets
 
 
-def validate_bundle(path, *, shared=False, signatures=True):
+def validate_bundle(path, *, shared=False, signatures=True, allow_legacy_rc19_shared_omissions=False):
     path = no_symlinks(path)
     require(path.is_dir(), "Bundle must be a directory")
     for item in path.rglob("*"):
@@ -160,11 +160,29 @@ def validate_bundle(path, *, shared=False, signatures=True):
     }
     if shared:
         targets["MacOS/AgentDockServiceRegistrar"] = BUNDLE_ID + ".service-registrar"
-        targets.update(native_mcp_catalog_targets(path))
+        # RC19 was a valid signed Shared Desktop before the native MCP catalog
+        # and launcher shipped. This version-locked exception is explicitly
+        # opt-in for installed/rollback bundles, never candidate sources.
+        catalog = contents / MCP_CATALOG
+        if allow_legacy_rc19_shared_omissions and not catalog.exists():
+            require(info.get("CFBundleVersion") == "20.0.0"
+                    and info.get("CFBundleShortVersionString") == "0.9.2",
+                    "Missing native MCP catalog is only allowed for legacy RC19")
+            require(not (contents / "Helpers/native-mcp").exists(),
+                    "Legacy RC19 must not have unlisted native MCP backends")
+        else:
+            targets.update(native_mcp_catalog_targets(path))
     # Existing native/older Next destinations may omit it; every new Shared
     # package requires it, and any included launcher must retain Next identity.
     if shared or (contents / MCP_LAUNCHER).exists():
-        targets[MCP_LAUNCHER] = BUNDLE_ID + ".mcp-launch"
+        # The signed RC19 legacy destination also predates the MCP launcher;
+        # only omit it alongside the absent legacy catalog, never for new RCs.
+        legacy_omission = (shared and allow_legacy_rc19_shared_omissions
+                           and not (contents / MCP_CATALOG).exists()
+                           and info.get("CFBundleVersion") == "20.0.0"
+                           and info.get("CFBundleShortVersionString") == "0.9.2")
+        if not (legacy_omission and not (contents / MCP_LAUNCHER).exists()):
+            targets[MCP_LAUNCHER] = BUNDLE_ID + ".mcp-launch"
     for relative, identifier in targets.items():
         target = contents / relative
         require(target.is_file() and os.access(target, os.X_OK), f"Missing executable: {relative}")

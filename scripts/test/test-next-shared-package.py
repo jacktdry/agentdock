@@ -107,6 +107,47 @@ class NextPackageTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     parse_native_mcp_catalog(raw)
 
+    def test_shared_legacy_rc19_catalog_absence_is_explicit_and_version_locked(self):
+        self.shared_fixture()
+        catalog = self.app / "Contents" / MCP_CATALOG
+        catalog.unlink()
+        (self.app / "Contents" / MCP_LAUNCHER).unlink()
+        legacy = self.app / "Contents/Info.plist"
+        info = plistlib.loads(legacy.read_bytes())
+        info["CFBundleVersion"] = "20.0.0"
+        info["CFBundleShortVersionString"] = "0.9.2"
+        legacy.write_bytes(plistlib.dumps(info))
+        with self.assertRaisesRegex(ValueError, "Missing native MCP catalog"):
+            validate_bundle(self.app, shared=True, signatures=False)
+        with mock.patch("next_shared_bundle.subprocess.check_output", side_effect=self.go_metadata):
+            validate_bundle(self.app, shared=True, signatures=False,
+                            allow_legacy_rc19_shared_omissions=True)
+
+        for version in ("19.0.0", "21.0.0"):
+            with self.subTest(other_bundle_version=version):
+                info["CFBundleVersion"] = version
+                legacy.write_bytes(plistlib.dumps(info))
+                with self.assertRaisesRegex(ValueError, "only allowed for legacy RC19"):
+                    validate_bundle(self.app, shared=True, signatures=False,
+                                    allow_legacy_rc19_shared_omissions=True)
+        info["CFBundleVersion"] = "20.0.0"
+        legacy.write_bytes(plistlib.dumps(info))
+        (self.app / "Contents/Helpers/native-mcp").mkdir()
+        with self.assertRaisesRegex(ValueError, "unlisted native MCP backends"):
+            validate_bundle(self.app, shared=True, signatures=False,
+                            allow_legacy_rc19_shared_omissions=True)
+        (self.app / "Contents/Helpers/native-mcp").rmdir()
+
+        # A present-but-invalid catalog is never silently treated as absent.
+        catalog.write_text('{"schema_version":2,"servers":[]}')
+        with self.assertRaisesRegex(ValueError, "Invalid native MCP catalog schema"):
+            validate_bundle(self.app, shared=True, signatures=False,
+                            allow_legacy_rc19_shared_omissions=True)
+        catalog.write_text('{"schema_version":1,"servers":[]}')
+        with self.assertRaisesRegex(ValueError, "Missing executable: " + MCP_LAUNCHER):
+            validate_bundle(self.app, shared=True, signatures=False,
+                            allow_legacy_rc19_shared_omissions=True)
+
     def test_shared_catalog_required_and_private(self):
         self.shared_fixture()
         catalog = self.app / "Contents" / MCP_CATALOG
