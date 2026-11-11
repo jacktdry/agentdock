@@ -41,3 +41,15 @@
 | 原版不中斷、Broker resource cleanup | PASS | Original Core PID 健康，觀察 Session 均釋放 |
 
 **決策：**階段二完成了當前不中斷模式下的真實盤點與程式驗證，但**兩個核心 Host UAT 都尚未關閉**。不要為了湊綠燈開啟無權限的 macOS 前景／繞過 WebKit／發新版／動 Original。工作交接見 `next-stage1-branch-milestone-inventory-2026-11-11.md` 與 `next-rc20-installed-host-2026-11-11.md`；P13/P14／Nexus 仍按既有決議延後。
+
+## 2026-11-11 A — 非干擾安裝版補充觀察（18:19+ Asia/Taipei）
+
+**目的／限制：**確認已安裝 NEXT 真正能否安全執行「Connection 拒絕 → Overview → 返回 Connection 保留錯誤」；不切前景、不點擊、不停止 Core／Tunnel、不改 M8、Original 或使用者設定。
+
+- **Host / Runtime PASS（觀察而非 Mutation）：**Mac-Dev 核實 NEXT GUI 即時 Bundle `dev.dropabit.agentdock.next`、PID `14144`；Original GUI `com.uvwt.agentdock`、PID `38041`；現行前景 `com.openai.codex`。Core 正式 `127.0.0.1:8767/healthz` 回 `{"ok":true,"version":"0.9.2-rc.20"}`、Original `8765/healthz` 回 `{"ok":true,"version":"1.1.1"}`（均 HTTP 200）。`/health` 是 404，不是健康端點。
+- **AX / GUI 本輪局部可觀察：**AX 權限有效；按即時 Bundle 取得 NEXT `AXExtrasMenuBar` → 一個無名 `AXMenuBarItem`，子選單清楚含「核心服務：資料已過期」、「檢查核心服務狀態」、「開啟 AgentDock Next」、「結束介面」；Original Item `AXDescription=AgentDock`。**本輪 NEXT `AXWindows` 回 0**，無法在不搶前景的情況下重新讀取 Connection／Overview 子樹。之前根因報告已以另一輪原生截圖＋遞迴 AX 讀到 `AXWebArea`、Banner／Navigation／Main，該歷史可觀察證據有效，但不得冒充本輪 WebArea 或本輪完整 UAT PASS。
+- **Source PASS（契約核對）：**`desktop/shared-poc/frontend/src/stores/connection.ts` 的被動 `refresh()` 不清 `actionError`；`runMutation()` 僅於下一筆操作清除舊 `actionError`，先處理 mutation 結果再刷新 snapshot；`OverviewPanel.vue` 顯示 `operationError`。`internal/desktopapi/connection_integration.go` 的 `mutate()` 驗證 Core 所屬根、ConfigRevision、M8 外的服務權威能力及必要的 preflight；`Action` 限 `start/stop/restart/regenerate`。UI 上不可操作的無效 Port／Mode，不會自然走到 `runMutation` 的錯誤跨頁路徑。
+- **安全拒絕情境盤點：**後端直接送未知 Action 會 `connection_request_invalid`，stale revision 會拒絕且副作用為零，但**不代表合法 GUI 操作**：正常 UI 封鎖不合法選項，刻意繞過 Wails Binding 或改變現役 Revision 都違背本輪驗收目標。可見的 Start／Restart／Port／Tunnel 更改可能觸發真實服務副作用，不能拿來製造 FAIL。
+- **Mutation Host OPEN／BLOCKED：**當前無可核實又不搶焦點的 NEXT 主視窗 AX 操作路徑，亦未找到可從 UI 合法觸發且保證不影響現役 Core／Tunnel 的拒絕 Mutation。沒有執行 AXPress、注入 Wails Binding、撰寫假錯誤、操作 Tray 或 GUI。**不能把 Source PASS、先前 AXWebArea PASS 說成真實 Mutation Host PASS。**
+
+**下一個唯一必要 Host 工作：**在另獲可接受的前景操作窗口及已驗證不會生效的合法拒絕情境後，重新以 Bundle ID→即時 AXWindow→AXWebArea→Connection/Overview 取得具名操作控制，執行一次拒絕→Overview→Connection，檢查仍顯示相同 `actionError`，被動 refresh 不清錯誤，再確認雙 `healthz`。若仍無安全拒絕路徑，保持 OPEN，不加入新的欺騙式測試入口，也不為測試重構正常 GUI。

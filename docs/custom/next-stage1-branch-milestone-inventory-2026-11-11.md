@@ -73,3 +73,22 @@ fix/next-rc19-to-rc20-deploy-compat-20261111 86ff4cf0 (盤點前 clean HEAD)
 6. **保留其他工作線：**P13/P14 實驗預設不合；P5 OAuth、M6 ACP、Original maintenance 有 dirty 證據，在該工作負責人決定前不可清理、重設或強制套用到 NEXT。
 
 **本階段驗收：**Git 工作樹與遠端 ref 已唯讀查證；重要候選關係、dirty 檔案、Milestone OPEN/PASS 分層與後續整合順序明確記錄。沒有啟動 Codex ACP、移動 `custom/main`／RC20 signed candidate 分支、執行任何合併／Push／Release、更新安裝版或操作 Original/Next 服務；僅在獨立 compat 文件分支建立本地交接提交。資料來自本機 Git／工作樹與列出的專案歷史文件，非完整遠端 CI／PR 在線審核。
+
+## R04 — 歷史證據選擇性整合 Appendix（2026-11-11）
+
+**來源：**只讀 `agentdock-next-edge-rc-20261023` 原 dirty 工作樹；當時 untracked `docs/custom/next-a1-rc20-candidate-2026-11-05.md`、dirty `docs/custom/pre-m9-progress-2026-10-09.md` 與 `next-active-backlog-2026-10-21.md`。以下都是**過去時間點的紀錄，不是 11/11 現役 Installed 狀態**。來源檔仍在原工作樹，**未 reset/stash/移除/修改**；本 Appendix 不整份複製有舊版主張的文件。
+
+### 11/02 Cloudflared 維護／rollback（新增追溯）
+
+- 2026-11-02 授權本機維護時，NEXT 還是 **RC19**（Core 來源 `138c6cb0f123`）；只把 `cloudflared 2026.9.3 → 2026.10.7`，重簽 helper/外層 bundle，未換 Core 或新增 Native Catalog/Launcher。當時 GUI Stop 回報 `runtime_action_failed`，**沒有把錯誤當成功**，改採版本相符的 NEXT-only `deploy-next-shared.py`，保留 App root inode/原子 Contents swap；Original 元件同日有獨立維護，並非 NEXT Source merge。
+- 11/02 當時驗收：Next Core/Tunnel launchd/PID、新 `cloudflared --version`、四條 QUIC 連線、`8767/healthz` 200、Bundle codesign 和 Original `8765` 200；**公開端點 health 403 未過**，以及 CLI `ready=false / connected=null / public_endpoint=unchecked / remote_route=manual_route_required`，不補稱 public Host PASS。
+- 當次回滾證據在 ``/Library/Application Support/AgentDock-Rollback/tunnel-2026.10.7-su2pnuwe/` 與 ``/Applications/.agentdock-next-replacement-a57nvx7y/AgentDock Next.app`（只記錄當時路徑，**本輪未確認當前仍存在或有效**）。當時 Core PID `92533`／Tunnel `92907`、`92909` 僅歷史，禁止套用至 RC20。
+
+### 11/05 A1 RC20 的未被新 Host 狀態覆寫的歷史差異
+
+- 獨立乾淨工作樹 `feature/next-a1-rc20-20261105` 在 `704bb40d08f6144513791a9e1854cd2c9a799b73` 封存八檔 A1 source/test/doc；Candidate `next-v0.9.2-rc.20` 僅是 **tag 字串**，沒有 Tag／Push。當時 `next-preflight` canonical、ad-hoc arm64 App/ZIP/DMG、Core `version --json`、`deploy-next-shared.py::manual_version_gate` 的唯讀版本檢查通過，**沒有部署**。
+- 11/05 有兩種不同 Host 證據不可合併：一是 `staged Core` 真實 ACP completion→cancellation；二是 repository-local、已簽章 RC20 packaged Core 以隔離臨時 Root 與隨機 Loopback Port 執行真實 RPC：同 Session `completed/end_turn → cancelled/cancelled → completed/end_turn`，Session close/delete 後無測試 listener。後者**不是 installed GUI/UAT**，亦不等於 11/11 installed Antigravity Host。當時有一筆**非該輪 owner** 的 direct Computer active Session，因此拒絕 RC20 deploy，這是正確的 ownership blocker，而非部署失敗。
+- 11/05 A1 曾有 `-race -count=10` source PASS 紀錄；**11/11 另於相同 signed RC20 源重測，Race 下至少一項 1 秒 Fixture watchdog 3/3 FAIL**，診斷 overlay 七項×十次 PASS。前者是帶日期的歷史觀察，**不取代現在 H04 Source 未修正**；不要以 11/05 記錄覆蓋 11/11 失敗證據。
+- 舊 Active Backlog 的 A1 尚未實作、RC19 installed 文字是 11/04～11/05 的歷史快照；當前以 [RC20 Installed Host](next-rc20-installed-host-2026-11-11.md)、[Race/GUI/Tray 根因](next-rc20-h04-h01-h02-root-cause-2026-11-11.md) 和 Active Backlog 頁首為準。原未提交的五個 A1 source/test 與 signed RC20 source 已核實相同 bytes，**不得重新整合舊 dirty patch**。
+
+**R04 決議：完成選擇性歷史補充，不另創重複的 Candidate Full Copy。** 若後續要求稽核逐字原文，仍可對照保留的 dirty source；這不構成回頭更動其 ownership 的授權。

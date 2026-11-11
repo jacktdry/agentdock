@@ -81,3 +81,24 @@ NEXT Shared Wails ACP Panel (`ACPPanel.vue`, `stores/acp.ts`)
 - 沒有 Git merge/rebase/push/tag、沒有重新簽章或安裝 App、沒有更動 user credentials、Core M8 Policy、permission journal、Native MCP startup lock、Browser/Computer leases。
 
 **相關最新工作證據：**[Stage1 Git/Milestone](next-stage1-branch-milestone-inventory-2026-11-11.md)、[Stage2 GUI/Tray](next-rc20-connection-tray-nofocus-host-2026-11-11.md)、[RC20 Installed ACP](next-rc20-installed-host-2026-11-11.md)、[Core ID dispatch](next-native-mcp-core-id-dispatch-2026-10-25.md)、[Desktop peer provenance](next-native-mcp-desktop-peer-provenance-2026-10-26.md)、[P13/P14 UX 決策](p13-p14-ux-scope-decision-2026-10-22.md)。
+
+## N00 — 第一個 Native MCP Backend 產品決策（2026-11-11）
+
+**決策：NO-GO / 維持停用；不立 N01～N03 正式程式實作工作。** 這不是否定已有 Signed Launcher／Catalog／M8 架構，而是目前缺少能證明「真正值得啟動第一個 Backend」的用戶流程。本決議不修改任何安裝版 Catalog 或使用者權限。
+
+| 產品問題 | 經現況核對的答案 |
+| --- | --- |
+| 目前真實痛點 | ChatGPT 在維持 Mac 桌面正常使用時，安全地完成專案 Git／CLI、Browser/Computer 操作、ACP Session 及權限/租約清理；痛點在不中斷、正確身分、透明恢復，而不是「缺一個 Native MCP 工具」本身 |
+| 現有替代方案 | Original Mac-Dev MCP 已可透過已驗證 Core/CLI 操作、日常 Browser/Computer/ACP；具名外部 App 由現有 Plugin、受控第三方 MCP 或專用 CLI 提供。不需 Native Codex Backend 才能完成本輪 A–F；Native 對一般文件/狀態查詢也尚無明確缺口 |
+| Native 獨特價值的候選 | 若未來存在**只能由簽章的 NEXT Bundle 內固定執行檔**完成、必須由 M8 每次驗證意圖、同一 ACP Session 定向所有權與精準回收、且現有 MCP/Plugin/CLI 不能安全/可靠實作的實際工作，Native 的身分 pin + Core lifecycle 才可能形成不可替代價值；目前沒有經用戶現場驗證的個案 |
+| 額外成本/風險 | 引入 Backend 預設權限、Installer/Apple 簽章與 notary、Catalog allowlist、可信操作者批准 UI、verify→exec 差距、獨立 ACP lifecycle、失敗殘留處置，並帶來跨平台維護與新的發行攻擊面。此成本目前高於已量測的增益（尚未有增益量測） |
+| 現在該做什麼 | 保留 `servers=[]`、Native startup off、既有唯讀 Readiness 與安全 source tests；先完成 H01/H02、ACP/Browser 真實必要缺口、R01 安全發行。不要因架構已存在而承諾 N01/N02/N03，也不要把 Kernel peer provenance 當真人批准 |
+
+### 允許重新開案的可量測前置條件
+
+1. 從**真實且自願的**至少 10 筆近期代表性工作流程中紀錄：輸入/所需許可、現有 Mac-Dev／ACP／Plugin 的成功率、步驟、等待/重試時間、殘留/焦點風險；不蒐集 Token/敏感內容。由使用者確認其中**至少 3 筆重複出現、實際阻礙完成**的工作，而不只是功能願望。
+2. 對每個候選 Backend 做同一任務的現有工具 Baseline；若同等授權/安全下可完成，Native 必須提出**額外可觀察優勢**（例如中位數操作/人工步驟減少 ≥30%，或能解決有重現證據的高嚴重度 ownership/失敗問題）；不是純粹少敲一個指令。
+3. 寫出單一固定 server ID、唯一 signed binary、必要權限與資訊出口、明確的 Deny/Timeout/Cancel/Fail-closed 鍵和獨立回滾機制。現有 Plugin/CLI 完成度若更高，優先擴充既有工具，不新增 Backend。
+4. 小範圍真實 Pilot：至少 5 次互相獨立的實用工作、0 次非本人核准/跨 Session cleanup、0 次 Original/Tunnel 中斷、0 次額外前景切換/提示；任何高風險負例即停用，不得依 fixture 假 PASS。再評估是否值得長期簽章/版本維護。
+
+**無法達標的停止條件：**找不到三個實際痛點、既有工具已可滿足、需要全域高權限/任意 shell、沒有真人意圖與 ownership 可靠確認、或成本收益無法測量 → **NO-GO 持續有效**。若未來證據達標再開 N01（單一 Backend）→ N02（可信操作者）→ N03（真實 Session/model tool Host），每個階段另有安全 Gate；本次沒有任何 Native Backend / model tool Host PASS。

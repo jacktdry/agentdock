@@ -65,3 +65,27 @@
 | H02 Tray 失名 | **完成：Wails v3.0.0-beta.27 macOS `setTooltip` no-op + 無 AXLabel** | **未完成**：已安裝 NEXT 尚未套補丁，無安全 MenuBar Host 驗證 | 先做 `SetLabel("NEXT")` 最小方案評估；若需 icon-only，才考慮極窄 Wails Native bridge；以 AXDescription／AXTitle 真實值驗收 |
 
 **總結：**三項**根因調查交付已完成**，其中 H01 原先的「整個 GUI 載入失敗」假設已被新的 Host 證據反駁；H04 已找到不降級測試斷言的可行修復方案；H02 已定位到 Wails macOS tooltip 的空實作。沒有把尚未修改／驗收的產品功能標成 PASS。後續接手見 [Stage5 工作包](next-rc20-stage5-codex-resume-workpacks-2026-11-11.md)；P13/P14 仍依先前使用者決議延後，NEXT RC20 仍 ad-hoc、`release_ready=false`。
+
+## 後續直接實作規格 B／C（2026-11-11，無 ACP／無正式 Source 修改）
+
+### B / H02：Wails Tray 最小變更決議（Source 契約已確認，修正 Host OPEN）
+
+**優先方案：零 Fork，現行 Wails `v3.0.0-beta.27`，僅修改 `desktop/shared-poc/main.go` 的 NEXT Shared Wails Tray 建立區塊（目前約 174–203 行）。** 保留 `tray.SetTemplateIcon(icons.SystrayMacTemplate)`、`tray.SetTooltip(productName)` 和原 `SetMenu()`，在 App Run 之前新增 `tray.SetLabel("NEXT")`；不修改 `desktop/macos/AgentDockApp/Sources/AppDelegate.swift`、穩定版、module cache、已安裝 App 或 M8。若需要跨平台不顯示文字，限定 `runtime.GOOS=="darwin"`。
+
+- **精確 Wails API 已唯讀查證：**`SystemTray.SetLabel()` 在 `impl == nil` 時儲存 label；macOS `newSystemTrayImpl` 取得初始值、`setLabel` 經 `systemTraySetLabel` 在 main queue 設定 `NSStatusItem.button.title`。`SetTooltip` 在 Darwin `setTooltip` 只有 `// Tooltips not supported on macOS`，不會產生 AX 名稱。預設 Template Icon 維持；新增 4 個字母會占用狀態列額外寬度（右側瀏海／擁擠狀態列需實測），文字與圖示是否同時顯示仍屬 Host Gate。既有 `Refresh/Open/Quit` Menu callback 不更動。
+- **上游取捨：**Wails v3.0.0 已於 2026-10-26 公告正式發布，v3.1.0 於 11-01 發布；有較新版本**不等於已證實修復 AX label**。未找到可直接證實新版已提供 `NSStatusBarButton.accessibilityLabel` 的相容正式修正，不能為單一 AX 問題升級整個 Wails/Go 工具鏈。先測 `SetLabel`，失敗才決定是否需上游修補。
+- **正向 Host：**重建的 NEXT-only App 本機包具正確 Bundle、簽章；用 Bundle ID 精準查 NEXT `AXExtrasMenuBar` 的唯一 Item，`AXTitle="NEXT"`（或等價穩定可識別名稱）；Original `AXDescription="AgentDock"` 不變；Template icon 清楚、文字沒被 notch 隱藏、Menu 有狀態刷新／Open／Quit 且僅在允許窗口安全驗收刷新，前景不被搶走。**AXTitle 尚未以改版實機驗證，不寫 PASS。**
+- **負向：**無 AX name、命中 Original、Icon 消失、選單項失蹤/誤指向、狀態列擠壓、暗色/亮色不辨識、文字多重 Tray、刷新導致 Core／Tunnel 重啟，任一即拒絕通過；**不得根據未命名 X 座標點擊**。
+- **備選最小 Bridge：**若產品堅持 icon-only 且 `SetLabel` 無法滿足完整的 `AgentDock Next` 可及性，單獨維護有版本 pin 和 patch provenance 的 Darwin `pkg/application/systemtray_darwin.m` / Go bridge，僅在 `systemTrayNew` 建立 button 時設定 `accessibilityLabel`（可能補 `accessibilityHelp`），確保初始名稱生效；同步測 macOS AppKit／主執行緒、正常文字/Icon/Menu/Destroy/Show Hide。**不能改 Go module cache 或引入動態 runtime injection**。上游可接受之前保持局部 patch，若維護成本大於收益就保留 `H02 OPEN`。
+
+### C / H04：正式 Fixture 變更規格（Source 未修改）
+
+**可直接交付修改者的檔案邊界：**僅 `internal/acp/write_timeout_test.go`，先不要動 `connection.go`、`pipe_write_unix.go`、`pipe_write_windows.go`、`awaitACPWrite` 或 `awaitACPWriteResult`。現有臨時 Overlay `dist/h04-diagnostic-20261111/h04-a1-two-scheduling-fixtures.go` SHA-256 `7bb1ec60f5016568f879d99869d4a695c31ece2794a415f12eb9b335edc2b3f0`；JSON SHA-256 `37d876c57d16029b6a7ffed833926ea3ae021ca5400699c11b65a1287e441b58`，只是診斷材料，不加入正式成品。
+
+1. `TestBlockedWriteHonorsRequestContext` 的 `prompt` 從 `strings.Repeat("x", 1<<20)` 改為 `1<<17`（128 KiB），保留 `cancel`/`deadline` 兩個子測試、`awaitACPWrite` 的真實 Write start、完整取消分類、`Closed()` 與 `pending` 清理斷言。
+2. `TestQueuedWriteTimeoutPreservesActiveWrite` 的首筆 `Notify("large", ...)` 同樣用 `1<<17`；在 `awaitACPWrite(started)` 後、送 queued request **之前**，非阻塞檢查 `first` **尚未結束**；queued 50 ms deadline 返回 `ACP_REQUEST_CANCELLED` 後、啟動 peer drain **之前**，再次確認 `first` 仍阻塞。任何提前完成均 `Fatal`，不可讓測試以 payload 太小而假陽性。
+3. 保留 `awaitACPWriteResult` 固定 1 秒 watchdog、未被傳送的 queued frame、`requireNoPendingWrites`、`Closed()` 不可觸發、peer JSON decoder 只收到完整 `large` 再 `healthy` 的順序與 Connection reuse。**不得僅延長 Timeout 或刪除負向斷言。**
+4. Unix 實際 `os.Pipe` + `writeACPStream` 使用 `context.AfterFunc` 關閉 writer 中止已嘗試寫入；Windows synchronous pipe 用鎖定 OS thread + `CancelSynchronousIo` 並 join，不能將 Unix 的阻塞/關閉語意直接類推 Windows。`128 KiB` 在每個目標系統**不保證**大於實際 pipe buffer；若 native Windows 測試發現沒有有效背壓，需以明確 blocking handshake/fixture 設計收斂，不能把 Windows Host 標 PASS。
+5. Source 提交後在**正式修正 source，非 Overlay**執行七項 focused `go test -mod=readonly -race -count=10 -timeout=140s -run '^Test(BlockedWriteHonorsRequestContext|QueuedWriteTimeoutPreservesActiveWrite|AlreadyCancelledWriteDoesNotTouchHealthyConnection|WriteFailureClosesFramingAndKeepsClassification|CloseReleasesBlockedAndQueuedWrites|CancelledRequestDoesNotWaitForCancelNotification|BlockedNotifyHonorsWriteDeadline)$' ./internal/acp`，再完整 `go test -race ./internal/acp`、Go vet、必要的 Windows native Pipe 測試及 Original/NEXT 健康、Session ownership；失敗時不得刷掉 FAIL。
+
+**已確定且不需 Codex 重做的根因：**兩處 1 MiB Fixture × Race 下高 Marshal/Decoder/Pipe 壓力與短 deadline 的測試同步不穩，縮小 Fixture 且驗證實際阻塞的臨時 Overlay 七項×十次 PASS。**原簽章 RC20 Source Race 仍 FAIL、正式修正/跨平台 Host OPEN**，不因此重寫 ACP pipeline。

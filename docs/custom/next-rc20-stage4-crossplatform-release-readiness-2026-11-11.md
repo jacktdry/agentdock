@@ -85,3 +85,21 @@
 **Stage4 的可完成範圍：**本機 Source/Package/Release metadata 驗證、跨平台 source build（Windows arm64 另記 timeout）、原本及 NEXT 服務健康維持、明確的 Hosted CI 和正式發行範圍。**NOT release-ready。** Stage4 不要求為了 CI 綠燈去改 Stable 發行流程、關閉 NEXT/Original、勉強產生 Windows Installer，或新設無真實需求的持續伺服器。
 
 接續 [Stage5 工作包](next-rc20-stage5-codex-resume-workpacks-2026-11-11.md)：先解決 GUI/Tray 的真實可用性，Codex 額度恢復才補 installed Prompt→Cancel→Recovery；Native MCP 先選一個真正有價值的 Backend 再接可信操作者與 M8；對 Host/安全/發行 Gate 分離計畫，最後才評估 Core 改版、Hosted CI、正式簽章與發布授權。
+
+## R01 — NEXT 專屬最小 CI／Release 契約（2026-11-11；Plan / Offline，未發行）
+
+**目的：**可安全、重現地發布 NEXT macOS arm64，不把 Original `v*` CI/簽章/Update Feed 與 NEXT `next-v*` 混用。產品利益是避免測試中的 NEXT 破壞 Original 的可靠控制入口。**不做** Windows Installer、任意多平台矩陣、重複 Portal／MCP test Job、自動啟用 Feed 或未授權發版。
+
+**唯讀現況：**`.github/workflows/next-release-preflight.yml` 的 `pull_request.paths` 是選擇性觸發，兩處 `RC_VERSION='0.9.1-rc.1'`／`BUNDLE_BUILD='1'` 是固定舊示例；`candidate-core` 為 `macos-15/darwin/arm64` 原生 smoke，未涵蓋正式 Shared Wails package、Developer ID 和發布。`.github/workflows/release.yml` 是 Stable `v*`，具 Stable artifact/name/channel，絕不可將 `next-v*` 套用其身分。`tools/release/next_candidate.go` 已拒絕非 canonical manifest bytes；`tools/release/next_artifacts.go` 可做候選檔 inventory，**不能替代 notarization 或實際 install**。Windows NEXT Installer `#error` 保持停用。RC20 ad-hoc 本機 App、ZIP、DMG 已在上節驗證，正式 Hosted 與外部簽名仍 OPEN。
+
+### 最小 Workflow 設計（待正式程式工作單寫入者實作）
+
+1. **NEXT 專用候選驗證入口：**在既有 `next-release-preflight.yml` 消除硬編碼版本，改由明確的 `workflow_dispatch` 輸入 `next_version`／`bundle_build` 與受保護來源的 **完整 Source SHA**，或由下一個獨立 `next-v*` 的 protected tag 觸發；先驗證 tag prefix、版本 ↔ tag 一致、`git rev-parse HEAD` 與完整 SHA 一致、checkout clean、BuildDate 使用該 commit timestamp；所有未核可 SHA/tags 拒絕。CI 實際跑 `next-preflight` 寫入一次 Canonical JSON，並用 `--verify` 校對 exact bytes；以該檔在同一 commit 之下產生/驗證 `next-candidate`。**目前 RC20 canonical `release_ready=false` 不可修改或冒充正式 candidate**；若產品已變更需在新 source commit 產生其自己的 Manifest。
+2. **一個 macOS arm64 預簽驗證＋封裝 Job：**`macos-15` arm64，針對 Go Core/Arbiter、Shared Wails、Vue typecheck/Vitest、必要安全/Package fixtures 執行現有測試指令；使用 `packaging/macos/build-next-shared.sh` 的已批准 build path 生成與同一 manifest 綁定的 NEXT-only App/ZIP/DMG。嚴格核對 `CFBundleIdentifier=dev.dropabit.agentdock.next`、`CFBundleVersion`、Core `version --json` SHA、簽章身份與 sealed native Catalog；`next-artifacts` 檢驗 canonical Inventory、ZIP CRC、DMG verify，針對三種成品計算 SHA256、記錄路徑/size/hash。先將**未發布 Artifact + manifest + inventory + job SHA**上傳為不可任意覆寫的候選產物（具保留期限）。
+3. **人工 Release Approval、正式簽章：**僅來源保護規則、Hosted Runner、A/B/C/H Host Gate、資安／回滾審核通過，且 Release Owner 明確批准後，才由 protected GitHub Environment（建議 `next-production`、required reviewer）解鎖 Developer ID Application 身分、Apple Team、ASC API Key/Keychain 私密設定；簽章含主 App、Core、cloudflared、Native Launcher 與封裝內容，`codesign --verify --deep --strict`、`spctl`、`xcrun notarytool submit --wait`、`stapler validate` 驗證，重新計算**簽後** Artifact hash。這是 **OPEN**：ad-hoc 不可冒用 Developer ID；憑證/Hosted CI 尚無可引用 RC20 成功 Run。
+4. **顯式 NEXT-only Publication Gate：**人工覆核最終 canonical manifest、新 Source SHA、簽章公證 ticket、已驗證 bytes/hash、Windows 未出貨的宣告、NEXT-only rollback 可用與經授權的發版範圍。正式公開前 `release_ready=false` 和 Update Feed `disabled/unpublished`；唯有 gate 全達成，才由**獨立授權發版來源**產生新 approved release metadata（絕不事後修改歷史 RC20 canonical bytes），以 `next-v*` 專用 Release/tag/存放位置發布。不得觸發 Stable `release.yml` 或 Original 的 `v*` Feed。
+5. **更新與回滾安全：**NEXT Feed 先發布到不可被 Stable 讀取的私有/候選 channel，驗證 version monotonic、签章 issuer、artifact SHA，已確認 NEXT-only RC19/前一穩定包可恢復；小範圍人工 canary、服務/GUI 非干擾以及 8767／8765 健康後才公開啟用 NEXT channel。出錯時原子回退**只屬於 NEXT** 的 feed 指標與可驗證前一 Artifact、停止 NEXT 更新通道、保留 installed rollback 證據，不停止、回退或覆寫 Original。Feed 未獲額外發行授權前維持 off。
+
+**驗收拆層：**本次 = Local workflow/source contract **PASS**、最小設計與人工 gate **COMPLETE**；Hosted macOS CI **OPEN**、Developer ID/Notary **OPEN**、RC20 real rollback **OPEN**、發行核准/Feed **BLOCKED（未授權）**。不會因既有本機 ad-hoc hash/RC19 備份或 CI 規劃而把 `release_ready` 設為 true。
+
+**後續允許改檔：**`.github/workflows/next-release-preflight.yml` 及必要時新增**一個**明確命名的 NEXT 發行 Workflow、對應 `tools/release/*` 測試與 `packaging/macos/build-next-shared.sh` 參數契約；不得改 `.github/workflows/release.yml` Stable 身分、`packaging/windows/NextAgentDock.iss`、Source signed RC20 commit 或任何 live Apple/Credentials。先在隔離 PR 作 fail-closed negative tests（錯誤 tag/SHA、非 canonical JSON、dirty checkout、缺簽章/公證、錯用 Original feed/identity、被覆寫 artifact），再要求 Hosted proof。原始 Wails 3 upstream release 最新資訊只作升級評估，不是本輪發版依據。

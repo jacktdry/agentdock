@@ -8,7 +8,7 @@
 
 - 已安裝 NEXT Core `0.9.2-rc.20`、簽章原來源 commit `704bb40d08f6`、Bundle build `21.0.0`、NEXT 端口 `8767`；Original Custom v1.1.1 在 `8765` 不得更動。NEXT RC19 signed 回滾 App 保留；目前 signed package 是 **ad-hoc、本地驗收**，非 Developer ID 官方 release。
 - RC20 installed Gemini Antigravity ACP **completed→cancelled→same-session recovery PASS**；**Codex installed 同等驗收因提供者額度阻擋**，不是程式錯誤的佐證。
-- Connection/Overview source test PASS，**真正 installed GUI 經背景 Window screenshot 空白／AX 僅基本 5 元素**，尚無真實拒絕操作跨頁驗收。Tray 真實 installed Wails `AXExtrasMenuBar` 1 個 enabled item，**NEXT 的 AXTitle/Description 缺失**，Original 有可辨識 label；不得盲點擊。
+- Connection/Overview source test PASS；後續原生 `screencapture -l` 和遞迴 AX 已證實 WebArea 存在、先前黑畫面/AX5 是觀察假象；**真正拒絕後跨頁 Mutation Host 仍 OPEN**。Tray 真實 installed Wails `AXExtrasMenuBar` 1 個 enabled item，**NEXT 的 AXTitle/Description 缺失**，Original 有可辨識 label；不得盲點擊。
 - Native MCP Launcher + Core-owned strict Catalog + M8 private framework 已具備；**installed Catalog `servers=[]`、Backend 0、Desktop 無 production mutation route**，Native Model tool→Backend Host OPEN。OS Signed Peer 只證明程序來源，**不等於真人同意**。
 - Stage4 的 macOS 簽章 App／ZIP／DMG、本機跨平台 source build、Release CI 狀態應以 [Stage4 實測報告](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md) 為準。Windows installer 預設明確 disabled；`release_ready=false`、Update feed unpublished，任何工作包都不得自行解鎖。
 - Git 本機：`custom/main=7e87605a` 是 RC20 源祖先；安裝用 signed source `704bb40d`、compat+Docs branch 後續獨立提交；相對遠端 `origin/custom/main` 有數百個本地提交未發布。原 `agentdock-next-edge-rc-20261023`、M6、P5 OAuth、Original maintenance dirty worktrees 不 reset／stash／覆蓋。P13/P14 已依使用者決策 deferred，NexusDock 亦 deferred。
@@ -60,3 +60,16 @@
 - **需要 Codex ACP/Code Writing 時才派工**：H01 若真實有 bug、H02 Wails Tray 修正、**H04 若需修 ACP Pipe/Test**、N01–N03 生產程式接線、R01 若需改 CI 工作流。
 - **真正需要 Codex 額度的 Hosted UAT**：H03 和 N03 的 model/native ACP Host；即使所有 source tests PASS，Host Gate 仍應明確保留 OPEN，不能捏造通過。
 - 原版、NEXT、雙端 Broker 清理與 Host 非干擾為所有工作包共同且必要的接受條件。
+
+## 2026-11-11 A～F 無 ACP 收斂狀態
+
+| 工作 | 本輪已完成 | 留待正式產品／Host |
+| --- | --- | --- |
+| **A H01** | [Connection/Overview 非干擾 AX、前景、安全拒絕路徑與 Store/Core 契約](next-rc20-connection-tray-nofocus-host-2026-11-11.md)：前景 Codex，NEXT AXWindows=0，Tray 子項可讀；source error persistence 核對通過 | GUI 真正拒絕→Overview→返回跨頁保持同一錯誤 **Host OPEN**。本輪不存在既安全又可由正常 UI 觸發的拒絕 Mutation；不注入假失敗、不搶焦點 |
+| **B H02** | [Wails beta.27 `SetLabel("NEXT")` 零 fork 最小 Spec 與負向驗收](next-rc20-h04-h01-h02-root-cause-2026-11-11.md) | 正式 `main.go` 修正＋安裝版 AX/Menu Host **OPEN**，目前無名 Tray 不可盲點 |
+| **C H04** | [兩個 128 KiB Fixture + Active blocked checks 的精準 Delta／Unix-Windows 不可類推契約](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)；現有 overlay hash 已再核對 | 原 Source 未修、race FAIL；正式測試變更/真 Windows Pipe UAT **OPEN** |
+| **D R01** | [NEXT-only Source SHA→Manifest→macOS arm64 CI→簽章/公證→人工 Approval→Feed／Rollback 流程](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md) | Hosted CI、Developer ID、Approval、正式 Feed **OPEN/BLOCKED**；不 Push/Tag |
+| **E R04** | [舊 RC20 Candidate、11/02 Cloudflared/Tunnel 與 11/05 staged/signed Core 的歷史 Appendix](next-stage1-branch-milestone-inventory-2026-11-11.md)；沒有覆蓋新的 Installed UAT | 歷史檔原 dirty owner 保留；不需再複製舊文全文 |
+| **F N00** | [Native MCP Backend 產品決策：NO-GO／維持停用](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)；既有 Mac-Dev/ACP/Plugin 足以完成目前實際工作 | 具 3 個重複且阻塞實際任務的 Pilot 證據前，不排 N01–N03 |
+
+**重要保留：**簽章來源 `704bb40d` 與文檔 compat branch HEAD 不同；Original `8765` 不動、NEXT `8767` 不更新、`release_ready=false`、Update Feed off、Codex ACP 完全沒有使用。A～F 的文件調查/規格完成**不等於**以上產品修改或 Host Gate 通過。
