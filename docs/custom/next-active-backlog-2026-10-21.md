@@ -1,6 +1,8 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
-> **2026-11-12 RC21 Source／Docs 統一開發基準（工作線 A）：**[整合基準、Lineage 與 B／C 合流方式](next-rc21-product-baseline-2026-11-12.md)。整合分支 `integration/next-rc21-product-baseline-20261112` 以 Source `0a0a0ba9` 為底，納入 Docs `1f0a390b` 的六筆獨立文件提交；這是**本機 Source＋Docs 基準**，不是 `custom/main`、已安裝版本或公開 Release。B／C 從各自 Source 分支獨立工作，完成後由指定整合者依序納入；D 唯讀盤點 GitHub／發行治理。本頁下方較早日期 OPEN 僅保留歷史，不能覆蓋新結案決策。
+> **2026-11-12 最新有效基準 — A＋B＋C 已本機整合：**[RC21 統一分支／驗證／GitHub 交接](next-rc21-consolidated-handoff-2026-11-12.md)。新 branch `integration/next-rc21-consolidated-20261112` 合入 B 的 P8 Browser Mode 安全 CLI（**非 GUI、預設 exclusive、下次正常啟動生效**）及 C 的 Plugin 被動 refresh 回饋保留、Settings ACK 後讀回確認；延續 H02／H04 已結案成果。**Source-only、現役 NEXT 未部署新功能，H01 native 跨頁 Host 尚未 PASS**。D 正式治理結案無文件證據；GitHub 尚未 Push、`custom/main` 未合併、正式 Release 未授權。P13/P14、NexusDock、Native MCP Backend 保持 deferred/NO-GO。舊 A-only / RC20 OPEN 留作歷史，不重開額外驗收。
+
+> **2026-11-12 A-only 歷史基準（已由上方 A＋B＋C 合流覆蓋）：**[整合基準、Lineage 與 B／C 合流方式](next-rc21-product-baseline-2026-11-12.md)。整合分支 `integration/next-rc21-product-baseline-20261112` 以 Source `0a0a0ba9` 為底，納入 Docs `1f0a390b` 的六筆獨立文件提交；這是**本機 Source＋Docs 基準**，不是 `custom/main`、已安裝版本或公開 Release。B／C 從各自 Source 分支獨立工作，完成後由指定整合者依序納入；D 唯讀盤點 GitHub／發行治理。本頁下方較早日期 OPEN 僅保留歷史，不能覆蓋新結案決策。
 
 > **2026-11-12 多 Session 交接入口：**[A／B／C／D 共用開發文件](next-four-workstreams-handoff-2026-11-12.md)。A 負責 RC21 Source＋Docs 及整合 Backlog；B 做 P8 Browser shared 模式安全啟用／停用；C 只修 P6／P7／H01 可重現的使用缺口；D 唯讀分類 GitHub 分支及正式發行條件。四線不同 worktree，不互改或無授權 Push／部署。
 
