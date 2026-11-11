@@ -117,6 +117,35 @@ describe('plugin_store_authority', () => {
     expect(mocks.setEnabled).not.toHaveBeenCalled()
   })
 
+  it('keeps unresolved plugin operation feedback when reopening or refreshing the Plugin page', async () => {
+    const store = usePluginStore()
+    await store.refresh()
+    mocks.setEnabled.mockResolvedValueOnce({
+      requestId: 'f'.repeat(32), outcome: 'outcome_unknown', outcomeUnknown: true,
+      completed: false, recoveryRequired: true, runtimeImpact: 'next_connection',
+      error: { code: 'plugin_operation_timeout', message: '', category: 'timeout', retryable: true },
+    })
+    mocks.operationStatus.mockResolvedValueOnce({ found: false, pending: true, outcomeUnknown: true })
+    await store.setEnabled(plugin, true)
+    expect(store.lastFeedback?.outcomeUnknown).toBe(true)
+    expect(store.mutationError?.code).toBe('plugin_operation_timeout')
+
+    // A fresh inventory is not a user command to retry or dismiss an uncertain operation.
+    await store.refresh()
+    expect(store.lastFeedback?.outcomeUnknown).toBe(true)
+    expect(store.mutationError?.code).toBe('plugin_operation_timeout')
+    expect(store.canInvoke('setEnabled')).toBe(true)
+
+    // Unlike passive navigation, a new explicit operation replaces the old failure.
+    mocks.setEnabled.mockResolvedValueOnce({
+      requestId: 'e'.repeat(32), outcome: 'completed', outcomeUnknown: false,
+      completed: true, recoveryRequired: false, runtimeImpact: '', error: null,
+    })
+    await store.setEnabled(plugin, false)
+    expect(store.mutationError).toBeNull()
+    expect(store.lastFeedback?.outcomeUnknown).toBe(false)
+  })
+
   it('does not retain write-only connection values in Pinia state', async () => {
     const store = usePluginStore()
     await store.refresh()
