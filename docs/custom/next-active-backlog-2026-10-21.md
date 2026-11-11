@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 分支／Milestone 整合盤點：**[19 個 worktree、RC20/compat fast-forward 54 commits、遠端落後 312 commits、dirty 舊樹與 P13/P14 範圍](next-stage1-branch-milestone-inventory-2026-11-11.md)。這是唯讀查證後的交接，非已執行 merge／push／release；下面 RC20 installed Host 才是運行證據。
+
 > **2026-11-11 NEXT RC20 本機已安裝：** [RC19→RC20 部署相容性、簽章與真實 ACP Host 驗收](next-rc20-installed-host-2026-11-11.md)。Computer Broker 三個指定直接控制 Session 已依授權釋放；RC20 Core `8767`、Tunnel、GUI 背景重啟以及 26 檔 SHA 比對 PASS，Original `8765` 未中斷；安裝版 **Antigravity Gemini ACP `completed→cancelled→同 Session recovered` PASS**。Codex provider quota 阻擋其安裝版三階段 UAT；Native MCP／Connection GUI／Tray／Windows／正式 CI 發布門檻仍 OPEN。獨立本地部署相容性 commit `55fcd06a`、回滾修正 `30a1bb87`；RC20 簽章候選 source commit `704bb40d` 不變，無 merge／push／release。
 
 **2026-10-26 NEXT Desktop native operator peer provenance（source-only）：** [Unix kernel peer PID/UID/birth 與 NEXT GUI 簽章 Bundle 的唯讀來源預檢](next-native-mcp-desktop-peer-provenance-2026-10-26.md)。原有 core/Stable IPC 不變；實際 Host Socket 與 signed temporary bundle tests、Race/go vet、Linux/Windows/no-cgo build PASS。此處只驗證程式來源，不提供真人確認/M8 授權/Native launch；installed Host 與 Connection/Tray 仍 OPEN。
