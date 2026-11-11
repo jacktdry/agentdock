@@ -1,6 +1,14 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
-> **2026-11-11 晚間 H04/H02/R01 無 ACP 實作更新（較上方歷史 A～F 文檔結論為新）：**隔離分支 fix/next-rc20-h04-h02-r01-20261111 已實作 H04 128 KiB Race Fixture+雙重阻塞斷言（正式 Source 七項 -race×10 PASS）；H02 Darwin Wails Tray SetLabel NEXT（Shared Desktop 測試 + arm64 Mach-O Source Build PASS，AX Host OPEN）；R01 新增 NEXT-only 手動 unpublished Candidate CI + 帶完整 Source SHA / Cloudflared SHA256 的候選封裝與清單驗證（Hosted CI OPEN，未發布）。見 [H04/H02 後續證據](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)、[R01 實作](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)。Original / NEXT 未替換、不發版、不啟用 Update Feed；既有 signed RC20 歷史記錄不覆寫。
+> **2026-11-12 RC21 Source／Docs 統一開發基準（工作線 A）：**[整合基準、Lineage 與 B／C 合流方式](next-rc21-product-baseline-2026-11-12.md)。整合分支 `integration/next-rc21-product-baseline-20261112` 以 Source `0a0a0ba9` 為底，納入 Docs `1f0a390b` 的六筆獨立文件提交；這是**本機 Source＋Docs 基準**，不是 `custom/main`、已安裝版本或公開 Release。B／C 從各自 Source 分支獨立工作，完成後由指定整合者依序納入；D 唯讀盤點 GitHub／發行治理。本頁下方較早日期 OPEN 僅保留歷史，不能覆蓋新結案決策。
+
+> **2026-11-12 多 Session 交接入口：**[A／B／C／D 共用開發文件](next-four-workstreams-handoff-2026-11-12.md)。A 負責 RC21 Source＋Docs 及整合 Backlog；B 做 P8 Browser shared 模式安全啟用／停用；C 只修 P6／P7／H01 可重現的使用缺口；D 唯讀分類 GitHub 分支及正式發行條件。四線不同 worktree，不互改或無授權 Push／部署。
+
+> **目前有效產品狀態：**[RC21 產品結案與 P8 真正續做事項](next-rc21-product-closeout-and-p8-resume-2026-11-11.md)。H02 Tray 辨識 **DONE**、H04 原始 Race fixture 修正 **DONE**（並行高負載下 1 秒測試逾時僅列已知風險）、RC21 NEXT-only 本機建置／安裝與簽章回滾備份 **DONE**。P8 2026-10-14 真實 ChatGPT／Codex／Antigravity 共用一個 Chrome、獨立 Lease/Page 與 cleanup **PASS**，但共享模式仍需 NEXT-only 顯式 opt-in，預設 exclusive；B 的缺口是日常安全設定與回退，不是重新驗證 Shared Broker。H01 真實失敗跨頁為 C 的獨立可重現缺口；正式 Hosted CI／Developer ID／Notary／Update Feed 為有發行目標才進入的 R01，不反向阻擋 RC21 本機結案。管理者提示來源未證實，不能歸因 NEXT 或要求權限操作。
+
+> **Source 專屬實作沿革（2026-11-11，已納入 RC21）：**H04 128 KiB Race fixture 與阻塞斷言、Darwin Wails Tray SetLabel NEXT、NEXT-only 手動 unpublished Candidate workflow／封裝 SHA 清單校驗原始碼，均來自 `0a0a0ba9`，見 [H04/H02 證據](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)、[R01 實作](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)。先前 Source-only 的「H02 AX Host OPEN」已由 RC21 installed AXTitle PASS 覆蓋；unpublished workflow 仍非 Hosted CI PASS，沒有 Push／發版／Feed 啟用。
+
+> **以下為歷史快照：**各段對 RC18／RC19／RC20 的 OPEN/FAIL 僅代表當時證據，請以本頁以上 2026-11-12 基準及 RC21 結案為現行判斷。尤其下方「P0 管理者提示 → P6 發行」是已被使用者收斂的舊工作清單，不是新的必做 Gate。
 
 
 > **2026-11-11 A～F 非 Codex ACP 後續收斂（文件／離線，非發版）：**[Stage5 A～F 狀態與下一個真正寫碼 Session 入口](next-rc20-stage5-codex-resume-workpacks-2026-11-11.md)。A H01 非干擾 GUI（本輪 AXWindows=0、Source 契約已核、真實拒絕跨頁 OPEN）；B H02 Wails `SetLabel("NEXT")` 零 fork 修正規格；C H04 兩個 128 KiB Fixture 與阻塞斷言精準變更規格（舊 RC20 Race 仍 FAIL）；D R01 NEXT-only macOS arm64 CI／Developer ID／人工 Release/Feed 保護計畫；E R04 [11/02 Tunnel＋11/05 Candidate 歷史 Appendix](next-stage1-branch-milestone-inventory-2026-11-11.md)；F N00 [首個 Native Backend 產品 NO-GO、繼續 disabled](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)。本輪僅文件，不改正式程式／安裝版／Original／M8；不使用 ACP、不 Push/Merge/Tag/Release。維持 `release_ready=false` 與 Feed off。詳細 B/C 見[根因報告追加規格](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)，R01 見[Stage4 追加發行契約](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)。
