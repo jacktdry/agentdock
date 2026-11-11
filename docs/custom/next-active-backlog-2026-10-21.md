@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-12 多 Session 交接入口：**[A／B／C／D 共用開發文件](next-four-workstreams-handoff-2026-11-12.md)。A 整合 RC21 Source＋Docs；B 做 P8 Browser shared 模式安全啟用／停用；C 只修 P6／P7／H01 真實使用缺口；D 唯讀分類 GitHub 分支及正式發行條件。四線不同 worktree，不得互改或無授權 Push／部署。本入口最新決策優先於下方歷史 Gate。
+
 > **2026-11-11 RC21 正式停止延伸驗收、P8 核心 Actor 流程已 PASS：**[RC21 產品結案與 P8 真正續做事項](next-rc21-product-closeout-and-p8-resume-2026-11-11.md)。H02 Tray 辨識 DONE、H04 原始 Race fixture 修正 DONE（高負載測試逾時列風險）、RC21 NEXT-only 本機候選及安裝 DONE；不再要求額外 Tray AXPress、回滾演練或全場景焦點監測。管理者權限提示尚無來源證據且可能跨 Session，**不是 NEXT 已確認缺陷**。P8 **2026-10-14 三真實 Actor ChatGPT＋Codex＋AGY 一個 Chrome 並發、lease/page 隔離與獨立 release 已 PASS**（參考 P8 §52），不可重複驗收。當前 shared 是 NEXT 明確臨時 opt-in，預設仍 exclusive，後續僅處理這個真正使用入口與安全啟用缺口。不修改 Stable/Original 或使用者 Edge。
 
 
