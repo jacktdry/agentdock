@@ -71,6 +71,14 @@ After deployment, standard authorized read-only MCP status returned: Browser Bro
 - R01 unpublished Hosted GitHub CI has not run, native Windows validation incomplete, high-load H04 fixture timeouts retained; no Developer ID signing, Apple notarization, GitHub Release, Tag or public Update Feed. No Push/MR/Merge.
 - This evidence lives on the separate documentation worktree branch rather than editing the immutable RC21 source, so the already-verified source SHA stays unchanged.
 
+## 2026-11-11 後續隔離驗收及管理者授權提示（補充）
+
+前次 installed GUI 以 open -g -a 啟動時未傳 Source 已有的 -background flag，不能據此判定 flag 無效。隔離 h02uat App 帶入參數之 argv 已核實，期間 UAT_FOCUS_COUNT=0、AXTitle=NEXT，測試 PID 已清理；但是同一監控另觀察到 macOS SecurityAgent 活化，**完全無安全提示沒有 PASS**，也尚未確認觸發命令。
+
+較晚的**安裝版唯讀 AX 樹**可直接讀到 NEXT Tray 下 AXMenu 的六個子項：核心服務初始狀態、檢查核心服務狀態、開啟 Next、結束介面、兩個分隔。故選單**結構與標籤 PASS**；未執行 AXPress、Refresh/Open/Quit，互動仍 OPEN。使用者提供 macOS「agentdock 啟動的工具指令要求管理者權限」視窗，**已知這是系統提權請求，但 exact tool/command/PID 仍 UNKNOWN**。停止任何會反覆要求密碼的 GUI/安全測試。
+
+後續 P0-P6、不得繞過提權的限制與最新交接見 [RC21 權限彈窗／Tray 對照與待辦](next-rc21-admin-auth-tray-handoff-2026-11-11.md)。本補充不否認前次 installed 背景啟動短暫搶焦點的事實，也不宣稱提權已修復。
+
 ## Evidence file paths (all ignored within source worktree)
 
 - dist/rc21-20261111-local/deploy-rc21-result.log

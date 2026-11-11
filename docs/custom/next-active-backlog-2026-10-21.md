@@ -1,5 +1,8 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 最新交接：P0 先找管理者授權彈窗來源。** [RC21 權限／背景啟動／Tray 進度與 P0-P6](next-rc21-admin-auth-tray-handoff-2026-11-11.md)。Installed RC21/Original Core 與 RC20 rollback 有前次 PASS 證據；Source 已支援 -background，但之前 installed open -g 沒有傳，隔離版帶入時 NEXT 未活化（PARTIAL PASS），同時仍看到 macOS SecurityAgent 活化；**未知實際提權命令，不可宣稱零彈窗或根因已修**。Installed NEXT Tray AX 已讀到狀態、檢查、開啟、結束與兩分隔（結構 PASS），沒有點擊。接續 P0 唯讀歸因→P1 僅修不必要提權→P2 安裝版無干擾啟動→P3 Tray 實際安全操作→P4 H01→P5 H04 高負載→P6 R01 CI/Release。這次只提交文件，本機 Git、不改已安裝程序、不 Push。
+
+
 > **2026-11-11 RC21 installed NEXT-only（真正部署＋H02 AX Host PASS）：**[RC21 正式安裝與保護邊界驗收](next-rc21-installed-host-2026-11-11.md)。Core 8767 為 rc.21（PID20891）、Tunnel PID21108、GUI PID22247 真正載入 RC21 Bundle 22.0.0，Original 8765 v1.1.1 PID38464 未中斷；26/26 App 檔案 SHA 與 RC21 source package 完全一致，實際 atomic rollback RC20 stage 26/26 與預留 RC20 備份一致、簽章 PASS。**安裝版 NEXT Tray AXTitle=NEXT、Main AXWebArea 存在（67 元素）PASS**。但 open -g 背景啟動仍曾把 NEXT 切到前景：嚴格零搶焦點 FAIL/OPEN，使用者自行回到 Codex 後未再次切焦；Tray 視覺／實際選單及 H01 真實拒絕 mutation 仍 OPEN。沒有 Push／公證／公開 Release／Feed。
 
 > **2026-11-11 RC21 Local + H02 AX Host（新證據）：**[RC21 候選與隔離驗收](next-rc21-local-candidate-host-evidence-2026-11-11.md)。已在本地乾淨 Source 0a0a0ba9 建立 NEXT RC21 22.0.0 arm64 App/ZIP/DMG；ad-hoc codesign、Core 版本、雜湊與 Inventory PASS；隔離版 Wails Tray 的 AXTitle=NEXT、前景不變且程序清理完成。Vue 184 tests、無並行負載 H04 Race×10／ACP full Race PASS；**並行高負載 1 秒 Fixture Timeout FAIL 仍保留紀錄**。未部署 RC21、不變更 Original／已安裝 RC20、不 Push、沒有 Developer ID、Notary／Feed。
