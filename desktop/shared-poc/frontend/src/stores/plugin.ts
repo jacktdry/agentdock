@@ -99,7 +99,8 @@ export const usePluginStore = defineStore('plugin', () => {
   async function refresh() {
     if (busy.value || !canRead.value) return false
     loading.value = true
-    resetMutationState()
+    // A passive inventory refresh is not a new mutation or an acknowledgement
+    // of an unresolved operation. Keep the last failure/recovery guidance visible.
     try {
       return await readSnapshot()
     } finally {

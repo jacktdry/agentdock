@@ -12,6 +12,12 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
   const error = shallowRef<APIError | null>(null)
   const completed = shallowRef(false)
   const valid = computed(() => current.value !== null && validBasicSettings(draft.value))
+  function invalidateSettings() {
+    current.value = null
+    mutable.value = false
+    portMutable.value = false
+    portDisabledReason.value = ''
+  }
   function reset() {
     if (current.value && !busy.value) draft.value = { ...current.value }
     completed.value = false
@@ -20,10 +26,7 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
     const result = await desktopApi.readBasicSettings()
     error.value = result.error ?? null
     if (error.value) {
-      current.value = null
-      mutable.value = false
-      portMutable.value = false
-      portDisabledReason.value = ''
+      invalidateSettings()
       return
     }
     current.value = result.settings
@@ -36,7 +39,7 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
     if (busy.value) return
     busy.value = true; completed.value = false; error.value = null
     try { await readSettings() }
-    catch (caught) { current.value = null; mutable.value = false; error.value = clientError('settings_read_call_failed', caught) }
+    catch (caught) { invalidateSettings(); error.value = clientError('settings_read_call_failed', caught) }
     finally { busy.value = false }
   }
   function payload() {
@@ -52,7 +55,17 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
         settingsPayload(confirmed, current.value, mutable.value, portMutable.value),
       )
       error.value = result.error ?? (!result.completed ? clientError('settings_not_completed', '') : null)
-      if (!error.value) { completed.value = true; await readSettings() }
+      if (!error.value) {
+        // Save acknowledgement alone does not establish that current settings
+        // can be read back. Do not show success or retain editable stale state.
+        try {
+          await readSettings()
+          completed.value = !error.value && current.value !== null
+        } catch (caught) {
+          invalidateSettings()
+          error.value = clientError('settings_read_call_failed', caught)
+        }
+      }
     } catch (caught) { error.value = clientError('settings_save_call_failed', caught) }
     finally { busy.value = false }
   }
