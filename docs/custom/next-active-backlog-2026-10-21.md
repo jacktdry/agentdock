@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-11 Stage4／Stage5 已完成：** [跨平台編譯、發行準備與 A1 Race 反例](next-rc20-stage4-crossplatform-release-readiness-2026-11-11.md)／[Codex 恢復後最小工作包與依賴](next-rc20-stage5-codex-resume-workpacks-2026-11-11.md)。Local macOS/Linux/Windows amd64 Core＋Arbiter CGO0 6/6、前端 Vitest 184/184、Typecheck、NEXT package 20/20、Windows fixture 18 tests（1 skipped）PASS，ZIP/DMG/App/RC19 rollback signed local proof PASS；**Windows arm64 source build timeout / non-shipping**、**A1 `TestQueuedWriteTimeoutPreservesActiveWrite` -race 可重現 3/3 FAIL**（非 race 3/3 PASS，其他六項 race PASS），列 H04，勿假定產品已故障或測試已 PASS。Native MCP／GUI/Tray/Codex Host、Hosted CI/Developer ID、公證／正式發行仍 OPEN；`release_ready=false`，無 Codex ACP／Merge／Push／Tag／Deploy。
+
 > **2026-11-11 RC20 Native MCP 第三階段安全盤點：** [安裝版 signed Launcher＋空 Catalog、Desktop 唯讀 Core IPC、ID-only M8 source 回歸及真正缺少的 Trusted Operator／Backend](next-rc20-native-mcp-stage3-security-audit-2026-11-11.md)。定點安全測試通過，但 Native tool model-to-backend Host **OPEN**，無 Codex ACP、無部署／啟動 Backend。
 
 > **2026-11-11 RC20 Connection／Tray 無搶焦點實機盤點：** [真實 Wails 主視窗空白擷取、Connection 16/16 source tests、RC20 Tray AX 未命名及 Shared Wails／Swift 來源差異](next-rc20-connection-tray-nofocus-host-2026-11-11.md)。Connection 拒絕後跨頁實機與 Tray 可辨識選單**仍 OPEN**；本輪未搶焦點／點擊／操作 Stable。
