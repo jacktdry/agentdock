@@ -1,5 +1,7 @@
 # NEXT RC20 — Connection／Tray 無搶焦點 Host 盤點（2026-11-11，台灣時間）
 
+> **2026-11-11 後續唯讀診斷更新：**[H01/H02 根因報告](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)推翻「整個 GUI 黑畫面／AX 只有 5 個 element」的推測：原生 Window Server `screencapture -l` 取得有內容的視窗（2,500 像素抽樣、96 色），AX 深入第 5 個 root child 之內有 `AXWebArea`、Banner/Nav/Main；原 ScreenCaptureKit 結果與淺層列印不足以判定 Wails 故障。真實 Connection 拒絕跨頁 Host 仍未測。H02 追到 **Wails beta.27 macOS `systemtray_darwin.go::setTooltip` 空函式**，已安裝 NEXT Tray 依然無可及性名稱，需要 Wails 實際路徑修正／Host AX 證據；下面保留先前觀察發生時的內容，不更改其歷史紀錄。
+
 ## 為什麼進行與操作界線
 
 使用者要求階段二：對正式已安裝 NEXT RC20 的 Connection「操作遭拒後跳到 Overview 再回 Connection 仍顯示錯誤」及 Tray「與 Original 可識別、安全開啟選單」補真實 GUI 驗收。工作優先不中斷使用者前景工作／Original 的 Stable 控制通道；**本次只做無搶焦點、唯讀 GUI／OS 觀察與既有來源回歸測試**，不做 Core/Tunnel/Port 變更、不碰 Edge 個人 Profile、不開啟或點擊未辨識的 Tray、不點擊 Wails GUI、更不修改 TCC／登入權限或建立新 RC。

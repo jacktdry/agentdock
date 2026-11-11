@@ -1,5 +1,7 @@
 # AgentDock NEXT RC20 — 階段四：跨平台、回歸與 Release Readiness（2026-11-11，台灣）
 
+> **2026-11-11 補驗：**本文件保留當時 RC20 原始七項 A1 `-race` **FAIL**，不能因後續獨立臨時 Go overlay PASS 而改寫歷史。較新[H04 Root Cause](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)確認 1MiB Race decode/pipe 與 1 秒 watchdog 耦合，另一個 deadline Test 亦偶發先超時；兩個 fixture 在臨時 overlay 中使用 128 KiB（queued 加實際阻塞斷言）後，focused 七項 `-race -count=10` PASS，**尚未合入 signed source**。
+
 ## 目的、使用者價值與操作界線
 
 使用者要求在**不用 Codex ACP、不打斷既有 macOS Original/NEXT**的條件下，完成剩餘跨平台建置、套件和發行門檻驗證，與接續的階段五工作包。這是一份**本機 release preflight 證據**，不是公開發佈准許，也不假設有 Windows 受測裝置或雲端 CI 已跑過本機尚未推送的 commit。

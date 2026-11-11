@@ -1,5 +1,7 @@
 # AgentDock NEXT — Stage5：Codex 恢復後工作包與不依賴 Codex 的接續路徑（2026-11-11）
 
+> **2026-11-11 H04／H01／H02 更新：**三項根因已查明，見[診斷與不可混淆的 source/Host Gate](next-rc20-h04-h01-h02-root-cause-2026-11-11.md)。H04 的 1MiB frame＋`-race` 使 1s watchdog/Context deadline 先於實際 Write 完成；兩個 Test 改用有明確阻塞證據的臨時 128 KiB fixture 時 focused 七項×十次 PASS，**正式 source 尚未修改**。H01 並非 confirmed Wails 空白 bug：macOS 原生擷取有內容且 AX 遞迴讀到 WebArea；真正拒絕跨頁仍 OPEN。H02 是 Wails beta.27 macOS `setTooltip` no-op 且缺少 `NSStatusBarButton` AXLabel；正確修正位置已定位。這三項根因調查不必再重新派 Codex；**後續程式碼修改及未過 Host Gate 仍須獨立處理**。
+
 > **使用者工作流程與產品目標：**讓 ChatGPT＋真實代理在使用者日常操作電腦時，安全、低干擾地使用 NEXT 的 Desktop、ACP、Browser／Computer Broker 和必要 MCP 工具。前四階段主要驗證了現在已具備什麼，**本文件把真實 OPEN Gate 收斂為可直接派工、可重現、可驗收的最小工作包**，避免 Codex 額度恢復後重新盤點或重複修補。此處的「Codex 工作包」不是立即啟動 ACP 的授權；**本輪沒有啟動 Codex/Antigravity ACP**。
 
 ## 0. 不可破壞的現況／分層
