@@ -45,6 +45,19 @@ func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePla
 	registry := toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{})
 	workspace, selected := os.LookupEnv(nextSharedBrowserWorkspaceEnv)
 	if !selected {
+		// Disabling shared mode in the Next-only preference must not bypass a
+		// surviving restart fence from a prior shared Core crash. Exclusive
+		// startup with orphan evidence would otherwise launch fresh Chrome.
+		if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && cfg.ACPEnabled && cfg.BrowserEnabled && !cfg.Stdio {
+			home, err := os.UserHomeDir()
+			if err != nil || cfg.AgentDockHome != filepath.Join(home, ".agentdock-next") {
+				return nil, nil, fmt.Errorf("Next Browser startup requires its isolated state root")
+			}
+			_, markerErr := os.Lstat(filepath.Join(cfg.AgentDockHome, sharedBrowserRestartMarker))
+			if markerErr == nil || !os.IsNotExist(markerErr) {
+				return nil, nil, fmt.Errorf("Next Browser restart blocked: shared-mode restart guard requires reconciliation")
+			}
+		}
 		bridge, err := toolbrowser.NewACPBridge(planner, registry)
 		return bridge, nil, err
 	}

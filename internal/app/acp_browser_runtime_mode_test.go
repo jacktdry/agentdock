@@ -197,3 +197,39 @@ func TestRuntimeACPBrowserNextSharedOptInDenials(t *testing.T) {
 		t.Fatalf("invalid selection incorrectly fell back: %v", err)
 	}
 }
+
+// Disabling a previously enabled shared mode must not use the otherwise
+// exclusive startup path to bypass a persistent orphan/restart guard.
+func TestRuntimeACPBrowserExclusiveRejectsSurvivingSharedGuard(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	t.Setenv(nextSharedBrowserWorkspaceEnv, "")
+	// Unset rather than empty opt-in: an empty explicit opt-in is rejected.
+	if err := os.Unsetenv(nextSharedBrowserWorkspaceEnv); err != nil {
+		t.Fatal(err)
+	}
+	stateRoot := filepath.Join(home, ".agentdock-next")
+	if err := os.Mkdir(stateRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(stateRoot, sharedBrowserRestartMarker)
+	if err := os.WriteFile(marker, []byte("do not remove orphan evidence"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner, err := toolbrowser.NewRoutePlanner(nil, catalog, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{AgentDockHome: stateRoot, ACPEnabled: true, BrowserEnabled: true}
+	if b, g, err := newRuntimeACPBrowserBridge(cfg, planner); err == nil || b != nil || g != nil {
+		t.Fatalf("exclusive started despite surviving guard: bridge=%v guard=%v err=%v", b, g, err)
+	}
+	if data, err := os.ReadFile(marker); err != nil || string(data) != "do not remove orphan evidence" {
+		t.Fatal("denial modified the shared restart marker")
+	}
+}

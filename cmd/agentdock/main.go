@@ -64,6 +64,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return errors.New("用法：agentdock update [--check|--progress-json|--local-archive <zip> --checksum <sha256> --target-version <version>]")
 		}
 	}
+	if len(args) > 0 && args[0] == "browser-mode" {
+		return desktopruntime.RunNextBrowserModeCommand(ctx, args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "service" {
 		return runServiceCommand(ctx, args[1:], stdout, stderr)
 	}
