@@ -294,7 +294,9 @@ def main() -> None:
             no_symlinks(destination / "Contents")
             validate_bundle(backup.parent, shared=True, allow_legacy_rc19_shared_omissions=True)
             NEXT_INSTALLER.rename_swap(backup, destination / "Contents")
-            validate_bundle(destination, shared=True)
+            # Rollback reinstates signed RC19, which predates the native MCP
+            # catalog and launcher. Do not confuse this with candidate checks.
+            validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True)
             registrar(destination, "core")
             require(wait_for_core(None, destination=destination), "Rolled-back Next Core identity/health not recovered")
             if tunnel_enabled:
