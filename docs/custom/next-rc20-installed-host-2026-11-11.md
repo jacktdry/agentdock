@@ -4,7 +4,7 @@
 
 使用者授權釋放三個既有 NEXT Computer Broker 直接控制 Session，並接續 RC20 A1 正式安裝驗收。三個指定 Session 均回報 `computer_ok=true`、`cleanup_state=complete`；隨後 Broker `active_sessions=null`。這是用戶授權的清理，不代表可自動清除以後的其他 Session。
 
-**RC20 現已安裝且 Core／Tunnel 健康，安裝包內容與原簽章候選完全一致；正式 installed Codex ACP completed → cancelled → recovered 三階段驗收尚未通過，因 Codex provider 額度限制。GUI 無焦點驗收亦未通過。**
+**RC20 現已安裝且 Core／Tunnel 健康，安裝包內容與原簽章候選完全一致。後續補驗的 installed Antigravity Gemini ACP `completed → cancelled → 同 Session recovered` PASS；Codex 的同等完整流程仍因 provider 額度限制 OPEN。GUI 已以背景方式重新啟動並觀察單一視窗、`focus_changed=false`，但完整 AX／Tray 操作驗收仍 OPEN。**
 
 ## RC19 → RC20 安裝相容性修正
 
@@ -33,3 +33,15 @@
 1. Codex 配額重置後，重新讀取真實 installed NEXT Core 身分與 ACP 狀態，再以**新建、任務自有**的唯讀 Codex Session 驗證正常 Prompt `completed/end_turn` → 第二個 Prompt `cancelled/cancelled` → **同一 Session 恢復 `completed/end_turn`**，再 close／delete；別用 Gemini 的已取消結果冒充 Codex PASS。
 2. GUI 可及性與無焦點背景驗收需另外處理 `COMPUTER_FOCUS_VIOLATION`；不要繞過 macOS consent/TCC 或搶焦點。其他 Native Codex MCP trusted operator→M8→backend、Connection GUI rejected mutation 跨頁、Tray AX/menu、Windows runtime、hosted CI/notarization／正式 release 等門檻仍 OPEN。
 3. 此 RC20 為 **本機 ad-hoc 簽章候選**，canonical manifest `release_ready=false`、update feed unpublished。後續若修改 signed App 必須重新建置與正式驗證，不能直接改動已簽章 Contents。
+
+
+## 2026-11-11 後續補驗（同日較晚的獨立執行）
+
+此節補充先前文件在 15:59–16:00 記錄之後的**新的 Host 觀測**，不覆寫上方其他工作者當時遇到的 Antigravity 工具呼叫／Computer provider 失敗事實。以下均由正式安裝的 NEXT `0.9.2-rc.20` Core 連線實測，不是隔離測試 Core。
+
+- **真實 installed Antigravity 取消後恢復 PASS：**本次獨立建立 `acps_3016b924f77b553b344873e1`，選 Gemini 3.8 Flash / low。第一個 Run `acpr_dedf566b1318f2edff767b8e` 回應 `NEXT_RC20_AGY_OK`、events `completed/end_turn`；第二個 Run `acpr_ebdec26857aabcbf86f61658` start `running` 後 cancel `cancel_requested=true`，events `cancelled/cancelled`；**同一 Session** 的第三個 Run `acpr_091995837595a3e66cabc239` 回應 `NEXT_RC20_RECOVERED`、events `completed/end_turn`。兩個正常 Run 的有界事件序列只觀測到模型文字回應及 completed，沒有工具事件；不將此擴大描述為底層 pipe 堵塞試驗。Session 已 `close`／`delete`，無需背景回收。
+- **Codex 額度仍阻擋：**另一個本輪明確持有的 installed Codex Session `acps_0e37dfb8b9253d7a57b3cd4f` 成功 `new`、更新 `read-only`，Prompt start 成功，但 events `ACP_REMOTE_ERROR`／Codex Usage Limit（顯示 19:58 重置）。已 `close`、`delete`；沒有重試其他 Codex Model，也沒有把此結果標成 installed Codex 三階段 PASS。上方另一工作者的 Codex Session 另有其獨立紀錄。
+- **GUI 實際背景重啟、有限度無焦點觀測：**原 RC19 GUI PID `94177` 以 `lsof -d txt` 精確映射到本次 RC19 回滾位置，並以 SIGTERM 正常結束；`open -g` 後新版 GUI PID `14144`，`ps` 與後續 bounded `lsof` 均確認載入現役 `/Users/wei/Applications/AgentDock Next.app/Contents/MacOS/AgentDock`。NEXT Computer Broker `observe`／`foreground=forbidden` 的 `list_windows` 觀測到 1 個正常主視窗（1146×948，非 minimized），當次前景是 Microsoft Teams，`focus_changed=false`；觀察 Session 已 `release cleanup=complete`。另一個早期無視窗 `get_app_state` 失敗與新 GUI 的後續單點觀測並非同一次呼叫；這不是 90 次 foreground sampling 或 Tray AX Host PASS。
+- **安裝與回滾內容獨立再驗證：**來源已簽章 RC20 App 與現役安裝 App `Contents` 的 **26 個 regular files 路徑及 SHA-256 逐一完全相同**；現役 RC20／回滾 RC19 `codesign --verify --deep --strict` PASS。現役 RC20 Core PID `11613`（`8767` HTTP 200）、Tunnel PID `12375`；Original custom v1.1.1 PID `38464`（`8765` HTTP 200），舊版 Original 未被重啟。當次最終 Browser Broker owners/leases/workers `0`、Computer Broker active `0`、Codex／Antigravity ACP running/loaded `0`，本輪自有測試 Session 均清理；不可推論這些資源將永久閒置。
+
+**交付界線：**安裝版 Antigravity Gemini ACP 正常→取消→同 Session 恢復 PASS；安裝版 Codex 同等三階段仍 OPEN，等待額度恢復後另建任務自有 Session 實測。Native Codex MCP trusted operator→M8→backend、Connection GUI 真實拒絕錯誤跨頁、Tray AX/menu、完整 GUI 無焦點驗收、Windows runtime、hosted CI／notarization／正式 release 均未因此變為 PASS。RC20 仍為本機 ad-hoc 候選，`release_ready=false`，沒有推送、合併或建立發行 Tag。
