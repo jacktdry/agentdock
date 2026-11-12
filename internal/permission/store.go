@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/fs/securepath"
 )
 
 var (
@@ -39,6 +41,12 @@ type Store struct {
 	state     State
 	live      map[string]liveApproval
 	now       func() time.Time
+	// Injectable per-Store replacement boundary for deterministic failure tests.
+	// Production always uses the platform-specific durable replacement.
+	replaceState func(tempPath, statePath, stateDir string) error
+	// A replacement error may mean the new name was published but not acknowledged.
+	// This Store must never authorize from its potentially stale in-memory state.
+	persistenceUncertain bool
 }
 
 type liveApproval struct {
@@ -91,8 +99,8 @@ func NewStore(root, runtimeEpoch string) (*Store, error) {
 	case info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular():
 		return nil, fmt.Errorf("%w: state.json must be a regular non-symlink file", ErrStateCorrupt)
 	}
-	if err := os.Chmod(s.statePath, 0o600); err != nil {
-		return nil, fmt.Errorf("chmod permission state: %w", err)
+	if err := securepath.EnsurePrivate(s.statePath); err != nil {
+		return nil, fmt.Errorf("secure permission state: %w", err)
 	}
 
 	state, err := s.readState()
@@ -121,8 +129,8 @@ func (s *Store) ensureStateDir() error {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			return fmt.Errorf("%w: permissions directory must be a real directory", ErrStateCorrupt)
 		}
-		if err := os.Chmod(s.stateDir, 0o700); err != nil {
-			return fmt.Errorf("chmod permissions directory: %w", err)
+		if err := securepath.EnsurePrivate(s.stateDir); err != nil {
+			return fmt.Errorf("secure permissions directory: %w", err)
 		}
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -137,6 +145,9 @@ func (s *Store) ensureStateDir() error {
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return fmt.Errorf("%w: permissions directory must be a real directory", ErrStateCorrupt)
+	}
+	if err := securepath.EnsurePrivate(s.stateDir); err != nil {
+		return fmt.Errorf("secure created permissions directory: %w", err)
 	}
 	return nil
 }
@@ -183,8 +194,15 @@ func (s *Store) VerifyDiskState() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.persistenceUncertain {
+		return ErrStateCorrupt
+	}
+	dirInfo, err := os.Lstat(s.stateDir)
+	if err != nil || !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 || verifyPrivateStatePath(s.stateDir, dirInfo, true) != nil {
+		return ErrStateCorrupt
+	}
 	info, err := os.Lstat(s.statePath)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0600 {
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || verifyPrivateStatePath(s.statePath, info, false) != nil {
 		return ErrStateCorrupt
 	}
 	disk, err := s.readState()
@@ -339,6 +357,9 @@ func invalidateRecord(record *ApprovalRecord, now time.Time, actor string) {
 }
 
 func (s *Store) writeState(state State) error {
+	if s.persistenceUncertain {
+		return ErrStateCorrupt
+	}
 	if err := validateState(state); err != nil {
 		return err
 	}
@@ -366,6 +387,12 @@ func (s *Store) writeState(state State) error {
 		_ = file.Close()
 		return fmt.Errorf("write permission state temp file: %w", err)
 	}
+	// Secure the temporary object *before* publishing it. On Windows,
+	// chmod alone does not protect the ACL; EnsurePrivate sets a protected DACL.
+	if err := securepath.EnsurePrivate(tmp); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("secure permission state temp file: %w", err)
+	}
 	if err := file.Sync(); err != nil {
 		_ = file.Close()
 		return fmt.Errorf("fsync permission state temp file: %w", err)
@@ -373,23 +400,17 @@ func (s *Store) writeState(state State) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close permission state temp file: %w", err)
 	}
-	if err := os.Rename(tmp, s.statePath); err != nil {
-		return fmt.Errorf("replace permission state: %w", err)
+	replace := s.replaceState
+	if replace == nil {
+		replace = replacePermissionState
+	}
+	if err := replace(tmp, s.statePath, s.stateDir); err != nil {
+		// Even if the rename failed before publication, we cannot establish
+		// that from an error alone. The only safe recovery is a fresh Store.
+		s.persistenceUncertain = true
+		return fmt.Errorf("replace permission state (reopen Store before further authorization): %w", err)
 	}
 	cleanup = false
-	if err := os.Chmod(s.statePath, 0o600); err != nil {
-		return fmt.Errorf("chmod permission state: %w", err)
-	}
-	if dir, err := os.Open(s.stateDir); err == nil {
-		syncErr := dir.Sync()
-		closeErr := dir.Close()
-		if syncErr != nil {
-			return fmt.Errorf("fsync permissions directory: %w", syncErr)
-		}
-		if closeErr != nil {
-			return fmt.Errorf("close permissions directory: %w", closeErr)
-		}
-	}
 	return nil
 }
 
@@ -433,6 +454,9 @@ func cloneFacts(value PermissionFacts) PermissionFacts {
 func (s *Store) Snapshot() (State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.persistenceUncertain {
+		return State{}, ErrStateCorrupt
+	}
 	if err := s.expireLocked(); err != nil {
 		return State{}, err
 	}
@@ -442,6 +466,11 @@ func (s *Store) Snapshot() (State, error) {
 func (s *Store) Policy() Policy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.persistenceUncertain {
+		// Policy has no error return. An invalid policy makes Evaluate reject,
+		// rather than exposing possibly stale grants after an uncertain write.
+		return Policy{}
+	}
 	return cloneState(State{
 		SchemaVersion: SchemaVersion,
 		Revision:      1,
@@ -501,6 +530,9 @@ func (s *Store) dropInvalidatedLiveLocked() {
 func (s *Store) History() ([]ApprovalRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.persistenceUncertain {
+		return nil, ErrStateCorrupt
+	}
 	if err := s.expireLocked(); err != nil {
 		return nil, err
 	}
@@ -517,6 +549,9 @@ func (s *Store) History() ([]ApprovalRecord, error) {
 func (s *Store) Approval(id string) (ApprovalRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.persistenceUncertain {
+		return ApprovalRecord{}, ErrStateCorrupt
+	}
 	if err := s.expireLocked(); err != nil {
 		return ApprovalRecord{}, err
 	}
