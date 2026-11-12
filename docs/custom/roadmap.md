@@ -1,5 +1,8 @@
 # AgentDock Custom Roadmap
 
+> **2026-11-12 下一階段必做收尾（GitHub CI 後、NEXT Host 驗收前）：**[遠端＋本機 Branch／Worktree 分類與磁碟清理計畫](next-post-ci-branch-worktree-cleanup-plan-2026-11-12.md)。公開 GitHub 同步與 Hosted CI 真實 PASS、origin/custom/main 檢查通過後，立即重新盤點 local＋remote branch、worktree、未提交/locked/活躍工作，產生 KEEP／CANDIDATE／REVIEW／BLOCKED 清單與磁碟占用。僅對已合併、乾淨、可追溯且獲核准的候選分批清理；**remote 刪除須另外明確批准，絕不強制清除其他 Session/Original/Stable 工作**。此階段不能因原先的 56 branches、24 worktrees 舊快照而跳過重新盤點。
+
+
 > **2026-11-12 最新本機整合決策：**[RC21 custom/main 基底＋A／B／C／D 單一整合基準](next-rc21-custom-main-integration-closeout-2026-11-12.md)。37 筆憑證泛用候選均完成有界人工語義複核；GitHub 為單人維護，**不設定第二人 PR 核准**。A/B/C/D Git 歷史已在新的獨立 worktree 合流，**本機 `custom/main` 已受控 Fast-forward 納入**；現役 NEXT 未動；GitHub 原始碼尚未 Push，僅 `custom/main` 最小分支保護已套用（禁 Force Push／刪除、無必要 PR 核准或 CI Check）。Release 未授權，推送另行確認。下方較舊 Roadmap 文字是歷史，勿覆蓋本決策。
 
 > **Current RC21 A＋B＋C 本機 Source 基準（2026-11-12）：**[非破壞性合流與驗證](next-rc21-consolidated-handoff-2026-11-12.md)。已保留 H02／H04／RC21 既有成果，納入 B 的 P8 NEXT-only **CLI**（不是 GUI，一律下次正常啟動生效）與 C 的 Plugin 回饋／Settings 讀回修正。**Source-only、未部署現役 NEXT、H01 原生 Host 未 PASS**。D 尚無正式治理結案，未 Push／Merge `custom/main`／授權 Release。以下 A-only 或舊 RC21 文句作歷史，不覆蓋本決策。
