@@ -58,6 +58,11 @@ var ErrPortPreflight = errors.New("port preflight rejected")
 // not change configuration, contact Core, or acquire the desktop mutation lock.
 func ObservePort(ctx context.Context, request PortObservationRequest) PortObservation {
 	if runtime.GOOS == "windows" && request.CandidatePort != 8765 && request.CandidatePort != 8766 {
+		// Cancellation must not be masked by lack of Windows Next authority.
+		// observePort exits before binding when the context is cancelled.
+		if ctx.Err() != nil {
+			return observePort(ctx, request, platformPortOwner)
+		}
 		return PortObservation{ConfiguredPort: request.ConfiguredPort, ObservedPort: request.CandidatePort,
 			ConfigRevision: request.ConfigRevision, State: PortUnknown, ReasonCode: "next_identity_unavailable", ObservedAt: time.Now().UTC()}
 	}
@@ -122,7 +127,7 @@ func observePort(ctx context.Context, request PortObservationRequest, owner port
 		result.State, result.ReasonCode = PortAvailable, "bind_available"
 		return
 	}
-	if !errors.Is(err, syscall.EADDRINUSE) {
+	if !portAddressInUse(err) {
 		result.ReasonCode = "probe_failed"
 		return
 	}
@@ -130,6 +135,12 @@ func observePort(ctx context.Context, request PortObservationRequest, owner port
 	defer cancel()
 	result.State, result.ReasonCode = owner(probeCtx, request)
 	return
+}
+
+func portAddressInUse(err error) bool {
+	// Winsock reports WSAEADDRINUSE (10048), while syscall.EADDRINUSE is
+	// synthetic on Windows. Other bind errors must remain unknown.
+	return errors.Is(err, syscall.EADDRINUSE) || (runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10048)))
 }
 
 // All listeners on the port are checked conservatively, including other local

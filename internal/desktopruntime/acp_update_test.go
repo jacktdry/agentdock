@@ -64,6 +64,14 @@ func TestCheckACPProfileUpdateFailClosesWhenTrustedReleaseMissing(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS == "windows" {
+		// Windows has no trusted managed-ACP target/promoter. HOME alone
+		// must never enable a managed update.
+		if got.Supported || got.Available || got.VersionState != "unsupported" || got.BlockedReason != "update_target_not_next_owned" {
+			t.Fatalf("Windows update must fail closed: %#v", got)
+		}
+		return
+	}
 	if got.Supported || got.Available || got.VersionState != "unavailable" || got.BlockedReason != "trusted_release_unavailable" {
 		t.Fatalf("update = %#v", got)
 	}
@@ -100,6 +108,13 @@ func TestCheckACPProfileUpdateReturnsNewerVerifiedForkRelease(t *testing.T) {
 		ACPAdapterProbe{Availability: "available", InstalledVersion: "1.2.0-agentdock.6"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		// A valid release and digest cannot bypass absent OS-managed target proof.
+		if got.Supported || got.Available || got.VersionState != "unsupported" || got.BlockedReason != "update_target_not_next_owned" {
+			t.Fatalf("unmanaged Windows update unexpectedly trusted: %#v", got)
+		}
+		return
 	}
 	if !got.Supported || !got.Available || got.LatestVersion != "1.2.0-agentdock.7" || got.VersionState != "update_available" || got.Digest != digest {
 		t.Fatalf("update = %#v", got)
