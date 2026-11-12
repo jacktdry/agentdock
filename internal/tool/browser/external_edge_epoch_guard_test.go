@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,33 @@ func expandedEdgeEpochProbe(t *testing.T, observations int) (edgeProcessPrefligh
 	return src, f
 }
 
+// The process/profile reader is deliberately macOS-specific: it recognizes
+// lsof/ps and bounded POSIX profile ancestors. On Windows the same synthetic
+// macOS observation must fail closed before any OS listener/signature probe.
+// Exercise that denial rather than manufacturing a Windows process identity.
+func edgeEpochPositiveFixtureAvailable(t *testing.T) bool {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return true
+	}
+	probe := edgeFixture()
+	source, err := readEdgeProcessPreflight(context.Background(), fixtureEdgeEndpoint, "/tmp/edge-fixture", probe)
+	if err != errEdgeProcessUnqualified || source != (edgeProcessPreflight{}) ||
+		probe.listenerCalls != 0 || probe.signatureCalls != 0 || probe.liveSignatureCalls != 0 {
+		t.Fatalf("unsupported Windows Edge process evidence advanced or qualified: %v", err)
+	}
+	w, peer := seriesTestIdentity()
+	guard, err := newEdgeProcessEpochRevalidation(source, w, peer, probe)
+	if guard != nil || err == nil || err.Error() != externalTransportFenceError().Error() {
+		t.Fatalf("unsupported process identity could create an external transport fence: %v", err)
+	}
+	return false
+}
+
 func TestEdgeEpochRevalidationAndSeriesBeforeAfterEveryOperation(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	src, f := expandedEdgeEpochProbe(t, 7) // admission + 3*(pre,post) = 7 OS observations
 	w, p := seriesTestIdentity()
 	verify, err := newEdgeProcessEpochRevalidation(src, w, p, f)
@@ -56,6 +83,9 @@ func TestEdgeEpochRevalidationAndSeriesBeforeAfterEveryOperation(t *testing.T) {
 }
 
 func TestEdgeEpochRevalidationRejectsChangedObservedIdentity(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	cases := []struct {
 		name   string
 		mutate func(*fakeEdgeProcessProbe)
@@ -101,6 +131,9 @@ func TestEdgeEpochRevalidationRejectsChangedObservedIdentity(t *testing.T) {
 }
 
 func TestEdgeEpochRevalidationConstructorRejectsAmbiguity(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	src, f := expandedEdgeEpochProbe(t, 1)
 	w, p := seriesTestIdentity()
 	cases := []struct {
@@ -130,6 +163,9 @@ func TestEdgeEpochRevalidationConstructorRejectsAmbiguity(t *testing.T) {
 }
 
 func TestEdgeEpochRevalidationWrongWorkerOrOpaquePeerBlocksProbe(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	src, f := expandedEdgeEpochProbe(t, 2)
 	w, p := seriesTestIdentity()
 	guard, e := newEdgeProcessEpochRevalidation(src, w, p, f)
@@ -155,6 +191,9 @@ func TestEdgeEpochRevalidationWrongWorkerOrOpaquePeerBlocksProbe(t *testing.T) {
 // Re-checking the OS process AFTER closing the owned transport must quarantine
 // the action's already-produced data when Edge restarts during that action.
 func TestEdgeEpochRevalidationSeriesQuarantinesRestartAfterAction(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	for _, name := range []string{"new-process-incarnation", "listener-changed", "profile-denied", "profile-replaced"} {
 		t.Run(name, func(t *testing.T) {
 			src, f := expandedEdgeEpochProbe(t, 3) // initial, pre-action, post-action
@@ -217,6 +256,9 @@ func TestEdgeEpochRevalidationSeriesQuarantinesRestartAfterAction(t *testing.T) 
 }
 
 func TestEdgeEpochRevalidationCanceledDuringOSProbe(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // Windows verified rejection; macOS exercises the full positive fixture.
+	}
 	src, f := expandedEdgeEpochProbe(t, 2)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -2,13 +2,14 @@ package browserpolicy
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func catalogFixture() CatalogDefinition {
-	return CatalogDefinition{Profiles: []ProfileDefinition{{ID: "user-edge", Browser: BrowserEdge, Class: ProfileAuthenticatedExternal, UserDataDir: filepath.Join(string(filepath.Separator), "configured", "edge")}}, Connectors: []ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}}}
+	return CatalogDefinition{Profiles: []ProfileDefinition{{ID: "user-edge", Browser: BrowserEdge, Class: ProfileAuthenticatedExternal, UserDataDir: filepath.Join(os.TempDir(), "agentdock-test-profile", "configured", "edge")}}, Connectors: []ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}}}
 }
 
 func TestNativeEdgeProfileSelectionIsExplicitAndUnambiguous(t *testing.T) {

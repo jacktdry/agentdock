@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
@@ -74,7 +76,7 @@ func leasePages(isolation string, id any) map[string]any {
 	return map[string]any{"structuredContent": map[string]any{"pages": []any{map[string]any{"id": id, "isolatedContext": isolation}}}}
 }
 func leaseScope() RequestScope {
-	return RequestScope{WorkspaceID: "workspace", CanonicalWorkspaceRoot: "/workspace", OwnerTaskID: "task", OwnerSessionID: "session", OwnerACPSessionID: "acp", Provenance: ScopeACP}
+	return RequestScope{WorkspaceID: "workspace", CanonicalWorkspaceRoot: filepath.Join(os.TempDir(), "agentdock-browser-lease-workspace"), OwnerTaskID: "task", OwnerSessionID: "session", OwnerACPSessionID: "acp", Provenance: ScopeACP}
 }
 func leaseStart(t *testing.T) ResolvedStart {
 	t.Helper()

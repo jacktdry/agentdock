@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +67,7 @@ func edgeSocketFixture(t *testing.T) (*net.TCPConn, edgeProcessPreflight, *fakeE
 	}
 	t.Cleanup(func() { _ = serverConn.Close() })
 	source := edgeProcessPreflight{pid: 1245, endpoint: "ws://" + listener.Addr().String() + "/devtools/browser/fixture",
-		executable: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", userDataDir: "/private/edge-fixture",
+		executable: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", userDataDir: filepath.Join(os.TempDir(), "agentdock-edge-socket-fixture"),
 		startToken: "501:Fri Oct 9 12:00:00 2026", observedAt: time.Now()}
 	raw := fmt.Sprintf("p1245\nf7\nn%s->%s\nTST=ESTABLISHED\nTQR=0\nTQS=0\n", c.RemoteAddr(), c.LocalAddr())
 	return c.(*net.TCPConn), source, &fakeEdgeSocketProbe{raw: [2]string{raw, raw}, tokens: [2]string{source.startToken, source.startToken}, expectedPort: c.RemoteAddr().(*net.TCPAddr).Port}

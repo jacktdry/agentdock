@@ -68,6 +68,13 @@ func TestNextCandidateGate(t *testing.T) {
 
 // Real Go compilation with the production overlay generator, but a tiny offline
 // fixture main. This is not a clean-HEAD Core or release artifact acceptance.
+func nextTestExecutableName(base string) string {
+	if runtime.GOOS == "windows" {
+		return base + ".exe"
+	}
+	return base
+}
+
 func TestNextOverlayBinary(t *testing.T) {
 	root, m, _ := candidateFixture(t)
 	out := filepath.Join(root, "dist/fixture")
@@ -87,7 +94,7 @@ func main(){ if len(os.Args)!=3 || os.Args[1]!="version" || os.Args[2]!="--json"
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(main), 0600); err != nil {
 		t.Fatal(err)
 	}
-	binary := filepath.Join(out, "fixture")
+	binary := filepath.Join(out, nextTestExecutableName("fixture"))
 	flags := "-X github.com/uvwt/agentdock/internal/buildinfo.Commit=" + m.Commit + " -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=" + m.BuildDate
 	cmd := exec.Command("go", "build", "-overlay", filepath.Join(out, "overlay.json"), "-ldflags", flags, "-o", binary, ".")
 	cmd.Dir = root
@@ -140,7 +147,7 @@ func TestNextArbiterOverlayBuild(t *testing.T) {
 	if err != nil || !bytes.Contains(overlaySource, []byte(`const Version = "0.9.1-rc.2"`)) {
 		t.Fatalf("arbiter RC overlay missing: %v", err)
 	}
-	binary := filepath.Join(out, "arbiter-fixture")
+	binary := filepath.Join(out, nextTestExecutableName("arbiter-fixture"))
 	flags := "-X github.com/uvwt/agentdock/internal/buildinfo.Commit=" + m.Commit + " -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=" + m.BuildDate
 	cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-overlay", filepath.Join(out, "overlay.json"), "-ldflags", flags, "-o", binary, "./cmd/agentdock-arbiter")
 	cmd.Dir = root
