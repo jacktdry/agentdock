@@ -1,5 +1,8 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-12 PR #1 Hosted full CI 阻擋的四線平行修復入口：**[A Linux ACP／B macOS／C Windows Permission Durability／D Windows Portability 的檔案所有權、驗收 Gate 與四份開工提示詞](next-rc21-hosted-ci-four-workstreams-2026-11-12.md)。固定 source `b7a26cd9`，NEXT source-only 與 Linux Browser/Container 已 PASS，Hosted Ubuntu／macOS／Windows Go tests 仍 FAIL；因此 **PR #1 尚未合併，branch/worktree 清理 Gate 未開**。四條線以獨立 Worktree 只做各自本機修復、測試、HANDOFF、commit，**不 Push／Merge／改 CI**；C 專屬 `internal/permission/**`，D 的完整 Windows 驗收依賴 C 之後的整合。完整 Hosted CI 再驗與 `custom/main` PR auto-trigger 改進由後續單一整合者執行。
+
+
 > **2026-11-12 下一階段必做收尾（GitHub CI 後、NEXT Host 驗收前）：**[遠端＋本機 Branch／Worktree 分類與磁碟清理計畫](next-post-ci-branch-worktree-cleanup-plan-2026-11-12.md)。公開 GitHub 同步與 Hosted CI 真實 PASS、origin/custom/main 檢查通過後，立即重新盤點 local＋remote branch、worktree、未提交/locked/活躍工作，產生 KEEP／CANDIDATE／REVIEW／BLOCKED 清單與磁碟占用。僅對已合併、乾淨、可追溯且獲核准的候選分批清理；**remote 刪除須另外明確批准，絕不強制清除其他 Session/Original/Stable 工作**。此階段不能因原先的 56 branches、24 worktrees 舊快照而跳過重新盤點。
 
 
