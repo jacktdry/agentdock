@@ -15,6 +15,9 @@ func profileFixtureMetadata(ctx context.Context, dir string) (edgeProfileMetadat
 }
 
 func TestEdgeProfileMetadataBoundedReadOnly(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // POSIX ancestor metadata does not qualify Windows profile identity.
+	}
 	for _, scenario := range []string{"success", "symlink", "uid", "group mode", "other mode", "file", "zero inode", "zero device", "replacement", "owner change", "device change", "cancel", "error"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -84,6 +87,9 @@ func TestEdgeProfileMetadataBoundedReadOnly(t *testing.T) {
 }
 
 func TestEdgeProcessPreflightProfileFence(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // POSIX ancestor metadata does not qualify Windows profile identity.
+	}
 	for _, scenario := range []string{"success", "inode", "device", "owner", "mode", "cancel", "error", "invalid"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := edgeFixture()

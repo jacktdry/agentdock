@@ -99,6 +99,13 @@ func TestManagedLeaseIsolationAndOperations(t *testing.T) {
 	m := NewManagedLeaseManager(b)
 	a, ab := acquireLease(t, m)
 	c, cb := acquireLease(t, m)
+	// Windows may return the same clock tick for acquire and immediate calls.
+	// Use an older fixture timestamp to observe a successful refresh reliably.
+	l, _ := m.lease(a.BrowserLeaseID)
+	previousActivity := a.LastActiveAt.Add(-time.Second)
+	l.mu.Lock()
+	l.metadata.LastActiveAt = previousActivity
+	l.mu.Unlock()
 	if a.BrowserLeaseID == c.BrowserLeaseID || a.BrowserSessionID == c.BrowserSessionID || a.IsolationContextName == c.IsolationContextName || a.WorkerID == c.WorkerID || a.PageID == c.PageID {
 		t.Fatal("lease identities reused")
 	}
@@ -129,8 +136,8 @@ func TestManagedLeaseIsolationAndOperations(t *testing.T) {
 			t.Fatalf("%+v", call)
 		}
 	}
-	l, _ := m.lease(a.BrowserLeaseID)
-	if !l.metadata.LastActiveAt.After(a.LastActiveAt) {
+	l, _ = m.lease(a.BrowserLeaseID)
+	if !l.metadata.LastActiveAt.After(previousActivity) {
 		t.Fatal("activity not recorded")
 	}
 	before := l.metadata.LastActiveAt

@@ -124,8 +124,20 @@ func assertBrowserWorkerRuntime(t *testing.T, cfg mcpclient.ServerConfig) {
 	wantCommand, err := commandpath.LookPath("npx")
 	if err != nil {
 		wantCommand = "npx"
-	} else if !filepath.IsAbs(wantCommand) || filepath.Base(wantCommand) != "npx" {
-		t.Fatal("resolved npx must be an absolute executable named npx")
+	} else {
+		base := filepath.Base(wantCommand)
+		if runtime.GOOS == "windows" {
+			// Windows Node installations expose npx.cmd (or a PE shim).
+			// This asserts the resolved executable name, not a substitute on PATH.
+			ext := strings.ToLower(filepath.Ext(base))
+			if ext != ".cmd" && ext != ".exe" && ext != ".bat" && ext != ".com" {
+				t.Fatalf("unsupported Windows npx executable suffix: %q", ext)
+			}
+			base = strings.TrimSuffix(base, filepath.Ext(base))
+		}
+		if !filepath.IsAbs(wantCommand) || !strings.EqualFold(base, "npx") {
+			t.Fatal("resolved npx must be absolute and named npx (with a Windows executable suffix when applicable)")
+		}
 	}
 	home, _ := os.UserHomeDir()
 	if cfg.Command != wantCommand || !reflect.DeepEqual(cfg.RuntimeEnv, map[string]string{"PATH": commandpath.Path(os.Getenv("PATH"), home)}) {
