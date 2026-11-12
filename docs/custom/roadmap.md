@@ -1,5 +1,8 @@
 # AgentDock Custom Roadmap
 
+> **2026-11-12 ABCDE 整合後第一輪 GitHub Full CI：**[Run 43167819420 實際結果與下一階段 F／G／H 三條 Windows 並行修復規格／提示詞](next-rc21-hosted-ci-post-e-windows-parallel-2026-11-12.md)。Ubuntu Go Check（含 Race）／Browser Integration／Container 已 PASS；macOS Go Test/Build PASS 但 Packaging Identity Script 舊 universal 預期 FAIL，已在本機 `a2b47000` 做 test-only 修正、定點 PASS，整組 scripts 因 Swift 編譯超時未完成；Windows Go Test 尚有 33 個頂層失敗，原 Permission fsync／Scope/panic 錯誤已消除。**PR #1 候選 `5af6f00e` 尚不可 Merge，遠端 `custom/main` 未更動；不得提前清理分支／Worktree。** F/G/H 從固定 `a2b47000` 各自 Worktree 本機開發與提交，不 Push／改 CI。
+
+
 > **2026-11-12 PR #1 Hosted full CI 阻擋的四線平行修復入口：**[A Linux ACP／B macOS／C Windows Permission Durability／D Windows Portability 的檔案所有權、驗收 Gate 與四份開工提示詞](next-rc21-hosted-ci-four-workstreams-2026-11-12.md)。固定 source `b7a26cd9`，NEXT source-only 與 Linux Browser/Container 已 PASS，Hosted Ubuntu／macOS／Windows Go tests 仍 FAIL；因此 **PR #1 尚未合併，branch/worktree 清理 Gate 未開**。四條線以獨立 Worktree 只做各自本機修復、測試、HANDOFF、commit，**不 Push／Merge／改 CI**；C 專屬 `internal/permission/**`，D 的完整 Windows 驗收依賴 C 之後的整合。完整 Hosted CI 再驗與 `custom/main` PR auto-trigger 改進由後續單一整合者執行。
 
 
