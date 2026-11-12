@@ -1,5 +1,7 @@
 # AgentDock NEXT — Active Backlog / Single-page Handoff (2026-10-21)
 
+> **2026-11-12 最新：**[A／B／C／D 最終本機整合與單人 GitHub 治理](next-rc21-custom-main-integration-closeout-2026-11-12.md)。分支 `integration/next-rc21-custom-main-reviewed-20261112` 以原 `custom/main` 祖先為底，合入 D（及其 A/B/C 祖先）完整歷史。D 的 [37 筆 credential 候選](next-rc21-d-secret-37-review-2026-11-12.md) 逐項完成、未發現已提交的正式憑證；**GitHub 只有一位維護者，不設強制第二人審查或未知 CI required status**。GitHub 保護規則尚未套用、未 Push、未改原 `custom/main`、現役 NEXT 尚未部署整合新功能、正式 Release 未授權。舊的 D 待審敘述及 A-only 快照皆是歷史。
+
 > **2026-11-12 最新有效基準 — A＋B＋C 已本機整合：**[RC21 統一分支／驗證／GitHub 交接](next-rc21-consolidated-handoff-2026-11-12.md)。新 branch `integration/next-rc21-consolidated-20261112` 合入 B 的 P8 Browser Mode 安全 CLI（**非 GUI、預設 exclusive、下次正常啟動生效**）及 C 的 Plugin 被動 refresh 回饋保留、Settings ACK 後讀回確認；延續 H02／H04 已結案成果。**Source-only、現役 NEXT 未部署新功能，H01 native 跨頁 Host 尚未 PASS**。D 正式治理結案無文件證據；GitHub 尚未 Push、`custom/main` 未合併、正式 Release 未授權。P13/P14、NexusDock、Native MCP Backend 保持 deferred/NO-GO。舊 A-only / RC20 OPEN 留作歷史，不重開額外驗收。
 
 > **2026-11-12 A-only 歷史基準（已由上方 A＋B＋C 合流覆蓋）：**[整合基準、Lineage 與 B／C 合流方式](next-rc21-product-baseline-2026-11-12.md)。整合分支 `integration/next-rc21-product-baseline-20261112` 以 Source `0a0a0ba9` 為底，納入 Docs `1f0a390b` 的六筆獨立文件提交；這是**本機 Source＋Docs 基準**，不是 `custom/main`、已安裝版本或公開 Release。B／C 從各自 Source 分支獨立工作，完成後由指定整合者依序納入；D 唯讀盤點 GitHub／發行治理。本頁下方較早日期 OPEN 僅保留歷史，不能覆蓋新結案決策。
