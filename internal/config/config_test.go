@@ -1,11 +1,68 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFromEnvBrowserDefaultByRole(t *testing.T) {
+	for _, test := range []struct {
+		name, variant, acp, stdio, browser string
+		absent                             bool
+		want                               bool
+	}{
+		{name: "next ACP absent", variant: "next", acp: "true", absent: true, want: true},
+		{name: "next ACP empty", variant: "next", acp: "true", want: true},
+		{name: "next ACP explicit false", variant: "next", acp: "true", browser: "false"},
+		{name: "stable ACP absent", variant: "stable", acp: "true", absent: true},
+		{name: "unmarked ACP absent", acp: "true", absent: true},
+		{name: "other variant ACP absent", variant: "other", acp: "true", absent: true},
+		{name: "next ACP false", variant: "next", acp: "false", absent: true},
+		{name: "next ACP unset", variant: "next", absent: true},
+		{name: "next stdio", variant: "next", acp: "true", stdio: "true", absent: true},
+		{name: "stable explicit true", variant: "stable", browser: "true", want: true},
+		{name: "next stdio explicit true", variant: "next", acp: "true", stdio: "true", browser: "true", want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("AGENTDOCK_DESKTOP_VARIANT", test.variant)
+			t.Setenv("AGENTDOCK_ACP_ENABLED", test.acp)
+			t.Setenv("AGENTDOCK_STDIO", test.stdio)
+			t.Setenv("AGENTDOCK_ACP_PROFILES_JSON", "[]")
+			t.Setenv("AGENTDOCK_HOME", "")
+			t.Setenv("AGENTDOCK_BROWSER_ENABLED", test.browser)
+			if test.absent {
+				if err := os.Unsetenv("AGENTDOCK_BROWSER_ENABLED"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := FromEnv()
+			if err != nil {
+				t.Fatalf("FromEnv() error = %v", err)
+			}
+			if cfg.BrowserEnabled != test.want {
+				t.Fatalf("BrowserEnabled = %v, want %v", cfg.BrowserEnabled, test.want)
+			}
+		})
+	}
+}
+
+func TestFromEnvBrowserRoleRejectsInvalidBooleans(t *testing.T) {
+	for _, key := range []string{"AGENTDOCK_BROWSER_ENABLED", "AGENTDOCK_ACP_ENABLED", "AGENTDOCK_STDIO"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+			t.Setenv("AGENTDOCK_ACP_ENABLED", "true")
+			t.Setenv("AGENTDOCK_STDIO", "false")
+			t.Setenv("AGENTDOCK_BROWSER_ENABLED", "")
+			t.Setenv(key, "invalid")
+			if _, err := FromEnv(); err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("FromEnv() error = %v, want %s parsing error", err, key)
+			}
+		})
+	}
+}
 
 func setTestUserHome(t *testing.T, home string) {
 	t.Helper()
@@ -550,5 +607,22 @@ func TestValidateAuthTreatsEmptyHostAsWildcard(t *testing.T) {
 	cfg := Config{Host: ""}
 	if err := cfg.ValidateAuth(); err == nil || !strings.Contains(err.Error(), "requires AGENTDOCK_AUTH_TOKEN or OAuth") {
 		t.Fatalf("ValidateAuth() error = %v, want wildcard authentication error", err)
+	}
+}
+
+func TestValidateAuthQuickIntermediateAndPublishedOrigin(t *testing.T) {
+	t.Setenv("AGENTDOCK_OAUTH_PASSWORD", "strong-password")
+	t.Setenv("AGENTDOCK_OAUTH_TOKEN_SECRET", "0123456789abcdef0123456789abcdef")
+	pending := Config{Host: "127.0.0.1", OAuthEnabled: false}
+	if err := pending.ValidateAuth(); err != nil {
+		t.Fatal("Quick must boot before URL publication", err)
+	}
+	pending.OAuthEnabled = true
+	if err := pending.ValidateAuth(); err == nil {
+		t.Fatal("OAuth enabled before URL publication")
+	}
+	pending.OAuthServerURL = "https://fresh.trycloudflare.com"
+	if err := pending.ValidateAuth(); err != nil {
+		t.Fatal("published Quick OAuth invalid", err)
 	}
 }

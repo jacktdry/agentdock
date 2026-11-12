@@ -414,14 +414,18 @@ func TestRuntimeOutputContractACPUpdateChange(t *testing.T) {
 func newOutputContractACPRuntime(t *testing.T, stateful bool) *Runtime {
 	t.Helper()
 	const (
-		helperEnv = "GO_WANT_OUTPUT_CONTRACT_ACP_HELPER"
-		stateEnv  = "GO_OUTPUT_CONTRACT_ACP_STATEFUL"
+		helperEnv     = "GO_WANT_OUTPUT_CONTRACT_ACP_HELPER"
+		stateEnv      = "GO_OUTPUT_CONTRACT_ACP_STATEFUL"
+		permissionEnv = "GO_OUTPUT_CONTRACT_ACP_PERMISSION"
 	)
 	t.Setenv(helperEnv, "1")
 	envFromEnv := map[string]string{helperEnv: helperEnv}
 	if stateful {
 		t.Setenv(stateEnv, "1")
 		envFromEnv[stateEnv] = stateEnv
+	}
+	if os.Getenv(permissionEnv) == "1" {
+		envFromEnv[permissionEnv] = permissionEnv
 	}
 
 	executable, err := os.Executable()
@@ -470,8 +474,9 @@ func TestOutputContractACPHelper(t *testing.T) {
 	remoteSession := 0
 	for scanner.Scan() {
 		var request struct {
-			ID     any    `json:"id"`
-			Method string `json:"method"`
+			ID     any             `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
 			os.Exit(2)
@@ -528,8 +533,61 @@ func TestOutputContractACPHelper(t *testing.T) {
 				result = map[string]any{"configOptions": []any{}}
 			}
 		case "session/prompt":
-			time.Sleep(2 * time.Second)
-			result = map[string]any{"stopReason": "end_turn"}
+			if os.Getenv("GO_OUTPUT_CONTRACT_ACP_PERMISSION") == "1" {
+				var params struct {
+					SessionID string `json:"sessionId"`
+				}
+				if err := json.Unmarshal(request.Params, &params); err != nil || params.SessionID == "" {
+					os.Exit(3)
+				}
+				permissionID := "permission-1"
+				if err := encoder.Encode(map[string]any{
+					"jsonrpc": "2.0", "id": permissionID, "method": "session/request_permission",
+					"params": map[string]any{
+						"sessionId": params.SessionID,
+						"toolCall":  map[string]any{"toolCallId": "tool-1", "title": "write file", "kind": "edit"},
+						"options": []map[string]any{
+							{"optionId": "allow-once", "name": "Allow once", "kind": "allow_once"},
+							{"optionId": "reject-once", "name": "Reject once", "kind": "reject_once"},
+							{"optionId": "allow-always", "name": "Always allow", "kind": "allow_always"},
+						},
+					},
+				}); err != nil {
+					os.Exit(4)
+				}
+				selected := ""
+				cancelled := false
+				for scanner.Scan() {
+					var response struct {
+						ID     any `json:"id"`
+						Result struct {
+							Outcome struct {
+								Outcome  string `json:"outcome"`
+								OptionID string `json:"optionId"`
+							} `json:"outcome"`
+						} `json:"result"`
+					}
+					if err := json.Unmarshal(scanner.Bytes(), &response); err != nil {
+						os.Exit(5)
+					}
+					if fmt.Sprint(response.ID) != permissionID {
+						continue
+					}
+					cancelled = response.Result.Outcome.Outcome == "cancelled"
+					selected = response.Result.Outcome.OptionID
+					break
+				}
+				if cancelled {
+					result = map[string]any{"stopReason": "cancelled"}
+				} else if selected == "allow-once" || selected == "reject-once" {
+					result = map[string]any{"stopReason": "end_turn"}
+				} else {
+					os.Exit(6)
+				}
+			} else {
+				time.Sleep(2 * time.Second)
+				result = map[string]any{"stopReason": "end_turn"}
+			}
 		default:
 			if request.ID == nil {
 				continue

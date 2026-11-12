@@ -7,28 +7,33 @@ final class LegacyDesktopRuntimeMigration {
         (label: "com.uvwt.agentdock.menu", plist: "com.uvwt.agentdock.menu.plist"),
     ]
 
+    private let serviceLoaded: (String) -> Bool
     private let paths: AppPaths
     private let fileManager: FileManager
 
-    init(paths: AppPaths, fileManager: FileManager = .default) {
+    init(paths: AppPaths, fileManager: FileManager = .default,
+         serviceLoaded: @escaping (String) -> Bool = LegacyDesktopRuntimeMigration.launchdLoaded) {
+        self.serviceLoaded = serviceLoaded
         self.paths = paths
         self.fileManager = fileManager
     }
 
-    static func isPresent(paths: AppPaths, fileManager: FileManager = .default) -> Bool {
+    static func isPresent(paths: AppPaths, fileManager: FileManager = .default,
+                          serviceLoaded: (String) -> Bool = LegacyDesktopRuntimeMigration.launchdLoaded) -> Bool {
+        guard paths.identity.allowsLegacyMigration else { return false }
         let launchAgents = paths.home.appendingPathComponent("Library/LaunchAgents")
         return services.contains { service in
             fileManager.fileExists(atPath: launchAgents.appendingPathComponent(service.plist).path)
-                || launchdLoaded(label: service.label)
+                || serviceLoaded(service.label)
         }
     }
 
     func begin() throws -> Transaction? {
-        guard Self.isPresent(paths: paths, fileManager: fileManager) else { return nil }
+        guard Self.isPresent(paths: paths, fileManager: fileManager, serviceLoaded: serviceLoaded) else { return nil }
 
         let domain = Self.launchdDomain
         let loadedLabels = Self.services.compactMap { service in
-            Self.launchdLoaded(label: service.label) ? service.label : nil
+            serviceLoaded(service.label) ? service.label : nil
         }
         for label in loadedLabels {
             let result = try runProcess(
@@ -130,7 +135,7 @@ final class LegacyDesktopRuntimeMigration {
 
     private static var launchdDomain: String { "gui/\(getuid())" }
 
-    private static func launchdLoaded(label: String) -> Bool {
+    static func launchdLoaded(label: String) -> Bool {
         guard let result = try? runProcess(
             executable: "/bin/launchctl",
             arguments: ["print", "\(launchdDomain)/\(label)"]

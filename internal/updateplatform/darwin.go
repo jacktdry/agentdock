@@ -17,6 +17,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/fs/atomicfile"
 	"github.com/uvwt/agentdock/internal/updateengine"
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 type DarwinDriver struct {
@@ -26,6 +27,7 @@ type DarwinDriver struct {
 
 type macOSHandoff struct {
 	SchemaVersion      int    `json:"schema_version"`
+	Variant            string `json:"variant,omitempty"`
 	TransactionID      string `json:"transaction_id,omitempty"`
 	TargetVersion      string `json:"target_version"`
 	CoreRegistration   string `json:"core_registration,omitempty"`
@@ -34,6 +36,7 @@ type macOSHandoff struct {
 
 type macOSPendingResult struct {
 	SchemaVersion  int    `json:"schema_version"`
+	Variant        string `json:"variant,omitempty"`
 	TransactionID  string `json:"transaction_id,omitempty"`
 	OK             bool   `json:"ok"`
 	CurrentVersion string `json:"current_version"`
@@ -46,6 +49,25 @@ func NewDarwinDriver(root string) (*DarwinDriver, error) {
 	if root == "" {
 		return nil, errors.New("macOS update root is required")
 	}
+	id, err := updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))
+	if err != nil {
+		return nil, err
+	}
+	if id.Variant != "next" && filepath.Base(root) == "AgentDock Next" {
+		return nil, errors.New("Next update identity missing")
+	}
+	if id.Variant == "next" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		if root != id.Root(home) {
+			return nil, errors.New("Next update root mismatch")
+		}
+		if err := updateidentity.SafePath(root); err != nil {
+			return nil, err
+		}
+	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -57,28 +79,41 @@ func NewDarwinDriver(root string) (*DarwinDriver, error) {
 	return &DarwinDriver{root: absolute, store: store}, nil
 }
 
+// OS boundaries are injectable for fixture-only activation/recovery tests.
+var validateApp = validateMacOSApp
+var validateSigningContinuity = validateMacOSSigningContinuity
+var stopApp = terminateMacOSApp
+var openApp = launchMacOSApp
+var verifyNextSigner = verifyNextPlanSigner
+
 func (driver *DarwinDriver) PrepareTrial(ctx context.Context, transaction updateengine.Transaction) error {
 	plan, err := driver.plan(transaction)
 	if err != nil {
 		return err
 	}
-	if err := validateMacOSApp(ctx, plan.TargetAppPath, transaction.SourceVersion); err != nil {
+	if plan.Variant == "next" {
+		if err := verifyNextSigner(ctx, plan, plan.TargetAppPath, plan.TrialAppPath); err != nil {
+			return err
+		}
+	}
+	if err := validateApp(ctx, plan.TargetAppPath, transaction.SourceVersion); err != nil {
 		return fmt.Errorf("source App is not usable: %w", err)
 	}
-	if err := validateMacOSApp(ctx, plan.TrialAppPath, transaction.TargetVersion); err != nil {
+	if err := validateApp(ctx, plan.TrialAppPath, transaction.TargetVersion); err != nil {
 		return fmt.Errorf("target App trial is not usable: %w", err)
 	}
-	if err := validateMacOSSigningContinuity(ctx, plan.TargetAppPath, plan.TrialAppPath); err != nil {
+	if err := validateSigningContinuity(ctx, plan.TargetAppPath, plan.TrialAppPath); err != nil {
 		return fmt.Errorf("target App signing identity does not match the source App: %w", err)
 	}
 	if err := removeIfExists(plan.HandoffPath); err != nil {
 		return fmt.Errorf("remove stale macOS handoff: %w", err)
 	}
-	if err := terminateMacOSApp(ctx, plan.TargetAppPath, 15*time.Second); err != nil {
+	if err := stopApp(ctx, plan.TargetAppPath, 15*time.Second); err != nil {
 		return fmt.Errorf("stop source App: %w", err)
 	}
 	if err := writePendingResult(plan.ResultPath, macOSPendingResult{
 		SchemaVersion:  1,
+		Variant:        plan.Variant,
 		TransactionID:  transaction.TransactionID,
 		OK:             true,
 		CurrentVersion: transaction.SourceVersion,
@@ -90,10 +125,10 @@ func (driver *DarwinDriver) PrepareTrial(ctx context.Context, transaction update
 	if err := swapPathsAtomic(plan.TargetAppPath, plan.TrialAppPath); err != nil {
 		return err
 	}
-	if err := validateMacOSApp(ctx, plan.TargetAppPath, transaction.TargetVersion); err != nil {
+	if err := validateApp(ctx, plan.TargetAppPath, transaction.TargetVersion); err != nil {
 		return fmt.Errorf("active App after atomic swap is invalid: %w", err)
 	}
-	if err := launchMacOSApp(ctx, plan.TargetAppPath); err != nil {
+	if err := openApp(ctx, plan.TargetAppPath); err != nil {
 		return err
 	}
 	return nil
@@ -104,9 +139,20 @@ func (driver *DarwinDriver) VerifyTrial(ctx context.Context, transaction updatee
 	if err != nil {
 		return nil, err
 	}
+	if plan.Variant == "next" {
+		if err := verifyNextSigner(ctx, plan, plan.TargetAppPath); err != nil {
+			return nil, err
+		}
+		if err := validateApp(ctx, plan.TargetAppPath, transaction.TargetVersion); err != nil {
+			return nil, err
+		}
+	}
 	handoff, err := waitForMacOSHandoff(ctx, plan.HandoffPath, transaction.TransactionID, transaction.TargetVersion, 60*time.Second)
 	if err != nil {
 		return nil, err
+	}
+	if plan.Variant == "next" && handoff.Variant != "next" {
+		return nil, errors.New("Next handoff identity mismatch")
 	}
 	var warnings []string
 	if plan.CoreWasEnabled {
@@ -116,6 +162,11 @@ func (driver *DarwinDriver) VerifyTrial(ctx context.Context, transaction updatee
 		case "enabled":
 			if strings.TrimSpace(plan.HealthURL) == "" {
 				return nil, errors.New("macOS trial requires a Core health URL when Core is enabled")
+			}
+			if plan.Variant == "next" {
+				if err := validateNextCoreListener(ctx, plan.TargetAppPath); err != nil {
+					return nil, err
+				}
 			}
 			if err := updateengine.WaitForVersion(ctx, []string{plan.HealthURL}, transaction.TargetVersion, 45*time.Second); err != nil {
 				return nil, fmt.Errorf("target Core health/version check failed: %w", err)
@@ -130,7 +181,17 @@ func (driver *DarwinDriver) VerifyTrial(ctx context.Context, transaction updatee
 	return warnings, nil
 }
 
-func (driver *DarwinDriver) Commit(context.Context, updateengine.Transaction) error {
+func (driver *DarwinDriver) Commit(ctx context.Context, transaction updateengine.Transaction) error {
+	if transaction.MacOS != nil && transaction.MacOS.Variant == "next" {
+		plan, err := driver.plan(transaction)
+		if err != nil {
+			return err
+		}
+		if err := verifyNextSigner(ctx, plan, plan.TargetAppPath); err != nil {
+			return err
+		}
+		return validateApp(ctx, plan.TargetAppPath, transaction.TargetVersion)
+	}
 	// The old App at TrialAppPath is the rollback slot. It must survive until the generic
 	// Arbiter persists the terminal committed result; cleanup happens afterwards in selfupdate.
 	return nil
@@ -141,9 +202,16 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 	if err != nil {
 		return err
 	}
+	// Prove both slots before process inspection or rollback mutation. A missing
+	// active slot is recoverable only from a validated source slot.
+	if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
+		if err := validateNextRollback(ctx, plan, transaction); err != nil {
+			return err
+		}
+	}
 	var rollbackErrors []error
-	if err := terminateMacOSApp(ctx, plan.TargetAppPath, 15*time.Second); err != nil {
-		rollbackErrors = append(rollbackErrors, fmt.Errorf("stop target App: %w", err))
+	if err := stopApp(ctx, plan.TargetAppPath, 15*time.Second); err != nil {
+		return fmt.Errorf("stop target App: %w", err)
 	}
 
 	activeVersion := macOSAppVersion(ctx, plan.TargetAppPath)
@@ -162,7 +230,7 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 	}
 
 	if len(rollbackErrors) == 0 {
-		if err := validateMacOSApp(ctx, plan.TargetAppPath, transaction.SourceVersion); err != nil {
+		if err := validateApp(ctx, plan.TargetAppPath, transaction.SourceVersion); err != nil {
 			rollbackErrors = append(rollbackErrors, fmt.Errorf("restored source App is invalid: %w", err))
 		}
 	}
@@ -171,6 +239,7 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 	}
 	if err := writePendingResult(plan.ResultPath, macOSPendingResult{
 		SchemaVersion:  1,
+		Variant:        plan.Variant,
 		TransactionID:  transaction.TransactionID,
 		OK:             false,
 		CurrentVersion: transaction.SourceVersion,
@@ -181,7 +250,7 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 	}
 	shouldLaunchSource := plan.AppWasRunning || plan.CoreWasEnabled || plan.TunnelEnabled
 	if shouldLaunchSource && len(rollbackErrors) == 0 {
-		if err := launchMacOSApp(ctx, plan.TargetAppPath); err != nil {
+		if err := openApp(ctx, plan.TargetAppPath); err != nil {
 			rollbackErrors = append(rollbackErrors, fmt.Errorf("restart source App: %w", err))
 		}
 	}
@@ -195,6 +264,8 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 		)
 		if err != nil {
 			rollbackErrors = append(rollbackErrors, fmt.Errorf("source App rollback handoff failed: %w", err))
+		} else if plan.Variant == "next" && handoff.Variant != "next" {
+			rollbackErrors = append(rollbackErrors, errors.New("Next rollback handoff identity mismatch"))
 		} else if plan.CoreWasEnabled {
 			switch handoff.CoreRegistration {
 			case "requires_approval":
@@ -203,7 +274,7 @@ func (driver *DarwinDriver) Rollback(ctx context.Context, transaction updateengi
 			case "enabled":
 				if strings.TrimSpace(plan.HealthURL) == "" {
 					rollbackErrors = append(rollbackErrors, errors.New("macOS rollback requires a Core health URL when Core was enabled"))
-				} else if err := updateengine.WaitForVersion(ctx, []string{plan.HealthURL}, transaction.SourceVersion, 45*time.Second); err != nil {
+				} else if err := verifyRollbackCore(ctx, plan, transaction.SourceVersion); err != nil {
 					rollbackErrors = append(rollbackErrors, fmt.Errorf("restored source Core health/version check failed: %w", err))
 				}
 			default:
@@ -243,6 +314,9 @@ func (driver *DarwinDriver) plan(transaction updateengine.Transaction) (*updatee
 	if transaction.Platform != "darwin" || transaction.MacOS == nil {
 		return nil, errors.New("macOS Arbiter requires a macOS transaction plan")
 	}
+	if _, err := updateengine.ValidateMacOSIdentity(driver.root, transaction); err != nil {
+		return nil, err
+	}
 	plan := transaction.MacOS
 	if strings.TrimSpace(plan.TargetAppPath) == "" || strings.TrimSpace(plan.TrialAppPath) == "" {
 		return nil, errors.New("macOS transaction App paths are required")
@@ -257,12 +331,24 @@ func (driver *DarwinDriver) plan(transaction updateengine.Transaction) (*updatee
 }
 
 func validateMacOSApp(ctx context.Context, appPath, expectedVersion string) error {
+	id, err := updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))
+	if err != nil {
+		return err
+	}
+	if err := id.ValidateBundle(ctx, appPath); err != nil {
+		return err
+	}
+	if id.Variant == "next" {
+		if err := id.ValidateSignatures(ctx, appPath); err != nil {
+			return err
+		}
+	}
 	info, err := os.Lstat(appPath)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("App Bundle is unavailable: %s", appPath)
 	}
 	identifier, err := plistValue(ctx, filepath.Join(appPath, "Contents", "Info.plist"), "CFBundleIdentifier")
-	if err != nil || identifier != "com.uvwt.agentdock" {
+	if err != nil || identifier != id.BundleID {
 		return fmt.Errorf("unexpected Bundle Identifier: %q", identifier)
 	}
 	version := macOSAppVersion(ctx, appPath)
@@ -299,6 +385,9 @@ func validateMacOSSigningContinuity(ctx context.Context, sourceAppPath, targetAp
 		return fmt.Errorf("read source App designated requirement: %w", err)
 	}
 	if isLegacyAdHocRequirement(requirement) {
+		if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
+			return errors.New("Next signing continuity requires a certificate identity")
+		}
 		// Existing 0.8.x desktop builds were ad-hoc signed, whose designated requirement is
 		// a per-build cdhash. Such a requirement can never match a different version. Allow
 		// this one compatibility boundary; once a certificate-signed App is active, every
@@ -417,7 +506,7 @@ func macOSOpenArguments(appPath string) []string {
 	// environment overrides are copied into the new process. Preserve the standard home
 	// overrides used by isolated/runtime-managed environments explicitly so the new App and
 	// its SMAppService registrations keep the same state root as the updater.
-	for _, name := range []string{"HOME", "CFFIXED_USER_HOME", "AGENTDOCK_SKIP_LOGIN_ITEM_CONFIGURATION"} {
+	for _, name := range []string{"HOME", "CFFIXED_USER_HOME", "AGENTDOCK_SKIP_LOGIN_ITEM_CONFIGURATION", "AGENTDOCK_DESKTOP_VARIANT"} {
 		if value, ok := os.LookupEnv(name); ok && strings.TrimSpace(value) != "" {
 			args = append(args, "--env", name+"="+value)
 		}
@@ -489,6 +578,136 @@ func removeIfExists(path string) error {
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	return nil
+}
+
+func validateNextRollback(ctx context.Context, plan *updateengine.MacOSPlan, transaction updateengine.Transaction) error {
+	activeVersion := macOSAppVersion(ctx, plan.TargetAppPath)
+	trialVersion := macOSAppVersion(ctx, plan.TrialAppPath)
+	source := updateengine.NormalizeVersion(transaction.SourceVersion)
+	target := updateengine.NormalizeVersion(transaction.TargetVersion)
+	if _, err := os.Lstat(plan.TargetAppPath); os.IsNotExist(err) {
+		if err := verifyNextSigner(ctx, plan, plan.TrialAppPath); err != nil {
+			return err
+		}
+		return validateApp(ctx, plan.TrialAppPath, source)
+	}
+	if activeVersion != source && activeVersion != target {
+		return errors.New("unproven Next active rollback slot")
+	}
+	if err := verifyNextSigner(ctx, plan, plan.TargetAppPath); err != nil {
+		return err
+	}
+	if err := validateApp(ctx, plan.TargetAppPath, activeVersion); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(plan.TrialAppPath); os.IsNotExist(err) && activeVersion == source {
+		return verifyNextSigner(ctx, plan, plan.TargetAppPath)
+	}
+	if trialVersion != source && trialVersion != target {
+		return errors.New("unproven Next trial rollback slot")
+	}
+	if err := verifyNextSigner(ctx, plan, plan.TrialAppPath); err != nil {
+		return err
+	}
+	if err := validateApp(ctx, plan.TrialAppPath, trialVersion); err != nil {
+		return err
+	}
+	return validateSigningContinuity(ctx, plan.TargetAppPath, plan.TrialAppPath)
+}
+
+// ValidateNextSigningContinuity is shared with staging so untrusted helpers are
+// rejected before skill bootstrap, well before activation.
+func ValidateNextSigningContinuity(ctx context.Context, source, target string) error {
+	if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next" {
+		return errors.New("explicit Next identity required")
+	}
+	requirement, err := NextSourceSigningRequirement(ctx, source)
+	if err != nil {
+		return err
+	}
+	return verifyNextPlanSigner(ctx, &updateengine.MacOSPlan{SigningRequirement: requirement}, source, target)
+}
+
+func verifyRollbackCore(ctx context.Context, plan *updateengine.MacOSPlan, version string) error {
+	if plan.Variant == "next" {
+		if err := validateNextCoreListener(ctx, plan.TargetAppPath); err != nil {
+			return err
+		}
+	}
+	return updateengine.WaitForVersion(ctx, []string{plan.HealthURL}, version, 45*time.Second)
+}
+
+func validateNextCoreListener(ctx context.Context, app string) error {
+	output, err := exec.CommandContext(ctx, "/usr/sbin/lsof", "-nP", "-iTCP:8767", "-sTCP:LISTEN", "-t").Output()
+	if err != nil {
+		return errors.New("Next Core listener ownership unavailable")
+	}
+	pid, err := nextListenerPID(string(output))
+	if err != nil {
+		return err
+	}
+
+	command, err := exec.CommandContext(ctx, "/bin/ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return errors.New("Next listener command unavailable")
+	}
+	return validateNextListenerCommand(app, string(command))
+}
+
+func nextListenerPID(output string) (int, error) {
+	pids := strings.Fields(output)
+	if len(pids) != 1 {
+		return 0, errors.New("Next Core listener ownership is ambiguous")
+	}
+	pid, err := strconv.Atoi(pids[0])
+	if err != nil || pid <= 0 {
+		return 0, errors.New("invalid Next Core listener PID")
+	}
+	return pid, nil
+}
+
+func validateNextListenerCommand(app, command string) error {
+	expected := filepath.Join(app, "Contents", "Helpers", "agentdock")
+	line := strings.TrimSpace(command)
+	if line != expected && !strings.HasPrefix(line, expected+" ") {
+		return errors.New("Next port is owned by another process")
+	}
+	return nil
+}
+
+// NextSourceSigningRequirement persists the known-good signer for recovery even
+// if the active slot is missing. Stable's historical ad-hoc exception is excluded.
+func NextSourceSigningRequirement(ctx context.Context, source string) (string, error) {
+	requirement, err := macOSDesignatedRequirement(ctx, source)
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(requirement, `identifier "dev.dropabit.agentdock.next"`) || !strings.Contains(requirement, "certificate ") || strings.Contains(requirement, "cdhash") {
+		return "", errors.New("Next requires a certificate-bound source signing identity")
+	}
+	return requirement, nil
+}
+
+func verifyNextPlanSigner(ctx context.Context, plan *updateengine.MacOSPlan, apps ...string) error {
+	id, _ := updateidentity.Resolve("next")
+	for _, app := range apps {
+		for _, item := range []struct{ path, identifier string }{
+			{app, id.BundleID},
+			{filepath.Join(app, "Contents", "Helpers", "agentdock"), id.Label("core")},
+			{filepath.Join(app, "Contents", "Helpers", "agentdock-arbiter"), id.Label("arbiter")},
+			{filepath.Join(app, "Contents", "Helpers", "cloudflared"), id.Label("cloudflared")},
+			{filepath.Join(app, "Contents", "Helpers", "AgentDockLoginHelper"), id.Label("login-helper")},
+		} {
+			if err := updateidentity.SafePath(item.path); err != nil {
+				return err
+			}
+			requirement := strings.ReplaceAll(plan.SigningRequirement, `identifier "`+id.BundleID+`"`, `identifier "`+item.identifier+`"`)
+			if output, err := exec.CommandContext(ctx, "/usr/bin/codesign", "--verify", "--strict", "-R="+requirement, item.path).CombinedOutput(); err != nil {
+				return fmt.Errorf("Next source signer mismatch: %w: %s", err, output)
+			}
+		}
 	}
 	return nil
 }

@@ -31,9 +31,13 @@ func platformOpenTunnelLogs(unixRuntimeManifest) (*processLogs, error) {
 }
 
 func macOSLogDir() (string, error) {
+	name, err := macOSRuntimeName()
+	if err != nil {
+		return "", err
+	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return "", fmt.Errorf("解析 macOS 用户目录失败: %w", err)
 	}
-	return filepath.Join(home, "Library", "Logs", "AgentDock"), nil
+	return filepath.Join(home, "Library", "Logs", name), nil
 }

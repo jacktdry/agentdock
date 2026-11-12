@@ -15,15 +15,28 @@ import (
 // ServiceStatus 是桌面端和 CLI 共享的结构化运行状态。
 // 生命周期操作统一返回 JSON，避免桌面端继续解析 PowerShell 文本。
 type ServiceStatus struct {
-	Running        bool `json:"running"`
-	Healthy        bool `json:"healthy"`
-	StartupEnabled bool `json:"startup_enabled"`
-	NexusConnected bool `json:"nexus_connected"`
+	Running                 bool   `json:"running"`
+	Healthy                 bool   `json:"healthy"`
+	StartupEnabled          bool   `json:"startup_enabled"`
+	NexusConnected          bool   `json:"nexus_connected"`
+	NexusIdentityGeneration string `json:"nexus_identity_generation,omitempty"`
 }
 
 type serviceCommandResult struct {
 	Action    string `json:"action"`
 	Completed bool   `json:"completed"`
+}
+
+// RunServiceActionLocked performs a Core lifecycle action for a caller that
+// already owns the Desktop mutation lock and has already validated the selected
+// Next runtime identity. It must not acquire the lock again.
+func RunServiceActionLocked(ctx context.Context, runtimeRoot, action string) error {
+	switch action {
+	case "start", "restart":
+		return platformServiceAction(ctx, runtimeRoot, action)
+	default:
+		return errors.New("unsupported locked Core service action")
+	}
 }
 
 func RunServiceCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {

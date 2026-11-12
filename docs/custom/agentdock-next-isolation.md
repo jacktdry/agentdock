@@ -1,0 +1,252 @@
+# AgentDock Next Isolation
+
+> 狀態：Accepted durable decision / Phase 1 and Phase 2 completed / Shared Next deployed / ChatGPT Next connector created / P3 side-by-side validation complete
+>
+> 日期：2026-10-05
+>
+> 適用分支：`custom/main`；目前實作 worktree/branch：`architecture/agentdock-next-isolation`；M7 code / stress 已於 `d8acb9be` 整合完成
+
+## 決策與 side-by-side 架構
+
+先前對已安裝 pre-M7 AgentDock 的 live activation 嘗試造成 ChatGPT Mac-Dev control channel 斷線。目前連線中的 **AgentDock 是 production control plane**，必須保持可用；客製版以 **AgentDock Next** 作獨立 development plane 並行開發。這取代先前 M7 direct stable activation / Memory registry cutover gate，不推翻 M7 feature code / stress 的完成狀態。
+
+Next 沿用 custom Core / Shared Desktop 架構，但 app identity、service ownership、runtime/state、tunnel / connector 與 update target 均獨立。ChatGPT 現有 stable `mac-dev` 仍連 stable Core；Next connector 已建立並連向 Next Core，ChatGPT 目前顯示名稱為 `macbook-air-m3`，邏輯角色仍是 `mac-dev-next`，不重指向原 connector。
+
+唯一規劃中的 shared service 是 Memory HTTP `http://127.0.0.1:8766/mcp`。Next registry/config 固定使用 `protocol_version=2025-11-25`，保存在 Next state；共用 endpoint / DB 不等於共用 AgentDock registry、runtime state 或 daemon lifecycle authority。
+
+## 不可破壞的 invariants
+
+- Next 開發不得檢查、修改、重啟、停止、替換或寫入 `/Applications/AgentDock.app`、目前 stable AgentDock Core、`~/.agentdock`、stable Memory registry 或 live launchd services；stable 不得作 development target。
+- **Stable `mac-dev` 是 Next 開發與維護的唯一 mutation control plane**：凡是修改 Next repository、build/package、安裝或替換 `AgentDock Next.app`、註冊／重啟 Next services、Tunnel／runtime mutation 與修復操作，一律由仍可用的 stable `mac-dev` 執行。`mac-dev-next`（目前 ChatGPT 顯示為 `macbook-air-m3`）只作 Next connector / runtime / side-by-side 驗證目標，不得用來修改、重編譯、重裝或修復自己；若 stable control plane 不可用則停止 live mutation，而不是改由 Next 自我維護。
+- Next 的 start / stop / restart、settings、diagnostics、tunnel、login item、ACP / Browser cleanup 及 installer / self-update 只可操作可證明為 Next-owned 的目標。禁止全域 kill、按 app basename 猜測 ownership、清除 stable children 或接管使用者 browser。
+- Core network namespace 不可混用：stable default `8765`、shared Memory `8766`、Next default `8767`。Next 不允許選用 stable/Memory reserved port；任何自訂 port 在 apply/start 前要做 ownership-aware occupancy preflight，無法證明為 Next-owned 的既有 listener 一律視為 conflict。
+- 不從 stable state 原地轉換、搬移或建立可寫 symlink；Next 不因缺少 state/config 而讀寫 stable fallback。明確 Next namespaces 未建立前，不啟動 runtime / service 實驗。
+- Bundle identifier、service label、paths、port、connector 必須一致驗證。缺失、衝突、identity 不符或 ownership 不明時 fail closed。
+- Installer / self-update 必須 **Next-target-aware**：以 Next identity 驗證來源、destination、runtime/service targets 與 update metadata；永不得 fallback 選擇 `AgentDock.app`。失敗 / rollback 只影響 Next。
+- Shared Memory daemon、stable stdio Memory children、stable launchd services 都不是 Next cleanup 目標。Memory endpoint 不可用時停止 Next cutover，不修理或重啟 live shared service。
+- 只有 Next 完整開發、測試且能獨立連上 ChatGPT 後，才另行規劃並授權 stable migration / retirement；開發 gate 不包含退休 old AgentDock。
+
+## Namespace matrix（proposed defaults）
+
+以下 defaults 已作為 repository identity/runtime contract 落地；updater/arbiter target isolation 已由 Phase 2 實作。2026-10-06 的 live readiness 已驗證 `~/Applications/AgentDock Next.app`、Next Core `8767`、Next Named Tunnel 與 ChatGPT Next connector；release-native signed updater / rollback UAT 仍是後續 gate。Stable identity 只記錄已知邊界，不以本文件要求額外探查或 mutation。
+
+| 項目 | Stable production plane | AgentDock Next development plane |
+| --- | --- | --- |
+| App | `/Applications/AgentDock.app`，禁止操作 | live development install：`~/Applications/AgentDock Next.app`；release updater contract 亦允許受驗證的 system Applications target |
+| Bundle identifier | 保留既有，不探查 / 更改 | `dev.dropabit.agentdock.next` |
+| Core LaunchAgent | 保留既有 live service | `dev.dropabit.agentdock.next.core` |
+| Tunnel LaunchAgent | 保留既有 live service | `dev.dropabit.agentdock.next.tunnel` |
+| Menu login LaunchAgent | 保留既有 live service | `dev.dropabit.agentdock.next.menu-login` |
+| Application Support / runtime root | 保留既有，不共用 | `~/Library/Application Support/AgentDock Next` |
+| Logs | 保留既有，不共用 | `~/Library/Logs/AgentDock Next` |
+| State / `AGENTDOCK_HOME` | `~/.agentdock`，禁止操作 | `~/.agentdock-next` |
+| Default work directory | 保留既有，不共用 | `~/AgentDock Next` |
+| Core port | `8765`，保持原樣 | `8767`；衝突時 fail closed，不回退 `8765` |
+| ChatGPT connector | stable `mac-dev` control channel | Next connector：ChatGPT 顯示 `macbook-air-m3`（邏輯角色 `mac-dev-next`） |
+| Memory registry/config | 原 stdio registry，禁止操作 | Next state 內獨立 registry → HTTP `http://127.0.0.1:8766/mcp`，pin `2025-11-25` |
+| Installer / self-update | 禁止作開發 target | 僅 Next identity / paths / services；fail closed，無 stable fallback |
+
+Next LaunchAgent plist filenames 以各 label 加 `.plist` 對應；實作前須完成 target-isolation 檢查，不能在準備 namespace 時操作 live launchd services。Tunnel 必須只指向 Next port，credential/config 與 endpoint ownership 留在 Next state，不沿用或覆寫 stable tunnel identity。平台 credential、login item、update channel / artifact metadata 等任何額外 persisted identity，也必須 Next-scoped；不明確時不安裝或啟動。
+
+日後若將 **AgentDock Next** 更名，視為獨立 packaging / identity migration，需完整處理 bundle、service、paths、installer/update metadata 與 connector 的一致性；更名不是現在共用 runtime state 的理由，也不能暗中取得 stable ownership。
+
+## Rollout sequence
+
+1. **文件決策**：本次僅記錄 contract；不改 source、安裝 app、註冊服務、寫 registry 或探查 live runtime。
+2. **M7.5 namespace 實作**：後續 bounded task 在 repository 內實作 Next identity / target resolution、runtime/state/log/work roots、port / tunnel 與 installer/self-update fail-closed；先用 isolated fixtures 驗證，不碰 stable。
+3. **Next-only package / runtime 驗證**：確認各 mutation surface 的 Next ownership，再於獨立 Next roots 驗證 install、start/stop/restart、settings、login/tunnel、update、failure/rollback 與 cleanup。不得操作 stable service；所需新 Next service 安裝不在本次 docs task 範圍。
+4. **Next Memory cutover**：只寫 Next registry/config，以 `2025-11-25` pin 使用既有 shared HTTP endpoint；驗證 health、ACP sessions 與無 per-session stdio Memory child。Stable registry/children 保持不動。
+5. **Next regression / independent connector**：重跑 M6/M7 relevant regression、ACP prompt-driven stress 與 Desktop checks，建立獨立 `mac-dev-next` ChatGPT 連線；由原 control channel 持續可用的連線結果證明隔離，不探查 / 操作 stable runtime。
+6. **M8/M9 與未來 migration**：M7.5 為 live migration 前置；Next 完整開發 / 測試並可獨立連線後，再另行提出含 recovery / rollback 的 migration 與 old AgentDock retirement 計畫。不存在立即 stable activation 的下一步。
+
+## Acceptance criteria
+
+- Diff / build artifact metadata 可證明 Next app、bundle、三個 service labels、roots、port 與 connector namespace 一致；本文件 defaults 尚未代表 source 已完成。
+- Target-resolution / installer / self-update tests 覆蓋 missing Next app、identity mismatch、stable-only installation、port collision 與 rollback；全部 fail closed，沒有選擇 `AgentDock.app` 或 stable state 的 fallback。
+- Next Runtime / Connection / Settings / Update / Diagnostics 與 process cleanup 只作用於 Next-owned targets；Next lifecycle / crash / rollback 不使原 Mac-Dev control channel 中斷。
+- Next Memory registry 位於 `~/.agentdock-next`，HTTP handshake / health 使用 `2025-11-25`；Next 新 ACP 不 spawn stdio Memory child。不得以 stable stdio child 歸零作 gate。
+- Next 中完成 M6/M7 lifecycle / Browser ownership regression 與 Codex、Antigravity 各 20 prompt-driven ephemeral stress；只以 Next-owned resources 回 baseline 驗收。
+- Next 可透過獨立 `mac-dev-next` 連上 ChatGPT；獨立 connector 不替換原 Mac-Dev。
+- 驗證證據明列 Next targets、實際執行 checks、失敗與未驗證部分；stable app / Core / state / registry / live services 未受操作。Stable migration / retirement 仍是後續另行授權的工作。
+
+相關文件：[Roadmap](roadmap.md)、[Architecture](architecture.md)、[ACP lifecycle / Memory](acp-lifecycle-memory.md)。
+
+## M7.5 Phase 1 implementation boundary
+
+Phase 1 adds a repository-only implementation of the identity contract; it does not authorize live activation or satisfy the later rollout gates above.
+
+- `packaging/macos/build-app.sh` sources the closed stable/next contract in `app-identity.sh`. `AGENTDOCK_MACOS_APP_VARIANT` defaults to `stable`; `next` produces `AgentDock Next.app`, `AgentDock-Next-macos-universal.zip`, and `AgentDock-Next-macos-universal.dmg`. Helper signing identifiers and all three bundled LaunchAgent labels follow the selected bundle ID. Unknown variants stop before output generation.
+- `AppIdentity` validates `AgentDockVariant`, bundle identifier, bundle name, and display name together. Older stable metadata may omit the variant only with matching stable identity. Next metadata cannot fall back to stable. Swift paths, service registration, configuration defaults, and direct Core subprocess environments carry this identity. Next installation writes explicit state/work paths and port 8767.
+- Next skips legacy filesystem/launchd migration and legacy login cleanup. Bundled Core/Tunnel receive `AGENTDOCK_DESKTOP_VARIANT` from their plists; Darwin runtime defaults, service labels, work directory, and logs use this marker. Unknown markers fail closed. Windows/Linux behavior is unchanged.
+- Next GUI update checks, update execution, and transaction recovery are blocked before entering the stable-only updater/arbiter. This is a temporary boundary, not a generalized updater implementation.
+
+Fixture validation entry points:
+
+```sh
+zsh scripts/test/test-macos-app.sh --fixtures-only
+python3 scripts/test/test-macos-identity.py
+AGENTDOCK_LAUNCHCTL_BIN=/usr/bin/false go test ./internal/desktopruntime ./scripts/test
+zsh -n packaging/macos/build-app.sh packaging/macos/app-identity.sh scripts/test/test-macos-app.sh
+```
+
+The fixture-only Swift mode runs configuration, identity, migration, and service validation tests plus packaging metadata tests; it skips preference persistence, permission checks, and artifact building/mounting. Legacy migration tests inject service probes. Go tests use the override above or test-local launchctl fakes; some tests need permission to bind ephemeral localhost HTTP fixture servers. Full app/helper Swift typechecking is also required. This phase has not built a signed ZIP/DMG or exercised live installation, registration, runtime activation, or connector/Memory cutover.
+
+At the Phase 1 checkpoint, Phase 2 still needed to generalize `selfupdate` / `updateplatform` and the arbiter to validate Next artifact contents, bundle/signing identity, destination, service labels, transaction metadata, ownership, rollback, and recovery. Direct Go updater/global uninstall entry points are not generalized or approved for Next use by Phase 1. Next GUI updates must remain blocked until these boundaries have tests. Publishing Next artifacts, connector `mac-dev-next`, and shared Memory HTTP remain later work; no stable migration or retirement is implied.
+
+## 2026-10-05 handoff checkpoint
+
+已完成：
+
+- 文件先行 isolation gate：`9962c61`（`docs(custom): define AgentDock Next isolation`）。
+- M7.5 Phase 1 repository identity/runtime isolation：`b189ee5`（`feat(macos): add AgentDock Next runtime identity`），位於 `architecture/agentdock-next-isolation`。
+- Stable 仍是 build default；Next 只在 `AGENTDOCK_MACOS_APP_VARIANT=next` 時選用獨立 identity。
+- Next contract 已落地：`AgentDock Next.app`、`dev.dropabit.agentdock.next`、三個 Next LaunchAgent labels、`~/.agentdock-next`、`~/Library/Application Support/AgentDock Next`、`~/Library/Logs/AgentDock Next`、`~/AgentDock Next`、Core `8767`。
+- Swift `AppIdentity` / `AppPaths`、Go Darwin runtime variant、service labels、legacy migration/login cleanup boundary、packaging metadata/signing IDs 均已 identity-aware；unknown/malformed Next identity fail closed。
+- Next GUI update check / apply / transaction recovery 暫時在進入 stable-only updater 前 fail closed；因此 Phase 1 不會誤用 stable updater。
+- Phase 1 驗證通過：shell syntax、`scripts/test/test-macos-identity.py`、`scripts/test/test-macos-app.sh --fixtures-only`、完整 Swift source/helper typecheck、`go test ./internal/desktopruntime ./scripts/test`（測試中以 `/usr/bin/false` mask launchctl）。第二模型 Gemini 3.1 Pro cross-review 無 blocker。
+
+Phase 1 當時的下一接手點（已由下方 Phase 2 checkpoint 更新）：
+
+1. **Phase 2 updater / arbiter target isolation**：generalize `internal/selfupdate`、`internal/updateplatform`、`agentdock-arbiter`，使 Next artifact name、bundle/signing identity、destination `AgentDock Next.app`、service labels、transaction metadata、trial/new/backup path、rollback/recovery 都由明確 Next identity 決定；stable 行為保持相容。
+2. Next identity 缺失、unknown、source/destination mismatch 或 ownership 不明時必須 fail closed；不得以 basename、`/Applications/AgentDock.app` 或 stable service label 作 fallback。
+3. 在 Phase 2 有完整 fixture/unit tests 前，保持 Next GUI updater gate 關閉。
+4. Phase 2 後才進行 **Next-only** package / codesign / launch-smoke、Memory registry HTTP cutover 與 `mac-dev-next` connector；不要先做 stable migration/retirement。
+
+安全邊界仍不變：不得檢查、修改、停止、重啟或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services。所有驗證先用 repo fixture / temp dirs；需要 live runtime 時只可操作可證明為 Next-owned 的資源。
+
+## M7.5 Phase 2 checkpoint — 2026-10-05
+
+Repository updater / arbiter target isolation 已實作。**Next GUI check / apply / transaction recovery gate 仍關閉**；本次不是 live activation 或 M7.5 整體驗收。
+
+- `internal/updateidentity` 是 updater 的 closed stable/next contract：Next ZIP、bundle/display/executable identity、Core/Tunnel/Menu plist labels、arguments、environment 與四個 helper signing identifiers 必須一致。Unknown marker、unmarked Next bundle、明確 override 不符、stable-only payload 均停止，不 fallback 到 stable。
+- Next 只接受 `/Applications/AgentDock Next.app` 或使用者 `Applications/AgentDock Next.app`；runtime journal 固定在 Next Application Support。Transaction 保存 `variant=next` 與 source certificate designated requirement，trial/rollback slot 固定為同 parent 的 `.AgentDock Next.app.trial.<transaction-id>`，copied arbiter 與 coordination/result paths 均綁定 Next root。Symlink、hardlink、非可信 owner 或可被其他使用者寫入的路徑拒絕；標準 macOS `/tmp`、`/var` alias 與 root/admin-owned `/Applications` 有明確處理。
+- Next 使用 arbiter atomic swap；trial slot 本身就是 backup。Legacy `.new` / `.backup` updater、pre-Arbiter fallback、bootstrap migration 與 standalone Core replacement 對 Next fail closed，不產生 stable new/backup paths。Stable 舊版缺少 variant / Arbiter 的相容性保留；明確指定無效 App override 則不再搜尋其他 target。
+- 下載解壓階段不執行 Next helper。Apply/arbiter 先驗證 persisted source signer requirement，再執行 helper version/bootstrap。Next source 與 target 的 App、Core、arbiter、cloudflared、login helper 均須符合該 signer；stable 的 legacy ad-hoc continuity 例外不適用 Next。Ad-hoc Next package 可供 metadata/signature fixtures，但不能通過 updater activation。
+- Rollback/recovery 在停止 App、交換路徑、啟動或清理前驗證 identity、slots 與 signer；active App 遺失時只可從通過 source version/signature 驗證的 Next slot 恢復。Next Core health 固定 `127.0.0.1:8767`，確認 listener command 指向 Next Core 後才查 health；foreign/ambiguous listener fail closed。
+- Swift service-state/handoff 攜帶 Next variant；stable 舊 JSON 相容。Next skill bootstrap 子程序使用 `.agentdock-next` 與 Next work directory，跳過 legacy skill migration。GUI updater/recovery gate 未開啟。
+
+驗證（全部 repository fixture / temp directory）：
+
+```sh
+TMPDIR=/private/tmp GOCACHE=/private/tmp/agentdock-next-phase2-gocache \
+  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+  go test -race ./internal/updateidentity ./internal/updateengine \
+  ./internal/updateplatform ./internal/selfupdate ./cmd/agentdock-arbiter
+# Same five packages: go vet
+TMPDIR=/private/tmp zsh scripts/test/test-macos-app.sh --fixtures-only
+swiftc -swift-version 5 -typecheck desktop/macos/AgentDockApp/Sources/*.swift
+```
+
+Go unit/race、vet、Swift fixtures、packaging identity fixtures、完整 Swift typecheck（保留既有 AppDelegate implicit strong capture warning），以及 updater/arbiter Windows amd64 / Linux amd64 cross-build 通過。第一輪既有 Go test 因 `/var` / `/private/var` alias 比較失敗；改用 canonical `/private/tmp` 後通過。Commit / rollback / interrupted recovery / missing active fixtures 使用真實暫存 journal 與 atomic swap；process launch/stop 與 certificate acceptance 注入 fixture，另外以真實 ad-hoc codesign fixture 驗證 bundle/helper identifiers 與拒絕 ad-hoc continuity。測試不掃 live processes、不啟動 GUI、不呼叫 live launchd、不查 live Core health。
+
+尚未驗證：certificate-signed release ZIP/DMG、native update/service registration、live rollback/recovery、GUI updater gate 開啟、Memory HTTP cutover、`mac-dev-next`、stable migration。沒有操作 stable App/Core/state/registry/live services。本次 review 是本 session diff review，未進行額外 cross-model review。
+
+下一接手點：獨立 review Phase 2，準備 Next-only signed package/launch-smoke 與 GUI gate 啟用驗證；需要另行授權的 live 工作仍須先證明 Next ownership。Memory/connector 與 stable retirement 次序不變。
+
+## M7.5 Next validation checkpoint — 2026-10-05
+
+Phase 2 已完成獨立 Gemini 3.1 Pro read-only review，結論為 **NO BLOCKER**；沒有 Critical / High / Medium finding。後續 Next-only 驗證均維持 stable production control plane 不可操作的邊界。
+
+- 從 `fc4ff98` source 產生 arm64 開發 artifact：`AgentDock Next.app`、ZIP、DMG。App / helper codesign、bundle metadata、三個 Next LaunchAgent plist、checksum 與 readonly DMG mount 均通過；artifact identity 為 `dev.dropabit.agentdock.next` / `AgentDockVariant=next`。
+- 本機沒有可用 Developer ID codesigning identity，因此目前 artifact 使用 ad-hoc signature。其 designated requirement 為 `cdhash`；Phase 2 的 Next updater signer-continuity contract 會拒絕這種來源，符合 fail-closed 設計。另以 `/private/tmp` isolated keychain 建立 self-signed code-signing certificate，未加入 user keychain search list、未修改 trust；macOS `codesign` 仍以 `errSecInternalComponent` 拒絕，故不以修改系統 trust 方式繞過此 gate。
+- Next app 僅安裝到 `~/Applications/AgentDock Next.app`。Direct Core smoke 綁定 `127.0.0.1:8767`，health 回報 `0.9.1`，只建立 `~/.agentdock-next`、`~/Library/Application Support/AgentDock Next`、`~/Library/Logs/AgentDock Next`、`~/AgentDock Next`。
+- 原生 `SMAppService` 以 temporary bundle-local harness 呼叫同一個 `ServiceController.start()` / `stop()` 完成真實 lifecycle 驗證：只註冊 `dev.dropabit.agentdock.next.core`，實際 PID executable mapping 為 Next bundle helper，8767 healthy；Tunnel / menu-login 未註冊。`stop()` 後 label、PID、port 均收斂。Harness 未進 Git，測後以乾淨 artifact 還原 App。
+- Next-only Memory registry 已建立於 `~/.agentdock-next/mcp/servers.json`，唯一 `memory` entry 使用 `streamable_http`、`http://127.0.0.1:8766/mcp`、`protocol_version=2025-11-25`。Next Core 自己的 MCP initialize 成功，`agentdock_context` 顯示 Next home/default dir，`mcp_tool_search → inspect → call memory_health` 成功；Memory `11.14.0` / `sqlite-vec` healthy，dynamic MCP 進入 `ready` 並列出 26 tools。
+- Next Core 在 Memory HTTP 使用期間沒有 spawn stdio Memory child。系統既存 stable stdio Memory process 不屬於 Next descendant，不作清理或驗收失敗條件。
+- Next fresh ACP config 使用本機 `codex-acp 2.1.1` 與 hardened `antigravity-acp 1.2.0-agentdock.6`（Keychain compatibility fix `9f56b52`，version bump `5cb54d2`）。Codex ephemeral prompt 回 `NEXT_MEMORY_OK`，Antigravity ephemeral prompt 回 `NEXT_AGY_MEMORY_OK`；兩者均到 `end_turn` 並最終 `closed_reason=ephemeral_prompt_terminal`，Next descendant tree 的 Memory child count 均為 0。Codex 使用 `~/.agentdock-next/acp/codex/codex-home` sandbox；hardened Antigravity adapter 對 AGY child 使用 private HOME / browser-free sandbox。
+- 每次 smoke 後都重新驗證 stable `mac-dev` 可回應；沒有停止、重啟、替換或讀寫 stable AgentDock App/Core/state/registry/live service。
+
+P3 side-by-side gate 已完成；其餘 release-native / migration gate：
+
+1. 取得有效 Developer ID / release code-signing identity 後，建立 certificate-bound Next artifact，開啟 Next GUI updater gate，驗證真實 update → trial → commit、失敗 rollback 與 interrupted recovery；不得為測試修改 macOS trust。
+2. ✅ 獨立 Next ChatGPT connector 已由使用者手動建立，ChatGPT 顯示名稱為 `macbook-air-m3`（邏輯角色 `mac-dev-next`）。2026-10-06 side-by-side 驗證確認 stable/Next connector 可同時呼叫，runtime/task/registry/service namespace 分離；public protected-resource metadata 分別綁定 stable / Next hostname，Next connector 實際回報 `~/.agentdock-next` identity。由 stable `mac-dev` 僅重啟 Next Core 後，Next 恢復健康、stable Core PID 未變，兩個 connector 仍可呼叫。控制平面規則維持不變：不得由 `macbook-air-m3` 自我修改或自我修復。
+3. 完成 M7.5 closeout review / 文件與 Memory handoff，外部 gate 全部解除後整合回 `custom/main`；stable migration / retirement 仍另案規劃。
+
+Next connector 不再等待所有 Shared UI parity 完成，目前已建立。後續 ACP/MCP/Plugin/Nexus/Browser parity 可透過 `macbook-air-m3` 驗證 Next connector/runtime 行為；但 repo/build/package/install/service/tunnel mutation 一律仍由 stable `mac-dev` 執行。完整排序見 [Pre-M9 Feature Parity and Connection Readiness](pre-m9-feature-parity.md)。
+
+正式 `mac-dev-next` public endpoint 採 **Next-owned Named Cloudflare Tunnel**：獨立 tunnel identity、hostname、token、service/state/log ownership，origin 指向 Next Core（預設 `127.0.0.1:8767`）。不得與 stable AgentDock 共用 tunnel token/hostname；Quick Tunnel 只作臨時 smoke。實際建立 Cloudflare Tunnel / DNS route 前由使用者確認 account/hostname。
+
+### ACP stress / macOS Keychain closeout
+
+- 2026-10-05 Next M6/M7 repository regression 已再次通過：`go test -race ./internal/tool/browser/... ./internal/tool/computer/... ./internal/app -run 'Browser|ACP|Memory|Ephemeral|Lifecycle'` 全綠；真實 `TestCodexACPUsesInjectedBrowserBrokerWithoutSpawningChromeDevtools` 也通過。
+- 使用者曾觀察到 AGY ACP 約 23 次 macOS Keychain 授權視窗；Codex ACP 不會。確認 `Antigravity Safe Storage` ACL 已包含 Google-signed `/Users/wei/.local/bin/agy`（Team `EQHXZ8M8AV`）後仍可重現，故 ACL 不是根因。
+- 真正根因是 hardened `antigravity-acp` 對 AGY 使用 isolated `HOME`，導致 macOS Security.framework 在 sandbox HOME 下找不到既有 login Keychain 而走 `loginKC:queryCreate`。Fork commit `9f56b52` 保留 private `.gemini` / MCP / plugin sandbox，但在 macOS 將真實 `~/Library/Keychains` 以 symlink 掛入 isolated HOME；cleanup test 保證只移除 symlink，不碰真實 Keychains。
+- Next-only patched adapter 位於 `~/.agentdock-next/bin/antigravity-acp`，沒有覆蓋 stable `/Users/wei/.local/bin/antigravity-acp`。單次 `KEYCHAIN_FIX_OK` probe 後沒有任何 SecurityAgent / `loginKC:queryCreate` 事件。
+- Antigravity 使用 `gemini-3.8-flash + low` 完成 5 × 4 共 20 個 prompt-driven ephemeral session；20/20 成功、每批 descendants 回到單一 adapter baseline、Memory child=0、五批 SecurityAgent event=0、無 leftover stress driver。
+- Codex 使用 `gpt-5.6-luna + low` 的明確首批 4/4 prompt 成功；後續長命令遭工具層 internal failure/replay 而產生超額 session，因此不以 shell 次數作證據。改以 Next registry 取連續 20 個 managed ephemeral sessions 逐一 inspect，20/20 均為 `closed_reason=ephemeral_prompt_terminal`、無 auto-close error；最後 Next descendant 收斂為 adapter/app-server baseline，Memory child=0。先前 `gpt-6.1-sol` / `gpt-6-sol` 的間歇 `model ... is not enabled in rustponsesapi` 視為外部 entitlement/routing，不列為 lifecycle failure。
+- Codex isolated home 會刻意保留非 Browser/Computer MCP（例如 GitLab/GitHub/codebase-memory），只移除 `chrome-devtools`、`node_repl`、`computer-use`；這是既有 contract，並非 isolation regression。
+
+## 2026-10-09 Next-only Shared Desktop installed build / rollback UAT
+
+**Scope and authority:** All mutations were sent through the stable `mac-dev` MCP control plane to the Next-only repository, `~/Applications/AgentDock Next.app`, and the exact `dev.dropabit.agentdock.next.*` service labels. The user explicitly accepted possible *Next* connector interruption; the original `/Applications/AgentDock.app`, its service/state/ports, AGY-ACP implementation repository, shared Memory daemon, and the user-owned Edge browser were not modified or restarted.
+
+- Clean source HEAD `539c68ac` was built by `packaging/macos/build-next-shared.sh` into `dist/next-shared-arm64.3gUf43/package/AgentDock Next.app`. Vue typecheck/Vite production build, Go Shared/Wails and CGO-enabled Core arm64 build, core Skill Bundle, ad-hoc macOS signatures, ZIP, DMG integrity, strict `next_shared_bundle.validate_bundle(shared=True)`, and 8 package tests passed. Vite emitted only an existing large-chunk warning; `hdiutil` emitted a deprecation warning. **This is an ad-hoc development build, not Developer ID notarized release/UAT.**
+- Installed Next's original Bundle ID was `dev.dropabit.agentdock.next` and its Core had `127.0.0.1:8767/healthz` HTTP 200. The existing installer `install-next-shared.py` atomically swapped *only* Next `Contents` while keeping the root bundle inode and a private old-`Contents` backup. However, an **incorrect manual `launchctl kickstart -k` alone** left the new Core failing to spawn, `launchctl` status `78: EX_CONFIG`; macOS unified logs identified `OS_REASON_CODESIGNING | Launch Constraint Violation` (stale SMAppService helper CDHash). A successful generic `codesign --verify` is insufficient to prove service-registration validity.
+- Atomically restoring the old `Contents` **alone did not recover** the Core: Launch Constraints remained stale. Running the **bundle-local Next-only** `Contents/MacOS/AgentDockServiceRegistrar reregister core` then refreshed the registered CDHash and restored the old Core health. Re-applied the verified new Next `Contents`, ran that Registrar `reregister core` before checking health; new Core PID `44161`, HTTP 200 and installed Core SHA-256 equal to source (`f6924e4437152cad20edb5aa03bdb1f3f19730754bf13c99091ae93dc35c2d4e`). Ran **Next-only** `reregister tunnel`, label running with PID `44594` and Core health still 200. Gracefully quit/reopened Next GUI in the background via exact Bundle ID, new GUI PID `44873`, no foreground activation. Backup of the previously installed Next Contents is retained at `~/Applications/.agentdock-next-replacement-020bp_m_/AgentDock Next.app/Contents`; do not delete it before release handoff/rollback review.
+- **Use the orchestrated Next-only script for subsequent updates:** `python3 packaging/macos/deploy-next-shared.py /verified/Next/AgentDock\ Next.app`. It validates source/installed Next identity and pre-existing healthy Core, uses the transactional Contents installer, parses a strict private backup, calls only `AgentDockServiceRegistrar reregister core` and (only if previously running) `reregister tunnel`, validates PID/health and payload, and attempts a verified old-`Contents` rollback/re-registration on failure. It **never** blindly calls `launchctl kickstart`, guesses stable targets, launches a user browser, or starts a disabled Tunnel. This new wrapper is **source + synthetic offline tests only**; the real manual Core/Tunnel update steps above are proven, but wrapper end-to-end native UAT remains open.
+- New offline `scripts/test/test-next-shared-deploy.py` validates **10/10** Next-only orchestration/negative cases, including unrecoverable rollback reporting; existing `scripts/test/test-next-shared-package.py` **8/8** passes against the built `.app`. Repo-local Go compilation cache was moved to `dist/next-go-build-cache` (private, symlink/owner checked). Go cache is content-addressed; each build still has a fresh TMPDIR, compiles the current source, signs anew, and retains no stable/shared-service mutable state. Cache is primed from the initial cold build, but repeated-build speed improvement is **not yet benchmarked**.
+
+Next P8's `RoutePlanner` still has **nil** production `ConnectorStatusProvider`, the external lease verifier is still nil, and authenticated Edge remains `UNQUALIFIED`; this deployment smoke does not qualify Browser Connectors or close P8/C2b. The installed GUI **process** was verified, but macOS native WebView visual/keyboard/accessibility UAT has **not** been performed; P6/P7/P8 GUI acceptance is still open. No live Nexus pairing or real Edge tabs/CDP calls occurred. Mac-Dev host Go tests for Browser/Policy/Desktop API/Desktop Runtime and `go vet` passed. The signed updater/rollback, Windows/WSL/Linux native, and M9 release gates are unchanged.
+
+## 2026-10-09 Next-only deployment wrapper native UAT and PID binding
+
+From commit `32abf101`, hardened `packaging/macos/deploy-next-shared.py`
+to treat a generic 8767 HTTP 200 as insufficient evidence. The wrapper
+now checks that the exact `dev.dropabit.agentdock.next.core` launchd PID
+has (1) its executable open as
+`~/Applications/AgentDock Next.app/Contents/Helpers/agentdock`, (2) the
+`127.0.0.1:8767` listener in that same PID, and (3) `/healthz` HTTP 200;
+this is verified before any bundle replacement and again after the Next
+Registrar re-registration, with bounded read-only `lsof` checks. It is an
+**Next process and port owner gate, not proof of browser authentication or
+the user's Edge identity**.
+
+**Offline verification:** `python3 scripts/test/test-next-shared-deploy.py -v`
+**12/12 PASS** (including wrong Next executable, a mismatched listener PID,
+and pre-install rejection); `python3 scripts/test/test-next-shared-package.py
+'dist/next-shared-arm64.3gUf43/package/AgentDock Next.app'` **8/8 PASS**.
+`python3 -m py_compile`, `zsh -n packaging/macos/build-next-shared.sh`
+and `git diff --check` passed.
+
+**Live Next-only acceptance (stable `mac-dev` control):**
+- Source was the already verified, ad-hoc-signed Next arm64 app under
+  `dist/next-shared-arm64.3gUf43/package/AgentDock Next.app`; the
+  wrapper `python3 packaging/macos/deploy-next-shared.py
+  'dist/next-shared-arm64.3gUf43/package/AgentDock Next.app'` exited
+  **0** with `NEXT_ONLY_DEPLOYED` and explicit rollback path.
+- The bundled Next Core and Tunnel Registrar completed; new Core
+  PID `75320`, Tunnel PID `75385`; fresh Next Core had exact signed
+  helper executable and port-owner binding, HTTP 200
+  `{"ok":true,"version":"0.9.1"}`. Installed Core SHA-256 matched the
+  previously built source (`f6924e4437152cad20edb5aa03bdb1f3f19730754bf13c99091ae93dc35c2d4e`).
+- Next GUI was gracefully quit and relaunched only in the background
+  using its exact Bundle ID `dev.dropabit.agentdock.next`, new
+  PID `75792`, with no foreground activation. The updated
+  rollback Contents remain at
+  `~/Applications/.agentdock-next-replacement-5gla__hu/AgentDock Next.app/Contents`.
+  Older Next-only rollback Contents also remain; do not delete backups
+  until cleanup/release policy is separately reviewed.
+- The wrapper's **success path was natively exercised**, including
+  service registration and health. Its **automatic rollback on real
+  injected failure remains offline-fixture verified only**; the earlier
+  manual Next-only old-Contents swap and Registrar recovery were exercised
+  separately. No Developer ID/notarized release, GUI visual/accessibility
+  check, live Nexus, browser CDP/Edge profile operation or real Browser
+  Connector qualification occurred.
+- The original AgentDock control plane and stable services were not
+  modified/restarted; no AGY-ACP source mutation occurred in this task.
+
+Remaining deployment hardening: consider a structured installer transaction
+receipt rather than parsing stdout, guard crash/installer timeout after
+atomic swap, and add native failure-injection rollback acceptance using
+Next-only fixtures/explicit recovery. A successful Core health check is not
+a substitute for GUI WebView acceptance or C2b real Edge attestation.
+
+
+## 2026-10-12 Next NexusDock label release + registrar pipe fix
+
+- NexusDock 僅增加原本頁面標題旁三語系「開發中」狀態文字；`NexusService`/實際配對操作維持不變，依使用者指示 defer。使用者已確認 Logs/Config macOS 原生手動操作 PASS。Frontend typecheck、Vitest 139/139、production build、canonical i18n coverage en/zh-Hant/zh-Hans 857/857（100%）PASS。
+- 首次 Next-only build `dist/next-shared-arm64.84ivZc` 之 8/8 bundle verifier PASS，但 `deploy-next-shared.py` 在 macOS Service Registrar 的 `launchctl print` child 等候阻塞並逾時，觸發 rollback；當下 Core 註冊的 Launch Constraint 失效（`78: EX_CONFIG`），安裝檔的舊 Core SHA 已恢復，Next Core 並未隨 Contents rollback 自動恢復。通過**僅對 PID/executable 核對的 Next GUI** 結束後，以 bundle-local Next-only Registrar 重新註冊 Core，原始 Next Core 重新健康（曾觀察 PID `63892`）。
+- 針對上述 registrar stdout Pipe 堵塞風險修復 `desktop/macos/AgentDockServiceRegistrar/main.swift`：先同步 drain `launchctl` 輸出，再 `waitUntilExit`，而非在 child 可能因 Pipe 已滿時先 wait；stderr 丟到 nullDevice 避免未讀取的第二個 Pipe 造成堵塞。Swift `swiftc -typecheck` PASS，commit `c77041ed`。這是現場觀測支持的原因與有界修復；未對所有 macOS 版本的長期穩定性做外推。
+- 修正後重新建置 `dist/next-shared-arm64.QUQAPN/package/AgentDock Next.app`，8/8 bundle verifier、ad-hoc codesign/DMG integrity PASS。**真實 Next-only deploy 成功**：wrapper 回傳 `NEXT_ONLY_DEPLOYED` 與回退保留位置 `~/Applications/.agentdock-next-replacement-jx92aiqc/AgentDock Next.app`；新 Core PID `71025` 監聽 Next 8767 並 `/healthz` HTTP 200；新 Next Tunnel PID `71866`；installed Core SHA256 與 build artifact 相符。Next GUI 由 `open -g -b dev.dropabit.agentdock.next` 背景啟動，PID `72301`，原生 AX 可讀到 Next Overview。原版 stable Core PID `44832` 仍於 8765，未重新啟動／更動。
+- 原生 AX 雖證明更新後 GUI 可以啟動及讀取 Overview，但沒有為驗證 NexusDock 標籤而搶佔使用者焦點；**已安裝標記的最終 NexusDock 原生像素 UAT 未執行**。Nexus real pairing、Nexus unknown 狀態除錯、Windows/Linux native、enterprise proxy、P8/P9/M9 gates 不變。保留所有 Next-only rollback 目錄，絕不自動清理。

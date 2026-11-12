@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 func newTestACPBridge(t *testing.T) *ACPBridge {
@@ -57,6 +59,9 @@ func TestACPBrowserMCPRequiresCapabilityAndOnlyExposesBrokerTools(t *testing.T) 
 		t.Fatal(err)
 	}
 	handler := bridge.MCPHTTPHandler()
+	if bridge.Diagnostics().AuthenticatedMCPRequestOwners != 0 {
+		t.Fatal("registration fabricated transport activity")
+	}
 	unauthorized := acpMCPRequest(t, handler, "", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{}})
 	if unauthorized.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized status = %d", unauthorized.Code)
@@ -68,6 +73,9 @@ func TestACPBrowserMCPRequiresCapabilityAndOnlyExposesBrokerTools(t *testing.T) 
 	})
 	if initialize.Code != http.StatusOK {
 		t.Fatalf("initialize status=%d body=%s", initialize.Code, initialize.Body.String())
+	}
+	if bridge.Diagnostics().AuthenticatedMCPRequestOwners != 1 {
+		t.Fatal("initialize authorization was not observed")
 	}
 	listed := acpMCPRequest(t, handler, token, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{}})
 	if listed.Code != http.StatusOK {
@@ -241,4 +249,167 @@ func TestACPBrowserRegisterSessionWithTokenRequiresStableCapability(t *testing.T
 	} else {
 		assertBrowserCode(t, err, ErrLeaseOwnerMismatch)
 	}
+}
+
+func TestACPBrowserPrincipalBindsSessionProfileNotCapabilityToken(t *testing.T) {
+	bridge := newTestACPBridge(t)
+	root := t.TempDir()
+	firstToken, err := bridge.RegisterSessionWithToken("session-a", "codex", root, "token-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := bridge.owner(firstToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := acpBrowserAuthPrincipal(owner)
+	if err := bridge.ReleaseSession(context.Background(), "session-a"); err != nil {
+		t.Fatal(err)
+	}
+	secondToken, err := bridge.RegisterSessionWithToken("session-a", "codex", root, "token-two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner2, _ := bridge.owner(secondToken)
+	second := acpBrowserAuthPrincipal(owner2)
+	if first.ID == "" || first != second || first.Kind != "acp_bridge" {
+		t.Fatalf("principal changed with capability rotation: %#v %#v", first, second)
+	}
+	otherToken, err := bridge.RegisterSession("session-b", "codex", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOwner, _ := bridge.owner(otherToken)
+	if first.ID == acpBrowserAuthPrincipal(otherOwner).ID {
+		t.Fatal("different ACP sessions shared browser principal")
+	}
+}
+
+func TestACPBrowserAdmissionRunsBeforeBackendAndReleaseBypassesPolicy(t *testing.T) {
+	bridge := newTestACPBridge(t)
+	backend := &fakeLeaseBackend{}
+	bridge.managed.manager = NewManagedLeaseManager(backend)
+	token, err := bridge.RegisterSession("admission-browser", "codex", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocked := errors.New("permission blocked")
+	calls := 0
+	bridge.SetAdmissionHook(func(context.Context, permission.HostOperation) (permission.HostOperationFinish, error) {
+		calls++
+		return nil, blocked
+	})
+	if _, err := bridge.Acquire(context.Background(), token, "https://example.test"); !errors.Is(err, blocked) {
+		t.Fatalf("Acquire error=%v", err)
+	}
+	if backend.starts != 0 || calls != 1 {
+		t.Fatalf("backend starts=%d admission calls=%d", backend.starts, calls)
+	}
+
+	bridge.SetAdmissionHook(nil)
+	meta, err := bridge.Acquire(context.Background(), token, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeReleaseCalls := calls
+	bridge.SetAdmissionHook(func(context.Context, permission.HostOperation) (permission.HostOperationFinish, error) {
+		calls++
+		return nil, blocked
+	})
+	if _, err := bridge.Release(context.Background(), token, meta.BrowserLeaseID); err != nil {
+		t.Fatalf("Release was blocked by permission hook: %v", err)
+	}
+	if calls != beforeReleaseCalls {
+		t.Fatalf("release invoked admission hook: before=%d after=%d", beforeReleaseCalls, calls)
+	}
+}
+
+// Registration, tool authorization and diagnostic reads must not fabricate HTTP activity.
+func TestACPBrowserAuthenticatedTransportObservation(t *testing.T) {
+	b := newTestACPBridge(t)
+	root := t.TempDir()
+	token, err := b.RegisterSession("one", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := b.MCPHTTPHandler()
+	payload := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{}}
+	check := func(want int) {
+		t.Helper()
+		d := b.Diagnostics()
+		if d.AuthenticatedMCPRequestOwners != want {
+			t.Fatalf("observed=%d want=%d", d.AuthenticatedMCPRequestOwners, want)
+		}
+	}
+	if _, err := b.owner(token); err != nil {
+		t.Fatal(err)
+	}
+	check(0)
+	for _, auth := range []string{"", "Bearer ", "Basic " + token, token, "Bearer forged", "Bearer Bearer " + token} {
+		req := httptest.NewRequest(http.MethodPost, "/internal/acp-browser/mcp", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", auth)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("invalid authorization status=%d", rec.Code)
+		}
+		check(0)
+	}
+	for i := 0; i < 2; i++ {
+		if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusOK {
+			t.Fatalf("tools/list status=%d", rec.Code)
+		}
+		check(1)
+	}
+	second, err := b.RegisterSession("two", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 24; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); acpMCPRequest(t, handler, second, payload); _ = b.Diagnostics() }()
+	}
+	wg.Wait()
+	check(2)
+	if err := b.ReleaseSession(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	check(1)
+	if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked status=%d", rec.Code)
+	}
+	check(1)
+	replacement, err := b.RegisterSession("one", "profile", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement == token {
+		t.Fatal("capability reused")
+	}
+	check(1)
+	if rec := acpMCPRequest(t, handler, token, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatal("expired generation accepted")
+	}
+	check(1)
+	// HTTP authorization is observable even when the SDK rejects malformed JSON.
+	req := httptest.NewRequest(http.MethodPost, "/internal/acp-browser/mcp", strings.NewReader("invalid JSON"))
+	req.Header.Set("Authorization", "Bearer "+replacement)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	check(2)
+	if err := b.ReleaseSession(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseSession(context.Background(), "two"); err != nil {
+		t.Fatal(err)
+	}
+	check(0)
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if rec := acpMCPRequest(t, handler, second, payload); rec.Code != http.StatusUnauthorized {
+		t.Fatal("closed bridge accepted")
+	}
+	check(0)
 }

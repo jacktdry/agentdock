@@ -11,6 +11,9 @@ import (
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
+	"github.com/uvwt/agentdock/internal/permission"
+	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
+	toolplugin "github.com/uvwt/agentdock/internal/tool/plugin"
 )
 
 // MethodAllowed 返回指定 Runtime API 路径允许当前方法与否。
@@ -25,7 +28,7 @@ func MethodAllowed(method, path string) bool {
 		_, ok := runtimeTaskID(cleanPath)
 		return ok
 	}
-	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve")
+	return method == http.MethodPost && (cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" || cleanPath == "/internal/runtime/mcp/oauth/callback" || cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/insertions")
 }
 
 func AllowHeader(path string) string {
@@ -33,7 +36,10 @@ func AllowHeader(path string) string {
 	if _, ok := runtimeTaskID(cleanPath); ok {
 		return "GET, DELETE"
 	}
-	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/mcp" {
+	if cleanPath == "/internal/runtime/capabilities" || cleanPath == "/internal/runtime/plugin/desktop" || cleanPath == "/internal/runtime/mcp/desktop" || cleanPath == "/internal/runtime/mcp" {
+		return "GET, POST"
+	}
+	if cleanPath == "/internal/runtime/insertions" {
 		return "GET, POST"
 	}
 	if cleanPath == "/internal/runtime/evolve" || cleanPath == "/internal/runtime/mcp/oauth/callback" {
@@ -52,6 +58,12 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 
 	taskID, isTaskPath := runtimeTaskID(path)
 	switch {
+	case path == "/internal/runtime/browser/desktop":
+		browser, ok := runtime.(BrowserDesktopRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "BROWSER_DESKTOP_UNSUPPORTED", Message: "browser snapshot unavailable", Category: "not_found"}
+		}
+		return map[string]any(browser.RuntimeBrowserDesktop()), nil
 	case path == "/internal/runtime/status":
 		return map[string]any(runtime.RuntimeStatus()), nil
 	case path == "/internal/runtime/analytics":
@@ -64,6 +76,62 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 			}
 		}
 		return map[string]any(diagnostics.RuntimeDiagnostics()), nil
+	case path == "/internal/runtime/execution":
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution state", Category: "not_found"}
+		}
+		return map[string]any(executionRuntime.RuntimeExecution()), nil
+	case path == "/internal/runtime/activity":
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution activity", Category: "not_found"}
+		}
+		after, err := parseRuntimeActivityCursor(request.queryValue("after"))
+		if err != nil {
+			return nil, err
+		}
+		limit, err := parseRuntimeActivityLimit(request.queryValue("limit"))
+		if err != nil {
+			return nil, err
+		}
+		result, err := executionRuntime.RuntimeActivity(after, limit)
+		return map[string]any(result), err
+	case path == "/internal/runtime/insertions" && method == http.MethodGet:
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution insertions", Category: "not_found"}
+		}
+		return map[string]any(executionRuntime.RuntimeInsertions(request.queryValue("call_id"))), nil
+	case path == "/internal/runtime/insertions" && method == http.MethodPost:
+		executionRuntime, ok := runtime.(ExecutionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "EXECUTION_UNSUPPORTED", Message: "runtime does not support execution insertions", Category: "not_found"}
+		}
+		args, err := decodeRuntimeInsertionRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		result, err := executionRuntime.RuntimeInsertionManage(ctx, args)
+		return map[string]any(result), err
+	case path == "/internal/runtime/permissions":
+		permissionRuntime, ok := runtime.(PermissionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "PERMISSION_UNSUPPORTED", Message: "runtime does not support permission state", Category: "not_found"}
+		}
+		result, err := permissionRuntime.RuntimePermissions()
+		return map[string]any(result), err
+	case path == "/internal/runtime/approvals":
+		permissionRuntime, ok := runtime.(PermissionRuntime)
+		if !ok {
+			return nil, &app.ToolError{Code: "PERMISSION_UNSUPPORTED", Message: "runtime does not support permission approvals", Category: "not_found"}
+		}
+		limit, err := parseRuntimeApprovalLimit(request.queryValue("limit"))
+		if err != nil {
+			return nil, err
+		}
+		result, err := permissionRuntime.RuntimeApprovals(request.queryValue("approval_id"), request.queryValue("status"), limit)
+		return map[string]any(result), err
 	case path == "/internal/runtime/capabilities":
 		refresh := strings.EqualFold(request.queryValue("refresh"), "true") || method == http.MethodPost
 		result, err := runtime.RuntimeCapabilities(ctx, refresh)
@@ -93,6 +161,24 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		default:
 			return nil, &app.ToolError{Code: "NOT_FOUND", Message: "runtime Skill API route not found", Category: "not_found"}
 		}
+	case path == "/internal/runtime/plugin/desktop":
+		desktop, ok := runtime.(PluginDesktopRuntime)
+		if !ok {
+			return nil, toolplugin.DesktopError("PLUGIN_CORE_UNAVAILABLE", "unavailable")
+		}
+		if method == http.MethodGet {
+			result, err := desktop.RuntimePluginDesktop(ctx)
+			return map[string]any(result), err
+		}
+		typed, err := toolplugin.DecodeDesktopRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(typed)
+		var args map[string]any
+		_ = json.Unmarshal(body, &args)
+		result, err := desktop.RuntimePluginDesktopManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/plugins":
 		result, err := runtime.RuntimePlugins(ctx)
 		return map[string]any(result), err
@@ -123,6 +209,32 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 			return nil, err
 		}
 		return map[string]any{"accepted": true}, nil
+	case path == "/internal/runtime/mcp/desktop":
+		if method == http.MethodGet {
+			result, err := runtime.RuntimeMCPDesktop(ctx)
+			return map[string]any(result), err
+		}
+		typed, err := toolmcp.DecodeDesktopRequest(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(typed)
+		var args map[string]any
+		_ = json.Unmarshal(body, &args)
+		// DesktopManageRequest keeps presence metadata for protected args outside
+		// its JSON shape. Reinsert the decoded semantic value so an explicit []
+		// (clear) is not collapsed by omitempty into an omitted field (preserve).
+		if typed.ArgsProvided() {
+			if typed.Args == nil {
+				args["args"] = nil
+			} else {
+				decodedArgs := make([]string, len(typed.Args))
+				copy(decodedArgs, typed.Args)
+				args["args"] = decodedArgs
+			}
+		}
+		result, err := runtime.RuntimeMCPDesktopManage(ctx, args)
+		return map[string]any(result), err
 	case path == "/internal/runtime/mcp" && method == http.MethodPost:
 		args, err := decodeRuntimeMCPRequest(request.Body)
 		if err != nil {
@@ -148,7 +260,7 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 		result, err := runtime.RuntimeTasks(request.queryValue("status"), limit)
 		return map[string]any(result), err
 	case isTaskPath && method == http.MethodDelete:
-		result, err := runtime.RuntimeTaskDelete(taskID)
+		result, err := runtime.RuntimeTaskDelete(ctx, taskID)
 		return map[string]any(result), err
 	case isTaskPath:
 		result, err := runtime.RuntimeTask(taskID)
@@ -159,21 +271,22 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 }
 
 type runtimeMCPRequest struct {
-	Action      string            `json:"action"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Transport   string            `json:"transport"`
-	URL         string            `json:"url"`
-	Command     string            `json:"command"`
-	Args        []string          `json:"args"`
-	Cwd         string            `json:"cwd"`
-	HeaderEnv   map[string]string `json:"header_env"`
-	EnvFromEnv  map[string]string `json:"env_from_env"`
-	Enabled     *bool             `json:"enabled"`
-	TimeoutMS   int               `json:"timeout_ms"`
-	Key         string            `json:"key"`
-	Value       *string           `json:"value"`
-	CallbackID  string            `json:"callback_id"`
+	Action          string            `json:"action"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Transport       string            `json:"transport"`
+	ProtocolVersion string            `json:"protocol_version"`
+	URL             string            `json:"url"`
+	Command         string            `json:"command"`
+	Args            []string          `json:"args"`
+	Cwd             string            `json:"cwd"`
+	HeaderEnv       map[string]string `json:"header_env"`
+	EnvFromEnv      map[string]string `json:"env_from_env"`
+	Enabled         *bool             `json:"enabled"`
+	TimeoutMS       int               `json:"timeout_ms"`
+	Key             string            `json:"key"`
+	Value           *string           `json:"value"`
+	CallbackID      string            `json:"callback_id"`
 }
 
 var runtimeMCPManageActions = map[string]bool{
@@ -214,6 +327,9 @@ func decodeRuntimeMCPRequest(body []byte) (map[string]any, error) {
 	}
 	if request.Transport != "" {
 		args["transport"] = request.Transport
+	}
+	if request.ProtocolVersion != "" {
+		args["protocol_version"] = request.ProtocolVersion
 	}
 	if request.URL != "" {
 		args["url"] = request.URL
@@ -355,6 +471,51 @@ func parseRuntimeTaskLimit(raw string) (int, error) {
 		return 0, &app.ToolError{
 			Code: "INVALID_LIMIT", Message: "limit must be an integer between 0 and 200", Category: "validation",
 			Details: map[string]any{"limit": raw, "minimum": 0, "maximum": 200},
+		}
+	}
+	return limit, nil
+}
+
+func parseRuntimeActivityCursor(raw string) (uint64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, &app.ToolError{
+			Code: "INVALID_ACTIVITY_CURSOR", Message: "after must be an unsigned decimal sequence", Category: "validation",
+			Details: map[string]any{"after": raw},
+		}
+	}
+	return value, nil
+}
+
+func parseRuntimeActivityLimit(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 200, nil
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > 500 {
+		return 0, &app.ToolError{
+			Code: "INVALID_ACTIVITY_LIMIT", Message: "limit must be an integer between 1 and 500", Category: "validation",
+			Details: map[string]any{"limit": raw, "minimum": 1, "maximum": 500},
+		}
+	}
+	return limit, nil
+}
+
+func parseRuntimeApprovalLimit(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 200, nil
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > permission.MaxHistory {
+		return 0, &app.ToolError{
+			Code: "INVALID_APPROVAL_LIMIT", Message: "limit must be an integer between 1 and 512", Category: "validation",
+			Details: map[string]any{"limit": raw, "minimum": 1, "maximum": permission.MaxHistory},
 		}
 	}
 	return limit, nil

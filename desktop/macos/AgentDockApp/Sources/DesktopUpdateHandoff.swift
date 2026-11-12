@@ -5,6 +5,7 @@ struct DesktopUpdateHandoff: Codable {
     static let schemaVersion = 1
 
     let schemaVersion: Int
+    let variant: String?
     let transactionID: String?
     let targetVersion: String
     let coreRegistration: String?
@@ -12,6 +13,7 @@ struct DesktopUpdateHandoff: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
+        case variant
         case transactionID = "transaction_id"
         case targetVersion = "target_version"
         case coreRegistration = "core_registration"
@@ -22,9 +24,11 @@ struct DesktopUpdateHandoff: Codable {
         targetVersion: String,
         transactionID: String? = nil,
         coreRegistration: String? = nil,
-        tunnelRegistration: String? = nil
+        tunnelRegistration: String? = nil,
+        identity: AppIdentity = .stable
     ) {
         schemaVersion = Self.schemaVersion
+        variant = identity == .next ? identity.rawValue : nil
         self.transactionID = transactionID
         self.targetVersion = targetVersion
         self.coreRegistration = coreRegistration

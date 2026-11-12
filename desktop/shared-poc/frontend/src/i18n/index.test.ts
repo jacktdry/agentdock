@@ -10,6 +10,7 @@ describe('shared UI i18n', () => {
     expect(t('activity.summary_active', { delivered: '12', dropped: '3' })).toBe(
       'Activity stream active. 12 delivered, 3 dropped.',
     )
+    expect(t('nexus.in_development')).toBe('In development')
   })
 
   it('switches to Traditional Chinese without changing keys', () => {
@@ -17,11 +18,13 @@ describe('shared UI i18n', () => {
     expect(currentLocale.value).toBe('zh-Hant')
     expect(t('common.refresh')).toBe('重新整理')
     expect(t('runtime.status_summary', { state: '正常' })).toBe('執行階段狀態：正常。')
+    expect(t('nexus.in_development')).toBe('開發中')
   })
 
   it('switches to Simplified Chinese', () => {
     setLocale('zh-Hans')
     expect(t('common.refresh')).toBe('刷新')
+    expect(t('nexus.in_development')).toBe('开发中')
   })
 
   it('can return to automatic system-language mode', () => {

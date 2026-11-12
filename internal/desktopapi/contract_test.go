@@ -45,16 +45,75 @@ func TestDefaultManifestCoversEveryDomainOnce(t *testing.T) {
 		t.Fatalf("activity stream capability = %#v", activityCapability.Streams)
 	}
 
-	for _, domain := range []Domain{
-		DomainACP,
-		DomainBrowser,
-		DomainPermission,
-		DomainMCP,
-		DomainPlugin,
-	} {
-		if seen[domain].Availability != AvailabilityUnavailable {
-			t.Fatalf("%s should remain unavailable in M2 scaffold, got %#v", domain, seen[domain])
+	acpCapability := seen[DomainACP]
+	if acpCapability.Availability != AvailabilityAvailable || len(acpCapability.Operations) != 9 {
+		t.Fatalf("ACP capability = %#v", acpCapability)
+	}
+	for _, operation := range acpCapability.Operations {
+		switch operation.Name {
+		case "nativeCodexReadiness":
+			if operation.Access != AccessRead || operation.RequiresConfirmation || !operation.NativeRequired || operation.Availability != AvailabilityExperimental {
+				t.Fatalf("Native Codex readiness must remain experimental and read-only: %#v", operation)
+			}
+		case "status", "settings", "probeProfile", "checkProfileUpdate":
+			if operation.Access != AccessRead || operation.RequiresConfirmation {
+				t.Fatal("ACP status must be read-only")
+			}
+		case "close", "updateLifecycle", "updateProfileAdapter":
+			if operation.Access != AccessMutating || !operation.RequiresConfirmation {
+				t.Fatal("ACP mutation requires confirmation")
+			}
+		case "saveSettings":
+			if operation.Access != AccessMutating || operation.RequiresConfirmation {
+				t.Fatal("ACP settings save must preserve sessions without a restart confirmation")
+			}
+		default:
+			t.Fatalf("unexpected ACP operation: %q", operation.Name)
 		}
+	}
+	mcpCapability := seen[DomainMCP]
+	if mcpCapability.Availability != AvailabilityAvailable || len(mcpCapability.Operations) != 16 {
+		t.Fatalf("MCP capability = %#v", mcpCapability)
+	}
+	for _, operation := range mcpCapability.Operations {
+		switch operation.Name {
+		case "snapshot", "inspect", "environment", "authorizationStatus", "authorizationFlowStatus", "operationStatus":
+			if operation.Access != AccessRead || operation.RequiresConfirmation {
+				t.Fatalf("MCP read operation = %#v", operation)
+			}
+		default:
+			if operation.Access == AccessRead || !operation.RequiresConfirmation {
+				t.Fatalf("MCP mutation operation = %#v", operation)
+			}
+		}
+	}
+	pluginCapability := seen[DomainPlugin]
+	if pluginCapability.Availability != AvailabilityAvailable || len(pluginCapability.Operations) != 13 {
+		t.Fatalf("Plugin capability = %#v", pluginCapability)
+	}
+	for _, operation := range pluginCapability.Operations {
+		switch operation.Name {
+		case "snapshot", "inspect", "environment", "operationStatus":
+			if operation.Access != AccessRead || operation.RequiresConfirmation {
+				t.Fatalf("Plugin read operation = %#v", operation)
+			}
+		case "chooseCandidate":
+			if operation.Access != AccessPrivileged || operation.RequiresConfirmation || !operation.NativeRequired {
+				t.Fatalf("Plugin candidate picker operation = %#v", operation)
+			}
+		case "discardCandidate":
+			if operation.Access != AccessMutating || operation.RequiresConfirmation {
+				t.Fatalf("Plugin discard candidate operation = %#v", operation)
+			}
+		default:
+			if operation.Access != AccessMutating || !operation.RequiresConfirmation {
+				t.Fatalf("Plugin mutation operation = %#v", operation)
+			}
+		}
+	}
+	browser := seen[DomainBrowser]
+	if browser.Availability != AvailabilityAvailable || len(browser.Operations) != 1 || browser.Operations[0].Name != "snapshot" || browser.Operations[0].Access != AccessRead || browser.Operations[0].RequiresConfirmation || len(browser.Streams) != 0 {
+		t.Fatalf("browser must expose only the passive Phase A snapshot, got %#v", browser)
 	}
 }
 

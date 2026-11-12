@@ -53,6 +53,8 @@ type WindowsPlan struct {
 }
 
 type MacOSPlan struct {
+	SigningRequirement string `json:"signing_requirement,omitempty"`
+	Variant            string `json:"variant,omitempty"`
 	SourceArbiterPath  string `json:"source_arbiter_path,omitempty"`
 	TargetAppPath      string `json:"target_app_path"`
 	TrialAppPath       string `json:"trial_app_path"`

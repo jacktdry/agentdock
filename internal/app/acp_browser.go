@@ -9,9 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
+	"github.com/uvwt/agentdock/internal/commandpath"
 	"github.com/uvwt/agentdock/internal/config"
 	toolbrowser "github.com/uvwt/agentdock/internal/tool/browser"
 	toolcomputer "github.com/uvwt/agentdock/internal/tool/computer"
@@ -41,7 +44,7 @@ func (p acpHostCapabilityProvider) Servers(ctx context.Context, sessionID, cwd s
 		servers = append(servers, acpruntime.SessionMCPServer{Name: name, Type: "http", URL: p.bridge.MCPServerURL(p.port), Headers: []acpruntime.SessionMCPHeader{{Name: "Authorization", Value: "Bearer " + token}}})
 	}
 	if p.computer != nil {
-		computerToken, err := p.computer.RegisterSessionWithToken(sessionID, p.profileID, token)
+		computerToken, err := p.computer.RegisterSessionWithTokenAndWorkspace(sessionID, p.profileID, cwd, token)
 		if err != nil {
 			if p.bridge != nil {
 				_ = p.bridge.ReleaseSession(ctx, sessionID)
@@ -91,6 +94,9 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 			if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 				return nil, fmt.Errorf("ACP profile %s CODEX_CONFIG: %w", profile.ID, err)
 			}
+			if env["AGENTDOCK_NEXT_CODEX_MCP_ISOLATION"] == "source-only" && containsNativeMCPConfig(cfg, 0) {
+				return nil, errNextCodexRegistryUnavailable
+			}
 		}
 		if servers, ok := cfg["mcp_servers"].(map[string]any); ok {
 			for _, key := range codexACPBlockedMCPServers {
@@ -126,6 +132,9 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 		delete(env, "DISABLE_MCP_CONFIG_FILTERING")
 	}
 	if acpProfileUsesAntigravity(profile) {
+		if err := prepareNextAntigravityACPState(agentDockHome, env); err != nil {
+			return nil, err
+		}
 		if brokerAvailable {
 			env["AGENTDOCK_BROWSER_BROKER_REQUIRED"] = "1"
 			delete(env, "AGENTDOCK_BROWSER_BACKENDS_DISABLED")
@@ -140,9 +149,120 @@ func prepareACPBrowserEnvironment(agentDockHome string, profile config.ACPProfil
 	return env, nil
 }
 
+// Use the existing desktop marker and exact Next home; stable and custom homes
+// retain their adapter configuration. Parent ACP HOME is never changed here.
+func prepareNextAntigravityACPState(agentDockHome string, env map[string]string) error {
+	if runtime.GOOS != "darwin" || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next" {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve Next Antigravity ACP home: %w", err)
+	}
+	if !filepath.IsAbs(home) || agentDockHome != filepath.Join(home, ".agentdock-next") {
+		return nil
+	}
+	state := filepath.Join(agentDockHome, "acp", "antigravity")
+	expected := map[string]string{"AGY_ACP_STATE_DIR": state, "AGY_ACP_CHILD_ISOLATION": "required"}
+	for key, value := range expected {
+		if supplied, exists := env[key]; exists && supplied != value {
+			return fmt.Errorf("conflicting Next Antigravity ACP %s", key)
+		}
+	}
+	for _, dir := range []string{agentDockHome, filepath.Join(agentDockHome, "acp"), state} {
+		info, err := os.Lstat(dir)
+		if os.IsNotExist(err) {
+			// Create one component at a time, never following or repairing an
+			// unsafe existing parent. Revalidate concurrent creation too.
+			if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+				return fmt.Errorf("create Next Antigravity ACP directory: %w", err)
+			}
+			info, err = os.Lstat(dir)
+		}
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 || !nativeStateOwnedByCurrentUser(info) {
+			return fmt.Errorf("unsafe Next Antigravity ACP directory: %s", dir)
+		}
+	}
+	for key, value := range expected {
+		env[key] = value
+	}
+	return nil
+}
+
 var codexACPBlockedMCPServers = []string{"chrome-devtools", "node_repl", "computer-use"}
 
+// A strict Next-only ACP profile MUST use the already provisioned isolated
+// home, WITHOUT copying global config.toml/auth.json or mutating native MCPs.
+// The native TS adapter performs an additional OS owner/realpath check.
+func containsNativeMCPConfig(value any, depth int) bool {
+	if depth > 12 {
+		return true
+	}
+	obj, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	for key, v := range obj {
+		if key == "mcp_servers" || containsNativeMCPConfig(v, depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+// Mirrored in codex-acp/src/next/NativeMcpIsolation.ts. Only known native
+// cache/state entries are allowed, inside the private Next-owned CODEX_HOME;
+// executable scripts, symlinks, and config.toml remain prohibited.
+var nextCodexNativeSQLite = regexp.MustCompile(`^(state|goals|logs|memories|queue)_[1-9][0-9]*\.sqlite(-wal|-shm)?$`)
+
+func allowedNextCodexNativeEntry(home string, entry os.DirEntry) bool {
+	name := entry.Name()
+	info, err := os.Lstat(filepath.Join(home, name))
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0022 != 0 {
+		return false
+	}
+	if !nativeStateOwnedByCurrentUser(info) {
+		return false
+	}
+	switch name {
+	case "auth.json":
+		return info.Mode().IsRegular() && nativeStateSingleLink(info) && info.Mode().Perm()&0077 == 0
+	case ".tmp", "tmp", "log", "skills", "sessions", "archived_sessions", "shell_snapshots":
+		return info.IsDir()
+	case "installation_id", "history.jsonl", "version.json", "models_cache.json":
+		return info.Mode().IsRegular() && nativeStateSingleLink(info)
+	default:
+		return info.Mode().IsRegular() && nativeStateSingleLink(info) && nextCodexNativeSQLite.MatchString(name)
+	}
+}
+
 func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env map[string]string) (map[string]string, error) {
+	if env["AGENTDOCK_NEXT_CODEX_MCP_ISOLATION"] == "source-only" {
+		home, err := os.UserHomeDir()
+		if err != nil || profile.ID != "codex" || profile.Kind != "codex" || os.Getenv("AGENTDOCK_DESKTOP_VARIANT") != "next" || os.Getenv(nextCodexMCPRegistrationEnv) != "source-only" || agentDockHome != filepath.Join(home, ".agentdock-next") || env["HOME"] != home || env["CODEX_HOME"] != filepath.Join(agentDockHome, "codex-mcp-isolated") {
+			return nil, errNextCodexRegistryUnavailable
+		}
+		for _, dir := range []string{agentDockHome, env["CODEX_HOME"]} {
+			info, err := os.Lstat(dir)
+			if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+				return nil, errNextCodexRegistryUnavailable
+			}
+		}
+		entries, err := os.ReadDir(env["CODEX_HOME"])
+		if err != nil {
+			return nil, errNextCodexRegistryUnavailable
+		}
+		for _, entry := range entries {
+			if !allowedNextCodexNativeEntry(env["CODEX_HOME"], entry) {
+				return nil, errNextCodexRegistryUnavailable
+			}
+		}
+		return env, nil
+	}
+	codexPath, err := resolveCodexCLI(env)
+	if err != nil {
+		return nil, err
+	}
 	sourceHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if sourceHome == "" {
 		home, err := os.UserHomeDir()
@@ -185,14 +305,6 @@ func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env ma
 			return nil, fmt.Errorf("stat Codex %s: %w", name, err)
 		}
 	}
-	codexPath := strings.TrimSpace(env["CODEX_PATH"])
-	if codexPath == "" {
-		resolved, err := exec.LookPath("codex")
-		if err != nil {
-			return nil, fmt.Errorf("resolve codex CLI for ACP browser isolation: %w", err)
-		}
-		codexPath = resolved
-	}
 	for _, server := range codexACPBlockedMCPServers {
 		if err := runCodexMCPRemove(codexPath, sandbox, server); err != nil {
 			return nil, err
@@ -202,11 +314,22 @@ func prepareCodexACPHome(agentDockHome string, profile config.ACPProfile, env ma
 	return env, nil
 }
 
+func resolveCodexCLI(env map[string]string) (string, error) {
+	if explicit, ok := env["CODEX_PATH"]; ok {
+		return commandpath.ValidateExecutable(explicit)
+	}
+	resolved, err := commandpath.LookPath("codex")
+	if err != nil {
+		return "", fmt.Errorf("resolve codex CLI for ACP browser isolation: %w", err)
+	}
+	return resolved, nil
+}
+
 var runCodexMCPRemove = func(codexPath, home, server string) error {
 	cmd := exec.Command(codexPath, "mcp", "remove", server) //nolint:gosec // executable comes from configured Codex path/PATH.
 	cmd.Env = codexIsolationCommandEnv(home)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("remove %s from Codex ACP MCP config: %w: %s", server, err, strings.TrimSpace(string(output)))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("remove %s from Codex ACP MCP config: %w", server, err)
 	}
 	return nil
 }

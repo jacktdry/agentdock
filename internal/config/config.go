@@ -120,18 +120,7 @@ func FromEnv() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	catalog, err := normalizeBrowserCatalog(browserCatalog)
-	if err != nil {
-		return Config{}, err
-	}
-	if err := validateBrowserPolicyCatalog(browserWorkspacePolicies, catalog); err != nil {
-		return Config{}, err
-	}
 	port, err := getenvInt("AGENTDOCK_PORT", 8765)
-	if err != nil {
-		return Config{}, err
-	}
-	browserEnabled, err := getenvBool("AGENTDOCK_BROWSER_ENABLED", false)
 	if err != nil {
 		return Config{}, err
 	}
@@ -151,6 +140,30 @@ func FromEnv() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	// A Next-only, owner-managed private file may supply the trusted external
+	// route catalog. It never mutates the signed LaunchAgent environment or the
+	// Stable AgentDock configuration. Absence preserves existing behavior.
+	if strings.TrimSpace(os.Getenv("AGENTDOCK_DESKTOP_VARIANT")) == "next" &&
+		!stdio {
+		privateCatalog, privatePolicies, exists, fileErr := nextBrowserRouteFile()
+		if fileErr != nil {
+			return Config{}, fileErr
+		}
+		if exists {
+			if strings.TrimSpace(os.Getenv(browserCatalogEnv)) != "" ||
+				strings.TrimSpace(os.Getenv(browserWorkspacePoliciesEnv)) != "" {
+				return Config{}, fmt.Errorf("Next private Browser route file conflicts with process Browser route environment")
+			}
+			browserCatalog, browserWorkspacePolicies = privateCatalog, privatePolicies
+		}
+	}
+	catalog, err := normalizeBrowserCatalog(browserCatalog)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateBrowserPolicyCatalog(browserWorkspacePolicies, catalog); err != nil {
+		return Config{}, err
+	}
 	mcpAppsMode, err := mcpAppsModeFromEnv()
 	if err != nil {
 		return Config{}, err
@@ -160,6 +173,13 @@ func FromEnv() (Config, error) {
 		return Config{}, err
 	}
 	acpEnabled, err := getenvBool("AGENTDOCK_ACP_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
+	// Next's non-stdio ACP role enables the lazy Broker by default. The launcher
+	// supplies the state root separately; explicit browser settings still win.
+	browserDefault := strings.TrimSpace(os.Getenv("AGENTDOCK_DESKTOP_VARIANT")) == "next" && acpEnabled && !stdio
+	browserEnabled, err := getenvBool("AGENTDOCK_BROWSER_ENABLED", browserDefault)
 	if err != nil {
 		return Config{}, err
 	}
@@ -465,6 +485,17 @@ func (c *Config) normalizeACP() error {
 }
 
 func (c *Config) normalizeACPProfiles() error {
+	return c.normalizeACPProfileConfiguration(true, true)
+}
+
+// ValidateACPSettings validates the complete persisted inventory, including
+// disabled profiles, without the runtime's implicit default selection.
+func ValidateACPSettings(enabled bool, defaultProfile string, profiles []ACPProfile) error {
+	c := Config{ACPEnabled: enabled, ACPDefaultProfile: defaultProfile, ACPProfiles: append([]ACPProfile(nil), profiles...)}
+	return c.normalizeACPProfileConfiguration(enabled, false)
+}
+
+func (c *Config) normalizeACPProfileConfiguration(requireEnabled, selectDefault bool) error {
 	seen := make(map[string]struct{}, len(c.ACPProfiles))
 	enabled := make(map[string]struct{}, len(c.ACPProfiles))
 	firstEnabled := ""
@@ -511,6 +542,13 @@ func (c *Config) normalizeACPProfiles() error {
 		if !profile.Enabled {
 			continue
 		}
+		enabled[profile.ID] = struct{}{}
+		if firstEnabled == "" {
+			firstEnabled = profile.ID
+		}
+		if !requireEnabled {
+			continue
+		}
 		if profile.Command == "" {
 			return fmt.Errorf("enabled ACP profile %q requires a command", profile.ID)
 		}
@@ -524,18 +562,17 @@ func (c *Config) normalizeACPProfiles() error {
 		if err := validateACPCommandPlatform(profile.Command, info); err != nil {
 			return fmt.Errorf("ACP profile %q: %w", profile.ID, err)
 		}
-		enabled[profile.ID] = struct{}{}
-		if firstEnabled == "" {
-			firstEnabled = profile.ID
-		}
 	}
 
-	if len(enabled) == 0 {
+	if requireEnabled && len(enabled) == 0 {
 		return errors.New("AGENTDOCK_ACP_PROFILES_JSON must contain at least one enabled ACP profile")
 	}
 	c.ACPDefaultProfile = strings.TrimSpace(c.ACPDefaultProfile)
-	if c.ACPDefaultProfile == "" {
+	if c.ACPDefaultProfile == "" && selectDefault {
 		c.ACPDefaultProfile = firstEnabled
+	}
+	if c.ACPDefaultProfile == "" && !requireEnabled {
+		return nil
 	}
 	if _, exists := enabled[c.ACPDefaultProfile]; !exists {
 		return fmt.Errorf("AGENTDOCK_ACP_DEFAULT_PROFILE must reference an enabled ACP profile: %q", c.ACPDefaultProfile)

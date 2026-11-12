@@ -16,6 +16,8 @@ type SessionRequest struct {
 	ModeID                string   `json:"mode_id,omitempty"`
 	ConfigID              string   `json:"config_id,omitempty"`
 	ConfigValue           any      `json:"config_value,omitempty"`
+	LifecyclePolicy       string   `json:"lifecycle_policy,omitempty"`
+	IdleCloseAfterMS      *int     `json:"idle_close_after_ms,omitempty"`
 }
 
 // PromptRequest 是 acp_prompt 的强类型输入。

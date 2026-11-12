@@ -511,6 +511,30 @@ func (s *Session) Peek(status string, maxBytes int) Snapshot {
 	return s.snapshot(status, maxBytes, false)
 }
 
+// Metadata returns lifecycle/output counters without materializing stdout/stderr
+// and without advancing observation cursors.
+func (s *Session) Metadata(status string) Snapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return Snapshot{
+		SessionID:          s.ID,
+		Status:             status,
+		ElapsedMS:          time.Since(s.StartedAt).Milliseconds(),
+		TimedOut:           s.TimedOut,
+		Terminal:           s.Terminal,
+		StdoutTotalBytes:   s.stdoutTotalBytes,
+		StderrTotalBytes:   s.stderrTotalBytes,
+		StdoutDroppedBytes: s.stdoutDroppedBytes,
+		StderrDroppedBytes: s.stderrDroppedBytes,
+		Completed:          s.completed,
+		ExitCode:           s.exitCode,
+		CommandOK:          s.exitCode == 0 && !s.TimedOut,
+		Runtime:            s.execution.Runtime,
+		WSLDistribution:    s.execution.Distribution,
+		Workdir:            s.execution.Workdir,
+	}
+}
+
 func (s *Session) snapshot(status string, maxBytes int, advance bool) Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()

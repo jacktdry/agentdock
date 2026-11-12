@@ -189,7 +189,7 @@ func TestWaitNamedTunnelReadyRejectsInvalidTokenLog(t *testing.T) {
 	}
 
 	if err := waitNamedTunnelReady(context.Background(), runtime, cursors, time.Second); err == nil ||
-		!strings.Contains(err.Error(), "Token 无效") {
+		err.Error() != "named_tunnel_token_invalid" {
 		t.Fatalf("invalid Named token log must fail readiness immediately, got %v", err)
 	}
 }

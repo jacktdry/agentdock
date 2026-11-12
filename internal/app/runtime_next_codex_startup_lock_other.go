@@ -1,0 +1,22 @@
+//go:build !darwin
+
+package app
+
+type nextCodexStartupLock struct{}
+
+func acquireNextCodexStartupLock(string) (*nextCodexStartupLock, error) {
+	return nil, errNextCodexRegistryUnavailable
+}
+func (*nextCodexStartupLock) validate() error { return errNextCodexRegistryUnavailable }
+func (*nextCodexStartupLock) close() error    { return nil }
+
+func (*nextCodexStartupLock) markBootstrapAttempt() error { return errNextCodexRegistryUnavailable }
+
+func acquireNextCodexRecoveryLock(string) (*nextCodexStartupLock, error) {
+	return nil, errNextCodexRegistryUnavailable
+}
+func (*nextCodexStartupLock) clearAfterVerifiedReboot() error { return errNextCodexRegistryUnavailable }
+
+func (*nextCodexStartupLock) readRecoveryJournal() ([]byte, error) {
+	return nil, errNextCodexRegistryUnavailable
+}

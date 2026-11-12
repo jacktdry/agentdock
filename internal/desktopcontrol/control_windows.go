@@ -25,7 +25,7 @@ func endpointPath(runtimeRoot string) string {
 	return fmt.Sprintf(`\\.\pipe\agentdock-control-%x`, digest[:10])
 }
 
-func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) []byte) error {
+func servePlatform(ctx context.Context, runtimeRoot string, handle func(context.Context, []byte) []byte) error {
 	security, err := currentUserPipeSecurity()
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) 
 		pipe, err := windows.CreateNamedPipe(
 			name,
 			windows.PIPE_ACCESS_DUPLEX,
-			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
+			windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT|windows.PIPE_REJECT_REMOTE_CLIENTS,
 			windows.PIPE_UNLIMITED_INSTANCES,
 			maxMessageBytes+4,
 			maxMessageBytes+4,
@@ -57,7 +57,7 @@ func servePlatform(ctx context.Context, runtimeRoot string, handle func([]byte) 
 			_ = windows.CloseHandle(pipe)
 			return fmt.Errorf("connect desktop control named pipe: %w", connectErr)
 		}
-		servePipe(pipe, handle)
+		servePipe(pipe, func(data []byte) []byte { return handle(ctx, data) })
 	}
 }
 

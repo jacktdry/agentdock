@@ -125,6 +125,7 @@ func (s *sessionStore) markInterrupted() error {
 }
 
 func (s *sessionStore) saveLocked(record SessionRecord) error {
+	record = normalizeSessionRecord(record)
 	if record.ID == "" || record.RemoteSessionID == "" || record.CWD == "" {
 		return errors.New("ACP session id, remote session id, and cwd are required")
 	}
@@ -178,6 +179,7 @@ func (s *sessionStore) loadLocked(id string) (SessionRecord, error) {
 	if err := json.Unmarshal(data, &record); err != nil {
 		return SessionRecord{}, fmt.Errorf("decode ACP session: %w", err)
 	}
+	record = normalizeSessionRecord(record)
 	if err := validateSessionRecord(id, record); err != nil {
 		return SessionRecord{}, err
 	}
@@ -217,8 +219,20 @@ func validateSessionRecord(expectedID string, record SessionRecord) error {
 	default:
 		return fmt.Errorf("invalid ACP session status %q", record.Status)
 	}
-	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
+	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() || record.LastActiveAt.IsZero() {
 		return errors.New("ACP session timestamps are required")
+	}
+	switch record.LifecyclePolicy {
+	case LifecyclePersistent, LifecycleEphemeral:
+		if record.IdleCloseAfterMS != 0 {
+			return errors.New("ACP non-idle session must not persist idle close TTL")
+		}
+	case LifecycleIdleManaged:
+		if record.IdleCloseAfterMS < MinIdleCloseAfter.Milliseconds() || record.IdleCloseAfterMS > MaxIdleCloseAfter.Milliseconds() {
+			return errors.New("ACP session idle close TTL is outside the supported range")
+		}
+	default:
+		return fmt.Errorf("invalid ACP session lifecycle policy %q", record.LifecyclePolicy)
 	}
 	return nil
 }

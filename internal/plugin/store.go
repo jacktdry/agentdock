@@ -921,6 +921,14 @@ func validateState(state State) error {
 	if !strings.HasPrefix(state.PackageDigest, "sha256:") {
 		return errors.New("Plugin package digest is required")
 	}
+	if state.Generation != "" {
+		if len(state.Generation) != 64 {
+			return errors.New("Plugin generation is invalid")
+		}
+		if _, err := hex.DecodeString(state.Generation); err != nil {
+			return errors.New("Plugin generation is invalid")
+		}
+	}
 	if err := validateProvenance(state.Provenance); err != nil {
 		return fmt.Errorf("invalid Plugin provenance: %w", err)
 	}

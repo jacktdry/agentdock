@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
+	toolcore "github.com/uvwt/agentdock/internal/tool/core"
 )
 
 type acpBrowserTokenContextKey struct{}
@@ -39,13 +41,35 @@ func (b *ACPBridge) MCPHTTPHandler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if _, err := b.owner(token); err != nil {
+		principal, err := b.authorizeMCPRequest(token)
+		if err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		ctx := context.WithValue(r.Context(), acpBrowserTokenContextKey{}, token)
+		ctx = requestmeta.WithAuthPrincipal(ctx, principal)
 		transport.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// authorizeMCPRequest verifies and records endpoint access atomically with
+// registration/revocation. It does not prove MCP initialization or browser work.
+func (b *ACPBridge) authorizeMCPRequest(token string) (requestmeta.AuthPrincipal, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	owner, err := b.ownerLocked(token)
+	if err != nil {
+		return requestmeta.AuthPrincipal{}, err
+	}
+	owner.authenticatedMCPRequestObserved = true
+	return acpBrowserAuthPrincipal(owner), nil
+}
+
+func acpBrowserAuthPrincipal(owner *acpBrowserOwner) requestmeta.AuthPrincipal {
+	if owner == nil {
+		return requestmeta.AuthPrincipal{}
+	}
+	return requestmeta.NewStableAuthPrincipal("acp_bridge", owner.sessionID, owner.profileID)
 }
 
 func acpBrowserToken(ctx context.Context) (string, error) {
@@ -62,8 +86,15 @@ func acpMCPResult(payload map[string]any, err error) (*mcpsdk.CallToolResult, er
 	}
 	if err != nil {
 		code := ErrActionFailed
+		var toolErr *toolcore.ToolError
 		var browserErr *Error
-		if errors.As(err, &browserErr) {
+		if errors.As(err, &toolErr) {
+			code = toolErr.Code
+			payload["phase"] = toolErr.Category
+			if toolErr.Details != nil {
+				payload["details"] = toolErr.Details
+			}
+		} else if errors.As(err, &browserErr) {
 			code = browserErr.Code
 			payload["phase"] = browserErr.Phase
 			if browserErr.Details != nil {

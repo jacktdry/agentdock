@@ -1,7 +1,9 @@
 package oauthclient
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -24,10 +26,18 @@ type CallbackOption struct {
 }
 
 type BeginResult struct {
+	FlowID           string           `json:"flow_id,omitempty"`
 	AuthorizationURL string           `json:"authorization_url,omitempty"`
 	CallbackID       string           `json:"callback_id,omitempty"`
 	ExpiresAt        string           `json:"expires_at,omitempty"`
 	CallbackOptions  []CallbackOption `json:"callback_options,omitempty"`
+}
+
+type FlowStatus struct {
+	FlowID    string `json:"flow_id"`
+	Status    string `json:"status"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type CallbackResult struct {
@@ -70,7 +80,18 @@ func (e *FlowError) Unwrap() error {
 }
 
 func newFlowError(code, message string, cause error) *FlowError {
-	return &FlowError{Code: code, Message: message, Cause: cause}
+	return &FlowError{Code: code, Message: message, Cause: sanitizeOAuthErrorCause(cause)}
+}
+
+func sanitizeOAuthErrorCause(cause error) error {
+	if errors.Is(cause, errOAuthRedirectRejected) {
+		return errOAuthRedirectRejected
+	}
+	var urlErr *url.Error
+	if errors.As(cause, &urlErr) {
+		return errOAuthHTTPFailed
+	}
+	return cause
 }
 
 func formatExpiry(value time.Time) string {

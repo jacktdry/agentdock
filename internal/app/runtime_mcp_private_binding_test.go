@@ -1,0 +1,138 @@
+package app
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
+)
+
+func TestDesktopPrivateFingerprintBindsRedactedMutationContent(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	first := "PRIVATE_BINDING_CANARY_ONE"
+	second := "PRIVATE_BINDING_CANARY_TWO"
+	request := toolmcp.DesktopManageRequest{
+		Action: "desktop_env_set", RequestID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Name: "demo", Key: "TOKEN", Value: &first,
+		ExpectedRegistryRevision: "rev-1", ExpectedGeneration: "gen-1", ExpectedEnvRevision: "env-1",
+	}
+	firstDescriptor := desktopAdmissionDescriptor(request)
+	firstFingerprint, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Value = &second
+	secondDescriptor := desktopAdmissionDescriptor(request)
+	secondFingerprint, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDisplay, _ := json.Marshal(firstDescriptor)
+	secondDisplay, _ := json.Marshal(secondDescriptor)
+	if string(firstDisplay) != string(secondDisplay) {
+		t.Fatalf("redacted descriptors should be display-equivalent: %s != %s", firstDisplay, secondDisplay)
+	}
+	if firstFingerprint == secondFingerprint {
+		t.Fatal("private request fingerprint did not bind the write-only value")
+	}
+	encoded := string(firstDisplay) + firstFingerprint + secondFingerprint
+	if strings.Contains(encoded, first) || strings.Contains(encoded, second) {
+		t.Fatal("private request binding exposed write-only values")
+	}
+}
+
+func TestDesktopAdmissionDescriptorRedactsProtectedConfiguration(t *testing.T) {
+	const canary = "PROTECTED_DESCRIPTOR_CANARY"
+	request := toolmcp.DesktopManageRequest{
+		Action:  "desktop_create",
+		URL:     "https://" + canary + ".example/mcp?token=" + canary,
+		Command: "/tmp/" + canary + "/bin/server",
+		CWD:     "/tmp/" + canary,
+		Args:    []string{"--token", canary},
+	}
+	descriptor := desktopAdmissionDescriptor(request)
+	data, _ := json.Marshal(descriptor)
+	if strings.Contains(string(data), canary) || strings.Contains(string(data), "example") {
+		t.Fatalf("protected configuration reached admission descriptor: %s", data)
+	}
+	if descriptor["command_configured"] != true || descriptor["cwd_configured"] != true ||
+		descriptor["endpoint_configured"] != true || descriptor["endpoint_scheme"] != "https" {
+		t.Fatalf("descriptor lost safe configuration facts: %#v", descriptor)
+	}
+	if _, exists := descriptor["command"]; exists {
+		t.Fatal("raw command field remained in admission descriptor")
+	}
+	if _, exists := descriptor["cwd"]; exists {
+		t.Fatal("raw cwd field remained in admission descriptor")
+	}
+	if _, exists := descriptor["endpoint_origin"]; exists {
+		t.Fatal("raw endpoint origin remained in admission descriptor")
+	}
+}
+
+func TestDesktopPrivateFingerprintIgnoresOperationID(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	request := toolmcp.DesktopManageRequest{
+		Action: "desktop_remove", RequestID: "11111111111111111111111111111111", Name: "demo",
+		ExpectedRegistryRevision: "rev-1", ExpectedGeneration: "gen-1",
+	}
+	first, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "22222222222222222222222222222222"
+	second, err := rt.desktopMCPRequestFingerprint(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("operation id changed semantic approval fingerprint")
+	}
+}
+
+func TestDesktopPrivateFingerprintDistinguishesOmittedAndExplicitEmptyArgs(t *testing.T) {
+	rt := newPermissionRuntime(t)
+	omitted, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitEmpty, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","args":[],"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitNull, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","args":null,"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixedCaseEmpty, err := toolmcp.DecodeDesktopRequest([]byte(`{"action":"desktop_update","name":"demo","Args":[],"expected_registry_revision":"rev-1","expected_generation":"gen-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omitted.ArgsProvided() || !explicitEmpty.ArgsProvided() || !explicitNull.ArgsProvided() || !mixedCaseEmpty.ArgsProvided() {
+		t.Fatalf("args presence omitted=%v empty=%v null=%v mixed=%v", omitted.ArgsProvided(), explicitEmpty.ArgsProvided(), explicitNull.ArgsProvided(), mixedCaseEmpty.ArgsProvided())
+	}
+	omittedFingerprint, err := rt.desktopMCPRequestFingerprint(omitted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nullFingerprint, err := rt.desktopMCPRequestFingerprint(explicitNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omittedFingerprint == nullFingerprint {
+		t.Fatal("omitted args collided with explicit null args")
+	}
+	for label, request := range map[string]toolmcp.DesktopManageRequest{"lowercase": explicitEmpty, "mixed-case": mixedCaseEmpty} {
+		explicitFingerprint, err := rt.desktopMCPRequestFingerprint(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if omittedFingerprint == explicitFingerprint {
+			t.Fatalf("omitted args (preserve) collided with %s explicit empty args (clear)", label)
+		}
+		if nullFingerprint == explicitFingerprint {
+			t.Fatalf("explicit null args (preserve) collided with %s explicit empty args (clear)", label)
+		}
+	}
+}

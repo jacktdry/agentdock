@@ -14,7 +14,7 @@ import (
 	"github.com/uvwt/agentdock/internal/wslfilehelper"
 )
 
-const protocolVersion = "1"
+const protocolVersion = "2"
 
 func main() {
 	if len(os.Args) == 2 {

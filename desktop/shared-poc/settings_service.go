@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/uvwt/agentdock/internal/desktopapi"
+	"github.com/uvwt/agentdock/internal/desktopruntime"
 )
 
 const (
@@ -29,6 +30,14 @@ func NewSettingsService(path string) *SettingsService {
 }
 
 func defaultSettingsPath() string {
+	if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" {
+		root := desktopruntime.DefaultRuntimeRoot()
+		if root == "" {
+			// No stable or temporary preferences fallback for a Next product.
+			return ""
+		}
+		return filepath.Join(root, "shared-desktop-poc", "preferences.json")
+	}
 	base, err := os.UserConfigDir()
 	if err != nil || base == "" {
 		base = os.TempDir()
@@ -122,6 +131,9 @@ func (s *SettingsService) readLocked() (Preferences, error) {
 }
 
 func (s *SettingsService) writeLocked(prefs Preferences) error {
+	if s.path == "" {
+		return errors.New("preferences path unavailable")
+	}
 	if err := validatePreferences(prefs); err != nil {
 		return err
 	}

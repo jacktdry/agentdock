@@ -6,10 +6,18 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
   const current = shallowRef<BasicSettings | null>(null)
   const draft = ref<BasicSettings>({ port: 0, logLevel: 'info', coreAutostart: false })
   const mutable = shallowRef(false)
+  const portMutable = shallowRef(true)
+  const portDisabledReason = shallowRef('')
   const busy = shallowRef(false)
   const error = shallowRef<APIError | null>(null)
   const completed = shallowRef(false)
   const valid = computed(() => current.value !== null && validBasicSettings(draft.value))
+  function invalidateSettings() {
+    current.value = null
+    mutable.value = false
+    portMutable.value = false
+    portDisabledReason.value = ''
+  }
   function reset() {
     if (current.value && !busy.value) draft.value = { ...current.value }
     completed.value = false
@@ -17,29 +25,63 @@ export const useBasicSettingsStore = defineStore('basicSettings', () => {
   async function readSettings() {
     const result = await desktopApi.readBasicSettings()
     error.value = result.error ?? null
-    if (error.value) { current.value = null; mutable.value = false; return }
-    current.value = result.settings; mutable.value = result.coreAutostartMutable
+    if (error.value) {
+      invalidateSettings()
+      return
+    }
+    current.value = result.settings
+    mutable.value = result.coreAutostartMutable
+    portMutable.value = result.portMutable
+    portDisabledReason.value = result.portDisabledReason ?? ''
     draft.value = { ...result.settings }
   }
   async function load() {
     if (busy.value) return
     busy.value = true; completed.value = false; error.value = null
     try { await readSettings() }
-    catch (caught) { current.value = null; mutable.value = false; error.value = clientError('settings_read_call_failed', caught) }
+    catch (caught) { invalidateSettings(); error.value = clientError('settings_read_call_failed', caught) }
     finally { busy.value = false }
   }
   function payload() {
-    return current.value ? settingsPayload(draft.value, current.value, mutable.value) : null
+    return current.value
+      ? settingsPayload(draft.value, current.value, mutable.value, portMutable.value)
+      : null
   }
   async function save(confirmed: BasicSettings) {
     if (busy.value || !current.value || !validBasicSettings(confirmed)) return
     busy.value = true; completed.value = false; error.value = null
     try {
-      const result = await desktopApi.saveBasicSettings(settingsPayload(confirmed, current.value, mutable.value))
+      const result = await desktopApi.saveBasicSettings(
+        settingsPayload(confirmed, current.value, mutable.value, portMutable.value),
+      )
       error.value = result.error ?? (!result.completed ? clientError('settings_not_completed', '') : null)
-      if (!error.value) { completed.value = true; await readSettings() }
+      if (!error.value) {
+        // Save acknowledgement alone does not establish that current settings
+        // can be read back. Do not show success or retain editable stale state.
+        try {
+          await readSettings()
+          completed.value = !error.value && current.value !== null
+        } catch (caught) {
+          invalidateSettings()
+          error.value = clientError('settings_read_call_failed', caught)
+        }
+      }
     } catch (caught) { error.value = clientError('settings_save_call_failed', caught) }
     finally { busy.value = false }
   }
-  return { current, draft, mutable, busy, error, completed, valid, reset, load, payload, save }
+  return {
+    current,
+    draft,
+    mutable,
+    portMutable,
+    portDisabledReason,
+    busy,
+    error,
+    completed,
+    valid,
+    reset,
+    load,
+    payload,
+    save,
+  }
 })

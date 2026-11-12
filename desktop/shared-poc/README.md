@@ -100,7 +100,13 @@ Windows installer/signing remains a native Windows runner/device gate.
 
 ## Internal naming
 
-The directory, nested Go module, bundle identifiers and executable name still use the historical `shared-poc` identifier during M4 to avoid mixing product-surface migration with a repository/package rename. User-visible product names are `AgentDock Desktop`. A future cleanup can rename internal identifiers separately.
+The Next macOS product build uses the existing Next bundle/helper identity with
+Shared Desktop as its top-level UI. See the [repository-only packaging runbook](../../docs/operations/next-shared-macos-package.md).
+
+The developer directory, nested Go module and generic Wails build assets retain
+the historical `shared-poc` identifier. Generic builds display `AgentDock Desktop`;
+the Next product packager sets `AgentDock Next` and the compiled Next variant.
+Generic `wails3 package` output is not the Next product package.
 
 ## Isolation
 

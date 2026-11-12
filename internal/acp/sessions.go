@@ -53,6 +53,14 @@ func (m *Manager) Authenticate(ctx context.Context, methodID string) error {
 }
 
 func (m *Manager) NewSession(ctx context.Context, cwd string, additionalDirectories []string) (SessionResult, error) {
+	return m.NewSessionWithLifecycle(ctx, cwd, additionalDirectories, SessionLifecycleOptions{})
+}
+
+func (m *Manager) NewSessionWithLifecycle(ctx context.Context, cwd string, additionalDirectories []string, lifecycle SessionLifecycleOptions) (SessionResult, error) {
+	lifecycle, err := NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return SessionResult{}, err
+	}
 	resolved, err := m.resolveCWD(cwd)
 	if err != nil {
 		return SessionResult{}, err
@@ -89,7 +97,7 @@ func (m *Manager) NewSession(ctx context.Context, cwd string, additionalDirector
 	if strings.TrimSpace(response.SessionID) == "" {
 		return SessionResult{}, newError("ACP_INVALID_RESPONSE", "ACP session/new omitted sessionId", false, map[string]any{"agent": m.opts.Agent.Name}, nil)
 	}
-	record, err := m.persistNewSessionWithID(id, response, resolved, additional)
+	record, err := m.persistNewSessionWithIDLifecycle(id, response, resolved, additional, lifecycle)
 	if err != nil {
 		return SessionResult{}, err
 	}
@@ -205,6 +213,14 @@ func (m *Manager) ResumeSession(ctx context.Context, id string) (SessionResult, 
 }
 
 func (m *Manager) ForkSession(ctx context.Context, id, cwd string, additionalDirectories []string) (SessionResult, error) {
+	return m.ForkSessionWithLifecycle(ctx, id, cwd, additionalDirectories, SessionLifecycleOptions{})
+}
+
+func (m *Manager) ForkSessionWithLifecycle(ctx context.Context, id, cwd string, additionalDirectories []string, lifecycle SessionLifecycleOptions) (SessionResult, error) {
+	lifecycle, err := NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return SessionResult{}, err
+	}
 	source, err := m.sessionForActivation(id)
 	if err != nil {
 		return SessionResult{}, err
@@ -260,7 +276,7 @@ func (m *Manager) ForkSession(ctx context.Context, id, cwd string, additionalDir
 	if strings.TrimSpace(response.SessionID) == "" {
 		return SessionResult{}, newError("ACP_INVALID_RESPONSE", "ACP session/fork omitted sessionId", false, map[string]any{"session_id": id}, nil)
 	}
-	record, err := m.persistNewSessionWithID(newID, response, resolved, additional)
+	record, err := m.persistNewSessionWithIDLifecycle(newID, response, resolved, additional, lifecycle)
 	if err != nil {
 		return SessionResult{}, err
 	}
@@ -294,6 +310,7 @@ func (m *Manager) SetSessionMode(ctx context.Context, id, modeID string) error {
 	current := m.sessions[id]
 	current.ModeID = modeID
 	current.UpdatedAt = time.Now().UTC()
+	current.LastActiveAt = current.UpdatedAt
 	if err := m.store.Save(current); err != nil {
 		m.mu.Unlock()
 		return err
@@ -350,7 +367,18 @@ func (m *Manager) SetSessionConfigOption(ctx context.Context, id, configID strin
 	if response.ConfigOptions == nil {
 		return nil, newError("ACP_INVALID_RESPONSE", "ACP session/set_config_option omitted configOptions", false, map[string]any{"session_id": id, "config_id": configID}, nil)
 	}
+	now := time.Now().UTC()
 	m.mu.Lock()
+	current, exists := m.sessions[id]
+	if exists {
+		current.UpdatedAt = now
+		current.LastActiveAt = now
+		if err := m.store.Save(current); err != nil {
+			m.mu.Unlock()
+			return nil, err
+		}
+		m.sessions[id] = current
+	}
 	if state, loaded := m.loaded[id]; loaded {
 		state.ConfigOptions = response.ConfigOptions
 		m.loaded[id] = state
@@ -364,6 +392,10 @@ func (m *Manager) InspectSession(id string) (SessionRecord, error) {
 }
 
 func (m *Manager) CloseSession(ctx context.Context, id string) (SessionRecord, error) {
+	return m.closeSession(ctx, id, "manual", false)
+}
+
+func (m *Manager) closeSession(ctx context.Context, id, reason string, auto bool) (SessionRecord, error) {
 	record, err := m.session(id)
 	if err != nil {
 		return SessionRecord{}, err
@@ -371,23 +403,48 @@ func (m *Manager) CloseSession(ctx context.Context, id string) (SessionRecord, e
 	if record.Status == SessionClosed {
 		return record, m.releaseSessionMCP(ctx, id)
 	}
-	process, err := m.ensureProcess(ctx)
-	if err != nil {
-		return SessionRecord{}, err
-	}
-	if !process.supportsSessionCapability("close") {
-		return SessionRecord{}, capabilityError("sessionCapabilities.close")
-	}
 	previousTerminal, hadPreviousTerminal, err := m.beginTerminalTransition(ctx, id, SessionClosed)
 	if err != nil {
 		return SessionRecord{}, err
 	}
+	return m.closeSessionClaimed(ctx, record, reason, auto, previousTerminal, hadPreviousTerminal)
+}
+
+func (m *Manager) closeSessionClaimed(ctx context.Context, record SessionRecord, reason string, auto bool, previousTerminal SessionStatus, hadPreviousTerminal bool) (SessionRecord, error) {
+	return m.closeSessionClaimedWithProcess(ctx, record, reason, auto, previousTerminal, hadPreviousTerminal, nil)
+}
+
+func (m *Manager) closeSessionClaimedWithProcess(ctx context.Context, record SessionRecord, reason string, auto bool, previousTerminal SessionStatus, hadPreviousTerminal bool, existingProcess *agentProcess) (SessionRecord, error) {
+	id := record.ID
 	succeeded := false
 	defer func() {
 		if !succeeded {
 			m.rollbackTerminalTransition(id, SessionClosed, previousTerminal, hadPreviousTerminal)
 		}
 	}()
+	process := existingProcess
+	var err error
+	if process == nil {
+		process, err = m.ensureProcess(ctx)
+		if err != nil {
+			return SessionRecord{}, err
+		}
+	} else {
+		m.mu.RLock()
+		currentProcess := m.process
+		m.mu.RUnlock()
+		if currentProcess != process || process.connection == nil {
+			return SessionRecord{}, newError("ACP_SESSION_AUTO_CLOSE_STALE", "ACP adapter process changed before idle auto-close", true, map[string]any{"session_id": id}, nil)
+		}
+		select {
+		case <-process.connection.Closed():
+			return SessionRecord{}, newError("ACP_SESSION_AUTO_CLOSE_STALE", "ACP adapter process closed before idle auto-close", true, map[string]any{"session_id": id}, nil)
+		default:
+		}
+	}
+	if !process.supportsSessionCapability("close") {
+		return SessionRecord{}, capabilityError("sessionCapabilities.close")
+	}
 
 	_ = m.CancelPrompt(ctx, id, "")
 	if err := process.connection.Request(ctx, "session/close", map[string]any{"sessionId": record.RemoteSessionID}, nil); err != nil {
@@ -398,10 +455,27 @@ func (m *Manager) CloseSession(ctx context.Context, id string) (SessionRecord, e
 	m.settleRunAfterRemoteClose(id)
 
 	now := time.Now().UTC()
+	m.mu.RLock()
+	current, exists := m.sessions[id]
+	m.mu.RUnlock()
+	if exists {
+		record = current
+	}
 	record.Status = SessionClosed
 	record.UpdatedAt = now
+	record.LastActiveAt = now
 	record.ClosedAt = &now
 	record.LastStopReason = "closed"
+	record.ClosedReason = strings.TrimSpace(reason)
+	if record.ClosedReason == "" {
+		record.ClosedReason = "manual"
+	}
+	if auto && record.AutoCloseAttemptedAt == nil {
+		record.AutoCloseAttemptedAt = &now
+	}
+	// A successful close supersedes any previous auto-close failure. Keep the
+	// attempt timestamp for diagnostics, but clear the stale current error.
+	record.AutoCloseError = ""
 	if err := m.store.Save(record); err != nil {
 		return SessionRecord{}, err
 	}
@@ -473,6 +547,14 @@ func (m *Manager) persistNewSession(state sessionLifecycleResponse, cwd string, 
 }
 
 func (m *Manager) persistNewSessionWithID(id string, state sessionLifecycleResponse, cwd string, additional []string) (SessionRecord, error) {
+	return m.persistNewSessionWithIDLifecycle(id, state, cwd, additional, SessionLifecycleOptions{})
+}
+
+func (m *Manager) persistNewSessionWithIDLifecycle(id string, state sessionLifecycleResponse, cwd string, additional []string, lifecycle SessionLifecycleOptions) (SessionRecord, error) {
+	lifecycle, err := NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return SessionRecord{}, err
+	}
 	if strings.TrimSpace(id) == "" {
 		return SessionRecord{}, newError("ACP_ID_FAILED", "persist ACP session with empty local id", false, nil, nil)
 	}
@@ -480,8 +562,9 @@ func (m *Manager) persistNewSessionWithID(id string, state sessionLifecycleRespo
 	record := SessionRecord{
 		SchemaVersion: sessionSchemaVersion, ID: id, Agent: m.opts.Agent.Name,
 		RemoteSessionID: state.SessionID, CWD: cwd, AdditionalDirectories: append([]string(nil), additional...),
-		Status: SessionReady, CreatedAt: now, UpdatedAt: now,
+		Status: SessionReady, LastActiveAt: now, CreatedAt: now, UpdatedAt: now,
 	}
+	applyLifecycleOptions(&record, lifecycle)
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -527,6 +610,40 @@ func (m *Manager) sessionForActivation(id string) (SessionRecord, error) {
 	}
 	record.AdditionalDirectories = additional
 	return record, nil
+}
+
+func (m *Manager) SetSessionLifecycle(id string, lifecycle SessionLifecycleOptions) (SessionRecord, error) {
+	lifecycle, err := NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return SessionRecord{}, err
+	}
+	if _, err := m.session(id); err != nil {
+		return SessionRecord{}, err
+	}
+	endOperation, err := m.beginSessionOperation(id)
+	if err != nil {
+		return SessionRecord{}, err
+	}
+	defer endOperation()
+	now := time.Now().UTC()
+	m.mu.Lock()
+	current, exists := m.sessions[id]
+	if !exists {
+		m.mu.Unlock()
+		return SessionRecord{}, newError("ACP_SESSION_NOT_FOUND", "ACP session was not found", false, map[string]any{"session_id": id}, nil)
+	}
+	applyLifecycleOptions(&current, lifecycle)
+	current.UpdatedAt = now
+	current.LastActiveAt = now
+	current.AutoCloseAttemptedAt = nil
+	current.AutoCloseError = ""
+	if err := m.store.Save(current); err != nil {
+		m.mu.Unlock()
+		return SessionRecord{}, err
+	}
+	m.sessions[id] = current
+	m.mu.Unlock()
+	return current, nil
 }
 
 func currentModeID(modes any) string {
@@ -578,8 +695,10 @@ func (m *Manager) restoreSessionMode(ctx context.Context, process *agentProcess,
 func (m *Manager) markSessionReady(record SessionRecord, state sessionLifecycleResponse) (SessionRecord, error) {
 	record.Status = SessionReady
 	record.LastStopReason = ""
+	record.ClosedReason = ""
 	record.ClosedAt = nil
 	record.UpdatedAt = time.Now().UTC()
+	record.LastActiveAt = record.UpdatedAt
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -643,6 +762,7 @@ func (m *Manager) rebindRemoteSession(record SessionRecord, state sessionLifecyc
 
 	current.RemoteSessionID = remoteID
 	current.UpdatedAt = time.Now().UTC()
+	current.LastActiveAt = current.UpdatedAt
 	if err := m.store.Save(current); err != nil {
 		return SessionRecord{}, err
 	}

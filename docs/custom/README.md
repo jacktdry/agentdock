@@ -12,7 +12,18 @@
 
 ## 文件索引
 
+- [next-rc21-product-baseline-2026-11-12.md](next-rc21-product-baseline-2026-11-12.md)：**RC21 Source＋Docs 最新本機整合基準**、合流方式與有效 Backlog。
+- [next-four-workstreams-handoff-2026-11-12.md](next-four-workstreams-handoff-2026-11-12.md)：**A／B／C／D 四線共用開發交接**，新 Session 先讀文件再執行指定工作線。
+
+- [p8-followup-checkpoint-2026-10-21.md](p8-followup-checkpoint-2026-10-21.md)：P8 三真實 Agent 已通過的歷史證據及現階段 Edge／原生非干擾／崩潰恢復驗收門檻。
+
+- [next-active-backlog-2026-10-21.md](next-active-backlog-2026-10-21.md)：**目前 NEXT 待辦與單頁交接入口**，區分 installed/source-only、保留分支與發佈門檻。
+- [worktree-consolidation-2026-10-21.md](worktree-consolidation-2026-10-21.md)：NEXT 工作樹收斂、保留原因、清理結果與恢復位置。
+
+
 - [architecture.md](architecture.md)：整體產品與技術架構。
+- [next-product-first-guardrails.md](next-product-first-guardrails.md)：2026-10-13 重新確認產品初衷、工作優先級與防偏離檢查；repo 根目錄 `AGENTS.md` 提供所有開發 Agent 的強制工作規則。
+- [agentdock-next-isolation.md](agentdock-next-isolation.md)：AgentDock Next side-by-side 隔離、namespace、rollout 與驗收契約。
 - [branching-strategy.md](branching-strategy.md)：`main`、`custom/main`、feature、Workbench port 與 upstream PR 的 Git 規則。
 - [upstream-tracking.md](upstream-tracking.md)：AgentDock / Workbench 更新的追蹤與採用流程。
 - [workbench-adoption.md](workbench-adoption.md)：Workbench 功能採用、延後與排除清單。
@@ -21,10 +32,22 @@
 - [m3-i18n-foundation.md](m3-i18n-foundation.md)：M3 實作、native bridge、migration boundary 與驗證方式。
 - [roundtable-2026-10-02.md](roundtable-2026-10-02.md)：本次 AI 圓桌的分歧、交叉挑戰與最終收斂。
 - [roadmap.md](roadmap.md)：Milestone、優先級與 Definition of Done。
+- [m8-permission-approval.md](m8-permission-approval.md)：M8 Core-owned Permission / Approval authority、binding、retry、history 與 implementation checkpoint。
+- [pre-m9-progress-2026-10-09.md](pre-m9-progress-2026-10-09.md)：**最新 Pre-M9／P4–P8 進度、AGY-ACP .14 待 Next 整合、8767 loopback 已恢復、後續順序及邊界。**
+- [pre-m9-feature-parity.md](pre-m9-feature-parity.md)：M8 closeout 後的 feature parity audit、Next Connection/Auth/Tunnel readiness、已完成的 P3 stable/Next side-by-side closeout、Wave 3 與 M9 前工作順序。
+- [pre-m9-wave0-contract.md](pre-m9-wave0-contract.md)：Wave 0 roundtable 收斂後凍結的 P1/P2 UX、secret、port ownership、Tunnel state/mutation 與 Wave 1 backend integration contract。
+- [pre-m9-acp-manager-roundtable.md](pre-m9-acp-manager-roundtable.md)：Wave 3 P4 ACP Manager 的 UX/IA、設定 authority、revisioned save、Antigravity preset、安全 update contract 與 closeout。
+- [pre-m9-mcp-management-roundtable.md](pre-m9-mcp-management-roundtable.md)：Wave 3 P5 MCP Management 的 standalone/plugin ownership、revision/generation、credential/OAuth、reconnect 與 Shared UI authority contract。
 - [acp-lifecycle-memory.md](acp-lifecycle-memory.md)：ACP session lifecycle、共享 Memory daemon 與 Adapter process cleanup 的實作交接。
 - [browser-cdp-lifecycle.md](browser-cdp-lifecycle.md)：Browser / CDP process ownership、stale cleanup、Edge connector 去重與 ACP browser child lifecycle。
+- [pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md](pre-m9-browser-noninterrupting-routing-decision-2026-10-10.md)：**P8 現行權威決策**：不干擾 UAT、共享 Broker／worker leases、正確 Edge／Chrome Profile；允許已授權 CDP，零反覆提示／不搶焦點驗收待完成。
+- [pre-m9-browser-no-remote-debugging-decision-2026-10-10.md](pre-m9-browser-no-remote-debugging-decision-2026-10-10.md)：**SUPERSEDED 歷史誤解**；全面禁令已失效，保留原文供追溯。
+- [pre-m9-browser-broker-roundtable.md](pre-m9-browser-broker-roundtable.md)：P8 Browser Broker Phase A 唯讀 Core 快照、經驗證的 Next Unix Desktop Control、權限／敏感資訊邊界、測試與 Shared UI 待辦。
 - [computer-use-backends.md](computer-use-backends.md)：Computer Use provider 選型、Orca / OpenAI Sky 實測、no-focus policy 與 ACP Computer Control Broker 邊界。
+- [next-orca-live-deploy-2026-10-18.md](next-orca-live-deploy-2026-10-18.md)：Next Orca CLI 啟動路徑修復的本機候選建置、受版本門檻保護的部署及 Broker 真實無焦點驗收（含一次外部焦點變更事件）。
+- [pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)：**新 HIGH 跨域改進項目**：CBM/Chrome DevTools/search-console MCP 程序盤點、owner/lease/generation/lifecycle 共用契約、分階段處理與安全 UAT。
 - [cbm-lifecycle-conflict.md](cbm-lifecycle-conflict.md)：Codebase Memory 更新後 supervisor / worker build 衝突、現場證據與後續 lifecycle 改善方向。
+- [next-core-skills-cbm-enablement-2026-10-16.md](next-core-skills-cbm-enablement-2026-10-16.md)：Next 四個 Core Skills 部署漏裝的修正、CBM 啟用，以及後續 Next-only `memory-lifecycle` 的分開維護／單一寫入者與 5% 交接驗證。
 
 ## 不可破壞的原則
 
@@ -35,3 +58,22 @@
 5. 準備回饋 upstream 的修正必須從乾淨的 `main` 建立。
 6. 新 Desktop 業務功能原則上只實作一次，不再長期維護 AppKit 與 WPF 兩套平行 UI。
 7. 使用者可見字串不得散落硬寫在 Swift、C#、Vue 或驗證腳本中。
+
+8. stable `mac-dev` 是 production control plane，也是 **Next 開發與維護唯一允許執行 mutation 的 control plane**；Next 開發不得檢查、修改、重啟、停止或替換 `/Applications/AgentDock.app`、stable Core、`~/.agentdock`、stable Memory registry 或 live launchd services，也不得把 stable runtime 當 development target。Next connector（ChatGPT 顯示 `macbook-air-m3`）只作 Next connector/runtime/side-by-side 驗證，不得修改、編譯、重裝或修復自己。
+9. 客製版以 **AgentDock Next** side-by-side 開發，app identity、服務、port、runtime/state/log/work roots 與 connector 必須隔離；installer / self-update 必須 Next-target-aware 並 fail closed，禁止 fallback 到 `AgentDock.app`。
+10. M7 code/stress 已於 `d8acb9be` 整合完成；M7.5 AgentDock Next isolation 的 repository/runtime validation 與 handoff 已完成，stable live cutover 仍刻意延後。M8 implementation / available-host validation 已完成：API `652331ed`、Shared Permission UI / authority hardening `3df9a784`；完整證據見 [M8 closeout](m8-permission-approval.md#m8-closeout--2026-10-05)。Pre-M9 P1/P2 live readiness 已完成：Shared UI、Next Core `8767`、獨立 Named Tunnel `mac-dev-next.dropabit.dev`、OAuth/public MCP discovery 皆已部署；connector copy 已以 `a7e92f2c` 改用 Wails native clipboard。使用者已建立 Next ChatGPT connector，顯示名稱為 `macbook-air-m3`；P3 stable/Next side-by-side validation 已於 2026-10-06 完成，確認 Core/endpoint/state/task/registry/service ownership 隔離與 Next-only lifecycle 不影響 stable。Wave 3 第一個 domain **P4 ACP Manager** 已於 2026-10-06 完成、review 並部署至 Next（final implementation checkpoint `c58a6f93`）。**P5 MCP Management** 已於 2026-10-07 完成第一輪 6 HIGH hardening、Gemini 3.1 Pro final independent review（0 BLOCKER / 0 HIGH）、Next-only package/deploy 與 Desktop bridge live UAT，正式 closeout；詳見 [P5 closeout](pre-m9-mcp-management-roundtable.md#21-p5-closeout--2026-10-07)。**P6 Plugin Management** 已於 2026-10-08 凍結 UX / IA + authority contract；Phase A Core/Desktop authority（`f70a4715`）、Phase B opaque candidate staging / security hardening（`55e8be0b`、`30fa143b`）、Phase C Shared UI（`999128d2`）與 Phase D independent review / hardening（`07a1a935`；0 BLOCKER / 0 HIGH）已完成，Phase E Desktop/Core live UAT 已通過、native GUI/keyboard UAT 待補，尚未正式 closeout；詳見 [P6 contract + implementation checkpoints](pre-m9-plugin-management-roundtable.md#171-implementation-checkpoint--2026-10-08)。後續依 Nexus / Platform Essentials → Browser Broker 推進。Developer ID signed updater、Windows/WSL/Linux helper native evidence仍作為 M9/release-native gate。
+11. 未來更名是 packaging / identity migration，不是現在共用 runtime state 的理由。完整不可變邊界見 [隔離契約](agentdock-next-isolation.md)。
+
+- [2026-10-14 Next UI/UX 逐頁圓桌與品質驗收](next-uiux-roundtable-2026-10-14.md)：涵蓋 P13/P14、Shared UI 全頁、Menu Bar/Tray、載入狀態、真實操作、繁中與原生 UAT
+
+- [p13-p14-ux-scope-decision-2026-10-22.md](p13-p14-ux-scope-decision-2026-10-22.md)：2026/10/22 使用者 UX 決策，維持原版精簡 Task 卡片、暫緩 P13 live Monitor 與 P14 降噪；既有實驗不納入 NEXT 主線。
+- [next-installed-browser-skills-uat-2026-10-22.md](next-installed-browser-skills-uat-2026-10-22.md)：NEXT 實際已安裝 Core 的隔離四技能 Bootstrap／重複執行與失敗拒絕驗收、Browser GUI 零視窗限制及下一個 RC 版本門檻。
+- [next-rc5-controlled-deploy-2026-10-22.md](next-rc5-controlled-deploy-2026-10-22.md)：RC5 NEXT-only 真實安裝、七 Skills 指紋不變、Connector/服務復原、背景 GUI 無搶焦點重啟與舊版 Contents 隔離回滾演練。
+- [next-rc5-browser-route-host-uat-2026-10-22.md](next-rc5-browser-route-host-uat-2026-10-22.md)：RC5 真實 GUI Browser Broker 路由資訊、缺少 Edge/Chrome 設定與授權，以及不搶焦點交接驗收。
+- [next-rc5-external-browser-readiness-2026-10-22.md](next-rc5-external-browser-readiness-2026-10-22.md)：NEXT RC5 公司 Edge 執行檔／CDP 監聽埠唯讀盤點、macOS Profile 權限限制、路由設定持久化缺口及授權後驗收門檻。
+- [next-private-browser-routes-2026-10-22.md](next-private-browser-routes-2026-10-22.md)：使用者指定現有 Edge、CDP 端點 404 限制、NEXT-only 私有路由設定載入設計與安全驗收。
+- [next-company-browser-uat-scope-2026-10-22.md](next-company-browser-uat-scope-2026-10-22.md)：Oprueba／HomiPlay 公司 Edge 網站 UAT 範圍、GitLab Token API 優先、既有 Edge DevTools MCP 可用及 NEXT 連接器整合邊界。
+- [next-edge-single-use-fence-2026-10-23.md](next-edge-single-use-fence-2026-10-23.md)：NEXT 公司 Edge 單操作 WebSocket fence、不可重用授權與多步驟租約尚待實作的安全邊界。
+- [next-edge-multi-operation-fence-2026-10-23.md](next-edge-multi-operation-fence-2026-10-23.md)：NEXT Edge 多操作 one-shot fence 序列化、清理與失敗後拒絕的 source-only 實作及待完成的真實身分驗證。
+- [next-edge-peer-reverification-2026-10-23.md](next-edge-peer-reverification-2026-10-23.md)：NEXT Edge 每次操作前後的可信 peer 重新驗證、清理後結果隔離與待完成的真實 Edge 身分驗證。
+- [next-edge-process-epoch-guard-2026-10-23.md](next-edge-process-epoch-guard-2026-10-23.md)：NEXT Edge OS 程序啟動代別、Profile inode 連續性驗證與仍缺的 WebSocket 身分證明。

@@ -71,15 +71,26 @@ func TestACPToolsAreFeatureGatedAndUseStrictSchemas(t *testing.T) {
 
 	sessionProperties := testInputSchema("acp_session")["properties"].(map[string]any)
 	actions := sessionProperties["action"].(map[string]any)["enum"].([]string)
-	expectedActions := []string{"info", "new", "list", "inspect", "open", "update", "close", "delete"}
+	expectedActions := []string{"info", "status", "new", "list", "inspect", "open", "update", "close", "delete"}
 	if !reflect.DeepEqual(actions, expectedActions) {
 		t.Fatalf("acp_session actions = %#v, want %#v", actions, expectedActions)
 	}
 	sessionOutputProperties := testOutputSchema("acp_session")["properties"].(map[string]any)
-	for _, property := range []string{"profile_id", "context_policy", "event_policy", "interaction_policy", "steering_policy", "change", "title"} {
+	for _, property := range []string{"profile_id", "context_policy", "event_policy", "interaction_policy", "steering_policy", "diagnostics", "adapter_pid", "adapter_process", "broker_correlation", "change", "title"} {
 		if _, exists := sessionOutputProperties[property]; !exists {
 			t.Fatalf("acp_session output schema missing %s", property)
 		}
+	}
+
+	statusResult, err := runtime.Call(context.Background(), "acp_session", map[string]any{"action": "status"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statusResult["profile_id"] != "helper" || statusResult["diagnostics"] == nil || statusResult["broker_correlation"] == nil {
+		t.Fatalf("status result=%#v", statusResult)
+	}
+	if _, exists := statusResult["adapter_pid"]; exists {
+		t.Fatalf("status started adapter process: %#v", statusResult)
 	}
 
 	promptProperties := testOutputSchema("acp_prompt")["properties"].(map[string]any)

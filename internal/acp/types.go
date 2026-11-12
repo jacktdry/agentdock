@@ -32,9 +32,14 @@ type AgentSpec struct {
 // session. Agent adapters may connect to it, but they never own its backend.
 type SessionMCPServer struct {
 	Name    string             `json:"name"`
-	Type    string             `json:"type"`
-	URL     string             `json:"url"`
-	Headers []SessionMCPHeader `json:"headers"`
+	Type    string             `json:"type,omitempty"`
+	URL     string             `json:"url,omitempty"`
+	Headers []SessionMCPHeader `json:"headers,omitempty"`
+	// Stdio is only supplied by an explicitly admitted, Core-owned Next MCP
+	// wrapper. Host HTTP MCPs remain unchanged.
+	Command string             `json:"command,omitempty"`
+	Args    []string           `json:"args,omitempty"`
+	Env     []SessionMCPHeader `json:"env,omitempty"`
 }
 
 type SessionMCPHeader struct {
@@ -49,13 +54,38 @@ type SessionMCPProvider interface {
 	ReleaseSession(context.Context, string) error
 }
 
+// PermissionContinuation is the Core-owned view of a provider-side
+// session/request_permission option selection. Provider labels/kinds are not
+// authorization facts; any non-cancel option is opaque continuation until the
+// injected admission hook permits it.
+type PermissionContinuation struct {
+	InteractionID string
+	SessionID     string
+	WorkspaceRoot string
+	OptionID      string
+	ToolCall      map[string]any
+}
+
+// PermissionContinuationFinish settles the host admission record after the
+// provider continuation is actually handed back to the ACP request.
+type PermissionContinuationFinish func(error)
+
+// PermissionContinuationAdmission is injected by AgentDock Core. A nil hook
+// fails closed for non-cancel provider continuation.
+type PermissionContinuationAdmission func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error)
+
 type Options struct {
-	Home               string
-	DefaultCWD         string
-	Agent              AgentSpec
-	MaxConcurrentRuns  int
-	InteractionTimeout time.Duration
-	SessionMCPProvider SessionMCPProvider
+	Home                            string
+	DefaultCWD                      string
+	Agent                           AgentSpec
+	MaxConcurrentRuns               int
+	InteractionTimeout              time.Duration
+	SessionMCPProvider              SessionMCPProvider
+	PermissionContinuationAdmission PermissionContinuationAdmission
+	// PromptDecorator is Core-provided opt-in guidance attached only to a new
+	// ACP Run, not to a steer of an already running turn. It is not an MCP
+	// lifecycle authority and cannot grant permission to stop child processes.
+	PromptDecorator func(localSessionID string, blocks []ContentBlock) ([]ContentBlock, error)
 }
 
 type Error struct {
@@ -116,19 +146,26 @@ const (
 )
 
 type SessionRecord struct {
-	SchemaVersion         int           `json:"schema_version"`
-	ID                    string        `json:"id"`
-	Agent                 string        `json:"agent"`
-	RemoteSessionID       string        `json:"remote_session_id"`
-	CWD                   string        `json:"cwd"`
-	Title                 string        `json:"title,omitempty"`
-	AdditionalDirectories []string      `json:"additional_directories,omitempty"`
-	ModeID                string        `json:"mode_id,omitempty"`
-	Status                SessionStatus `json:"status"`
-	LastStopReason        string        `json:"last_stop_reason,omitempty"`
-	CreatedAt             time.Time     `json:"created_at"`
-	UpdatedAt             time.Time     `json:"updated_at"`
-	ClosedAt              *time.Time    `json:"closed_at,omitempty"`
+	SchemaVersion         int                    `json:"schema_version"`
+	ID                    string                 `json:"id"`
+	Agent                 string                 `json:"agent"`
+	RemoteSessionID       string                 `json:"remote_session_id"`
+	CWD                   string                 `json:"cwd"`
+	Title                 string                 `json:"title,omitempty"`
+	AdditionalDirectories []string               `json:"additional_directories,omitempty"`
+	ModeID                string                 `json:"mode_id,omitempty"`
+	Status                SessionStatus          `json:"status"`
+	LastStopReason        string                 `json:"last_stop_reason,omitempty"`
+	LifecyclePolicy       SessionLifecyclePolicy `json:"lifecycle_policy"`
+	IdleCloseAfterMS      int64                  `json:"idle_close_after_ms,omitempty"`
+	LastActiveAt          time.Time              `json:"last_active_at"`
+	RetentionProtected    bool                   `json:"retention_protected,omitempty"`
+	ClosedReason          string                 `json:"closed_reason,omitempty"`
+	AutoCloseAttemptedAt  *time.Time             `json:"auto_close_attempted_at,omitempty"`
+	AutoCloseError        string                 `json:"auto_close_error,omitempty"`
+	CreatedAt             time.Time              `json:"created_at"`
+	UpdatedAt             time.Time              `json:"updated_at"`
+	ClosedAt              *time.Time             `json:"closed_at,omitempty"`
 }
 
 type RunStatus string

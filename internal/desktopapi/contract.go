@@ -55,9 +55,12 @@ const (
 )
 
 type OperationCapability struct {
-	Name                 string      `json:"name"`
-	Access               AccessLevel `json:"access"`
-	RequiresConfirmation bool        `json:"requiresConfirmation"`
+	Name                 string       `json:"name"`
+	Access               AccessLevel  `json:"access"`
+	RequiresConfirmation bool         `json:"requiresConfirmation"`
+	Availability         Availability `json:"availability,omitempty"`
+	DisabledReason       string       `json:"disabledReason,omitempty"`
+	NativeRequired       bool         `json:"nativeRequired,omitempty"`
 }
 
 type StreamCapability struct {
@@ -178,10 +181,27 @@ func DefaultManifest() Manifest {
 				},
 				Streams: []StreamCapability{},
 			},
-			availableCapability(DomainConnection, "Tunnel configuration remains native-only; regenerate requires quick mode", "status", "start", "stop", "restart", "regenerate"),
+			{Domain: DomainConnection, Version: 1, Availability: AvailabilityAvailable,
+				Operations: frozenConnectionOperations(), Streams: []StreamCapability{},
+				Reason: "Snapshot capabilities govern selected Next support; mutations require configRevision; Named custom ports require manual routing; macOS registration, stop and autostart require native service management"},
 			availableCapability(DomainSettings, "Basic settings only; macOS autostart changes require native SMAppService", "read", "save"),
-			unavailableCapability(DomainACP, "ACP desktop contract is scheduled after the activity execution slice"),
-			unavailableCapability(DomainBrowser, "browser routing contract is scheduled for the browser-routing milestone"),
+			{
+				Domain: DomainACP, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "status", Access: AccessRead},
+					{Name: "nativeCodexReadiness", Access: AccessRead, Availability: AvailabilityExperimental, NativeRequired: true},
+					{Name: "settings", Access: AccessRead},
+					{Name: "probeProfile", Access: AccessRead},
+					{Name: "checkProfileUpdate", Access: AccessRead},
+					{Name: "saveSettings", Access: AccessMutating},
+					{Name: "updateProfileAdapter", Access: AccessMutating, RequiresConfirmation: true},
+					{Name: "updateLifecycle", Access: AccessMutating, RequiresConfirmation: true},
+					{Name: "close", Access: AccessMutating, RequiresConfirmation: true},
+				},
+				Streams: []StreamCapability{},
+				Reason:  "Revisioned configuration inventory/save are Desktop-owned and available without Core; saves preserve runtime and require Core restart to load. Lifecycle and diagnostics retain the local Core control plane",
+			},
+			availableCapability(DomainBrowser, "Phase A passive broker snapshot only; Next identity and authenticated local Core required; no connector health or mutations", "snapshot"),
 			{
 				Domain:       DomainActivity,
 				Version:      ActivitySchemaVersion,
@@ -198,12 +218,56 @@ func DefaultManifest() Manifest {
 				},
 				Reason: "wire contract is defined; production execution source is scheduled for M5",
 			},
-			unavailableCapability(DomainPermission, "permission parity is not implemented in the shared shell yet"),
-			unavailableCapability(DomainMCP, "MCP management has not been adapted to the shared desktop API yet"),
-			unavailableCapability(DomainPlugin, "Plugin management has not been adapted to the shared desktop API yet"),
+			{
+				Domain: DomainPermission, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "status", Access: AccessRead}, {Name: "history", Access: AccessRead}, {Name: "approval", Access: AccessRead},
+					{Name: "beginConfirmation", Access: AccessPrivileged},
+					{Name: "updatePolicy", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "approveOnce", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "approveWorkspace", Access: AccessPrivileged, RequiresConfirmation: true},
+					{Name: "reject", Access: AccessPrivileged, RequiresConfirmation: true},
+				}, Streams: []StreamCapability{}, Reason: "Core-owned permission state and distinct native Desktop control; explicit confirmation and caller retry",
+			},
+			{
+				Domain: DomainMCP, Version: 1, Availability: AvailabilityAvailable,
+				Operations: mcpOperations(), Streams: []StreamCapability{},
+				Reason: "Core-owned protected MCP inventory and revisioned standalone management; Plugin-owned entries remain read-only",
+			},
+			{
+				Domain: DomainPlugin, Version: 1, Availability: AvailabilityAvailable,
+				Operations: pluginOperations(), Streams: []StreamCapability{},
+				Reason: "Core-owned Plugin inventory and revisioned lifecycle management; package selection uses a native picker and opaque immutable candidate review",
+			},
 			availableCapability(DomainUpdate, "Apply and recovery remain native-only", "check"),
-			availableCapability(DomainDiagnostics, "Local file availability only; logs, content and environment are omitted", "snapshot"),
+			{
+				Domain: DomainDiagnostics, Version: 1, Availability: AvailabilityAvailable,
+				Operations: []OperationCapability{
+					{Name: "snapshot", Access: AccessRead},
+					{Name: "directories", Access: AccessRead},
+					{Name: "openNextDirectory", Access: AccessMutating},
+				}, Streams: []StreamCapability{},
+				Reason: "Metadata and fixed Next directory intents only; Directories reports native availability without mutation",
+			},
 		},
+	}
+}
+
+func pluginOperations() []OperationCapability {
+	return []OperationCapability{
+		{Name: "snapshot", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "inspect", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "environment", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "operationStatus", Access: AccessRead, Availability: AvailabilityAvailable},
+		{Name: "chooseCandidate", Access: AccessPrivileged, Availability: AvailabilityAvailable, NativeRequired: true},
+		{Name: "discardCandidate", Access: AccessMutating, Availability: AvailabilityAvailable},
+		{Name: "installCandidate", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "updateCandidate", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "setEnabled", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "removeKeep", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "removePurge", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "setEnvironment", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
+		{Name: "unsetEnvironment", Access: AccessMutating, RequiresConfirmation: true, Availability: AvailabilityAvailable},
 	}
 }
 

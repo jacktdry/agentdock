@@ -70,11 +70,11 @@ func TestManagerPromptEventsPermissionAndPersistence(t *testing.T) {
 		_ = manager.Close()
 		t.Fatalf("policy did not filter always option: %#v", permission.Options)
 	}
-	if _, err := manager.RespondInteraction(permission.ID, "allow-always", false); err == nil {
+	if _, err := manager.RespondInteraction(context.Background(), permission.ID, "allow-always", false); err == nil {
 		_ = manager.Close()
 		t.Fatal("always option was accepted")
 	}
-	if _, err := manager.RespondInteraction(permission.ID, "allow-once", false); err != nil {
+	if _, err := manager.RespondInteraction(context.Background(), permission.ID, "allow-once", false); err != nil {
 		_ = manager.Close()
 		t.Fatal(err)
 	}
@@ -609,6 +609,9 @@ func newTestManagerWithAgent(home, workspace, agentInfoName, agentVersion, promp
 			},
 		},
 		MaxConcurrentRuns: 2, InteractionTimeout: 3 * time.Second,
+		PermissionContinuationAdmission: func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error) {
+			return func(error) {}, nil
+		},
 	})
 }
 
@@ -730,6 +733,7 @@ func TestACPHelperProcess(t *testing.T) {
 	}
 	promptMode := os.Getenv("GO_ACP_HELPER_PROMPT_MODE")
 	promptCount := 0
+	closeCount := 0
 	helperCWD, _ := os.Getwd()
 	for scanner.Scan() {
 		var message rpcMessage
@@ -845,7 +849,10 @@ func TestACPHelperProcess(t *testing.T) {
 				})
 			}
 		case "session/close":
-			if promptMode == "steering_reset_failure" {
+			closeCount++
+			if promptMode == "close_failure" || (promptMode == "close_once_failure" && closeCount == 1) {
+				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "close failed"}})
+			} else if promptMode == "steering_reset_failure" {
 				_ = encoder.Encode(rpcMessage{JSONRPC: "2.0", ID: message.ID, Error: &rpcError{Code: -32603, Message: "reset failed"}})
 			} else {
 				writeHelperResult(encoder, message.ID, map[string]any{})

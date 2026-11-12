@@ -75,6 +75,9 @@ func (s *Service) loadImageSource(ctx context.Context, request ViewImageRequest)
 		if err != nil {
 			return loadedImageSource{}, err
 		}
+		if err := s.guardProtectedLocalPath(resolved.Abs, resolved.Display, false); err != nil {
+			return loadedImageSource{}, err
+		}
 		info, err := os.Stat(resolved.Abs)
 		if err != nil {
 			return loadedImageSource{}, err

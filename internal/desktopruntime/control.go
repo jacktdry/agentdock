@@ -14,7 +14,8 @@ type controlActionParams struct {
 }
 
 type ControlRuntimeStatus struct {
-	NexusConnected bool
+	NexusConnected          bool
+	NexusIdentityGeneration string
 }
 
 // DispatchControlRequest 是后台核心的本地控制 API。这里只暴露桌面日常管理能力，
@@ -38,6 +39,7 @@ func DispatchControlRequest(ctx context.Context, request desktopcontrol.Request,
 			return nil, err
 		}
 		status.NexusConnected = runtimeStatus.NexusConnected
+		status.NexusIdentityGeneration = runtimeStatus.NexusIdentityGeneration
 		return status, nil
 	case "tunnel.status":
 		return platformTunnelStatus(ctx, params.RuntimeRoot)

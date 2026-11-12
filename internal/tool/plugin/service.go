@@ -27,8 +27,10 @@ type Service struct {
 	envs       *envstore.Store
 	ws         *workspace.Workspace
 
-	mcpLeaseMu sync.Mutex
-	mcpLeases  map[string]func()
+	mcpLeaseMu         sync.Mutex
+	mcpLeases          map[string]func()
+	desktopCandidateMu sync.Mutex
+	desktopCandidates  map[string]*desktopCandidateRecord
 }
 
 type CapabilityItem struct {
@@ -65,7 +67,7 @@ func (s *Service) CapabilityItems() ([]CapabilityItem, error) {
 func New(cfg config.Config, manager *pluginruntime.Manager, mcpClients *mcpclient.Manager, envs *envstore.Store, ws *workspace.Workspace) *Service {
 	return &Service{
 		cfg: cfg, manager: manager, mcpClients: mcpClients, envs: envs, ws: ws,
-		mcpLeases: make(map[string]func()),
+		mcpLeases: make(map[string]func()), desktopCandidates: make(map[string]*desktopCandidateRecord),
 	}
 }
 
@@ -94,11 +96,19 @@ func (s *Service) reconcileMCPState(state pluginruntime.State) error {
 }
 
 func (s *Service) reconcileMCP(excludedPlugin, activationPlugin string, override *pluginruntime.Installed) error {
+	return s.reconcileMCPWithGrantPolicy(excludedPlugin, activationPlugin, override, false)
+}
+
+func (s *Service) reconcileMCPWithGrantPolicy(excludedPlugin, activationPlugin string, override *pluginruntime.Installed, keepRemovedGrants bool) error {
 	configs, leases, err := s.ownedMCPConfigs(excludedPlugin, activationPlugin, override)
 	if err != nil {
 		return err
 	}
-	if err := s.mcpClients.SetOwnedServers(configs); err != nil {
+	apply := s.mcpClients.SetOwnedServers
+	if keepRemovedGrants {
+		apply = s.mcpClients.SetOwnedServersPreservingRemovedGrants
+	}
+	if err := apply(configs); err != nil {
 		releasePluginLeases(leases)
 		return err
 	}
@@ -123,6 +133,21 @@ func (s *Service) ReleaseMCPLeases() {
 	releasePluginLeases(leases)
 }
 
+func (s *Service) ReleaseDesktopCandidates() {
+	if s == nil {
+		return
+	}
+	s.desktopCandidateMu.Lock()
+	candidates := s.desktopCandidates
+	s.desktopCandidates = make(map[string]*desktopCandidateRecord)
+	s.desktopCandidateMu.Unlock()
+	for _, candidate := range candidates {
+		if candidate != nil && candidate.prepared != nil {
+			candidate.prepared.Close()
+		}
+	}
+}
+
 func releasePluginLeases(leases map[string]func()) {
 	for _, release := range leases {
 		if release != nil {
@@ -132,6 +157,15 @@ func releasePluginLeases(leases map[string]func()) {
 }
 
 func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, error) {
+	release, err := s.manager.Store().AcquireManagement(ctx)
+	if err != nil {
+		return nil, pluginToolError(err)
+	}
+	defer release()
+	return s.manage(ctx, request)
+}
+
+func (s *Service) manage(ctx context.Context, request ManageRequest) (Result, error) {
 	action := strings.ToLower(strings.TrimSpace(request.Action))
 	switch action {
 	case "inspect":

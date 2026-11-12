@@ -29,6 +29,9 @@ func scanSharedUIHardcoded(root string) error {
 			return nil
 		}
 		ext := filepath.Ext(path)
+		if strings.HasSuffix(entry.Name(), ".test.ts") {
+			return nil
+		}
 		if ext != ".vue" && ext != ".ts" {
 			return nil
 		}

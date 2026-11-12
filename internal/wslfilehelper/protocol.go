@@ -5,7 +5,8 @@ package wslfilehelper
 // Request 是 Windows Host 通过 stdin 发送给 Linux helper 的内部协议。
 // 这是内部实现协议，不直接暴露给 MCP 调用方。
 type Request struct {
-	Action string `json:"action"`
+	Action         string   `json:"action"`
+	ProtectedRoots []string `json:"protected_roots"`
 
 	Path    string `json:"path"`
 	NewPath string `json:"new_path"`

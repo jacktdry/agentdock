@@ -14,8 +14,9 @@ import (
 func TestExternalWorkerConfig(t *testing.T) {
 	options := ExternalWorkerOptions{Cwd: "/workspace", Route: externalRoute(externalStart())}
 	cfg := externalWorkerConfig(options)
+	assertBrowserWorkerRuntime(t, cfg)
 	want := []string{"--yes", "chrome-devtools-mcp@1.7.0", "--wsEndpoint=" + options.Route.Start.Endpoint, "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}
-	if cfg.Command != "npx" || cfg.Transport != mcpclient.TransportStdio || cfg.Cwd != options.Cwd || cfg.TimeoutMS != 60000 || cfg.Name != ManagedEngineServerName || !reflect.DeepEqual(cfg.Args, want) {
+	if cfg.Transport != mcpclient.TransportStdio || cfg.Cwd != options.Cwd || cfg.TimeoutMS != 60000 || cfg.Name != ManagedEngineServerName || !reflect.DeepEqual(cfg.Args, want) {
 		t.Fatalf("unsafe external config: %+v", cfg)
 	}
 	s := fakeManagedSession(t, "external")

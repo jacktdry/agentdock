@@ -6,6 +6,54 @@
 review_threshold_lines: 300
 
 scripts:
+  - path: packaging/macos/build-next-shared.sh
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: packaging/macos/next_shared_bundle.py
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: packaging/macos/deploy-next-shared.py
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+    oversize_justification: Next-only 部署安全交易需在同一受控流程核對來源身份、服務重新註冊、失敗回滾與原服務隔離；目前 329 行，後續可獨立重構，但不可省略這些保護。
+    notes: Next-only 交易部署、服务重新注册及保留回滚 Contents；不得修改 stable App。
+
+  - path: packaging/macos/install-next-shared.py
+    class: packaging
+    owner: desktop
+    public_contract: false
+    deletable: false
+
+  - path: scripts/release/next-unpublished-candidate-macos.sh
+    class: release
+    owner: desktop
+    public_contract: false
+    deletable: false
+    notes: Next-only 手動觸發的未發佈來源候選驗證；僅驗證 ad-hoc 包與來源身分，不上傳或公開發行。
+
+  - path: scripts/test/test-next-shared-deploy.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+    oversize_justification: Next-only 手動部署安全測試含 SemVer preflight、受限 Core metadata、stage/owner、原生 PID 與原子回滾失敗注入的正負測；聚合於單一安全邊界測試檔避免覆蓋遺漏。
+    notes: Next-only 安装、回滚及服务重注册的安全回归测试。
+
+  - path: scripts/test/test-next-shared-package.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+    oversize_justification: Next-only macOS App 安全封裝與原生身分的端到端負向測試，覆蓋簽章、版本、bundle 檔案佈局及候選隔離；目前約 410 行，不能略過重要平台契約。
+
   - path: scripts/install/install.sh
     class: bootstrap
     owner: installer
@@ -85,6 +133,13 @@ scripts:
     public_contract: false
     deletable: false
     oversize_justification: Linux Installer Engine VPS E2E（非 root + sudo + systemd + 身份/属主断言），URL 经 env 注入。
+
+  - path: scripts/test/test-macos-identity.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+    notes: stable/Next App Bundle identity 和 LaunchAgent metadata fixture。
 
   - path: scripts/test/test-macos-app.sh
     class: test
@@ -180,6 +235,13 @@ scripts:
     public_contract: false
     deletable: false
 
+  - path: packaging/macos/app-identity.sh
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: build-app.sh 使用的 stable/Next 固定 App identity 與 LaunchAgent metadata contract。
+
   - path: packaging/macos/build-app.sh
     class: packaging
     owner: release
@@ -222,6 +284,48 @@ scripts:
     legacy_oversize: true
     oversize_justification: v0.8.2/v0.8.3 已发布 updater 会安装并可能在恢复路径调用该脚本；这里保留 v0.8.3 原始字节作为跨版本 Release 兼容资产，禁止新增产品能力。
     notes: 仅进入 Windows Release ZIP 兼容旧 updater；generation 迁移成功后从安装目录删除，旧版本退出支持窗口后可整体移除。
+
+  - path: packaging/windows/NextAgentDock.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next-only Inno source, build remains fail-closed; do not reuse Stable identity, payload or code.iss.
+
+  - path: packaging/windows/includes/next-code.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next-only defensive path and identity checks; not an accepted installer lifecycle.
+
+  - path: packaging/windows/includes/next-payload.iss
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Reserved Next-only payload declaration, no Stable fallback.
+
+  - path: packaging/windows/prepare-next-rc.py
+    class: packaging
+    owner: release
+    public_contract: false
+    deletable: false
+    notes: Next RC source and offline candidate input verifier; installer compilation is always refused.
+
+  - path: scripts/test/test-next-windows-packaging.py
+    class: test
+    owner: release
+    public_contract: false
+    deletable: false
+    oversize_justification: 包含 Next 來源候選版檔案身分、架構、SHA、輸入污染、禁止 Installer 編譯與 canonical manifest 負向驗證；不得視為 Windows 原生 UAT。
+
+  - path: scripts/test/test-next-wpf-runtime.py
+    class: test
+    owner: desktop
+    public_contract: false
+    deletable: false
+    notes: Windows Next manifest 身分靜態檢查；native 測試需 Windows host，不作本階段 release gate。
 
   - path: packaging/windows/AgentDock.iss
     class: packaging

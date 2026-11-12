@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,18 +11,28 @@ import (
 )
 
 type Service struct {
-	managers  map[string]*acpruntime.Manager
-	defaultID string
+	managers            map[string]*acpruntime.Manager
+	defaultID           string
+	newSessionLifecycle acpruntime.SessionLifecycleOptions
 }
 
 func NewMulti(defaultID string, managers map[string]*acpruntime.Manager) *Service {
+	service, _ := NewMultiWithDefaultLifecycle(defaultID, managers, acpruntime.SessionLifecycleOptions{})
+	return service
+}
+
+func NewMultiWithDefaultLifecycle(defaultID string, managers map[string]*acpruntime.Manager, lifecycle acpruntime.SessionLifecycleOptions) (*Service, error) {
+	normalized, err := acpruntime.NormalizeSessionLifecycleOptions(lifecycle)
+	if err != nil {
+		return nil, err
+	}
 	copied := make(map[string]*acpruntime.Manager, len(managers))
 	for id, manager := range managers {
 		if manager != nil {
 			copied[id] = manager
 		}
 	}
-	return &Service{managers: copied, defaultID: strings.TrimSpace(defaultID)}
+	return &Service{managers: copied, defaultID: strings.TrimSpace(defaultID), newSessionLifecycle: normalized}, nil
 }
 
 func (s *Service) Close() error {
@@ -55,4 +66,64 @@ func (s *Service) managerFor(profileID string) (*acpruntime.Manager, string, err
 		return nil, "", validationError("ACP_PROFILE_NOT_FOUND", "ACP profile was not found", map[string]any{"profile_id": profileID})
 	}
 	return manager, profileID, nil
+}
+
+// IsLiveManagedSession validates a known local ACP session against the exact
+// configured profile without opening/loading a persisted session. This is
+// advisory (not a native child ownership or dispatch capability).
+func (s *Service) IsLiveManagedSession(profileID, localID string) bool {
+	if s == nil || profileID == "" || localID == "" {
+		return false
+	}
+	manager, _, err := s.managerFor(profileID)
+	return err == nil && manager.IsLiveManagedSession(localID)
+}
+
+// NextCodexAppServerBirths requires the exact Codex profile and a private
+// authenticated Adapter challenge; never activate an absent ACP process.
+// A kernel-correlated app-server does not prove per-thread MCP ownership.
+func (s *Service) NextCodexAppServerBirths(ctx context.Context, key []byte) (acpruntime.NextCodexAppServerBirths, error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || len(key) != 32 {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex MCP app-server evidence unavailable")
+	}
+	manager, profileID, err := s.managerFor("codex")
+	if err != nil || profileID != "codex" {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex MCP app-server evidence unavailable")
+	}
+	return manager.NextCodexAppServerBirths(ctx, key)
+}
+
+// BootstrapNextCodexAppServerBirths is an explicit Next-only pre-Session
+// operation. It never injects MCP configurations or grants cleanup rights.
+func (s *Service) BootstrapNextCodexAppServerBirths(ctx context.Context, key []byte) (acpruntime.NextCodexAppServerBirths, error) {
+	manager, profileID, err := s.managerFor("codex")
+	if err != nil || profileID != "codex" || ctx == nil || ctx.Err() != nil || len(key) != 32 {
+		return acpruntime.NextCodexAppServerBirths{}, errors.New("Next Codex bootstrap unavailable")
+	}
+	return manager.BootstrapNextCodexAppServerBirths(ctx, key)
+}
+
+func (s *Service) InstallNextCodexInstrumentedSessionMCP(server acpruntime.SessionMCPServer) error {
+	m, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return errors.New("Next Codex MCP installation unavailable")
+	}
+	return m.InstallInstrumentedSessionMCP(server)
+}
+func (s *Service) NextCodexMCPBorrowers() int {
+	m, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return -1
+	}
+	return m.InstrumentedSessionMCPBorrowers()
+}
+
+// NextCodexAdapterProcessID observes the existing manager only; it never
+// starts or attaches a native Adapter. Zero means no owned live Adapter PID.
+func (s *Service) NextCodexAdapterProcessID() int {
+	manager, id, err := s.managerFor("codex")
+	if err != nil || id != "codex" {
+		return -1
+	}
+	return manager.AdapterProcessID()
 }

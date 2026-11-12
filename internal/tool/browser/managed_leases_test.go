@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
@@ -74,7 +76,7 @@ func leasePages(isolation string, id any) map[string]any {
 	return map[string]any{"structuredContent": map[string]any{"pages": []any{map[string]any{"id": id, "isolatedContext": isolation}}}}
 }
 func leaseScope() RequestScope {
-	return RequestScope{WorkspaceID: "workspace", CanonicalWorkspaceRoot: "/workspace", OwnerTaskID: "task", OwnerSessionID: "session", OwnerACPSessionID: "acp", Provenance: ScopeACP}
+	return RequestScope{WorkspaceID: "workspace", CanonicalWorkspaceRoot: filepath.Join(os.TempDir(), "agentdock-browser-lease-workspace"), OwnerTaskID: "task", OwnerSessionID: "session", OwnerACPSessionID: "acp", Provenance: ScopeACP}
 }
 func leaseStart(t *testing.T) ResolvedStart {
 	t.Helper()
@@ -97,6 +99,13 @@ func TestManagedLeaseIsolationAndOperations(t *testing.T) {
 	m := NewManagedLeaseManager(b)
 	a, ab := acquireLease(t, m)
 	c, cb := acquireLease(t, m)
+	// Windows may return the same clock tick for acquire and immediate calls.
+	// Use an older fixture timestamp to observe a successful refresh reliably.
+	l, _ := m.lease(a.BrowserLeaseID)
+	previousActivity := a.LastActiveAt.Add(-time.Second)
+	l.mu.Lock()
+	l.metadata.LastActiveAt = previousActivity
+	l.mu.Unlock()
 	if a.BrowserLeaseID == c.BrowserLeaseID || a.BrowserSessionID == c.BrowserSessionID || a.IsolationContextName == c.IsolationContextName || a.WorkerID == c.WorkerID || a.PageID == c.PageID {
 		t.Fatal("lease identities reused")
 	}
@@ -127,8 +136,8 @@ func TestManagedLeaseIsolationAndOperations(t *testing.T) {
 			t.Fatalf("%+v", call)
 		}
 	}
-	l, _ := m.lease(a.BrowserLeaseID)
-	if !l.metadata.LastActiveAt.After(a.LastActiveAt) {
+	l, _ = m.lease(a.BrowserLeaseID)
+	if !l.metadata.LastActiveAt.After(previousActivity) {
 		t.Fatal("activity not recorded")
 	}
 	before := l.metadata.LastActiveAt
@@ -252,24 +261,28 @@ func TestManagedLeaseReleaseCleanup(t *testing.T) {
 			} else if err != nil || meta.CleanupState != CleanupComplete {
 				t.Fatalf("%+v %v", meta, err)
 			}
-			if failure != "none" && (meta.CleanupError == "" || meta.CleanupReason == "") {
-				t.Fatal("missing diagnostic")
+			if b.stopErr != nil {
+				if meta.CleanupError != b.stopErr.Error() || meta.CleanupReason != "exclusive managed worker cleanup failed" || !errors.Is(err, b.stopErr) {
+					t.Fatal("Stop failure diagnostic lost or polluted by unused close_page")
+				}
+			} else if meta.CleanupError != "" || meta.CleanupReason != "exclusive managed worker stopped" {
+				t.Fatal("successful owned Stop reported bogus cleanup error")
 			}
 			if b.stopErr != nil {
 				repeated, err := m.Release(context.Background(), leaseScope(), a.BrowserLeaseID)
 				assertBrowserCode(t, err, ErrActionFailed)
-				if repeated != meta || len(b.calls) != 3 {
+				if repeated != meta || len(b.calls) != 2 {
 					t.Fatal("failed cleanup lost its diagnostic or retried implicitly")
 				}
 			}
-			if b.calls[1].tool != "close_page" || fmt.Sprint(b.calls[1].args["pageId"]) != a.PageID || b.calls[2].tool != "stop" || b.calls[2].worker != a.WorkerID {
+			if len(b.calls) != 2 || b.calls[1].tool != "stop" || b.calls[1].worker != a.WorkerID || !reflect.DeepEqual(b.stopped, []string{a.WorkerID}) {
 				t.Fatal("cleanup order/target")
 			}
 			_, err = m.Call(context.Background(), leaseScope(), a.BrowserLeaseID, "click", nil)
 			assertBrowserCode(t, err, ErrLeaseStateInvalid)
 			if b.stopErr == nil {
 				_, err = m.Release(context.Background(), leaseScope(), a.BrowserLeaseID)
-				if err != nil || len(b.calls) != 3 {
+				if err != nil || len(b.calls) != 2 {
 					t.Fatal("not idempotent")
 				}
 			}
@@ -499,5 +512,58 @@ func TestManagedLeaseStaleWorkerCannotMigratePage(t *testing.T) {
 	result, err := m.Call(context.Background(), leaseScope(), current.BrowserLeaseID, "click", nil)
 	if err != nil || result["args"].(map[string]any)["pageId"] != float64(1) {
 		t.Fatalf("new generation affected: %v %v", result, err)
+	}
+}
+
+// Marks the existing fake as a shared borrow without starting a worker.
+type fakeSharedLeaseBackend struct{ fakeLeaseBackend }
+
+func (*fakeSharedLeaseBackend) sharedManagedBorrowCleanup() {}
+
+func TestManagedLeaseSharedReleaseCleanup(t *testing.T) {
+	for _, failure := range []string{"none", "close", "stop", "both"} {
+		t.Run(failure, func(t *testing.T) {
+			b := &fakeSharedLeaseBackend{}
+			if failure == "close" || failure == "both" {
+				b.closeErr = errors.New("close failed")
+			}
+			if failure == "stop" || failure == "both" {
+				b.stopErr = errors.New("borrow stop failed")
+			}
+			m := NewManagedLeaseManager(b)
+			a, _ := acquireLease(t, m)
+			sibling, _ := acquireLease(t, m)
+			meta, err := m.Release(context.Background(), a.Scope, a.BrowserLeaseID)
+			reason := "shared managed owned page closed and borrow ended"
+			if b.closeErr != nil {
+				reason = "shared managed borrow ended after page close failed"
+			}
+			if b.stopErr != nil {
+				assertBrowserCode(t, err, ErrActionFailed)
+				if meta.CleanupState != CleanupFailed || !errors.Is(err, b.stopErr) {
+					t.Fatal("borrow Stop failure concealed")
+				}
+				reason = "shared managed page or borrow cleanup failed"
+			} else if err != nil || meta.CleanupState != CleanupComplete {
+				t.Fatalf("%+v %v", meta, err)
+			}
+			var diagnostic string
+			if joined := errors.Join(b.closeErr, b.stopErr); joined != nil {
+				diagnostic = joined.Error()
+			}
+			if meta.CleanupError != diagnostic || meta.CleanupReason != reason {
+				t.Fatalf("inaccurate shared cleanup diagnostic: %+v", meta)
+			}
+			if len(b.calls) != 4 || b.calls[2].tool != "close_page" || b.calls[2].worker != a.WorkerID || len(b.calls[2].args) != 1 || fmt.Sprint(b.calls[2].args["pageId"]) != a.PageID || b.calls[3].tool != "stop" || b.calls[3].worker != a.WorkerID || !reflect.DeepEqual(b.stopped, []string{a.WorkerID}) {
+				t.Fatal("shared cleanup must close exact owned page before ending borrow")
+			}
+			repeated, repeatErr := m.Release(context.Background(), a.Scope, a.BrowserLeaseID)
+			if repeated != meta || len(b.calls) != 4 || (repeatErr != nil) != (err != nil) {
+				t.Fatal("shared release not idempotent")
+			}
+			if _, err := m.Call(context.Background(), sibling.Scope, sibling.BrowserLeaseID, "click", nil); err != nil {
+				t.Fatal("sibling lease disrupted", err)
+			}
+		})
 	}
 }

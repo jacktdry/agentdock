@@ -14,15 +14,57 @@ import (
 
 	"github.com/uvwt/agentdock/internal/fs/processlock"
 	"github.com/uvwt/agentdock/internal/updateengine"
+	"github.com/uvwt/agentdock/internal/updateidentity"
+	"github.com/uvwt/agentdock/internal/updateplatform"
 )
 
 type macOSUpdateServiceState struct {
-	SchemaVersion int  `json:"schema_version"`
-	CoreEnabled   bool `json:"core_enabled"`
-	TunnelEnabled bool `json:"tunnel_enabled"`
+	SchemaVersion int    `json:"schema_version"`
+	Variant       string `json:"variant,omitempty"`
+	CoreEnabled   bool   `json:"core_enabled"`
+	TunnelEnabled bool   `json:"tunnel_enabled"`
 }
 
 func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (applyResult, bool, error) {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return applyResult{}, true, err
+	}
+	var sourceRequirement string
+	if id.Variant == "next" {
+		if err := validateUpdateRequest(request); err != nil {
+			return applyResult{}, true, err
+		}
+		for _, path := range []string{request.DesktopTargetPath, request.DesktopStagedPath} {
+			if err := id.ValidateBundle(ctx, path); err != nil {
+				return applyResult{}, true, err
+			}
+			if err := id.ValidateSignatures(ctx, path); err != nil {
+				return applyResult{}, true, err
+			}
+		}
+
+		sourceRequirement, err = updateplatform.NextSourceSigningRequirement(ctx, request.DesktopTargetPath)
+		if err != nil {
+			return applyResult{}, true, err
+		}
+		if err := updateplatform.ValidateNextSigningContinuity(ctx, request.DesktopTargetPath, request.DesktopStagedPath); err != nil {
+			return applyResult{}, true, err
+		}
+		if err := validateMacOSDesktopRuntime(ctx, request.DesktopTargetPath, request.CurrentVersion); err != nil {
+			return applyResult{}, true, err
+		}
+		if err := validateMacOSDesktopRuntime(ctx, request.DesktopStagedPath, request.TargetVersion); err != nil {
+			return applyResult{}, true, err
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return applyResult{}, true, err
+		}
+		if err := updateidentity.SafePath(filepath.Join(id.Root(home), "update-services.json")); err != nil {
+			return applyResult{}, true, err
+		}
+	}
 	if err := validateDesktopUpdateCoordination(); err != nil {
 		return applyResult{}, true, err
 	}
@@ -33,6 +75,9 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 	sourceArbiter := filepath.Join(request.DesktopTargetPath, "Contents", "Helpers", "agentdock-arbiter")
 	targetArbiter := filepath.Join(request.DesktopStagedPath, "Contents", "Helpers", "agentdock-arbiter")
 	if !executableRegularFile(sourceArbiter) || !executableRegularFile(targetArbiter) {
+		if id.Variant == "next" {
+			return applyResult{}, true, errors.New("Next requires both arbiters")
+		}
 		// Arbiter was introduced after the early 0.8.x App update protocol. If either side of
 		// the transition predates it, use the already-established legacy atomic App updater.
 		// New Release packages are required to embed Arbiter by the macOS packaging test, so
@@ -44,7 +89,20 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 	if err != nil {
 		return applyResult{}, true, err
 	}
+	if id.Variant == "next" {
+		for _, path := range []string{filepath.Join(root, "update", "staging.lock"), filepath.Join(root, "update", "transaction.lock"), filepath.Join(root, "update", "transaction.json")} {
+			if err := updateidentity.SafePath(path); err != nil {
+				return applyResult{}, true, err
+			}
+		}
+	}
+
 	store, err := updateengine.NewStore(root)
+	if err != nil {
+		return applyResult{}, true, err
+	}
+	serviceStatePath := filepath.Join(root, "update-services.json")
+	serviceState, err := readMacOSUpdateServiceState(serviceStatePath)
 	if err != nil {
 		return applyResult{}, true, err
 	}
@@ -69,9 +127,19 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 		return applyResult{}, true, err
 	}
 	parent := filepath.Dir(filepath.Clean(request.DesktopTargetPath))
-	trialPath := filepath.Join(parent, ".AgentDock.app.trial."+transaction.TransactionID)
+	trialPath := filepath.Join(parent, "."+id.AppName()+".trial."+transaction.TransactionID)
 	arbiterDir := filepath.Join(root, "update", "arbiters", transaction.TransactionID)
 	arbiterPath := filepath.Join(arbiterDir, "agentdock-arbiter")
+	if id.Variant == "next" {
+		for _, path := range []string{trialPath, arbiterDir} {
+			if err := updateidentity.SafePath(path); err != nil {
+				return applyResult{}, true, err
+			}
+			if _, err := os.Lstat(path); !os.IsNotExist(err) {
+				return applyResult{}, true, errors.New("Next staging path already exists or is inaccessible")
+			}
+		}
+	}
 	cleanupPreflight := true
 	defer func() {
 		if cleanupPreflight {
@@ -93,32 +161,34 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 		return applyResult{}, true, err
 	}
 
-	serviceStatePath := filepath.Join(root, "update-services.json")
-	serviceState, err := readMacOSUpdateServiceState(serviceStatePath)
-	if err != nil {
-		return applyResult{}, true, err
-	}
 	appPIDs, err := runningMacOSAppPIDs(ctx, request.DesktopTargetPath)
 	if err != nil {
 		return applyResult{}, true, err
 	}
 	var healthURL string
 	if serviceState.CoreEnabled {
-		if candidates := macOSConfiguredHealthCandidates(); len(candidates) > 0 {
+		if id.Variant == "next" {
+			healthURL = "http://127.0.0.1:8767/healthz"
+		} else if candidates := macOSConfiguredHealthCandidates(); len(candidates) > 0 {
 			healthURL = candidates[0]
 		}
 	}
 	transaction.MacOS = &updateengine.MacOSPlan{
-		SourceArbiterPath: arbiterPath,
-		TargetAppPath:     filepath.Clean(request.DesktopTargetPath),
-		TrialAppPath:      trialPath,
-		HandoffPath:       filepath.Join(root, "update-handoff.json"),
-		ResultPath:        filepath.Join(root, "update-result.json"),
-		ServiceStatePath:  serviceStatePath,
-		HealthURL:         healthURL,
-		AppWasRunning:     len(appPIDs) > 0,
-		CoreWasEnabled:    serviceState.CoreEnabled,
-		TunnelEnabled:     serviceState.TunnelEnabled,
+		Variant:            id.Variant,
+		SigningRequirement: sourceRequirement,
+		SourceArbiterPath:  arbiterPath,
+		TargetAppPath:      filepath.Clean(request.DesktopTargetPath),
+		TrialAppPath:       trialPath,
+		HandoffPath:        filepath.Join(root, "update-handoff.json"),
+		ResultPath:         filepath.Join(root, "update-result.json"),
+		ServiceStatePath:   serviceStatePath,
+		HealthURL:          healthURL,
+		AppWasRunning:      len(appPIDs) > 0,
+		CoreWasEnabled:     serviceState.CoreEnabled,
+		TunnelEnabled:      serviceState.TunnelEnabled,
+	}
+	if _, err := updateengine.ValidateMacOSIdentity(root, transaction); err != nil {
+		return applyResult{}, true, err
 	}
 	if err := store.WriteTransaction(transaction); err != nil {
 		return applyResult{}, true, err
@@ -143,12 +213,20 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 	)
 	command.Dir = root
 	output, runErr := command.CombinedOutput()
+	if id.Variant == "next" {
+		if _, err := updateengine.ValidateMacOSIdentity(root, transaction); err != nil {
+			return applyResult{}, true, err
+		}
+	}
 	result, resultErr := store.ReadResult(transaction.TransactionID)
 	if resultErr != nil {
 		return applyResult{}, true, errors.Join(
 			fmt.Errorf("macOS update Arbiter did not persist a terminal result: %w", resultErr),
 			runErr,
 		)
+	}
+	if id.Variant == "next" && (result.TransactionID != transaction.TransactionID || result.Platform != "darwin" || result.SourceVersion != transaction.SourceVersion || result.TargetVersion != transaction.TargetVersion) {
+		return applyResult{}, true, errors.New("Next terminal result does not belong to this transaction")
 	}
 	cleanupMacOSUpdateArtifactsForTerminalResult(
 		result,
@@ -169,8 +247,10 @@ func applyManagedDesktopOnlyUpdate(ctx context.Context, request applyRequest) (a
 	}
 
 	targetCore := filepath.Join(request.DesktopTargetPath, "Contents", "Helpers", "agentdock")
-	if err := finalizeLegacySkillMigration(ctx, targetCore, request.Output); err != nil {
-		fmt.Fprintf(request.Output, "警告：legacy Skill migration 暂未收口，旧目录将继续保留用于回滚: %v\n", err)
+	if id.Variant == "stable" {
+		if err := finalizeLegacySkillMigration(ctx, targetCore, request.Output); err != nil {
+			fmt.Fprintf(request.Output, "警告：legacy Skill migration 暂未收口，旧目录将继续保留用于回滚: %v\n", err)
+		}
 	}
 	fmt.Fprintf(request.Output, "macOS App 原子更新已提交：%s → %s\n", normalizeVersion(request.CurrentVersion), normalizeVersion(request.TargetVersion))
 	return applyResult{}, true, nil
@@ -215,6 +295,15 @@ func copyKnownGoodMacOSArbiter(ctx context.Context, sourcePath, targetPath strin
 }
 
 func readMacOSUpdateServiceState(path string) (macOSUpdateServiceState, error) {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return macOSUpdateServiceState{}, err
+	}
+	if id.Variant == "next" {
+		if err := updateidentity.SafePath(path); err != nil {
+			return macOSUpdateServiceState{}, err
+		}
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return macOSUpdateServiceState{}, fmt.Errorf("read macOS update service state: %w", err)
@@ -222,6 +311,9 @@ func readMacOSUpdateServiceState(path string) (macOSUpdateServiceState, error) {
 	var state macOSUpdateServiceState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return macOSUpdateServiceState{}, fmt.Errorf("parse macOS update service state: %w", err)
+	}
+	if id.Variant == "next" && state.Variant != "next" {
+		return macOSUpdateServiceState{}, errors.New("Next service state identity missing or mismatched")
 	}
 	if state.SchemaVersion != 1 {
 		return macOSUpdateServiceState{}, fmt.Errorf("unsupported macOS update service state schema: %d", state.SchemaVersion)

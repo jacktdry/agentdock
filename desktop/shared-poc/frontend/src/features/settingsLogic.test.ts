@@ -20,4 +20,15 @@ describe('basic settings logic', () => {
     })
     expect(settingsPayload(draft, current, true).coreAutostart).toBe(false)
   })
+
+  it('preserves Connection-owned port when the settings surface cannot mutate it', () => {
+    const current = { port: 8767, logLevel: 'info', coreAutostart: true }
+    const draft = { port: 19000, logLevel: 'debug', coreAutostart: true }
+
+    expect(settingsPayload(draft, current, true, false)).toEqual({
+      port: 8767,
+      logLevel: 'debug',
+      coreAutostart: true,
+    })
+  })
 })

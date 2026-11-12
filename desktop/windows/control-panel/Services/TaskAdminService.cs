@@ -21,6 +21,8 @@ internal static class TaskAdminService
     {
         try
         {
+            // Guard direct helper invocation before parsing Stable task defaults or COM access.
+            WindowsProductIdentity.Current.RequireSupportedRuntime();
             var request = Parse(arguments);
             EnsureAdministrator();
             if (request.Action is "prepare-elevated" or "set-enabled")

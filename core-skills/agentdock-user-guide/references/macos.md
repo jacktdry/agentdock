@@ -1,6 +1,8 @@
 # macOS Desktop 配置与生效
 
-适用于通过 `AgentDock.app` 运行的 macOS Desktop。不要把 Linux 的 systemd 环境文件、Windows runtime root 或 Docker Compose 流程套到这里。
+本文件下方列出的 `AgentDock.app`、`~/Library/Application Support/AgentDock` 和默认 Core 端口描述的是 **stable macOS Desktop**。不要把 Linux 的 systemd 环境文件、Windows runtime root 或 Docker Compose 流程套到这里。
+
+**AgentDock Next 独立实例**：先由 `agentdock_context` 确认当前实例身份，Next 配置目录为 `~/Library/Application Support/AgentDock Next`，Core 状态目录 `~/.agentdock-next`，默认工作目录 `~/AgentDock Next`，Core 端口 8767，App 为 `~/Applications/AgentDock Next.app`（实际安装路径需验证）。Next 不共用 stable 的 Core、配置、Managed Skills、MCP Registry 或进程生命周期。任何保存、更改或重新启动，都只允许明确绑定当前实例实际拥有的资源；Next UI 与 stable UI 的设置入口可能不同，先检查当前版本的能力，不能借用 stable 设置界面当作 Next 的替代。
 
 ## 配置事实源
 

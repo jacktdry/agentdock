@@ -599,7 +599,7 @@ M6 Browser Broker / Computer Control Broker 已完成 runtime、lifecycle、diag
 - Browser lease operation 不依賴 global selected page；company Edge 仍 fail closed，不 fallback 到 managed Chrome；
 - Codex / Antigravity ACP child 不再自帶 `chrome-devtools-mcp`、`cua-repl`、`node_repl` / Sky Computer Use；
 - Computer Control default provider 為 Orca，`foreground=forbidden` 預設 fail closed，Browser task 不會 silent fallback 到 Computer Use；
-- `antigravity-acp 1.2.0-agentdock.5` 支援 Browser + Computer 兩個 AgentDock host-owned MCP，standalone `agy` 全域能力不受影響；
+- `antigravity-acp 1.2.0-agentdock.5` 起支援 Browser + Computer 兩個 AgentDock host-owned MCP；AgentDock Next 目前使用 `1.2.0-agentdock.6`（`5cb54d2`，含 `9f56b52` macOS Keychain compatibility fix），standalone `agy` 全域能力不受影響；
 - 30 秒 lifecycle runner、managed/external 5 分鐘 idle TTL、bounded cleanup recovery 與 acquire-orphan recovery 已落地；
 - `browser_broker` diagnostics 可追 owner → lease → worker → page/context → connector/process ownership，且不輸出 capability token；
 - 8-owner Broker stress 驗證 4 active + 4 queued，另有 4 個真 managed MCP/Chrome 同時 lease 的 live isolation stress；20 次真實 Antigravity session lifecycle 驗證 capability/process descendants 回到 baseline；
@@ -618,7 +618,7 @@ M6 已交付 browser ownership / lease model、`chrome-devtools-mcp@1.7.0` engin
 - cleanup/recovery 只對 AgentDock-owned worker/connector/page 有 authority；external browser PID 永遠只是 observation；
 - terminal metadata 暫留供 idempotent release 與 diagnostics 使用，實體 browser/MCP resource 已回收；metadata retention/pruning 可在後續 observability policy 再定義。
 
-### M7 — ACP Manager
+### M7 — ACP Manager（code / stress completed）
 
 - 將既有 `browser_broker` / `computer_broker` diagnostics 納入 ACP session diagnostics；
 - persistent / ephemeral / idle-managed policy 決定何時保留或釋放 host-owned capability；
@@ -627,6 +627,7 @@ M6 已交付 browser ownership / lease model、`chrome-devtools-mcp@1.7.0` engin
 - 明確區分 persisted / loaded / running / idle；
 - adapter process recycle 仍由 adapter fork 負責，不在 AgentDock Core 寫 Antigravity / Codex 專屬 process-name kill；
 - 不重新建立 ACP-owned browser backend，也不繞過 Computer Control Broker。
+- 2026-10-04 M7 real stress：Codex / Antigravity 各 20 個 prompt-driven ephemeral session；每批 Browser owner / Computer active session 回 0，adapter descendants 不累積；4 live managed Chrome lease 與 8-owner 4+4 queue regression再次通過。
 
 ## M6 Verification Result
 

@@ -11,6 +11,8 @@ BUILD_COMMIT ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf unkn
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BUILD_LDFLAGS := -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$(BUILD_COMMIT) -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$(BUILD_DATE)
 DOCKER_BUILD_ARGS := --build-arg BUILD_COMMIT=$(BUILD_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE)
+# All maintained Go source roots; update when adding a root. Excludes generated dist outputs.
+GO_SOURCE_PACKAGES := ./cmd/... ./desktop/... ./internal/... ./scripts/... ./tools/...
 
 fmt:
 	gofmt -w ./cmd ./internal ./desktop
@@ -23,7 +25,7 @@ fmt-check:
 	fi
 
 test:
-	go test ./...
+	go test $(GO_SOURCE_PACKAGES)
 
 test-scripts:
 	./scripts/test/check-scripts.sh
@@ -43,10 +45,10 @@ i18n-coverage:
 	go run ./tools/i18n coverage
 
 vet:
-	go vet ./...
+	go vet $(GO_SOURCE_PACKAGES)
 
 race:
-	go test -race ./...
+	go test -race $(GO_SOURCE_PACKAGES)
 
 build:
 	go build -trimpath -ldflags "$(BUILD_LDFLAGS)" -o ./bin/$(APP) ./cmd/agentdock

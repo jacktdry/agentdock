@@ -5,26 +5,30 @@ struct DesktopUpdateServiceState: Codable {
     static let schemaVersion = 1
 
     let schemaVersion: Int
+    let variant: String?
     let coreEnabled: Bool
     let tunnelEnabled: Bool
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
+        case variant
         case coreEnabled = "core_enabled"
         case tunnelEnabled = "tunnel_enabled"
     }
 
-    init(coreEnabled: Bool, tunnelEnabled: Bool) {
+    init(coreEnabled: Bool, tunnelEnabled: Bool, identity: AppIdentity = .stable) {
+        variant = identity == .next ? identity.rawValue : nil
         schemaVersion = Self.schemaVersion
         self.coreEnabled = coreEnabled
         self.tunnelEnabled = tunnelEnabled
     }
 
-    static func load(from path: URL) throws -> DesktopUpdateServiceState? {
+    static func load(from path: URL, identity: AppIdentity = .stable) throws -> DesktopUpdateServiceState? {
         guard FileManager.default.fileExists(atPath: path.path) else { return nil }
         let data = try Data(contentsOf: path)
         let state = try JSONDecoder().decode(DesktopUpdateServiceState.self, from: data)
-        guard state.schemaVersion == Self.schemaVersion else {
+        guard state.schemaVersion == Self.schemaVersion,
+              state.variant == identity.rawValue || (identity == .stable && state.variant == nil) else {
             throw ValidationError(L10n.text("The AgentDock update service state version is not supported."))
         }
         return state

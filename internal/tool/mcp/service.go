@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/execution"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
 )
@@ -11,10 +12,17 @@ import (
 type Service struct {
 	mcpClients *mcpclient.Manager
 	envs       *envstore.Store
+	execution  *execution.Store
 }
 
 func New(manager *mcpclient.Manager, envs *envstore.Store) *Service {
 	return &Service{mcpClients: manager, envs: envs}
+}
+
+func (s *Service) SetExecutionStore(store *execution.Store) {
+	if s != nil {
+		s.execution = store
+	}
 }
 
 type CapabilityItem struct {

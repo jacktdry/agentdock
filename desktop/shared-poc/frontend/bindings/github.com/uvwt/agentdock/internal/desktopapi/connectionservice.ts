@@ -9,10 +9,42 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
-export function Action(action: string): $CancellablePromise<$models.ConnectionActionResult> {
-    return $Call.ByID(2613481889, action);
+export function Action(action: string, configRevision: string): $CancellablePromise<$models.ConnectionActionResult> {
+    return $Call.ByID(2613481889, action, configRevision);
+}
+
+export function ConfigureTunnel(request: $models.ConnectionTunnelRequest): $CancellablePromise<$models.ConnectionActionResult> {
+    return $Call.ByID(3265119663, request);
+}
+
+export function PreflightPort(candidatePort: number): $CancellablePromise<$models.ConnectionPreflightResult> {
+    return $Call.ByID(1704306877, candidatePort);
+}
+
+export function RevealOAuthPassword(): $CancellablePromise<$models.OAuthPasswordRevealResult> {
+    return $Call.ByID(2881859176);
+}
+
+export function SetTunnelAutostart(request: $models.ConnectionAutostartRequest): $CancellablePromise<$models.ConnectionActionResult> {
+    return $Call.ByID(1472678964, request);
+}
+
+export function Snapshot(): $CancellablePromise<$models.ConnectionSnapshotResult> {
+    return $Call.ByID(1926314099);
 }
 
 export function Status(): $CancellablePromise<$models.ConnectionStatusResult> {
     return $Call.ByID(2883329957);
+}
+
+/**
+ * No URL argument: only the current configured public origin is probed.
+ * Reachability is discovery compatibility, never proof of Next ownership.
+ */
+export function TestPublicEndpoint(): $CancellablePromise<$models.PublicEndpointResult> {
+    return $Call.ByID(1562038855);
+}
+
+export function UpdatePort(request: $models.ConnectionPortRequest): $CancellablePromise<$models.ConnectionActionResult> {
+    return $Call.ByID(671696189, request);
 }

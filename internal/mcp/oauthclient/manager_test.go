@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ type fakeOAuthService struct {
 	registrations     int
 	refreshes         int
 	invalidRefresh    bool
+	tokenRedirectURL  string
 	lastRegistration  oauthex.ClientRegistrationMetadata
 	registrationStart chan struct{}
 	registrationGate  chan struct{}
@@ -93,6 +96,14 @@ func (f *fakeOAuthService) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			"application_type":           meta.ApplicationType,
 		})
 	case "/token":
+		f.mu.Lock()
+		redirectURL := f.tokenRedirectURL
+		f.mu.Unlock()
+		if redirectURL != "" {
+			w.Header().Set("Location", redirectURL)
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		}
 		if err := r.ParseForm(); err != nil {
 			writeTestJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request"})
 			return
@@ -173,8 +184,11 @@ func authorizeFakeService(t *testing.T, manager *Manager, fake *fakeOAuthService
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AuthorizationURL == "" || done == nil {
+	if result.FlowID == "" || result.AuthorizationURL == "" || done == nil {
 		t.Fatalf("authorization result = %#v", result)
+	}
+	if status, ok := manager.FlowStatus(result.FlowID); !ok || status.Status != "authorizing" || status.FlowID != result.FlowID {
+		t.Fatalf("active flow status = %#v ok=%v", status, ok)
 	}
 	authURL, err := url.Parse(result.AuthorizationURL)
 	if err != nil {
@@ -203,6 +217,65 @@ func authorizeFakeService(t *testing.T, manager *Manager, fake *fakeOAuthService
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("authorization flow did not complete")
+	}
+	if status, ok := manager.FlowStatus(result.FlowID); !ok || status.Status != "authorized" || status.ErrorCode != "" {
+		t.Fatalf("completed flow status = %#v ok=%v", status, ok)
+	}
+}
+
+func TestManagerFlowStatusCapacityRejectsBeforeReservation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	now := time.Now().UTC()
+	manager.mu.Lock()
+	for i := 0; i < maxFlowStatuses; i++ {
+		manager.flowStatuses[fmt.Sprintf("flow-%03d", i)] = flowObservation{status: "authorizing", expiresAt: now.Add(flowTTL)}
+	}
+	manager.mu.Unlock()
+	_, err := manager.ReserveAuthorization("cloudflare", "capacity-test", fake.endpoint(), CallbackLocal)
+	var flowErr *FlowError
+	if !errors.As(err, &flowErr) || flowErr.Code != "MCP_AUTH_FLOW_LIMIT" {
+		t.Fatalf("capacity error = %#v", err)
+	}
+	if _, _, grantErr := manager.store.loadGrantWithEpoch("capacity-test"); !errors.Is(grantErr, os.ErrNotExist) {
+		t.Fatalf("capacity rejection created authorization envelope: %v", grantErr)
+	}
+}
+
+func TestManagerFlowStatusDenialIsSafe(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FlowID == "" || result.AuthorizationURL == "" || done == nil {
+		t.Fatalf("authorization result = %#v", result)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const providerSecret = "provider-private-description"
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Error: "access_denied", ErrorDescription: providerSecret}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_DENIED" || strings.Contains(typed.Message, providerSecret) {
+			t.Fatalf("denied flow error = %#v", flowErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("denied flow did not complete")
+	}
+	status, ok := manager.FlowStatus(result.FlowID)
+	if !ok || status.Status != "denied" || status.ErrorCode != "MCP_AUTH_DENIED" {
+		t.Fatalf("denied flow status = %#v ok=%v", status, ok)
+	}
+	data, _ := json.Marshal(status)
+	if strings.Contains(string(data), providerSecret) {
+		t.Fatal("flow status exposed provider description")
 	}
 }
 
@@ -506,5 +579,190 @@ func TestGrantPathPrefixesWindowsReservedStorageNames(t *testing.T) {
 		if got, want := filepath.Base(path), "grant-"+storageKey+".json"; got != want {
 			t.Fatalf("grantPath(%q) basename = %q, want %q", storageKey, got, want)
 		}
+	}
+}
+
+func TestOAuthRedirectPolicyAllowsSameOriginAndRejectsForeignOrigins(t *testing.T) {
+	initial, _ := http.NewRequest(http.MethodPost, "https://example.test/token", nil)
+	same, _ := http.NewRequest(http.MethodPost, "https://example.test/next", nil)
+	if err := oauthRedirectPolicy(same, []*http.Request{initial}); err != nil {
+		t.Fatalf("same-origin redirect rejected: %v", err)
+	}
+	for name, target := range map[string]string{
+		"cross-port": "https://example.test:444/next",
+		"subdomain":  "https://sub.example.test/next",
+		"downgrade":  "http://example.test/next",
+	} {
+		t.Run(name, func(t *testing.T) {
+			next, _ := http.NewRequest(http.MethodPost, target, nil)
+			if !errors.Is(oauthRedirectPolicy(next, []*http.Request{initial}), errOAuthRedirectRejected) {
+				t.Fatalf("redirect to %s was not rejected", target)
+			}
+		})
+	}
+}
+
+func TestAuthorizationCodeExchangeRejectsCrossOriginRedirect(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	var attackerRequests atomic.Int32
+	var attackerBody string
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerRequests.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		attackerBody = string(data)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer attacker.Close()
+	fake.mu.Lock()
+	fake.tokenRedirectURL = attacker.URL + "/steal"
+	fake.mu.Unlock()
+
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Code: "code-1", Issuer: fake.server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_TOKEN_EXCHANGE_FAILED" {
+			t.Fatalf("exchange redirect error = %#v", flowErr)
+		}
+		if !errors.Is(typed.Cause, errOAuthRedirectRejected) ||
+			strings.Contains(typed.Cause.Error(), attacker.URL) || strings.Contains(typed.Cause.Error(), "steal") {
+			t.Fatalf("exchange redirect cause was not sanitized: %#v", typed.Cause)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("redirected token exchange did not finish")
+	}
+	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "code-1") {
+		t.Fatalf("cross-origin token redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
+	}
+}
+
+func TestRefreshTokenRejectsCrossOriginRedirect(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	home := t.TempDir()
+	manager := prepareOAuthManager(t, fake, home)
+	authorizeFakeService(t, manager, fake)
+
+	grant, err := manager.store.loadGrant("cloudflare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant.Expiry = time.Now().Add(-time.Minute)
+	if err := manager.store.saveGrant("cloudflare", grant); err != nil {
+		t.Fatal(err)
+	}
+
+	var attackerRequests atomic.Int32
+	var attackerBody string
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerRequests.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		attackerBody = string(data)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer attacker.Close()
+	fake.mu.Lock()
+	fake.tokenRedirectURL = attacker.URL + "/steal-refresh"
+	fake.mu.Unlock()
+
+	restarted, err := New(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := restarted.tokenSource("cloudflare", fake.endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source == nil {
+		t.Fatal("token source missing")
+	}
+	if _, err := source.Token(); err == nil {
+		t.Fatal("cross-origin refresh redirect succeeded")
+	} else if !errors.Is(err, errOAuthRedirectRejected) ||
+		strings.Contains(err.Error(), attacker.URL) || strings.Contains(err.Error(), "steal-refresh") {
+		t.Fatalf("refresh redirect error was not sanitized: %v", err)
+	}
+	if attackerRequests.Load() != 0 || strings.Contains(attackerBody, "refresh-1") {
+		t.Fatalf("cross-origin refresh redirect reached attacker: requests=%d body=%q", attackerRequests.Load(), attackerBody)
+	}
+}
+
+func TestAuthorizationCodeExchangeSanitizesMalformedRedirectLocation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	const canary = "MALFORMED_LOCATION_SECRET_CANARY"
+	fake.mu.Lock()
+	fake.tokenRedirectURL = "http://[" + canary
+	fake.mu.Unlock()
+
+	manager := prepareOAuthManager(t, fake, t.TempDir())
+	result, done, err := manager.Begin(context.Background(), "cloudflare", "cloudflare", fake.endpoint(), CallbackLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authURL, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeliverCallback(CallbackResult{State: authURL.Query().Get("state"), Code: "code-1", Issuer: fake.server.URL}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case flowErr := <-done:
+		var typed *FlowError
+		if !errors.As(flowErr, &typed) || typed.Code != "MCP_AUTH_TOKEN_EXCHANGE_FAILED" || !errors.Is(typed.Cause, errOAuthHTTPFailed) {
+			t.Fatalf("malformed redirect exchange error = %#v", flowErr)
+		}
+		if strings.Contains(typed.Cause.Error(), canary) {
+			t.Fatalf("malformed Location leaked: %v", typed.Cause)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("malformed redirect exchange did not finish")
+	}
+}
+
+func TestRefreshTokenSanitizesMalformedRedirectLocation(t *testing.T) {
+	fake := newFakeOAuthService(t)
+	home := t.TempDir()
+	manager := prepareOAuthManager(t, fake, home)
+	authorizeFakeService(t, manager, fake)
+
+	grant, err := manager.store.loadGrant("cloudflare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant.Expiry = time.Now().Add(-time.Minute)
+	if err := manager.store.saveGrant("cloudflare", grant); err != nil {
+		t.Fatal(err)
+	}
+
+	const canary = "MALFORMED_REFRESH_LOCATION_SECRET_CANARY"
+	fake.mu.Lock()
+	fake.tokenRedirectURL = "http://[" + canary
+	fake.mu.Unlock()
+
+	restarted, err := New(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := restarted.tokenSource("cloudflare", fake.endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source == nil {
+		t.Fatal("token source missing")
+	}
+	_, err = source.Token()
+	if !errors.Is(err, errOAuthHTTPFailed) || strings.Contains(err.Error(), canary) {
+		t.Fatalf("malformed refresh Location was not sanitized: %v", err)
 	}
 }

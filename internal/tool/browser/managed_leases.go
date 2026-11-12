@@ -161,8 +161,9 @@ func (m *ManagedLeaseManager) Call(ctx context.Context, scope RequestScope, id, 
 	return result, err
 }
 
-// Stop is authoritative cleanup. A failed close_page is diagnostic only when
-// Stop succeeds; failed worker cleanup returns an error and CleanupFailed.
+// Stop is authoritative cleanup. Only shared borrows close their owned page
+// first; exclusive workers may contain the last page, which MCP cannot close.
+// A shared close failure remains diagnostic; failed Stop returns CleanupFailed.
 func (m *ManagedLeaseManager) Release(ctx context.Context, scope RequestScope, id string) (LeaseMetadata, error) {
 	l, err := m.lease(id)
 	if err != nil {
@@ -189,19 +190,33 @@ func (m *ManagedLeaseManager) releaseLocked(ctx context.Context, scope RequestSc
 		return l.metadata, leaseError(ErrLeaseStateInvalid, id, "lease cannot release", nil)
 	}
 	l.metadata.CleanupState = CleanupReleasing
-	result, closeErr := m.backend.Call(ctx, l.binding.WorkerID, "close_page", map[string]any{"pageId": l.pageID})
-	if closeErr == nil {
-		closeErr = leaseCallResultError(result)
+	_, shared := m.backend.(sharedManagedCleanup)
+	var closeErr error
+	if shared {
+		var result map[string]any
+		result, closeErr = m.backend.Call(ctx, l.binding.WorkerID, "close_page", map[string]any{"pageId": l.pageID})
+		if closeErr == nil {
+			closeErr = leaseCallResultError(result)
+		}
 	}
 	stopErr := m.backend.Stop(l.binding.WorkerID)
 	l.metadata.CleanupState = CleanupComplete
 	l.metadata.CleanupReason = "exclusive managed worker stopped"
+	if shared {
+		l.metadata.CleanupReason = "shared managed owned page closed and borrow ended"
+		if closeErr != nil {
+			l.metadata.CleanupReason = "shared managed borrow ended after page close failed"
+		}
+	}
 	if diagnostic := errors.Join(closeErr, stopErr); diagnostic != nil {
 		l.metadata.CleanupError = diagnostic.Error()
 	}
 	if stopErr != nil {
 		l.metadata.CleanupState = CleanupFailed
 		l.metadata.CleanupReason = "exclusive managed worker cleanup failed"
+		if _, shared := m.backend.(sharedManagedCleanup); shared {
+			l.metadata.CleanupReason = "shared managed page or borrow cleanup failed"
+		}
 		l.nextCleanupRecoveryAt = time.Now().UTC().Add(cleanupRecoveryBaseDelay)
 		return l.metadata, leaseError(ErrActionFailed, id, l.metadata.CleanupReason, stopErr)
 	}
@@ -219,12 +234,18 @@ func (m *ManagedLeaseManager) recoverFailedLocked(ctx context.Context, l *manage
 	stopErr := m.backend.Stop(l.binding.WorkerID)
 	if stopErr != nil {
 		l.metadata.CleanupReason = "exclusive managed worker recovery failed"
+		if _, shared := m.backend.(sharedManagedCleanup); shared {
+			l.metadata.CleanupReason = "shared managed page or borrow recovery failed"
+		}
 		l.metadata.CleanupError = stopErr.Error()
 		l.nextCleanupRecoveryAt = time.Now().UTC().Add(cleanupRecoveryDelay(l.cleanupRecoveryAttempts + 1))
 		return l.metadata, leaseError(ErrActionFailed, id, l.metadata.CleanupReason, stopErr)
 	}
 	l.metadata.CleanupState = CleanupComplete
 	l.metadata.CleanupReason = "exclusive managed worker cleanup recovered"
+	if _, shared := m.backend.(sharedManagedCleanup); shared {
+		l.metadata.CleanupReason = "shared managed owned page cleanup and borrow end recovered"
+	}
 	l.nextCleanupRecoveryAt = time.Time{}
 	return l.metadata, nil
 }

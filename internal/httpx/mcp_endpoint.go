@@ -18,22 +18,21 @@ import (
 )
 
 func agentDockContextHandler(server *mcp.Server, cfg config.Config, oauthStore *auth.OAuthStore) http.HandlerFunc {
-	authorizer := auth.Bearer{Token: cfg.AuthToken}
 	authRequired := cfg.AuthRequired()
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		staticOK := cfg.AuthToken != "" && authorizer.Authorized(r)
-		oauthOK := authorizedOAuth(r, cfg, oauthStore)
-		if authRequired && !staticOK && !oauthOK {
+		authn := authenticateRequest(r, cfg, oauthStore)
+		if authRequired && !authn.OK {
 			setBearerChallenge(w, cfg, r, strings.TrimSpace(r.Header.Get("Authorization")) != "")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
+		ctx = requestmeta.WithAuthPrincipal(ctx, authn.Principal)
 		result, err := server.AgentDockContext(ctx)
 		if err != nil {
 			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -43,13 +42,11 @@ func agentDockContextHandler(server *mcp.Server, cfg config.Config, oauthStore *
 	}
 }
 func mcpEndpointHandler(server *mcp.Server, cfg config.Config, oauthStore *auth.OAuthStore) http.HandlerFunc {
-	authorizer := auth.Bearer{Token: cfg.AuthToken}
 	authRequired := cfg.AuthRequired()
 	transport := server.HTTPHandler()
 	return func(w http.ResponseWriter, r *http.Request) {
-		staticOK := cfg.AuthToken != "" && authorizer.Authorized(r)
-		oauthOK := authorizedOAuth(r, cfg, oauthStore)
-		if authRequired && !staticOK && !oauthOK {
+		authn := authenticateRequest(r, cfg, oauthStore)
+		if authRequired && !authn.OK {
 			setBearerChallenge(w, cfg, r, strings.TrimSpace(r.Header.Get("Authorization")) != "")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -59,6 +56,7 @@ func mcpEndpointHandler(server *mcp.Server, cfg config.Config, oauthStore *auth.
 		}
 		ctx := extractMCPTraceContext(r.Context(), r.Header)
 		ctx = requestmeta.WithBaseURL(ctx, requestPublicBaseURL(cfg, r))
+		ctx = requestmeta.WithAuthPrincipal(ctx, authn.Principal)
 		transport.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,8 +22,33 @@ func (svc *Service) applyPatch(ctx context.Context, request EditRequest) (Result
 	if err != nil {
 		return nil, err
 	}
+	if err := svc.guardProtectedPath(workdir.Abs, workdir.Display, false); err != nil {
+		return nil, err
+	}
 	if strings.HasPrefix(strings.TrimSpace(patch), "*** Begin Patch") {
 		return svc.applyEnvelopePatch(patch, request.DryRun, workdir.Display)
+	}
+	patchPaths, err := unifiedPatchPaths(patch)
+	if err != nil {
+		return nil, toolErrorCause("PATCH_FAILED", "cannot safely resolve unified patch paths", "validation", map[string]any{"workdir": workdir.Display}, err)
+	}
+	for _, patchPath := range patchPaths {
+		clean := filepath.Clean(filepath.FromSlash(patchPath))
+		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return nil, toolErrorDetails(
+				"PATCH_FAILED",
+				"unified patch path escapes workdir",
+				"validation",
+				map[string]any{"path": patchPath, "workdir": workdir.Display},
+			)
+		}
+		target, resolveErr := svc.ws.ResolveForWrite(filepath.Join(workdir.Abs, clean))
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if guardErr := svc.guardProtectedPath(target.Abs, target.Display, true); guardErr != nil {
+			return nil, guardErr
+		}
 	}
 	maxDiffBytes := boundedInt(intValue(request.MaxDiffBytes, 65536), 65536, 1, maxTextOutputBytes)
 	preview := textutil.SafeTruncateString(patch, maxDiffBytes)

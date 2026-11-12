@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
 )
 
 func TestManagerStreamableHTTPFlowAndPersistence(t *testing.T) {
@@ -683,5 +685,972 @@ func TestPluginOwnedStdioUsesStableEnvAndRuntimeProvenance(t *testing.T) {
 		if item.Name == runtimeName {
 			t.Fatalf("Plugin-owned MCP leaked into standalone servers.json: %#v", item)
 		}
+	}
+}
+
+func TestManagerStreamableHTTPProtocolPinSkipsDiscover(t *testing.T) {
+	const pinned = "2025-11-25"
+	var discoverCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var request struct {
+			ID     any            `json:"id"`
+			Method string         `json:"method"`
+			Params map[string]any `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch request.Method {
+		case "server/discover":
+			discoverCalls.Add(1)
+			http.Error(w, "Bad Request: Unsupported protocol version: 2026-07-28. Supported versions: 2025-11-25", http.StatusBadRequest)
+		case "initialize":
+			if got := request.Params["protocolVersion"]; got != pinned {
+				t.Errorf("initialize protocol version = %#v, want %q", got, pinned)
+			}
+			if got := r.Header.Get("MCP-Protocol-Version"); got != "" {
+				t.Errorf("initialize protocol header = %q, want empty", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Mcp-Session-Id", "legacy-session")
+			writeRPCResult(t, w, request.ID, map[string]any{
+				"protocolVersion": pinned,
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "legacy", "version": "1.0.0"},
+			})
+		case "notifications/initialized":
+			if got := r.Header.Get("MCP-Protocol-Version"); got != pinned {
+				t.Errorf("initialized protocol header = %q, want %q", got, pinned)
+			}
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			if got := r.Header.Get("MCP-Protocol-Version"); got != pinned {
+				t.Errorf("tools/list protocol header = %q, want %q", got, pinned)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			writeRPCResult(t, w, request.ID, map[string]any{"tools": []map[string]any{{
+				"name": "health", "description": "health", "inputSchema": map[string]any{"type": "object"},
+			}}})
+		default:
+			t.Errorf("unexpected method %q", request.Method)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	manager, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = manager.Add(ServerConfig{
+		Name: "legacy", Description: "Legacy MCP", Transport: TransportStreamableHTTP,
+		ProtocolVersion: pinned, URL: server.URL, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed, tools, err := manager.Refresh(context.Background(), "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if discoverCalls.Load() != 0 {
+		t.Fatalf("pinned legacy server received %d server/discover calls", discoverCalls.Load())
+	}
+	if refreshed.Status != "ready" || refreshed.ToolCount != 1 || len(tools) != 1 || tools[0].Name != "health" {
+		t.Fatalf("refresh=%#v tools=%#v", refreshed, tools)
+	}
+	cfg, _, err := manager.Inspect("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProtocolVersion != pinned {
+		t.Fatalf("persisted protocol_version=%q", cfg.ProtocolVersion)
+	}
+}
+
+type failingCloseProtocolClient struct {
+	closeCalls atomic.Int32
+}
+
+func (c *failingCloseProtocolClient) initialize(context.Context) error { return nil }
+func (c *failingCloseProtocolClient) listTools(context.Context) ([]Tool, error) {
+	return nil, nil
+}
+func (c *failingCloseProtocolClient) callTool(context.Context, string, map[string]any) (map[string]any, error) {
+	return nil, nil
+}
+func (c *failingCloseProtocolClient) close() error {
+	c.closeCalls.Add(1)
+	return errors.New("close-canary")
+}
+
+func requireMCPClientErrorCode(t *testing.T, err error, code string) *Error {
+	t.Helper()
+	var mcpErr *Error
+	if !errors.As(err, &mcpErr) || mcpErr.Code != code {
+		t.Fatalf("error = %#v, want %s", err, code)
+	}
+	return mcpErr
+}
+
+func TestManagerRevisionedStandaloneMutations(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	initial, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !validToken(initial.Revision) {
+		t.Fatalf("initial revision = %q", initial.Revision)
+	}
+
+	cfg := ServerConfig{
+		Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/mcp", Enabled: true,
+	}
+	created, err := manager.AddChecked(cfg, initial.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.Persisted || !created.RuntimeApplied {
+		t.Fatalf("create result = %#v", created)
+	}
+	createdCfg := created.Registry.Servers["demo"]
+	if !validToken(createdCfg.Generation) || created.Registry.Revision == initial.Revision {
+		t.Fatalf("create metadata = revision %q generation %q", created.Registry.Revision, createdCfg.Generation)
+	}
+
+	updatedCfg := cfg
+	updatedCfg.Description = "Updated"
+	updated, err := manager.Update("demo", updatedCfg, created.Registry.Revision, createdCfg.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedEntry := updated.Registry.Servers["demo"]
+	if updatedEntry.Description != "Updated" || updatedEntry.Generation == createdCfg.Generation ||
+		updated.Registry.Revision == created.Registry.Revision {
+		t.Fatalf("update result = %#v", updated)
+	}
+
+	_, err = manager.SetEnabledChecked("demo", false, created.Registry.Revision, createdCfg.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+
+	_, err = manager.SetEnabledChecked("demo", false, updated.Registry.Revision, createdCfg.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+
+	renamed := updatedCfg
+	renamed.Name = "renamed"
+	_, err = manager.Update("demo", renamed, updated.Registry.Revision, updatedEntry.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_NAME_IMMUTABLE")
+	afterRejectedRename, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterRejectedRename.Revision != updated.Registry.Revision {
+		t.Fatal("rejected rename changed registry revision")
+	}
+
+	removed, err := manager.RemoveChecked("demo", updated.Registry.Revision, updatedEntry.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := removed.Registry.Servers["demo"]; exists {
+		t.Fatal("removed server remained in authoritative registry")
+	}
+	recreated, err := manager.AddChecked(cfg, removed.Registry.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recreatedEntry := recreated.Registry.Servers["demo"]
+	if recreatedEntry.Generation == updatedEntry.Generation {
+		t.Fatal("delete/recreate reused server generation")
+	}
+	_, err = manager.SetEnabledChecked("demo", false, recreated.Registry.Revision, updatedEntry.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_GENERATION_CONFLICT")
+}
+
+func TestManagerCheckedMutationRejectsCrossManagerStaleRevision(t *testing.T) {
+	home := t.TempDir()
+	first, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	firstSnapshot, err := first.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSnapshot, err := second.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstSnapshot.Revision != secondSnapshot.Revision {
+		t.Fatalf("initial revisions differ: first=%q second=%q", firstSnapshot.Revision, secondSnapshot.Revision)
+	}
+
+	if _, err := first.AddChecked(ServerConfig{
+		Name: "first", Description: "First", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/first", Enabled: true,
+	}, firstSnapshot.Revision); err != nil {
+		t.Fatal(err)
+	}
+	_, err = second.AddChecked(ServerConfig{
+		Name: "second", Description: "Second", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/second", Enabled: true,
+	}, secondSnapshot.Revision)
+	requireMCPClientErrorCode(t, err, "MCP_REGISTRY_CONFLICT")
+
+	authoritative, err := second.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := authoritative.Servers["second"]; exists {
+		t.Fatal("stale checked mutation persisted second server")
+	}
+	if _, exists := authoritative.Servers["first"]; !exists {
+		t.Fatal("authoritative registry lost first manager update")
+	}
+}
+
+func TestManagerRevisionedUpdateRejectsPluginOwnedServer(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	name := "plugin.demo.remote"
+	if err := manager.SetOwnedServers([]ServerConfig{{
+		Name: name, DisplayName: "Demo Plugin", Description: "Plugin-owned",
+		Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp",
+		StorageKey: name, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(), Enabled: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := snapshot.Servers[name]
+	if owned.SourceType != "plugin" || !validToken(owned.Generation) {
+		t.Fatalf("owned snapshot = %#v", owned)
+	}
+	_, err = manager.Update(name, ServerConfig{
+		Name: name, Description: "Attempted standalone edit", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/other", Enabled: true,
+	}, snapshot.Revision, owned.Generation)
+	requireMCPClientErrorCode(t, err, "MCP_OWNED_BY_PLUGIN")
+}
+
+func TestManagerCleanupFailureKeepsOldRuntimeStateAndBlocksReplacement(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := ServerConfig{
+		Name: "demo", Description: "Old runtime config", Transport: TransportStreamableHTTP,
+		URL: "https://example.invalid/mcp", Enabled: true,
+	}
+	if _, err := manager.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := manager.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldGeneration := snapshot.Servers["demo"].Generation
+	failing := &failingCloseProtocolClient{}
+	manager.mu.Lock()
+	oldState := manager.states["demo"]
+	oldState.client = failing
+	manager.mu.Unlock()
+
+	updatedCfg := cfg
+	updatedCfg.Description = "Persisted new config"
+	result, err := manager.Update("demo", updatedCfg, snapshot.Revision, oldGeneration)
+	requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+	if !result.Persisted || result.RuntimeApplied {
+		t.Fatalf("partial update result = %#v", result)
+	}
+
+	persisted, readErr := manager.Registry()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if persisted.Servers["demo"].Description != "Persisted new config" ||
+		persisted.Revision != result.Registry.Revision {
+		t.Fatalf("persisted registry = %#v result=%#v", persisted, result)
+	}
+
+	manager.mu.RLock()
+	runtimeCfg := manager.servers["demo"]
+	runtimeState := manager.states["demo"]
+	manager.mu.RUnlock()
+	if runtimeCfg.Description != "Old runtime config" || runtimeState != oldState || runtimeState.client != failing {
+		t.Fatalf("runtime state switched after cleanup failure: cfg=%#v state=%p old=%p", runtimeCfg, runtimeState, oldState)
+	}
+
+	_, _, err = manager.Refresh(context.Background(), "demo")
+	requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+	if failing.closeCalls.Load() < 2 {
+		t.Fatalf("close attempts = %d, want retry before replacement", failing.closeCalls.Load())
+	}
+	manager.mu.RLock()
+	if manager.states["demo"] != oldState || manager.states["demo"].client != failing {
+		manager.mu.RUnlock()
+		t.Fatal("failed cleanup was bypassed by replacement runtime state")
+	}
+	manager.mu.RUnlock()
+}
+
+func TestManagerPassiveRegistryAndLegacyMutations(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	failing := &failingCloseProtocolClient{}
+	m.states["demo"].client = failing
+	first, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision != second.Revision || first.Servers["demo"].Generation != second.Servers["demo"].Generation || failing.closeCalls.Load() != 0 {
+		t.Fatal("passive read changed metadata or closed client")
+	}
+	// Snapshot maps must not alias the running manager's configs.
+	first.Servers["demo"] = ServerConfig{}
+	m.states["demo"].client = nil
+	disabled, err := m.SetEnabledChecked("demo", false, second.Revision, second.Servers["demo"].Generation)
+	if err != nil || !disabled.Persisted || !disabled.RuntimeApplied || disabled.Summary.Enabled {
+		t.Fatalf("checked disable: %#v %v", disabled, err)
+	}
+	if _, err := m.SetEnabled("demo", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove("demo"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.List()) != 0 {
+		t.Fatal("legacy remove left server registered")
+	}
+}
+
+func TestManagerRegistryReadFailureNeverAuthorizesCachedMutation(t *testing.T) {
+	m, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp"}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := m.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := []byte(`{"version":2,"servers":`)
+	if err := os.WriteFile(m.store.path, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	operations := []func() error{
+		func() error { _, err := m.Registry(); return err },
+		func() error {
+			other := cfg
+			other.Name = "other"
+			_, err := m.AddChecked(other, snapshot.Revision)
+			return err
+		},
+		func() error {
+			_, err := m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error {
+			_, err := m.SetEnabledChecked("demo", true, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error {
+			_, err := m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+			return err
+		},
+		func() error { return m.Remove("demo") },
+	}
+	for _, operation := range operations {
+		requireMCPClientErrorCode(t, operation(), "MCP_REGISTRY_READ_FAILED")
+	}
+	after, err := os.ReadFile(m.store.path)
+	if err != nil || string(after) != string(corrupt) {
+		t.Fatalf("failed read overwrote registry: %q %v", after, err)
+	}
+}
+
+func TestManagerRefreshCloseFailureDoesNotStartReplacement(t *testing.T) {
+	m, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "replacement-started")
+	t.Setenv("P5_REPLACEMENT_MARKER", marker)
+	cfg := ServerConfig{Name: "local", Description: "Local", Transport: TransportStdio, Command: os.Args[0], Args: []string{"-test.run=TestP5ReplacementHelperProcess"}, EnvFromEnv: map[string]string{"P5_REPLACEMENT_MARKER": "P5_REPLACEMENT_MARKER"}, Enabled: true}
+	if _, err := m.Add(cfg); err != nil {
+		t.Fatal(err)
+	}
+	failing := &failingCloseProtocolClient{}
+	state := m.states["local"]
+	state.client = failing
+	for i := 0; i < 2; i++ {
+		_, _, err := m.Refresh(context.Background(), "local")
+		requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+		if state.client != failing || state.lastErrorCode != "MCP_CLIENT_CLOSE_FAILED" {
+			t.Fatal("close failure lost old client or error state")
+		}
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("replacement process started: %v", err)
+	}
+	if failing.closeCalls.Load() != 2 {
+		t.Fatal("refresh bypassed close retry")
+	}
+	state.client = nil
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestP5ReplacementHelperProcess(t *testing.T) {
+	if marker := os.Getenv("P5_REPLACEMENT_MARKER"); marker != "" {
+		if err := os.WriteFile(marker, []byte("started"), 0600); err != nil {
+			os.Exit(2)
+		}
+		os.Exit(0)
+	}
+}
+
+func TestPersistedMutationInvalidatesOAuthIdentityBeforeCleanup(t *testing.T) {
+	for _, change := range []string{"endpoint", "transport", "description", "timeout", "enabled", "remove"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true}
+			if _, err := m.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(home, "data", "mcp", "grant-demo.json")
+			data, err := json.Marshal(oauthclient.Grant{SchemaVersion: 1, Endpoint: cfg.URL, AccessToken: "test-access"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := m.Registry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.states["demo"].client = &failingCloseProtocolClient{}
+			switch change {
+			case "endpoint":
+				cfg.URL += "/new"
+			case "transport":
+				cfg.Transport = TransportStdio
+				cfg.URL = ""
+				cfg.Command = "test-command"
+			case "description":
+				cfg.Description = "new description"
+			case "timeout":
+				cfg.TimeoutMS = 12345
+			case "enabled":
+				cfg.Enabled = false
+			}
+			var result MutationResult
+			if change == "remove" {
+				result, err = m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+			} else {
+				result, err = m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+			}
+			requireMCPClientErrorCode(t, err, "MCP_CLIENT_CLOSE_FAILED")
+			if !result.Persisted || result.RuntimeApplied {
+				t.Fatalf("unexpected mutation result: %#v", result)
+			}
+			data, err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			invalidate := change == "endpoint" || change == "transport" || change == "remove"
+			if invalidate {
+				var envelope struct {
+					SchemaVersion int                `json:"schema_version"`
+					Epoch         string             `json:"epoch"`
+					Grant         *oauthclient.Grant `json:"grant"`
+				}
+				if err := json.Unmarshal(data, &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if envelope.SchemaVersion != 2 || envelope.Epoch == "" || envelope.Grant != nil {
+					t.Fatal("missing authorization tombstone")
+				}
+			} else if m.oauth.Status("demo", "https://example.invalid/mcp") != oauthclient.StatusAuthorized {
+				t.Fatal("unrelated update removed authorization")
+			}
+		})
+	}
+}
+
+func TestAuthorizeReservationOrdersAcrossIndependentManagers(t *testing.T) {
+	for _, change := range []string{"endpoint", "recreate"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			first, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true}
+			if _, err := first.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if err := first.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+			second, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := second.Registry()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			snapshotHeld := make(chan struct{})
+			allowReserve := make(chan struct{})
+			reserved := make(chan struct{})
+			allowBegin := make(chan struct{})
+			var snapshotOnce, reservedOnce sync.Once
+			first.authorizeSnapshotHook = func() {
+				snapshotOnce.Do(func() { close(snapshotHeld) })
+				<-allowReserve
+			}
+			first.authorizeReservedHook = func() {
+				reservedOnce.Do(func() { close(reserved) })
+				<-allowBegin
+			}
+
+			authOutcome := make(chan error, 1)
+			go func() {
+				result, err := first.Authorize(context.Background(), "demo", oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					authOutcome <- errors.New("stale flow created")
+					return
+				}
+				authOutcome <- err
+			}()
+			select {
+			case <-snapshotHeld:
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not enter locked snapshot")
+			}
+
+			mutationStarted := make(chan struct{})
+			mutationDone := make(chan error, 1)
+			go func() {
+				close(mutationStarted)
+				switch change {
+				case "endpoint":
+					updated := cfg
+					updated.URL += "/new"
+					_, err := second.Update("demo", updated, snapshot.Revision, snapshot.Servers["demo"].Generation)
+					mutationDone <- err
+				case "recreate":
+					_, err := second.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+					if err == nil {
+						_, err = second.Add(cfg)
+					}
+					mutationDone <- err
+				}
+			}()
+			<-mutationStarted
+			close(allowReserve)
+
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish reservation")
+			}
+			select {
+			case err := <-mutationDone:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("independent registry mutation did not finish after reservation")
+			}
+			close(allowBegin)
+
+			select {
+			case err := <-authOutcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated cross-manager reservation performed discovery")
+			}
+		})
+	}
+}
+
+func TestPluginOwnedAuthorizePreservesCoreOAuthPath(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		http.Error(w, "not oauth metadata", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	const runtimeName = "plugin.demo.remote"
+	const storageKey = "plugin.demo.remote.auth"
+	cfg := ServerConfig{
+		Name: runtimeName, DisplayName: "Remote", Description: "Plugin remote MCP",
+		Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true,
+		StorageKey: storageKey, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+	}
+	if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.Authorize(context.Background(), runtimeName, oauthclient.CallbackLocal)
+	requireMCPClientErrorCode(t, err, "MCP_AUTH_DISCOVERY_FAILED")
+	if requests.Load() == 0 {
+		t.Fatal("plugin-owned authorization did not reach OAuth discovery")
+	}
+	if _, err := os.Stat(filepath.Join(home, "data", "mcp", "grant-"+storageKey+".json")); err != nil {
+		t.Fatalf("plugin storage-key authorization reservation missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "data", "mcp", "grant-"+runtimeName+".json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime name was incorrectly used as OAuth storage key: %v", err)
+	}
+}
+
+func TestPluginOwnedAuthorizationReservationInvalidatedByOwnedTransition(t *testing.T) {
+	for _, change := range []string{"endpoint", "remove"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer m.Close()
+
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+
+			cfg := ServerConfig{
+				Name: "plugin.demo.remote", DisplayName: "Remote", Description: "Plugin remote MCP",
+				Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true,
+				StorageKey: "plugin.demo.remote.auth", SourceType: "plugin", PluginName: "demo.plugin",
+				PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+			}
+			if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+
+			reserved := make(chan struct{})
+			resume := make(chan struct{})
+			var reservedOnce, resumeOnce sync.Once
+			m.authorizeReservedHook = func() {
+				reservedOnce.Do(func() { close(reserved) })
+				<-resume
+			}
+			release := func() { resumeOnce.Do(func() { close(resume) }) }
+			defer release()
+
+			outcome := make(chan error, 1)
+			go func() {
+				result, err := m.Authorize(context.Background(), cfg.Name, oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					outcome <- errors.New("stale plugin flow created")
+					return
+				}
+				outcome <- err
+			}()
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("plugin authorization reservation did not finish")
+			}
+
+			switch change {
+			case "endpoint":
+				cfg.URL += "/new"
+				if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+					t.Fatal(err)
+				}
+			case "remove":
+				if err := m.SetOwnedServers(nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			release()
+
+			select {
+			case err := <-outcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("plugin authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated plugin reservation performed discovery")
+			}
+		})
+	}
+}
+
+func TestPluginOwnedGrantPreservedOnDisableButInvalidatedOnIdentityChange(t *testing.T) {
+	home := t.TempDir()
+	m, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+
+	const storageKey = "plugin.demo.remote.auth"
+	cfg := ServerConfig{
+		Name: "plugin.demo.remote", DisplayName: "Remote", Description: "Plugin remote MCP",
+		Transport: TransportStreamableHTTP, URL: "https://example.invalid/mcp", Enabled: true,
+		StorageKey: storageKey, SourceType: "plugin", PluginName: "demo.plugin",
+		PluginRuntimeRoot: t.TempDir(), PluginDataDir: t.TempDir(),
+	}
+	if err := m.SetOwnedServers([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	grantRoot := filepath.Join(home, "data", "mcp")
+	if err := os.MkdirAll(grantRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	grantPath := filepath.Join(grantRoot, "grant-"+storageKey+".json")
+	grantData, err := json.Marshal(oauthclient.Grant{
+		SchemaVersion: 1,
+		Endpoint:      cfg.URL,
+		AccessToken:   "saved-access-token",
+		UpdatedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(grantPath, grantData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.SetOwnedServersPreservingRemovedGrants(nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(grantPath); err != nil {
+		t.Fatalf("disable/remove-keep deleted saved grant: %v", err)
+	}
+
+	if err := m.SetOwnedServersPreservingRemovedGrants([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	cfg.URL = "https://example.invalid/changed"
+	if err := m.SetOwnedServersPreservingRemovedGrants([]ServerConfig{cfg}); err != nil {
+		t.Fatal(err)
+	}
+	// Authorization invalidation retains a v2 epoch tombstone to fence stale
+	// OAuth callbacks; the grant must be cleared rather than unlinking the file.
+	data, err := os.ReadFile(grantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		SchemaVersion int                `json:"schema_version"`
+		Epoch         string             `json:"epoch"`
+		Grant         *oauthclient.Grant `json:"grant"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.SchemaVersion != 2 || envelope.Epoch == "" || envelope.Grant != nil {
+		t.Fatal("endpoint identity change retained stale grant or lost fencing")
+	}
+
+}
+
+func TestAuthorizeReservationInvalidatedByRegistryTransition(t *testing.T) {
+	for _, change := range []string{"endpoint", "remove", "recreate"} {
+		t.Run(change, func(t *testing.T) {
+			home := t.TempDir()
+			m, err := NewManager(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
+			defer server.Close()
+			cfg := ServerConfig{Name: "demo", Description: "Demo", Transport: TransportStreamableHTTP, URL: server.URL + "/mcp", Enabled: true}
+			if _, err := m.Add(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.SetOAuthCallback(oauthclient.CallbackOption{ID: oauthclient.CallbackLocal, Label: "Local", RedirectURL: "http://127.0.0.1:12345/callback"}); err != nil {
+				t.Fatal(err)
+			}
+			reserved, resume := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(resume) }) }
+			defer release()
+			m.authorizeReservedHook = func() { close(reserved); <-resume }
+			outcome := make(chan error, 1)
+			go func() {
+				result, err := m.Authorize(context.Background(), "demo", oauthclient.CallbackLocal)
+				if result.AuthorizationURL != "" {
+					outcome <- errors.New("stale flow created")
+					return
+				}
+				outcome <- err
+			}()
+			select {
+			case <-reserved:
+			case <-time.After(5 * time.Second):
+				t.Fatal("reservation did not finish")
+			}
+			// Mutation finishing before resume also proves discovery is outside registryMu.
+			mutation := make(chan error, 1)
+			go func() {
+				snapshot, err := m.Registry()
+				if err == nil {
+					if change == "endpoint" {
+						cfg.URL += "/new"
+						_, err = m.Update("demo", cfg, snapshot.Revision, snapshot.Servers["demo"].Generation)
+					} else {
+						_, err = m.RemoveChecked("demo", snapshot.Revision, snapshot.Servers["demo"].Generation)
+						if err == nil && change == "recreate" {
+							_, err = m.Add(cfg)
+						}
+					}
+				}
+				mutation <- err
+			}()
+			select {
+			case err := <-mutation:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("registry transition blocked by authorization")
+			}
+			release()
+			select {
+			case err := <-outcome:
+				requireMCPClientErrorCode(t, err, "MCP_AUTH_CANCELLED")
+			case <-time.After(5 * time.Second):
+				t.Fatal("authorization did not finish")
+			}
+			if requests.Load() != 0 {
+				t.Fatal("invalidated reservation performed discovery")
+			}
+			if m.oauth.Status("demo", cfg.URL) == oauthclient.StatusAuthorized {
+				t.Fatal("stale grant survived")
+			}
+		})
+	}
+}
+
+func TestDesktopPluginEnvironmentScopePinsCrossManagerRegistryWriter(t *testing.T) {
+	home := t.TempDir()
+	first, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := NewManager(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		finished <- first.WithPluginEnvironmentScope("demo", "plugin.demo.one", "plugin.demo.one", func() error { close(entered); <-release; return nil })
+	}()
+	<-entered
+	writer := make(chan error, 1)
+	go func() {
+		_, err := second.Add(ServerConfig{Name: "plugin.demo.one", Description: "Standalone fixture", Transport: TransportStdio, Command: "never-run", Enabled: false})
+		writer <- err
+	}()
+	select {
+	case err := <-writer:
+		close(release)
+		<-finished
+		t.Fatalf("registry writer crossed pinned Plugin env scope: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-writer; err != nil {
+		t.Fatal(err)
+	}
+	invoked := false
+	err = first.WithPluginEnvironmentScope("demo", "plugin.demo.one", "plugin.demo.one", func() error { invoked = true; return nil })
+	requireMCPClientErrorCode(t, err, "MCP_SERVER_COLLISION")
+	if invoked {
+		t.Fatal("standalone alias reached Plugin environment callback")
 	}
 }

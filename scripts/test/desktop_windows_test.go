@@ -189,12 +189,26 @@ func TestWindowsControlPanelUsesStableAppUserModelID(t *testing.T) {
 	}
 	app := string(appData)
 	for _, want := range []string{
-		"com.uvwt.agentdock.controlpanel",
+		"WindowsProductIdentity.Current.AppUserModelId",
 		"SetCurrentProcessExplicitAppUserModelID",
 		"_ = SetCurrentProcessExplicitAppUserModelID(AppUserModelId)",
 	} {
 		if !strings.Contains(app, want) {
-			t.Fatalf("App.xaml.cs missing stable taskbar identity %q", want)
+			t.Fatalf("App.xaml.cs missing runtime taskbar identity use %q", want)
+		}
+	}
+	identityData, err := os.ReadFile(filepath.Join("..", "..", "desktop", "windows", "control-panel", "Models", "WindowsProductIdentity.cs"))
+	if err != nil {
+		t.Fatalf("read WindowsProductIdentity.cs: %v", err)
+	}
+	identity := string(identityData)
+	for _, want := range []string{
+		`AppUserModelId => IsNext`,
+		`"com.uvwt.agentdock.controlpanel"`,
+		`"dev.dropabit.agentdock.next.controlpanel"`,
+	} {
+		if !strings.Contains(identity, want) {
+			t.Fatalf("WindowsProductIdentity.cs missing product taskbar identity %q", want)
 		}
 	}
 

@@ -27,7 +27,8 @@ type response struct {
 	Error  *responseError  `json:"error,omitempty"`
 }
 
-// Handler 只处理已验证的本地请求。传输层负责限制消息大小与本机权限。
+// Handler processes local requests with transport-specific context evidence.
+// Socket permissions alone do not authenticate a particular GUI sender.
 type Handler func(context.Context, Request) (any, error)
 
 func Serve(ctx context.Context, runtimeRoot string, handler Handler) error {
@@ -37,8 +38,8 @@ func Serve(ctx context.Context, runtimeRoot string, handler Handler) error {
 	if handler == nil {
 		return errors.New("desktop control handler is required")
 	}
-	return servePlatform(ctx, runtimeRoot, func(requestData []byte) []byte {
-		return handleMessage(ctx, requestData, handler)
+	return servePlatform(ctx, runtimeRoot, func(requestCtx context.Context, requestData []byte) []byte {
+		return handleMessage(requestCtx, requestData, handler)
 	})
 }
 

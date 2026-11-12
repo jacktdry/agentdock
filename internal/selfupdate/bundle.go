@@ -131,6 +131,11 @@ func bootstrapBundledSkills(ctx context.Context, binaryPath, bundlePath string, 
 		return errors.New("核心 Skill Bundle 路径不能为空")
 	}
 	command := exec.CommandContext(ctx, binaryPath, "skill", "bootstrap", "--bundle", bundlePath)
+	environment, err := updateHelperEnvironment()
+	if err != nil {
+		return err
+	}
+	command.Env = environment
 	processcontrol.ConfigureBackground(command)
 	combined, err := command.CombinedOutput()
 	if len(combined) > 0 && output != nil {

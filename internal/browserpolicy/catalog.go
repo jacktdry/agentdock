@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,13 +27,20 @@ const (
 
 type ConnectorDriver string
 
-const DriverChromeDevToolsMCPWS ConnectorDriver = "chrome-devtools-mcp-ws"
+const (
+	DriverChromeDevToolsMCPWS ConnectorDriver = "chrome-devtools-mcp-ws"
+	DriverNextEdgeCDP         ConnectorDriver = "next-core-edge-cdp"
+)
 
 // Definitions describe intent only. Runtime observations belong to the broker.
 type ProfileDefinition struct {
-	ID      string               `json:"id"`
-	Browser BrowserKind          `json:"browser"`
-	Class   ExternalProfileClass `json:"class"`
+	ID                  string               `json:"id"`
+	Browser             BrowserKind          `json:"browser"`
+	Class               ExternalProfileClass `json:"class"`
+	UserDataDir         string               `json:"user_data_dir,omitempty"`
+	ProfileDirectory    string               `json:"profile_directory,omitempty"`
+	BindCurrentProfile  bool                 `json:"bind_current_profile,omitempty"`
+	SelectedProfileName string               `json:"selected_profile_name,omitempty"` // Owner selection, never authentication proof.
 }
 
 type ConnectorDefinition struct {
@@ -56,6 +64,11 @@ type Catalog struct {
 
 var stableID = regexp.MustCompile(`^[a-z][a-z0-9]*([._-][a-z0-9]+)*$`)
 var browserEndpointPath = regexp.MustCompile(`^/devtools/browser(/[A-Za-z0-9_-]{1,128})?$`)
+var externalProfileDirectory = regexp.MustCompile(`^(Default|Profile [1-9][0-9]{0,7})$`)
+
+func ValidExternalProfileDirectory(name string) bool {
+	return externalProfileDirectory.MatchString(name)
+}
 
 func validID(id string) bool { return len(id) <= 64 && stableID.MatchString(id) }
 
@@ -111,12 +124,15 @@ func NewCatalog(def CatalogDefinition) (Catalog, error) {
 		if _, exists := c.profiles[p.ID]; exists {
 			return Catalog{}, fmt.Errorf("duplicate profile %q", p.ID)
 		}
+		if p.UserDataDir != "" && (strings.ContainsRune(p.UserDataDir, '\x00') || !filepath.IsAbs(p.UserDataDir) || filepath.Clean(p.UserDataDir) != p.UserDataDir || filepath.Dir(p.UserDataDir) == p.UserDataDir) {
+			return Catalog{}, fmt.Errorf("profile %q: user_data_dir must be a canonical absolute non-root path", p.ID)
+		}
 		c.profiles[p.ID] = p
 		c.definition.Profiles = append(c.definition.Profiles, p)
 	}
 	endpointOwners := make(map[string]string)
 	for _, connector := range def.Connectors {
-		if !validID(connector.ID) || connector.Driver != DriverChromeDevToolsMCPWS {
+		if !validID(connector.ID) || (connector.Driver != DriverChromeDevToolsMCPWS && connector.Driver != DriverNextEdgeCDP) {
 			return Catalog{}, fmt.Errorf("invalid connector %q", connector.ID)
 		}
 		if _, exists := c.connectors[connector.ID]; exists {
@@ -124,6 +140,14 @@ func NewCatalog(def CatalogDefinition) (Catalog, error) {
 		}
 		if _, exists := c.profiles[connector.ProfileID]; !exists {
 			return Catalog{}, fmt.Errorf("connector %q references missing profile", connector.ID)
+		}
+		if connector.Driver == DriverNextEdgeCDP {
+			p := c.profiles[connector.ProfileID]
+			selectionValid := (ValidExternalProfileDirectory(p.ProfileDirectory) && !p.BindCurrentProfile) || (p.ProfileDirectory == "" && p.BindCurrentProfile)
+			if p.Browser != BrowserEdge || p.Class != ProfileAuthenticatedExternal || p.UserDataDir == "" || !selectionValid ||
+				strings.TrimSpace(p.SelectedProfileName) == "" || strings.TrimSpace(p.SelectedProfileName) != p.SelectedProfileName || len(p.SelectedProfileName) > 128 || strings.ContainsAny(p.SelectedProfileName, "\x00\r\n\t") {
+				return Catalog{}, fmt.Errorf("connector %q: native NEXT Edge requires an explicit selected Profile and one directory selection", connector.ID)
+			}
 		}
 		endpoint, err := normalizeEndpoint(connector.Endpoint)
 		if err != nil {
@@ -165,6 +189,9 @@ func ValidateWorkspacePolicies(policies []WorkspaceRootPolicy, catalog Catalog) 
 		}
 		if p.Class == WorkspaceCompany && (profile.Browser != BrowserEdge || profile.Class != ProfileAuthenticatedExternal) {
 			return fmt.Errorf("workspace policy %d: company requires authenticated external Edge", i)
+		}
+		if p.Class == WorkspaceCompany && profile.UserDataDir == "" {
+			return fmt.Errorf("workspace policy %d: company requires profile user_data_dir", i)
 		}
 	}
 	return nil

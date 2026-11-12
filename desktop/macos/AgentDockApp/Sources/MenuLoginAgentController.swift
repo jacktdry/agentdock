@@ -2,13 +2,15 @@ import Foundation
 import ServiceManagement
 
 final class MenuLoginAgentController {
-    private let menuAgentPlistName = "com.uvwt.agentdock.menu-login.plist"
+    private let identity: AppIdentity
+    private var menuAgentPlistName: String { identity.menuPlistName }
     private let legacyHelperIdentifier = "com.uvwt.agentdock.login-helper"
     private let preferenceKey = "menuLoginEnabled"
     private let preferenceInitializedKey = "menuLoginPreferenceInitialized"
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    init(identity: AppIdentity = .current, defaults: UserDefaults = .standard) {
+        self.identity = identity
         self.defaults = defaults
     }
 
@@ -95,6 +97,10 @@ final class MenuLoginAgentController {
             failures.append("AgentDock menu login item: \(error.localizedDescription)")
         }
 
+        guard identity.allowsLegacyMigration else {
+            if !failures.isEmpty { throw ValidationError(failures.joined(separator: "\n")) }
+            return
+        }
         let obsoleteMainApp = SMAppService.mainApp
         if obsoleteMainApp.status == .enabled || obsoleteMainApp.status == .requiresApproval {
             do {
@@ -125,6 +131,7 @@ final class MenuLoginAgentController {
     }
 
     private func migrateLegacyRegistrationsIfSafe() {
+        guard identity.allowsLegacyMigration else { return }
         // 用户希望保留登录启动时，只有新 agent 已真正启用才清理旧注册。
         // 若系统仍要求批准，先保留旧登录项，避免迁移过程中出现自动启动空窗。
         if defaults.bool(forKey: preferenceKey), menuAgent.status != .enabled {

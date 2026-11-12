@@ -5,11 +5,49 @@ ROOT_DIR="${0:A:h:h:h}"
 SOURCE_DIR="$ROOT_DIR/desktop/macos/AgentDockApp/Sources"
 LOCALIZATION_DIR="$ROOT_DIR/desktop/macos/AgentDockApp/Resources"
 LOGIN_HELPER_SOURCE="$ROOT_DIR/desktop/macos/AgentDockLoginHelper/main.swift"
+SERVICE_REGISTRAR_SOURCE="$ROOT_DIR/desktop/macos/AgentDockServiceRegistrar/main.swift"
 OUTPUT_DIR="${AGENTDOCK_MACOS_APP_OUTPUT_DIR:-$ROOT_DIR/dist/macos-app}"
 ARCH_LIST="${AGENTDOCK_MACOS_ARCHES:-$(uname -m)}"
 OFFLINE_PAYLOAD_DIR="${AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR:-}"
 MIN_VERSION="${AGENTDOCK_MACOS_MIN_VERSION:-13.0}"
-BUNDLE_ID="com.uvwt.agentdock"
+# Fixed flavor contract; shared with the metadata-only fixture path.
+source "$ROOT_DIR/packaging/macos/app-identity.sh"
+if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
+  [[ "$APP_VARIANT" == next ]] || { print -u2 -- "RC manifest requires Next identity"; exit 1; }
+  candidate_output="$OUTPUT_DIR"
+  [[ "${1:-}" != --metadata-only ]] || candidate_output="${2:-}"
+  [[ -n "$candidate_output" ]] || exit 1
+  candidate_values="$(cd "$ROOT_DIR" && go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" --check-output "$candidate_output")"
+  IFS=$'\t' read -r candidate_version candidate_commit candidate_date candidate_short candidate_build <<< "$candidate_values"
+  [[ "${1:-}" == --metadata-only || "${1:-}" == "$candidate_version" ]] || { print -u2 -- "RC App version mismatch"; exit 1; }
+fi
+# Only the Next product packager may supply a Shared Desktop entrypoint.
+SHARED_EXECUTABLE="${AGENTDOCK_MACOS_SHARED_EXECUTABLE:-}"
+NEXT_MCP_LAUNCHER="${AGENTDOCK_MACOS_NEXT_MCP_LAUNCHER:-}"
+if [[ -n "$NEXT_MCP_LAUNCHER" ]]; then
+  [[ "$APP_VARIANT" == next && -n "$SHARED_EXECUTABLE" && "$ARCH_LIST" == arm64 ]] || {
+    print -u2 -- "MCP launcher requires Next arm64 Shared Desktop"; exit 1
+  }
+fi
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  [[ "$APP_VARIANT" == next && "$ARCH_LIST" == arm64 && -f "$SHARED_EXECUTABLE" && ! -L "$SHARED_EXECUTABLE" ]] || {
+    print -u2 -- "Shared executable requires Next arm64 and a regular file"; exit 1
+  }
+  [[ "$(file "$SHARED_EXECUTABLE")" == *"Mach-O 64-bit executable arm64"* ]] || exit 1
+  [[ -f "$SERVICE_REGISTRAR_SOURCE" && ! -L "$SERVICE_REGISTRAR_SOURCE" ]] || {
+    print -u2 -- "Shared executable requires the native service registrar source"; exit 1
+  }
+  [[ -f "$NEXT_MCP_LAUNCHER" && ! -L "$NEXT_MCP_LAUNCHER" && -x "$NEXT_MCP_LAUNCHER" ]] || {
+    print -u2 -- "Shared executable requires the Next MCP launcher"; exit 1
+  }
+  [[ "$(file "$NEXT_MCP_LAUNCHER")" == *"Mach-O 64-bit executable arm64"* && "$(lipo -archs "$NEXT_MCP_LAUNCHER")" == arm64 ]] || exit 1
+fi
+if [[ "${1:-}" == "--metadata-only" ]]; then
+  [[ $# == 2 ]] || { print -u2 -- "Usage: build-app.sh --metadata-only OUTPUT"; exit 1; }
+  VERSION="0.0.0"
+  write_app_metadata "$2/$APP_BUNDLE_NAME/Contents"
+  exit 0
+fi
 APP_ICON_SOURCE="$ROOT_DIR/packaging/assets/agentdock.png"
 CODESIGN_IDENTITY="${AGENTDOCK_CODESIGN_IDENTITY:-"-"}"
 CODESIGN_KEYCHAIN="${AGENTDOCK_CODESIGN_KEYCHAIN:-}"
@@ -22,6 +60,7 @@ usage() {
   packaging/macos/build-app.sh [版本]
 
 环境变量：
+  AGENTDOCK_MACOS_APP_VARIANT   stable（默认）或 next
   AGENTDOCK_MACOS_ARCHES        逗号分隔架构，默认当前架构；Release 使用 arm64,x86_64
   AGENTDOCK_MACOS_APP_OUTPUT_DIR 输出目录，默认 dist/macos-app
   AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR
@@ -84,17 +123,28 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentdock-macos-app.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$OUTPUT_DIR"
+ARBITER_BUILD_ARGS=()
+NEXT_OVERLAY_DIR=''
+if [[ -n "${AGENTDOCK_NEXT_CANDIDATE_MANIFEST:-}" ]]; then
+  NEXT_OVERLAY_DIR="$(mktemp -d "$OUTPUT_DIR/.next-overlay.XXXXXX")"
+  trap 'rm -rf "$TMP_DIR" "$NEXT_OVERLAY_DIR"' EXIT
+  (cd "$ROOT_DIR" && go run ./tools/release next-candidate --manifest "$AGENTDOCK_NEXT_CANDIDATE_MANIFEST" --output "$NEXT_OVERLAY_DIR") >/dev/null
+  ARBITER_BUILD_ARGS=(-overlay "$NEXT_OVERLAY_DIR/overlay.json" -ldflags "-s -w -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$candidate_commit -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$candidate_date")
+else
+  ARBITER_BUILD_ARGS=(-ldflags '-s -w')
+fi
 rm -rf \
-  "$OUTPUT_DIR/AgentDock.app" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.dmg" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.dmg.sha256" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.zip" \
-  "$OUTPUT_DIR/AgentDock-macos-universal.zip.sha256"
+  "$OUTPUT_DIR/$APP_BUNDLE_NAME" \
+  "$OUTPUT_DIR/$DMG_NAME" \
+  "$OUTPUT_DIR/${DMG_NAME}.sha256" \
+  "$OUTPUT_DIR/$ZIP_NAME" \
+  "$OUTPUT_DIR/${ZIP_NAME}.sha256"
 
 IFS=',' read -rA architectures <<< "$ARCH_LIST"
 (( ${#architectures[@]} > 0 )) || die "没有可构建的架构"
 compiled_binaries=()
 login_helper_binaries=()
+service_registrar_binaries=()
 release_architectures=()
 for architecture in "${architectures[@]}"; do
   architecture="${architecture//[[:space:]]/}"
@@ -106,7 +156,10 @@ for architecture in "${architectures[@]}"; do
   release_architectures+=("$release_architecture")
   binary="$TMP_DIR/AgentDock-$architecture"
   print -- "==> 编译 AgentDock.app：$architecture"
-  xcrun swiftc \
+  if [[ -n "$SHARED_EXECUTABLE" ]]; then
+    cp "$SHARED_EXECUTABLE" "$binary"
+  else
+    xcrun swiftc \
     -swift-version 5 \
     -O \
     -whole-module-optimization \
@@ -114,6 +167,7 @@ for architecture in "${architectures[@]}"; do
     -sdk "$SDK_PATH" \
     "$SOURCE_DIR"/*.swift \
     -o "$binary"
+  fi
   compiled_binaries+=("$binary")
 
   login_helper="$TMP_DIR/AgentDockLoginHelper-$architecture"
@@ -123,18 +177,26 @@ for architecture in "${architectures[@]}"; do
     -whole-module-optimization \
     -target "$architecture-apple-macosx$MIN_VERSION" \
     -sdk "$SDK_PATH" \
+    "$SOURCE_DIR/AppIdentity.swift" \
     "$LOGIN_HELPER_SOURCE" \
     -o "$login_helper"
   login_helper_binaries+=("$login_helper")
+
+  if [[ -n "$SHARED_EXECUTABLE" ]]; then
+    service_registrar="$TMP_DIR/AgentDockServiceRegistrar-$architecture"
+    xcrun swiftc       -swift-version 5       -O       -whole-module-optimization       -target "$architecture-apple-macosx$MIN_VERSION"       -sdk "$SDK_PATH"       "$SERVICE_REGISTRAR_SOURCE"       -o "$service_registrar"
+    service_registrar_binaries+=("$service_registrar")
+  fi
 done
 
-APP_DIR="$OUTPUT_DIR/AgentDock.app"
+APP_DIR="$OUTPUT_DIR/$APP_BUNDLE_NAME"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 HELPERS_DIR="$CONTENTS_DIR/Helpers"
 LAUNCH_AGENTS_DIR="$CONTENTS_DIR/Library/LaunchAgents"
 MENU_LOGIN_HELPER="$HELPERS_DIR/AgentDockLoginHelper"
+SERVICE_REGISTRAR="$MACOS_DIR/AgentDockServiceRegistrar"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$HELPERS_DIR" "$LAUNCH_AGENTS_DIR"
 localization_count=0
 while IFS= read -r -d '' source_lproj; do
@@ -158,6 +220,19 @@ else
   lipo -create "${login_helper_binaries[@]}" -output "$MENU_LOGIN_HELPER"
 fi
 chmod 0755 "$MENU_LOGIN_HELPER"
+
+if (( ${#service_registrar_binaries[@]} == 1 )); then
+  cp -p "$service_registrar_binaries[1]" "$SERVICE_REGISTRAR"
+elif (( ${#service_registrar_binaries[@]} > 1 )); then
+  lipo -create "${service_registrar_binaries[@]}" -output "$SERVICE_REGISTRAR"
+fi
+if (( ${#service_registrar_binaries[@]} > 0 )); then
+  chmod 0755 "$SERVICE_REGISTRAR"
+fi
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  cp "$NEXT_MCP_LAUNCHER" "$HELPERS_DIR/agentdock-next-mcp-launch"
+  chmod 0755 "$HELPERS_DIR/agentdock-next-mcp-launch"
+fi
 
 ICONSET_DIR="$TMP_DIR/AgentDock.iconset"
 mkdir -p "$ICONSET_DIR"
@@ -230,7 +305,7 @@ for release_architecture in "${release_architectures[@]}"; do
   (
     cd "$ROOT_DIR"
     CGO_ENABLED=0 GOOS=darwin GOARCH="$release_architecture" \
-      go build -trimpath -ldflags '-s -w' -o "$arbiter_binary" ./cmd/agentdock-arbiter
+      go build -trimpath "${ARBITER_BUILD_ARGS[@]}" -o "$arbiter_binary" ./cmd/agentdock-arbiter
   )
   arbiter_file_output="$(file "$arbiter_binary")"
   [[ "$arbiter_file_output" == *"$expected_file_architecture"* ]] || \
@@ -258,123 +333,19 @@ find "$CORE_SKILL_BUNDLE" -type f -exec chmod 0644 {} +
 [[ -f "$CORE_SKILL_BUNDLE/manifest.json" && ! -L "$CORE_SKILL_BUNDLE/manifest.json" ]] || \
   die "App Bundle 缺少核心 Skill manifest"
 
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.core.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.core</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/agentdock</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>agentdock</string>
-    <string>service</string>
-    <string>launch-core</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>ThrottleInterval</key>
-  <integer>5</integer>
-</dict>
-</plist>
-PLIST
+write_app_metadata "$CONTENTS_DIR"
 
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.tunnel.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.tunnel</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/agentdock</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>agentdock</string>
-    <string>tunnel</string>
-    <string>launch</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>ThrottleInterval</key>
-  <integer>5</integer>
-</dict>
-</plist>
-PLIST
-
-cat > "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.menu-login.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.uvwt.agentdock.menu-login</string>
-  <key>BundleProgram</key>
-  <string>Contents/Helpers/AgentDockLoginHelper</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>AgentDockLoginHelper</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>LimitLoadToSessionType</key>
-  <string>Aqua</string>
-</dict>
-</plist>
-PLIST
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.core.plist" >/dev/null
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.tunnel.plist" >/dev/null
-plutil -lint "$LAUNCH_AGENTS_DIR/com.uvwt.agentdock.menu-login.plist" >/dev/null
-
-cat > "$CONTENTS_DIR/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleDisplayName</key>
-  <string>AgentDock</string>
-  <key>CFBundleExecutable</key>
-  <string>AgentDock</string>
-  <key>CFBundleIdentifier</key>
-  <string>$BUNDLE_ID</string>
-  <key>CFBundleIconFile</key>
-  <string>AgentDock.icns</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>AgentDock</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundleVersion</key>
-  <string>$VERSION</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>$MIN_VERSION</string>
-  <key>LSUIElement</key>
-  <true/>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSAppleEventsUsageDescription</key>
-  <string>AgentDock needs to control System Events and Finder to perform desktop automation tasks you request.</string>
-  <key>NSHumanReadableCopyright</key>
-  <string>Copyright © AgentDock contributors</string>
-</dict>
-</plist>
-PLIST
-plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  cat > "$RESOURCES_DIR/desktop-product.json" <<JSON
+{"schema_version":1,"product_name":"$APP_NAME","desktop_variant":"$APP_VARIANT","ui":"shared-wails"}
+JSON
+  chmod 0644 "$RESOURCES_DIR/desktop-product.json"
+  # Sealed, inactive by default. No caller/env catalog or backend override.
+  cat > "$RESOURCES_DIR/native-mcp-servers.json" <<JSON
+{"schema_version":1,"servers":[]}
+JSON
+  chmod 0644 "$RESOURCES_DIR/native-mcp-servers.json"
+fi
 
 sign_macos_code() {
   local identifier="$1"
@@ -399,16 +370,20 @@ if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
 else
   print -- "==> 使用指定身份签名 AgentDock.app"
 fi
-sign_macos_code "com.uvwt.agentdock.login-helper" "$MENU_LOGIN_HELPER"
-sign_macos_code "com.uvwt.agentdock.core" "$HELPERS_DIR/agentdock"
-sign_macos_code "com.uvwt.agentdock.cloudflared" "$HELPERS_DIR/cloudflared"
-sign_macos_code "com.uvwt.agentdock.arbiter" "$HELPERS_DIR/agentdock-arbiter"
+sign_macos_code "$LOGIN_SIGN_ID" "$MENU_LOGIN_HELPER"
+sign_macos_code "$CORE_LABEL" "$HELPERS_DIR/agentdock"
+sign_macos_code "$CLOUDFLARED_SIGN_ID" "$HELPERS_DIR/cloudflared"
+sign_macos_code "$ARBITER_SIGN_ID" "$HELPERS_DIR/agentdock-arbiter"
+if [[ -n "$SHARED_EXECUTABLE" ]]; then
+  sign_macos_code "$REGISTRAR_SIGN_ID" "$SERVICE_REGISTRAR"
+  sign_macos_code "$BUNDLE_ID.mcp-launch" "$HELPERS_DIR/agentdock-next-mcp-launch"
+fi
 # 嵌套代码先分别签名，再签外层 App。不要用 --deep 做签名操作，否则会重新签
 # Core/cloudflared 并破坏它们的稳定代码身份；--deep 只用于最终递归验证。
 sign_macos_code "$BUNDLE_ID" "$APP_DIR"
 codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
-ZIP_PATH="$OUTPUT_DIR/AgentDock-macos-universal.zip"
+ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 print -- "==> 创建 AgentDock App 更新 ZIP"
 ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
 unzip -tq "$ZIP_PATH" >/dev/null
@@ -418,14 +393,14 @@ unzip -tq "$ZIP_PATH" >/dev/null
 )
 
 DMG_STAGE_DIR="$TMP_DIR/dmg-root"
-DMG_PATH="$OUTPUT_DIR/AgentDock-macos-universal.dmg"
+DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 mkdir -p "$DMG_STAGE_DIR"
-ditto "$APP_DIR" "$DMG_STAGE_DIR/AgentDock.app"
+ditto "$APP_DIR" "$DMG_STAGE_DIR/$APP_BUNDLE_NAME"
 ln -s /Applications "$DMG_STAGE_DIR/Applications"
 
 print -- "==> 创建 AgentDock DMG"
 hdiutil create \
-  -volname "AgentDock" \
+  -volname "$APP_NAME" \
   -srcfolder "$DMG_STAGE_DIR" \
   -ov \
   -format UDZO \

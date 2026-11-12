@@ -27,6 +27,14 @@ type StdioSession struct {
 }
 
 func OpenStdioSession(ctx context.Context, cfg ServerConfig) (*StdioSession, error) {
+	return OpenStdioSessionWithStartedWitness(ctx, cfg, nil)
+}
+
+// OpenStdioSessionWithStartedWitness is an ephemeral, process-local opt-in.
+// The callback runs immediately after the owned stdio child is attached,
+// BEFORE MCP handshake, list-tools, or lease publication. A callback failure
+// fails the session and invokes the existing owned-child cleanup.
+func OpenStdioSessionWithStartedWitness(ctx context.Context, cfg ServerConfig, witness func(context.Context, int) error) (*StdioSession, error) {
 	cfg = normalizeServerConfig(cfg)
 	if cfg.Transport != TransportStdio || cfg.Command == "" || cfg.TimeoutMS < 1 || cfg.TimeoutMS > maxTimeoutMS {
 		return nil, newError("MCP_CONFIG_INVALID", "ephemeral session requires a stdio command and bounded timeout", false, nil, nil)
@@ -34,6 +42,7 @@ func OpenStdioSession(ctx context.Context, cfg ServerConfig) (*StdioSession, err
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutMS)*time.Millisecond)
 	defer cancel()
 	c := newStdioClient(cfg)
+	c.startedWitness = witness
 	if err := c.initialize(ctx); err != nil {
 		return nil, errors.Join(err, c.close())
 	}

@@ -15,7 +15,7 @@ const diagnostics = useDiagnosticsStore()
 const { t } = useI18n()
 onMounted(() => {
   void runtime.refresh(); void connection.refresh(); void diagnostics.refresh()
-  if (!update.data) void update.refresh()
+  if (!update.data && !update.channelDisabled) void update.refresh()
 })
 </script>
 <template>
@@ -30,15 +30,21 @@ onMounted(() => {
       </article>
       <article class="panel">
         <h3>{{ t('connection.title') }}</h3>
-        <p>{{ connection.status ? t(connection.status.running ? 'common.running' : 'common.stopped') : t('common.unavailable') }}</p>
-        <p class="safe-url">{{ connection.publicURL || t('common.unavailable') }}</p>
-        <OperationStatus :busy="connection.busy" :error="connection.error" />
+        <p>
+          {{ connection.snapshot?.coreRunning === null || connection.snapshot?.coreRunning === undefined
+            ? t('common.unavailable')
+            : t(connection.snapshot.coreRunning ? 'common.running' : 'common.stopped') }}
+        </p>
+        <p class="safe-url">{{ connection.snapshot?.publicMCPURL || t('common.unavailable') }}</p>
+        <OperationStatus :busy="connection.busy" :error="connection.operationError" />
+        <OperationStatus v-if="!connection.busy && connection.actionError && connection.error"
+          :busy="false" :error="connection.error" />
         <button type="button" @click="emit('navigate', 'connection')">{{ t('overview.open_connection') }}</button>
       </article>
       <article class="panel">
         <h3>{{ t('update.title') }}</h3>
-        <p>{{ !update.data ? t('update.not_checked') : t(update.data.updateAvailable || update.data.desktopUpdateAvailable ? 'update.available' : 'update.current_state') }}</p>
-        <OperationStatus :busy="update.busy" :error="update.error" />
+        <p>{{ update.channelDisabled ? t('update.channel_disabled') : !update.data ? t('update.not_checked') : t(update.data.updateAvailable || update.data.desktopUpdateAvailable ? 'update.available' : 'update.current_state') }}</p>
+        <OperationStatus :busy="update.busy" :error="update.channelDisabled ? null : update.error" />
         <button type="button" @click="emit('navigate', 'system')">{{ t('overview.open_system') }}</button>
       </article>
       <article class="panel">

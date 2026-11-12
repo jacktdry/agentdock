@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,6 +30,19 @@ const sdkTransportRejectedCode int64 = -32005
 const stdioGracePeriod = 2500 * time.Millisecond
 const stdioTerminateWait = 3 * time.Second
 
+var supportedMCPProtocolVersions = map[string]struct{}{
+	"2024-11-05": {},
+	"2025-03-26": {},
+	"2025-06-18": {},
+	"2025-11-25": {},
+	"2026-07-28": {},
+}
+
+func supportedMCPProtocolVersion(version string) bool {
+	_, ok := supportedMCPProtocolVersions[strings.TrimSpace(version)]
+	return ok
+}
+
 type protocolClient interface {
 	initialize(context.Context) error
 	listTools(context.Context) ([]Tool, error)
@@ -45,8 +59,12 @@ type sdkProtocolClient struct {
 	controller *processcontrol.Controller
 	stderr     *tailBuffer
 	oauth      sdkauth.OAuthHandler
+	httpClient *http.Client
 	closeOnce  sync.Once
 	closeErr   error
+	// Ephemeral-only post-Start, pre-handshake witness. Never persisted in
+	// ServerConfig or used by general Manager sessions.
+	startedWitness func(context.Context, int) error
 }
 
 func newStreamableHTTPClient(cfg ServerConfig, oauth sdkauth.OAuthHandler) *sdkProtocolClient {
@@ -66,7 +84,11 @@ func (c *sdkProtocolClient) initialize(ctx context.Context) error {
 		&mcpsdk.Implementation{Name: config.ServerName, Version: buildinfo.Version},
 		&mcpsdk.ClientOptions{Capabilities: &mcpsdk.ClientCapabilities{}},
 	)
-	session, err := client.Connect(ctx, transport, nil)
+	var sessionOptions *mcpsdk.ClientSessionOptions
+	if c.cfg.ProtocolVersion != "" {
+		sessionOptions = &mcpsdk.ClientSessionOptions{ProtocolVersion: c.cfg.ProtocolVersion}
+	}
+	session, err := client.Connect(ctx, transport, sessionOptions)
 	if err != nil {
 		return errors.Join(c.wrapSDKError("initialize MCP session", err), c.cleanupProcess())
 	}
@@ -99,9 +121,32 @@ func (c *sdkProtocolClient) transport() (mcpsdk.Transport, error) {
 			// access token，也会在真正发请求前被静态 Header 覆盖。
 			oauth = nil
 		}
+		endpoint, err := url.Parse(c.cfg.URL)
+		if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+			return nil, errors.New("invalid MCP HTTP endpoint")
+		}
+		// Copy the client so repeated setup cannot stack wrappers or mutate callers.
+		httpClient := &http.Client{}
+		if c.httpClient != nil {
+			*httpClient = *c.httpClient
+		}
+		previousRedirect := httpClient.CheckRedirect
+		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if !sameHTTPOrigin(endpoint, req.URL) {
+				return errMCPOriginRejected
+			}
+			if previousRedirect != nil {
+				return previousRedirect(req, via)
+			}
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		}
+		httpClient.Transport = headerRoundTripper{headers: headers, endpoint: endpoint, base: httpClient.Transport}
 		return &mcpsdk.StreamableClientTransport{
 			Endpoint:             c.cfg.URL,
-			HTTPClient:           &http.Client{Transport: headerRoundTripper{headers: headers}},
+			HTTPClient:           httpClient,
 			OAuthHandler:         oauth,
 			MaxRetries:           -1,
 			DisableStandaloneSSE: true,
@@ -144,6 +189,13 @@ func (c *sdkProtocolClient) startStdioTransport() (mcpsdk.Transport, error) {
 	c.command = cmd
 	c.stdin = stdin
 	c.controller = controller
+	if c.startedWitness != nil {
+		if err := c.startedWitness(context.Background(), cmd.Process.Pid); err != nil {
+			// OpenStdioSessionWithStartedWitness will close this exact owned
+			// transport and its process group; no connection is published.
+			return nil, newError("MCP_START_FAILED", "owned MCP stdio child witness unavailable", false, map[string]any{"server": c.cfg.Name}, err)
+		}
+	}
 	return &mcpsdk.IOTransport{Reader: stdout, Writer: stdin}, nil
 }
 
@@ -266,6 +318,10 @@ func (c *sdkProtocolClient) wrapSDKError(operation string, err error) error {
 		return nil
 	}
 	details := map[string]any{"server": c.cfg.Name}
+	if errors.Is(err, errMCPOriginRejected) {
+		// net/http wraps redirect errors with the untrusted Location URL.
+		return newError("MCP_CONNECTION_FAILED", errMCPOriginRejected.Error(), false, details, errMCPOriginRejected)
+	}
 	var authRequired *oauthclient.AuthRequiredError
 	if errors.As(err, &authRequired) {
 		return newError("MCP_AUTH_REQUIRED", authRequired.Error(), false, details, err)
@@ -402,11 +458,35 @@ func resolveHTTPHeaders(cfg ServerConfig) (http.Header, error) {
 	return headers, nil
 }
 
+var errMCPOriginRejected = errors.New("MCP HTTP request to another origin rejected")
+
+func sameHTTPOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || a.Hostname() == "" || b.Hostname() == "" {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if p := u.Port(); p != "" {
+			return p
+		}
+		if strings.EqualFold(u.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
+}
+
 type headerRoundTripper struct {
-	headers http.Header
+	headers  http.Header
+	endpoint *url.URL
+	base     http.RoundTripper
 }
 
 func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	// Guard every dispatch, including SDK-originated requests, before adding secrets.
+	if !sameHTTPOrigin(t.endpoint, request.URL) {
+		return nil, errMCPOriginRejected
+	}
 	clone := request.Clone(request.Context())
 	clone.Header = request.Header.Clone()
 	for name, values := range t.headers {
@@ -415,7 +495,11 @@ func (t headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, er
 			clone.Header.Add(name, value)
 		}
 	}
-	return http.DefaultTransport.RoundTrip(clone)
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(clone)
 }
 
 type tailBuffer struct {

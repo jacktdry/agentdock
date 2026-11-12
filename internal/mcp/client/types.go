@@ -20,9 +20,12 @@ var (
 )
 
 type ServerConfig struct {
+	// Generation is registry-owned metadata, never supplied by a caller.
+	Generation        string            `json:"-"`
 	Name              string            `json:"name"`
 	Description       string            `json:"description"`
 	Transport         string            `json:"transport"`
+	ProtocolVersion   string            `json:"protocol_version,omitempty"`
 	URL               string            `json:"url,omitempty"`
 	Command           string            `json:"command,omitempty"`
 	Args              []string          `json:"args,omitempty"`
@@ -42,6 +45,23 @@ type ServerConfig struct {
 	PluginDataDir     string            `json:"-"`
 	Enabled           bool              `json:"enabled"`
 	TimeoutMS         int               `json:"timeout_ms,omitempty"`
+}
+
+// RegistrySnapshot is an authoritative Core read, not a renderer-safe DTO.
+// Configs may contain protected args/URLs; adapters must project safe fields.
+type RegistrySnapshot struct {
+	Revision string
+	Servers  map[string]ServerConfig
+}
+
+// MutationResult retains durable post-state even if runtime cleanup fails.
+// A non-nil error with Persisted=true must not be blindly retried.
+type MutationResult struct {
+	Registry       RegistrySnapshot
+	Persisted      bool
+	RuntimeApplied bool
+	Server         ServerConfig
+	Summary        ServerSummary
 }
 
 type Tool struct {
@@ -101,6 +121,7 @@ func normalizeServerConfig(cfg ServerConfig) ServerConfig {
 	cfg.Name = strings.TrimSpace(cfg.Name)
 	cfg.Description = strings.TrimSpace(cfg.Description)
 	cfg.Transport = strings.ToLower(strings.TrimSpace(cfg.Transport))
+	cfg.ProtocolVersion = strings.TrimSpace(cfg.ProtocolVersion)
 	cfg.URL = strings.TrimSpace(cfg.URL)
 	cfg.Command = strings.TrimSpace(cfg.Command)
 	cfg.Cwd = strings.TrimSpace(cfg.Cwd)

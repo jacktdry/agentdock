@@ -9,12 +9,17 @@ import (
 type ErrorCategory string
 
 const (
-	ErrorCategoryValidation    ErrorCategory = "validation"
-	ErrorCategoryUnavailable   ErrorCategory = "unavailable"
-	ErrorCategoryOperation     ErrorCategory = "operation"
-	ErrorCategoryTimeout       ErrorCategory = "timeout"
-	ErrorCategoryCompatibility ErrorCategory = "compatibility"
-	ErrorCategoryInternal      ErrorCategory = "internal"
+	ErrorCategoryValidation     ErrorCategory = "validation"
+	ErrorCategoryNotFound       ErrorCategory = "not_found"
+	ErrorCategoryConflict       ErrorCategory = "conflict"
+	ErrorCategoryAuthentication ErrorCategory = "authentication"
+	ErrorCategoryPermission     ErrorCategory = "permission"
+	ErrorCategoryCapacity       ErrorCategory = "capacity"
+	ErrorCategoryUnavailable    ErrorCategory = "unavailable"
+	ErrorCategoryOperation      ErrorCategory = "operation"
+	ErrorCategoryTimeout        ErrorCategory = "timeout"
+	ErrorCategoryCompatibility  ErrorCategory = "compatibility"
+	ErrorCategoryInternal       ErrorCategory = "internal"
 )
 
 type APIError struct {

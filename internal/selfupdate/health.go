@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,15 @@ type healthResponse struct {
 }
 
 func healthCandidates(_ string) []string {
+	if runtime.GOOS == "darwin" {
+		switch os.Getenv("AGENTDOCK_DESKTOP_VARIANT") {
+		case "next":
+			return []string{"http://127.0.0.1:8767/healthz"}
+		case "", "stable":
+		default:
+			return nil
+		}
+	}
 	var candidates []string
 	if port, err := strconv.Atoi(strings.TrimSpace(os.Getenv("AGENTDOCK_PORT"))); err == nil && port > 0 && port <= 65535 {
 		candidates = append(candidates, localHealthURL(os.Getenv("AGENTDOCK_HOST"), port))

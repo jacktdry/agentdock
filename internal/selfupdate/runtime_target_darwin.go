@@ -40,9 +40,13 @@ func coreBinaryFallbackForRuntime(runtimeRoot string) (string, bool) {
 }
 
 var standardDesktopUpdateCandidates = func() []string {
-	candidates := []string{"/Applications/AgentDock.app"}
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return nil
+	}
+	candidates := []string{filepath.Join("/Applications", id.AppName())}
 	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-		candidates = append(candidates, filepath.Join(home, "Applications", "AgentDock.app"))
+		candidates = append(candidates, filepath.Join(home, "Applications", id.AppName()))
 	}
 	return candidates
 }

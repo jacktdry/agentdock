@@ -264,3 +264,20 @@ running daemon 永遠從自己的 build path spawn worker；新 client / daemon 
 在正式改善前，維持以下 operational rule：
 
 > 若遇到 `worker executable build conflicts with its supervisor`，先確認是否存在更新前啟動的 CBM daemon / sessions。不要為了單一 re-index 直接終止所有 CBM process；讓 active work drain，之後再安全 restart 並補做 re-index。
+
+
+## 2026-10-11 補充：index options 競爭與跨 MCP client 數量
+
+唯讀 CBM daemon log 顯示 `watcher.changed … strategy=git`、`active_jobs=1`、`index.supervisor.reap outcome=clean`，且期間 `index_repository` 因不同 options 而衝突。此現象**不同於**本文件 2026-10-03 的 binary/worker build mismatch；不能把另一項正在索引自動解讀成另一個 ChatGPT Session 正在主動使用。
+
+macOS 観察 64 個 CBM Clients（其中 62 個是 Codex ACP app-server 子程序）及 1 個 shared daemon：64 Clients 不代表 64 個活躍 indexing workers。長期需 project+commit+options coalescing 和 bounded retry/queue，以及 daemon/client per-session lifecycle；不為解決此問題直接 kill daemon 或其他 Session。見 [MCP Runtime 共用生命週期](pre-m9-mcp-runtime-lifecycle-policy-2026-10-11.md)。
+
+## 2026-10-14 P9 bounded release-impact triage（唯讀、未重啟）
+
+這次只回答 **M9 安裝／更新是否會破壞 CBM 或使用者既有工作**，沒有為外部 CBM 建立新的管理服務、改動索引設定、停止程序或重建索引。
+
+- **歷史 build mismatch（2026-10-03）**：在外部 `~/.local/share/mcp-servers/codebase-memory-mcp/bin/codebase-memory-mcp` executable 原地更新後，舊 supervisor 可能仍存活且啟動磁碟上的新 worker，觸發既有 build 相容性拒絕；這是 **CBM 自身 binary 更新與跨進程版本生命週期**，不得繞過一致性檢查，也不能只因 Client 長駐就 `pkill`。
+- **本次取樣（2026-10-14 +08）**：上述 executable 磁碟 mtime 為 **2026-10-03 12:28:35**。macOS process name/arguments 僅用於本機唯讀篩選、未記錄完整 argv/env/credentials；共 66 個 CBM 名稱提示，其中 **2 個 daemon**（當次 PID 58769／12280，啟動於 10/07／10/14）與約 **64 個 Client**，多數 Client 的 PPID 為 Codex app-server（本次 parent PID 55205）。未觀察到啟動早於目前 CBM executable mtime 的 CBM 程序，**但這不是可靠的 running build/version API**；不可據此推定不存在更新中的程序。最近 CBM daemon log 尾端 4,000 行含 **794 次 clean supervisor reap**、770 筆 Git watcher change、`active_jobs=1` 訊息及 **0 次 worker_failed**，沒有重現舊式 build mismatch。Client 數量也不是索引 worker／活躍 job 數。
+- **獨立的索引選項衝突（2026-10-11）**：Git watcher 自動索引與人工 `index_repository` 用不同 options 可能競爭；此時索引拒絕／等待不等於 supervisor binary mismatch，也無法推斷是哪個 ChatGPT／Codex Session 正在索引。必要時做 project+branch/commit+options 的 bounded coalescing 和 retry，不能直接中止已接受的其他 repo job。
+- **與 AgentDock Next install/update 的關係**：實際 Next-only `packaging/macos/install-next-shared.py` 和 `deploy-next-shared.py` 使用固定 allowlist，交易式替換 **`~/Applications/AgentDock Next.app/Contents`** 並重新註冊 Next 自有服務，未包含 CBM 的外部 executable、cache、daemon 或其 PID。M7/P5 MCP Client 與 CBM shared daemon 並無由此 installer 直接啟動的 CBM binary update 路徑。現有證據**不支持** Next 安裝／更新會製造本事件的 installed-vs-running CBM build mismatch；也不支持為 M9 提前修改這個多方共享 daemon。
+- **P9 結論**：將此事件判為 **post-M9 CBM service/ACP-MCP runtime lifecycle 維護債**，不列作 *目前已證實* 的 M9 installer/release 阻斷。保留後續清晰退出條件：上游 build/version 介面、owner/lease/generation 真實證據、active index-job drain、index options coalescing、bounded pending retry、restart 與驗證；跨所有 owner 前不得自動 stop。**若日後觀察到 Next 自己的安裝／更新會改變仍在服務中的 managed MCP binary，或影響有效的用戶工作，必須重新開啟 M9 阻斷判定**。

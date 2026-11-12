@@ -6,7 +6,7 @@ defineProps<{ busy: boolean; error: APIError | null; completed?: boolean }>()
 const { t } = useI18n()
 </script>
 <template>
-  <p aria-live="polite" :class="{ error: !!error }">
+  <p class="operation-status" aria-live="polite" :class="{ error: !!error }">
     {{ busy ? t('common.loading') : error ? errorMessage(error) : completed ? t('common.completed') : '' }}
   </p>
 </template>

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -302,5 +303,24 @@ func TestBridgeToolInvokeContinuesTraceContextIntoRuntime(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("bridge did not stop after cancellation")
+	}
+}
+
+func TestNexusAuthPrincipalUsesAuthenticatedDeviceIdentity(t *testing.T) {
+	identity := Identity{NodeID: "node-a", DeviceID: "device-a", DeviceToken: "secret-token"}
+	first := nexusAuthPrincipal(identity)
+	rotated := nexusAuthPrincipal(Identity{NodeID: "node-a", DeviceID: "device-a", DeviceToken: "rotated-token"})
+	other := nexusAuthPrincipal(Identity{NodeID: "node-b", DeviceID: "device-a", DeviceToken: "secret-token"})
+	if first.Kind != "nexus_device" || !first.Authenticated || !first.Stable || first.ID == "" {
+		t.Fatalf("principal = %#v", first)
+	}
+	if first != rotated {
+		t.Fatalf("device principal changed on credential rotation: %#v %#v", first, rotated)
+	}
+	if first.ID == other.ID {
+		t.Fatal("different Nexus node shared principal")
+	}
+	if strings.Contains(first.ID, identity.DeviceToken) || strings.Contains(first.ID, identity.NodeID) || strings.Contains(first.ID, identity.DeviceID) {
+		t.Fatalf("principal leaked identity material: %q", first.ID)
 	}
 }

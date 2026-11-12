@@ -34,6 +34,8 @@ func defaultExternalLeasePolicy() externalLeasePolicy {
 type externalLease struct {
 	managedLease
 	worker     WorkerInfo
+	peer       externalPeerIdentity
+	peerLost   bool
 	targetLost bool
 }
 type externalOrphanWorker struct {
@@ -43,11 +45,13 @@ type externalOrphanWorker struct {
 }
 
 type ExternalLeaseManager struct {
-	mu      sync.Mutex
-	leases  map[string]*externalLease
-	orphans map[string]*externalOrphanWorker
-	backend ExternalLeaseBackend
-	policy  externalLeasePolicy
+	mu                   sync.Mutex
+	leases               map[string]*externalLease
+	orphans              map[string]*externalOrphanWorker
+	backend              ExternalLeaseBackend
+	policy               externalLeasePolicy
+	verifier             externalPeerVerifier
+	verificationInFlight chan struct{}
 }
 
 func NewExternalLeaseManager(backend ExternalLeaseBackend) *ExternalLeaseManager {
@@ -55,7 +59,7 @@ func NewExternalLeaseManager(backend ExternalLeaseBackend) *ExternalLeaseManager
 }
 
 func newExternalLeaseManager(backend ExternalLeaseBackend, policy externalLeasePolicy) *ExternalLeaseManager {
-	return &ExternalLeaseManager{backend: backend, leases: make(map[string]*externalLease), orphans: make(map[string]*externalOrphanWorker), policy: policy}
+	return &ExternalLeaseManager{backend: backend, leases: make(map[string]*externalLease), orphans: make(map[string]*externalOrphanWorker), policy: policy, verificationInFlight: make(chan struct{}, 1)}
 }
 
 func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision, url string) (LeaseMetadata, EngineBinding, error) {
@@ -66,6 +70,25 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if err := validateExternalStart(route); err != nil {
 		return LeaseMetadata{}, EngineBinding{}, err
 	}
+	if start.Engine == EngineNativeCDP && url != "" && url != "about:blank" && !start.OriginScope.Allows(url) {
+		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrActionInvalid, "", "initial company URL outside approved origins", nil)
+	}
+	if ctx.Err() != nil || !consumeExternalRouteGrant(route) {
+		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrRequiredRouteUnavailable, "", "external route admission unavailable", nil)
+	}
+	if start.Engine == EngineNativeCDP {
+		// The five-second one-shot grant authorizes starting this admission,
+		// not every subsequent independently verified OS and CDP step.
+		// Bound the whole procedure even when the caller has no deadline.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 35*time.Second)
+		defer cancel()
+	}
+	// Consume admission once even when the required transport is unavailable.
+	// Do not start a legacy connector or touch any browser without this fence.
+	if _, ok := m.backend.(externalTransportFence); !ok {
+		return LeaseMetadata{}, EngineBinding{}, externalTransportFenceError()
+	}
 	worker, err := m.backend.StartExternal(ctx, ExternalWorkerOptions{Cwd: scope.CanonicalWorkspaceRoot, Route: route})
 	var pageID float64
 	proven := false
@@ -75,7 +98,7 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if proven {
-				if closeErr := m.closeOwnedPage(cleanupCtx, worker, pageID); closeErr != nil {
+				if closeErr := m.closeOwnedPage(cleanupCtx, worker, route.grant.peer, pageID); closeErr != nil {
 					cause = errors.Join(cause, externalLeaseError(ErrActionFailed, "", "external owned target cleanup failed", closeErr))
 				}
 			}
@@ -94,7 +117,10 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if worker.WorkerID == "" || worker.State != WorkerReady {
 		return fail(externalLeaseError(ErrLeaseTargetMismatch, "", "ready worker identity missing", nil))
 	}
-	baselineResult, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
+		return fail(err)
+	}
+	baselineResult, err := m.callExternalFenced(ctx, worker, route.grant.peer, "list_pages", map[string]any{})
 	if err != nil {
 		return fail(err)
 	}
@@ -108,17 +134,32 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if url == "" {
 		url = "about:blank"
 	}
-	result, createErr := m.backend.CallExternal(ctx, worker, "new_page", map[string]any{"url": url, "background": true})
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
+		return fail(err)
+	}
+	createURL := url
+	if start.Engine == EngineNativeCDP {
+		createURL = "about:blank"
+	}
+	result, createErr := m.callExternalFenced(ctx, worker, route.grant.peer, "new_page", map[string]any{"url": createURL, "background": true})
 	var pageString string
 	pageID, pageString, err = externalNewPageID(baseline, result)
 	if err != nil {
 		return fail(externalLeaseError(ErrLeaseTargetMismatch, "", "ambiguous external target cleanup: no page closed; connector stopped only", errors.Join(createErr, err)))
 	}
 	proven = true
+	// The peer can change while new_page is executing. A page ID from the
+	// old peer is not authority to close a page in the new peer. Quarantine
+	// this result and stop only our connector on any identity uncertainty.
+	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
+		proven = false
+		return fail(err)
+	}
 	if createErr != nil {
 		return fail(createErr)
 	}
 	if err := ctx.Err(); err != nil {
+		proven = false
 		return fail(err)
 	}
 	now := time.Now().UTC()
@@ -127,10 +168,25 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 		OwnerType: OwnerExternalPersistent, ProfileClass: start.ProfileClass, Ownership: start.Ownership, CDPEndpoint: start.Endpoint, ProfilePath: start.ProfilePath,
 		ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleExternal, CreatedAt: now, LastActiveAt: now, ExpiresAt: now.Add(m.policy.IdleTTL), CleanupState: CleanupPending,
 		ConnectorPID: PIDObservation{PID: worker.Session.PID, ObservedAt: now}}
-	binding := EngineBinding{BrowserLeaseID: id, BrowserSessionID: session, WorkerID: worker.WorkerID, PageID: pageString, ConnectorID: start.ConnectorID, Engine: EngineChromeDevToolsMCP}
+	binding := EngineBinding{BrowserLeaseID: id, BrowserSessionID: session, WorkerID: worker.WorkerID, PageID: pageString, ConnectorID: start.ConnectorID, Engine: start.Engine}
 	m.mu.Lock()
-	m.leases[id] = &externalLease{managedLease: managedLease{metadata: meta, binding: binding, pageID: pageID, idleTTL: m.policy.IdleTTL}, worker: worker}
+	m.leases[id] = &externalLease{managedLease: managedLease{metadata: meta, binding: binding, pageID: pageID, idleTTL: m.policy.IdleTTL}, worker: worker, peer: route.grant.peer}
 	m.mu.Unlock()
+	// Admission proves and publishes the blank owned target within the short
+	// one-shot grant. Potentially slow site loading is an active scoped lease
+	// operation, with normal owner, peer, TTL and cancellation enforcement.
+	if start.Engine == EngineNativeCDP && url != "about:blank" {
+		if _, err := m.Call(ctx, scope, id, "navigate_page", map[string]any{"url": url}); err != nil {
+			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, releaseErr := m.Release(cleanup, scope, id)
+			return LeaseMetadata{}, EngineBinding{}, errors.Join(err, releaseErr)
+		}
+		l, _ := m.lease(id)
+		l.mu.Lock()
+		meta = l.metadata
+		l.mu.Unlock()
+	}
 	return meta, binding, nil
 }
 
@@ -145,8 +201,8 @@ func (m *ExternalLeaseManager) lease(id string) (*externalLease, error) {
 }
 
 // verifyTarget never substitutes another page for a missing lease target.
-func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worker WorkerInfo) (map[float64]externalPage, error) {
-	result, err := m.backend.CallExternal(ctx, worker, "list_pages", map[string]any{})
+func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity) (map[float64]externalPage, error) {
+	result, err := m.callExternalFenced(ctx, worker, peer, "list_pages", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +219,8 @@ func (m *ExternalLeaseManager) externalPagesForWorker(ctx context.Context, worke
 // closeOwnedPage is version-pinned compatibility logic. The connector is
 // stopped immediately after release, so we never repair MCP selection by
 // selecting or otherwise touching a user-owned page.
-func (m *ExternalLeaseManager) closeOwnedPage(ctx context.Context, worker WorkerInfo, pageID float64) error {
-	result, err := m.backend.CallExternal(ctx, worker, "close_page", map[string]any{"pageId": pageID})
+func (m *ExternalLeaseManager) closeOwnedPage(ctx context.Context, worker WorkerInfo, peer externalPeerIdentity, pageID float64) error {
+	result, err := m.callExternalFenced(ctx, worker, peer, "close_page", map[string]any{"pageId": pageID})
 	if err != nil {
 		return err
 	}
@@ -176,7 +232,7 @@ func (m *ExternalLeaseManager) verifyTarget(ctx context.Context, l *externalLeas
 	if l.targetLost {
 		return externalLeaseError(ErrLeaseTargetMismatch, id, "external target identity lost", nil)
 	}
-	pages, err := m.externalPagesForWorker(ctx, l.worker)
+	pages, err := m.externalPagesForWorker(ctx, l.worker, l.peer)
 	if err != nil {
 		l.recordIdentityError(err)
 		return err
@@ -194,6 +250,18 @@ func (l *externalLease) recordIdentityError(err error) {
 	if errors.As(err, &e) && e.Code == ErrLeaseTargetMismatch {
 		l.targetLost = true
 	}
+}
+
+// Caller holds l.mu. Once lost, peer identity cannot be restored for this lease.
+func (m *ExternalLeaseManager) verifyLeasePeer(ctx context.Context, l *externalLease) error {
+	if l.peerLost {
+		return externalLeaseError(ErrLeaseTargetMismatch, l.metadata.BrowserLeaseID, "external peer identity lost", nil)
+	}
+	if err := m.verifyPeer(ctx, l.peer, l.worker); err != nil {
+		l.peerLost = true
+		return err
+	}
+	return nil
 }
 
 func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id, tool string, args map[string]any) (map[string]any, error) {
@@ -215,6 +283,9 @@ func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id,
 	if _, exists := args["pageId"]; exists {
 		return nil, externalLeaseError(ErrLeaseTargetMismatch, id, "caller pageId forbidden", nil)
 	}
+	if err := m.verifyLeasePeer(ctx, l); err != nil {
+		return nil, err
+	}
 	if err := m.verifyTarget(ctx, l); err != nil {
 		return nil, err
 	}
@@ -223,7 +294,13 @@ func (m *ExternalLeaseManager) Call(ctx context.Context, scope RequestScope, id,
 		targetArgs = make(map[string]any)
 	}
 	targetArgs["pageId"] = l.pageID
-	result, err := m.backend.CallExternal(ctx, l.worker, tool, targetArgs)
+	result, err := m.callExternalFenced(ctx, l.worker, l.peer, tool, targetArgs)
+	// Recheck after the operation before releasing any data. The action may
+	// already have taken effect; this is a response quarantine, not atomic
+	// peer fencing or rollback. Never return a stale peer's raw results.
+	if peerErr := m.verifyLeasePeer(ctx, l); peerErr != nil {
+		return nil, peerErr
+	}
 	if err == nil {
 		err = leaseCallResultError(result)
 	}
@@ -260,9 +337,21 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 		return l.metadata, externalLeaseError(ErrLeaseStateInvalid, id, "lease cannot release", nil)
 	}
 	l.metadata.CleanupState = CleanupReleasing
-	closeErr := m.verifyTarget(ctx, l)
+	closeErr := m.verifyLeasePeer(ctx, l)
 	if closeErr == nil {
-		closeErr = m.closeOwnedPage(ctx, l.worker, l.pageID)
+		closeErr = m.verifyTarget(ctx, l)
+	}
+	if closeErr == nil {
+		closeErr = m.verifyLeasePeer(ctx, l)
+	}
+	if closeErr == nil {
+		closeErr = m.closeOwnedPage(ctx, l.worker, l.peer, l.pageID)
+		// These independent observations supplement the required transport
+		// fence; they cannot implement it. Quarantine even apparent success (or a raw close
+		// error) when the post-close peer cannot be verified. Never retry close.
+		if peerErr := m.verifyLeasePeer(ctx, l); peerErr != nil {
+			closeErr = peerErr
+		}
 	}
 	stopErr := m.backend.Stop(l.worker.WorkerID)
 	if stopErr != nil {
@@ -276,10 +365,16 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 	l.metadata.CleanupState = CleanupComplete
 	if closeErr != nil {
 		l.metadata.CleanupReason = "external connector stopped; owned page close unconfirmed"
+		if l.binding.Engine == EngineNativeCDP {
+			l.metadata.CleanupReason = "native lease retired; owned page close unconfirmed; shared connection preserved when healthy"
+		}
 		l.metadata.CleanupError = closeErr.Error()
 		return l.metadata, nil
 	}
 	l.metadata.CleanupReason = "owned external page closed and connector stopped"
+	if l.binding.Engine == EngineNativeCDP {
+		l.metadata.CleanupReason = "owned external page closed; native lease retired; shared connection preserved"
+	}
 	return l.metadata, nil
 }
 
@@ -351,6 +446,9 @@ func (m *ExternalLeaseManager) RecoverFailed(now time.Time) error {
 		}
 		l.metadata.CleanupState = CleanupComplete
 		l.metadata.CleanupReason = "external connector cleanup recovered; external browser/profile preserved"
+		if l.peerLost {
+			l.metadata.CleanupReason = "external connector cleanup recovered; owned page close unconfirmed; external browser/profile preserved"
+		}
 		l.nextCleanupRecoveryAt = time.Time{}
 		l.mu.Unlock()
 	}

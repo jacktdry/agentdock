@@ -14,8 +14,10 @@ type ExternalWorkerOptions struct {
 	Route RouteDecision
 }
 
-// The caller supplies a trusted RoutePlanner/ResolveRoute decision; company
-// browser policy is resolved upstream, never inferred here.
+// This validates external transport shape, not route admission or live peer
+// identity. ResolveRoute alone cannot authorize attachment: the trusted caller
+// must pass through ExternalLeaseManager.Acquire for one-shot grant consumption
+// and attach-time verification. Company routing is resolved upstream.
 func validateExternalStart(d RouteDecision) error {
 	s := d.Start
 	if (d.Route != browserpolicy.RouteExternal && d.Route != browserpolicy.RouteRequiredExternal) ||
@@ -23,7 +25,7 @@ func validateExternalStart(d RouteDecision) error {
 		return externalLeaseError(ErrPolicyConflict, "", "resolved route is not external or lacks required authentication", nil)
 	}
 	owned := ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}
-	if s.Engine != EngineChromeDevToolsMCP || s.EngineVersion != PreferredEngineVersion ||
+	if !supportedExternalEngine(s.Browser, s.Engine, s.EngineVersion) ||
 		(s.Browser != BrowserEdge && s.Browser != BrowserChrome && s.Browser != BrowserChromium) ||
 		(s.ProfileClass != ProfileExternal && s.ProfileClass != ProfileAuthenticatedExternal) ||
 		strings.TrimSpace(s.ProfileID) == "" || strings.TrimSpace(s.ConnectorID) == "" ||
@@ -38,7 +40,8 @@ func validateExternalStart(d RouteDecision) error {
 }
 
 func externalWorkerConfig(options ExternalWorkerOptions) mcpclient.ServerConfig {
-	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: "npx", Cwd: options.Cwd, TimeoutMS: 60000,
+	command, runtimeEnv := browserWorkerRuntime()
+	return mcpclient.ServerConfig{Name: ManagedEngineServerName, Transport: mcpclient.TransportStdio, Command: command, RuntimeEnv: runtimeEnv, Cwd: options.Cwd, TimeoutMS: 60000,
 		Args: []string{"--yes", ManagedEnginePackageSpec, "--wsEndpoint=" + options.Route.Start.Endpoint, "--experimentalPageIdRouting", "--experimentalStructuredContent", "--no-usage-statistics", "--no-performance-crux"}}
 }
 
@@ -46,6 +49,9 @@ func externalWorkerConfig(options ExternalWorkerOptions) mcpclient.ServerConfig 
 func (r *WorkerRegistry) StartExternal(ctx context.Context, options ExternalWorkerOptions) (WorkerInfo, error) {
 	if err := validateExternalStart(options.Route); err != nil {
 		return WorkerInfo{}, err
+	}
+	if options.Route.Start.Engine != EngineChromeDevToolsMCP {
+		return WorkerInfo{}, externalTransportFenceError()
 	}
 	return r.startWorker(ctx, externalWorkerConfig(options))
 }

@@ -4,10 +4,11 @@ package computer
 
 import (
 	"context"
-	"os/exec"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/commandpath"
 )
 
 func TestOrcaBrokerBackgroundObservationSmoke(t *testing.T) {
@@ -15,9 +16,12 @@ func TestOrcaBrokerBackgroundObservationSmoke(t *testing.T) {
 		t.Skip("focus smoke currently asserts the macOS frontmost-app adapter")
 	}
 	command := resolveOrcaCommand()
-	if _, err := exec.LookPath(command); err != nil {
+	if _, err := commandpath.LookPath(command); err != nil {
 		t.Skipf("Orca unavailable: %v", err)
 	}
+	// Reproduce a GUI launchd service without shell-managed /usr/local/bin.
+	// The provider must still find Orca, and observations must not steal focus.
+	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 	provider, err := NewOrcaProvider(OrcaProviderConfig{Command: command, Timeout: 20 * time.Second})
 	if err != nil {
 		t.Fatal(err)

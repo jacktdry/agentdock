@@ -36,6 +36,9 @@ func validateBasicSettings(settings BasicSettings) error {
 }
 
 func ReadBasicSettings(ctx context.Context, root string) (BasicSettings, error) {
+	if err := ValidateNextSettingsIdentity(ctx, root); err != nil {
+		return BasicSettings{}, err
+	}
 	basicSettingsMu.Lock()
 	defer basicSettingsMu.Unlock()
 	return platformReadBasicSettings(ctx, root)
@@ -48,6 +51,9 @@ func BasicAutostartMutable() bool {
 }
 
 func UpdateBasicSettings(ctx context.Context, root string, requested BasicSettings) error {
+	if err := ValidateNextSettingsIdentity(ctx, root); err != nil {
+		return err
+	}
 	if err := validateBasicSettings(requested); err != nil {
 		return err
 	}

@@ -7,6 +7,8 @@ description: 创建、设计、修改、重构和验证 AgentDock Skill 时使�
 
 用于创建或维护 AgentDock Skill。Skill 的本体是模型可读取的说明文档；真实操作仍由命令、文件、浏览器、MCP 等工具完成。
 
+**双实例路径边界**：本文提及的 `~/.agentdock/...` 都是原版 AgentDock 的示例。AgentDock Next 使用自己的 `~/.agentdock-next/...`；每次安装／运行须使用当前 `agentdock_context` 回报的 Home 与对应实例的 `skill_ref`，不得将 Managed Skill 的可变数据或环境指向另一实例。独立的共享 `~/.agents/skills` 是另一种来源，不能当作 Managed Skills 目录共用。
+
 AgentDock 不为 Skill 建立独立版本生命周期。Skill 的当前内容由来源与内容摘要识别；同名 managed Skill 更新时直接原子替换当前内容，不保留可选历史 revision，不提供 activate 或 rollback。
 
 ## 核心原则

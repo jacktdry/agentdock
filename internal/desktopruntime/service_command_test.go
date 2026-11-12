@@ -56,7 +56,7 @@ func TestRunServiceCommandTaskStartRequiresTaskName(t *testing.T) {
 }
 
 func TestServiceStatusJSONIncludesNexusConnection(t *testing.T) {
-	data, err := json.Marshal(ServiceStatus{NexusConnected: true})
+	data, err := json.Marshal(ServiceStatus{NexusConnected: true, NexusIdentityGeneration: "generation-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestServiceStatusJSONIncludesNexusConnection(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["nexus_connected"] != true {
-		t.Fatalf("nexus_connected = %#v, want true", decoded["nexus_connected"])
+	if decoded["nexus_connected"] != true || decoded["nexus_identity_generation"] != "generation-1" {
+		t.Fatalf("Nexus service status = %#v", decoded)
 	}
 }

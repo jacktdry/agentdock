@@ -7,6 +7,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/mcp/oauthclient"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 // Runtime 定义 Runtime API 路由真正需要的应用能力。
@@ -22,10 +23,12 @@ type Runtime interface {
 	RuntimePlugin(context.Context, string) (app.Result, error)
 	RuntimeTasks(status string, limit int) (app.Result, error)
 	RuntimeTask(id string) (app.Result, error)
-	RuntimeTaskDelete(id string) (app.Result, error)
+	RuntimeTaskDelete(context.Context, string) (app.Result, error)
 	RuntimeCapabilities(context.Context, bool) (app.Result, error)
 	RuntimeMCPServers(context.Context) (app.Result, error)
 	RuntimeMCPServer(context.Context, string) (app.Result, error)
+	RuntimeMCPDesktop(context.Context) (app.Result, error)
+	RuntimeMCPDesktopManage(context.Context, map[string]any) (app.Result, error)
 	RuntimeMCPManage(context.Context, map[string]any) (app.Result, error)
 	RuntimeEvolve(context.Context, map[string]any) (app.Result, error)
 }
@@ -36,6 +39,28 @@ type Runtime interface {
 // 让旧实现或测试替身能明确返回“不支持”，而不是被迫实现空方法。
 type DiagnosticsRuntime interface {
 	RuntimeDiagnostics() app.Result
+}
+
+// ExecutionRuntime is an optional local execution capability. Keeping it
+// separate avoids forcing non-Core test doubles and remote bridge consumers to
+// expose local execution state.
+type ExecutionRuntime interface {
+	RuntimeExecution() app.Result
+	RuntimeActivity(after uint64, limit int) (app.Result, error)
+	RuntimeActivityWait(context.Context, uint64) error
+	RuntimeInsertions(string) app.Result
+	RuntimeInsertionManage(context.Context, map[string]any) (app.Result, error)
+}
+
+type PermissionRuntime interface {
+	RuntimePermissions() (app.Result, error)
+	RuntimeApprovals(approvalID, status string, limit int) (app.Result, error)
+}
+
+type DesktopPermissionControlRuntime interface {
+	AuthenticateDesktopPermissionControl(string) bool
+	BeginPermissionConfirmation(string, permission.ControlMutationRequest) (permission.ConfirmationChallenge, error)
+	ApplyPermissionControlMutation(context.Context, string, string, permission.ControlMutationRequest) (app.Result, error)
 }
 
 type MCPOAuthRuntime interface {
@@ -60,4 +85,20 @@ func (r Request) queryValue(key string) string {
 		return ""
 	}
 	return r.Query.Get(key)
+}
+
+// PluginDesktopRuntime is an optional local Desktop authority, separate from
+// read-only Plugin APIs and model-facing plugin_manage.
+type PluginDesktopRuntime interface {
+	RuntimePluginDesktop(context.Context) (app.Result, error)
+	RuntimePluginDesktopManage(context.Context, map[string]any) (app.Result, error)
+}
+
+type PluginDesktopCandidateRuntime interface {
+	RuntimePluginDesktopCandidate(context.Context, map[string]any) (app.Result, error)
+}
+
+// BrowserDesktopRuntime is an optional passive observation capability.
+type BrowserDesktopRuntime interface {
+	RuntimeBrowserDesktop() app.Result
 }

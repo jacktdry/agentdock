@@ -19,6 +19,10 @@ func acpToolError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var toolErr *toolcore.ToolError
+	if errors.As(err, &toolErr) {
+		return toolErr
+	}
 	var acpErr *acpruntime.Error
 	if errors.As(err, &acpErr) {
 		category := "runtime"

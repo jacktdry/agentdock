@@ -58,6 +58,18 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 	}
 	defer logs.Close()
 
+	// A stop event cancels callbacks waiting on the Desktop mutation lock.
+	// The outer mutation may wait for supervisor exit, never for publication.
+	runCtx, cancelRun := context.WithCancel(ctx)
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		stopped, _ := guard.waitRetry(runCtx, 24*time.Hour)
+		if stopped {
+			cancelRun()
+		}
+	}()
+	defer func() { cancelRun(); <-watcherDone }()
 	var retryDelay time.Duration
 	for {
 		if err := ctx.Err(); err != nil {
@@ -82,7 +94,7 @@ func platformLaunchTunnel(ctx context.Context, runtimeRoot string) error {
 		}
 
 		startedAt := time.Now()
-		runErr := runCloudflaredOnce(ctx, runtime, logs)
+		runErr := runCloudflaredOnce(runCtx, runtime, logs)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -133,6 +145,14 @@ func runCloudflaredOnce(ctx context.Context, runtime tunnelRuntime, logs *proces
 	}
 	command.Stdout = logs.stdout
 	command.Stderr = logs.stderr
+	if runtime.mode == "named" {
+		token, err := readProtectedText(runtime.files.token, tunnelTokenEntropy)
+		if err != nil {
+			return errors.New("tunnel_token_unreadable")
+		}
+		command.Stdout = &tunnelSafeLogWriter{output: logs.stdout, token: token}
+		command.Stderr = &tunnelSafeLogWriter{output: logs.stderr, token: token}
+	}
 	if err := command.Start(); err != nil {
 		return err
 	}
@@ -177,13 +197,23 @@ func platformTunnelStatus(ctx context.Context, runtimeRoot string) (TunnelStatus
 	if runtime.mode == "named" {
 		ready = running && publicURL != ""
 	}
-	return TunnelStatus{
+	status := TunnelStatus{
 		Mode:           runtime.mode,
 		Running:        running,
 		Ready:          ready,
 		StartupEnabled: startupEnabled,
 		PublicURL:      publicURL,
-	}, nil
+	}
+	if runtime.mode == "quick" && !running {
+		status.PublicURL = ""
+		status.Ready = false
+	}
+	status = completeTunnelStatus(status, runtime.root, tunnelTokenStateWindows(runtime))
+	status.Observation.Autostart = "disabled"
+	if startupEnabled {
+		status.Observation.Autostart = "enabled"
+	}
+	return status, nil
 }
 
 func platformTunnelAction(ctx context.Context, runtimeRoot, action string) error {
@@ -191,9 +221,42 @@ func platformTunnelAction(ctx context.Context, runtimeRoot, action string) error
 	if err != nil {
 		return err
 	}
+	if action != "start" && action != "stop" && action != "restart" && action != "regenerate" {
+		return errors.New("unsupported_tunnel_action")
+	}
+	if action == "regenerate" && runtime.mode != "quick" {
+		return errors.New("quick_only")
+	}
+	if runtime.mode == "named" && action != "stop" && runtime.settings.Port != 8765 {
+		return ErrNamedManualRouteRequired
+	}
+	if tunnelRecoveryPending(runtime.root) {
+		return ErrTunnelRecoveryRequired
+	}
+	// Reusing an active unchanged tunnel must not supersede its callback.
+	running, err := processRunningAtPath(runtime.manifest.CloudflaredBinary)
+	if err != nil {
+		return err
+	}
+	if action == "start" && running {
+		return nil
+	}
+	if _, err := AdvanceTunnelGenerationLocked(runtime.root); err != nil {
+		return err
+	}
+	if runtime.mode == "quick" {
+		if err := clearActivePublicURL(runtime.files); err != nil {
+			return err
+		}
+	}
+	runtime.generation, err = TunnelGeneration(runtime.root)
+	if err != nil {
+		return err
+	}
+	runtime.preserveStoppedCore = true
 	switch action {
 	case "start":
-		return startTunnel(ctx, runtime)
+		return startTunnelLocal(ctx, runtime)
 	case "stop":
 		return stopTunnel(ctx, runtime)
 	case "restart":
@@ -203,7 +266,7 @@ func platformTunnelAction(ctx context.Context, runtimeRoot, action string) error
 		if err := stopTunnel(ctx, runtime); err != nil {
 			return err
 		}
-		return startTunnel(ctx, runtime)
+		return startTunnelLocal(ctx, runtime)
 	case "regenerate":
 		if runtime.mode != "quick" {
 			return errors.New("只有临时地址模式可以重新生成 Quick Tunnel")
@@ -232,6 +295,12 @@ func captureTunnelLogCursors(files tunnelFiles) (tunnelLogCursors, error) {
 }
 
 func startTunnel(ctx context.Context, runtime tunnelRuntime) error {
+	return startTunnelProcess(ctx, runtime, true)
+}
+func startTunnelLocal(ctx context.Context, runtime tunnelRuntime) error {
+	return startTunnelProcess(ctx, runtime, false)
+}
+func startTunnelProcess(ctx context.Context, runtime tunnelRuntime, waitReadiness bool) error {
 	if runtime.mode == "none" {
 		return nil
 	}
@@ -248,7 +317,7 @@ func startTunnel(ctx context.Context, runtime tunnelRuntime) error {
 		return err
 	}
 	if running && supervisorPID != 0 {
-		if runtime.mode == "quick" {
+		if waitReadiness && runtime.mode == "quick" {
 			return waitQuickTunnelReady(ctx, runtime, quickTunnelStartTimeout)
 		}
 		return nil
@@ -293,6 +362,9 @@ func startTunnel(ctx context.Context, runtime tunnelRuntime) error {
 	if err := waitCloudflaredRunning(ctx, runtime.manifest.CloudflaredBinary, 20*time.Second); err != nil {
 		return err
 	}
+	if !waitReadiness {
+		return nil
+	}
 	if runtime.mode == "quick" {
 		return waitQuickTunnelReady(ctx, runtime, quickTunnelStartTimeout)
 	}
@@ -323,10 +395,10 @@ func regenerateQuickTunnel(ctx context.Context, runtime tunnelRuntime) error {
 		return err
 	}
 	// 清掉旧公网地址后先重启核心，避免新地址准备期间继续使用失效的 OAuth Origin。
-	if err := platformServiceAction(ctx, runtime.root, "restart"); err != nil {
+	if err := restartQuickTunnelCore(ctx, runtime); err != nil {
 		return err
 	}
-	return startTunnel(ctx, runtime)
+	return startTunnelLocal(ctx, runtime)
 }
 
 func launchCloudflared(runtime tunnelRuntime) error {
@@ -379,6 +451,27 @@ func cloudflaredCommand(ctx context.Context, runtime tunnelRuntime) (*exec.Cmd, 
 }
 
 func applyQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, publicURL string) error {
+	release, err := AcquireDesktopMutation(ctx, runtime.root)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := checkTunnelGeneration(runtime.root, runtime.generation); err != nil {
+		return err
+	}
+	current, err := loadTunnelRuntime(runtime.root)
+	if err != nil {
+		return err
+	}
+	if current.mode != "quick" || current.settings.Port != runtime.settings.Port {
+		return ErrStaleTunnelGeneration
+	}
+	origin, err := normalizeHTTPSOrigin(publicURL)
+	if err != nil {
+		return errors.New("invalid_quick_origin")
+	}
+	publicURL = origin
+	runtime.preserveStoppedCore = true
 	if err := writeRuntimeText(runtime.files.serverURL, publicURL); err != nil {
 		return err
 	}
@@ -393,6 +486,15 @@ func applyQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, publicURL s
 }
 
 func invalidateQuickTunnelAfterExit(ctx context.Context, runtime tunnelRuntime) error {
+	release, err := AcquireDesktopMutation(ctx, runtime.root)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := checkTunnelGeneration(runtime.root, runtime.generation); err != nil {
+		return err
+	}
+	runtime.preserveStoppedCore = true
 	readyURL, err := readTrimmedText(runtime.files.quickURL)
 	if err != nil {
 		return err
@@ -456,7 +558,7 @@ func waitNamedTunnelReady(ctx context.Context, runtime tunnelRuntime, cursors tu
 				continue
 			}
 			if bytes.Contains(data, []byte(namedTunnelInvalidTokenMarker)) {
-				return fmt.Errorf("Named Tunnel Token 无效: %s", tunnelLogSummary(runtime.files))
+				return errors.New("named_tunnel_token_invalid")
 			}
 			if bytes.Contains(data, []byte(namedTunnelConnectedMarker)) {
 				connected = true
@@ -475,7 +577,7 @@ func waitNamedTunnelReady(ctx context.Context, runtime tunnelRuntime, cursors tu
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("Named Tunnel 未在 %s 内注册连接: %s", timeout, tunnelLogSummary(runtime.files))
+	return errors.New("named_tunnel_connection_timeout")
 }
 
 func waitQuickTunnelReady(ctx context.Context, runtime tunnelRuntime, timeout time.Duration) error {
@@ -500,7 +602,7 @@ func waitQuickTunnelReady(ctx context.Context, runtime tunnelRuntime, timeout ti
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("Quick Tunnel 未在 %s 内进入 ready: %s", timeout, tunnelLogSummary(runtime.files))
+	return errors.New("quick_tunnel_readiness_timeout")
 }
 
 func waitQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, cursors tunnelLogCursors, timeout time.Duration) (string, error) {
@@ -526,7 +628,7 @@ func waitQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, cursors tunn
 			return "", err
 		}
 		if !running {
-			return "", fmt.Errorf("cloudflared 在生成临时地址前退出: %s", tunnelLogSummary(runtime.files))
+			return "", errors.New("quick_tunnel_exited_before_url")
 		}
 		select {
 		case <-ctx.Done():
@@ -534,7 +636,7 @@ func waitQuickTunnelURL(ctx context.Context, runtime tunnelRuntime, cursors tunn
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	return "", fmt.Errorf("cloudflared 未在 %s 内生成 trycloudflare.com 临时地址: %s", timeout, tunnelLogSummary(runtime.files))
+	return "", errors.New("quick_tunnel_url_timeout")
 }
 
 func waitCloudflaredRunning(ctx context.Context, binaryPath string, timeout time.Duration) error {

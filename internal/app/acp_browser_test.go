@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/config"
@@ -34,7 +35,14 @@ url = "https://gitlab.example/mcp"
 
 	previous := runCodexMCPRemove
 	var removed []string
-	runCodexMCPRemove = func(_ string, home, server string) error {
+	codexPath := filepath.Join(t.TempDir(), codexFixtureName())
+	if err := os.WriteFile(codexPath, nil, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runCodexMCPRemove = func(path string, home, server string) error {
+		if path != codexPath {
+			t.Fatalf("wrong resolved executable: %q", path)
+		}
 		if home == "" {
 			t.Fatal("sandbox home missing")
 		}
@@ -44,7 +52,7 @@ url = "https://gitlab.example/mcp"
 	defer func() { runCodexMCPRemove = previous }()
 
 	env := map[string]string{
-		"CODEX_PATH":   "/tmp/fake-codex",
+		"CODEX_PATH":   codexPath,
 		"CODEX_CONFIG": `{"model":"gpt-test","mcp_servers":{"gitlab":{"url":"https://gitlab.example/mcp"},"chrome-devtools":{"command":"npx"},"node_repl":{"command":"node"},"computer-use":{"command":"cua"}}}`,
 	}
 	got, err := prepareACPBrowserEnvironment(t.TempDir(), config.ACPProfile{ID: "codex", Kind: "codex"}, env, true)
@@ -116,4 +124,39 @@ func TestPrepareACPBrowserEnvironmentDisablesAntigravityBrowserBackendsWithoutBr
 	if _, ok := got["AGENTDOCK_BROWSER_BROKER_REQUIRED"]; ok {
 		t.Fatalf("broker should not be required without an available bridge: %#v", got)
 	}
+}
+
+func TestResolveCodexCLIExplicitFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	valid := filepath.Join(dir, codexFixtureName())
+	if err := os.WriteFile(valid, nil, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	nonexec := filepath.Join(dir, "nonexec")
+	if err := os.WriteFile(nonexec, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	invalid := []string{"", "codex", filepath.Join(dir, "missing-secret"), dir}
+	if runtime.GOOS != "windows" {
+		invalid = append(invalid, nonexec)
+	}
+	for _, path := range invalid {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			if _, err := resolveCodexCLI(map[string]string{"CODEX_PATH": path}); err == nil {
+				t.Fatal("invalid explicit path fell back to available CLI")
+			}
+		})
+	}
+	got, err := resolveCodexCLI(map[string]string{"CODEX_PATH": valid})
+	if err != nil || got != valid {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
+func codexFixtureName() string {
+	if runtime.GOOS == "windows" {
+		return "codex.exe"
+	}
+	return "codex"
 }

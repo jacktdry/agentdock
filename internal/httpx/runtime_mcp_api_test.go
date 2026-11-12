@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/auth"
@@ -57,6 +58,46 @@ func TestRuntimeMCPAPIManagesServersWithoutReturningSecrets(t *testing.T) {
 	handler.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/demo", nil))
 	if missing.Code != http.StatusBadRequest || !strings.Contains(missing.Body.String(), `"code":"MCP_SERVER_NOT_FOUND"`) {
 		t.Fatalf("missing status=%d body=%s", missing.Code, missing.Body.String())
+	}
+}
+
+func TestRuntimeMCPDesktopHTTPRouteReadsPOSTBody(t *testing.T) {
+	cfg := testConfig(t)
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	defer runtime.Close()
+	handler := runtimeAPIHandler(runtime, cfg, auth.NewOAuthStore())
+
+	for _, request := range []*http.Request{
+		httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/desktop", nil),
+		httptest.NewRequest(http.MethodPost, "/internal/runtime/mcp/desktop", strings.NewReader("{\"action\":\"desktop_snapshot\"}")),
+	} {
+		request.RemoteAddr = "127.0.0.1:12345"
+		request.Host = "127.0.0.1:8765"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "\"registry_revision\"") {
+			t.Fatalf("%s desktop snapshot status=%d body=%s", request.Method, response.Code, response.Body.String())
+		}
+	}
+
+	remote := httptest.NewRequest(http.MethodGet, "/internal/runtime/mcp/desktop", nil)
+	remote.RemoteAddr = "198.51.100.10:4567"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, remote)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "\"code\":\"LOCAL_ACCESS_REQUIRED\"") {
+		t.Fatalf("remote desktop route status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRuntimeMCPDesktopUsesBoundedLongOperationTimeout(t *testing.T) {
+	if got := runtimeAPIRequestTimeout("/internal/runtime/mcp/desktop"); got != runtimeMCPDesktopTimeout || got <= 5*time.Minute {
+		t.Fatalf("Desktop MCP timeout = %s", got)
+	}
+	if got := runtimeAPIRequestTimeout("/internal/runtime/status"); got != 8*time.Second {
+		t.Fatalf("ordinary Runtime API timeout = %s", got)
 	}
 }
 

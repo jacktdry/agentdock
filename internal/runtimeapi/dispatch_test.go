@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"reflect"
@@ -46,8 +47,10 @@ func (r *runtimeStub) RuntimeTasks(status string, limit int) (app.Result, error)
 	r.taskStatus, r.taskLimit = status, limit
 	return app.Result{"status": status, "limit": limit}, nil
 }
-func (r *runtimeStub) RuntimeTask(string) (app.Result, error)       { return app.Result{}, nil }
-func (r *runtimeStub) RuntimeTaskDelete(string) (app.Result, error) { return app.Result{}, nil }
+func (r *runtimeStub) RuntimeTask(string) (app.Result, error) { return app.Result{}, nil }
+func (r *runtimeStub) RuntimeTaskDelete(context.Context, string) (app.Result, error) {
+	return app.Result{}, nil
+}
 func (r *runtimeStub) RuntimeCapabilities(context.Context, bool) (app.Result, error) {
 	return app.Result{}, nil
 }
@@ -201,12 +204,12 @@ func TestDispatchMCPManagePreservesOnlyProvidedFields(t *testing.T) {
 	_, err := Dispatch(context.Background(), runtime, Request{
 		Method: "POST",
 		Path:   "/internal/runtime/mcp",
-		Body:   []byte(`{"action":"add","name":"demo","transport":"stdio","args":[]}`),
+		Body:   []byte(`{"action":"add","name":"demo","transport":"stdio","protocol_version":"2025-11-25","args":[]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{"action": "add", "name": "demo", "transport": "stdio", "args": []string{}}
+	want := map[string]any{"action": "add", "name": "demo", "transport": "stdio", "protocol_version": "2025-11-25", "args": []string{}}
 	if !reflect.DeepEqual(runtime.mcpArgs, want) {
 		t.Fatalf("MCP args = %#v, want %#v", runtime.mcpArgs, want)
 	}
@@ -242,5 +245,47 @@ func TestDispatchKeepsRouteSpecificValidationErrors(t *testing.T) {
 				t.Fatalf("error = %#v, want ToolError code %s", err, test.code)
 			}
 		})
+	}
+}
+
+func (r *runtimeStub) RuntimeMCPDesktop(context.Context) (app.Result, error) {
+	return app.Result{"action": "desktop_snapshot"}, nil
+}
+func (r *runtimeStub) RuntimeMCPDesktopManage(_ context.Context, args map[string]any) (app.Result, error) {
+	r.mcpArgs = args
+	return app.Result{"ok": true}, nil
+}
+
+func TestDesktopRouteBoundary(t *testing.T) {
+	const canary = "DESKTOP_SECRET_CANARY"
+	r := &runtimeStub{}
+	result, err := Dispatch(context.Background(), r, Request{Method: "GET", Path: "/internal/runtime/mcp/desktop"})
+	if err != nil || result["action"] != "desktop_snapshot" {
+		t.Fatalf("snapshot: %v %v", result, err)
+	}
+	body := []byte(`{"action":"desktop_env_set","name":"demo","key":"KEY","value":"` + canary + `","expected_env_revision":"rev"}`)
+	result, err = Dispatch(context.Background(), r, Request{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: body})
+	if err != nil || r.mcpArgs["value"] != canary {
+		t.Fatal("write-only value did not reach Desktop runtime")
+	}
+	data, _ := json.Marshal(result)
+	if strings.Contains(string(data), canary) {
+		t.Fatal("result leaked value")
+	}
+	for _, req := range []Request{
+		{Method: "POST", Path: "/internal/runtime/mcp", Body: body},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"add"}`)},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"desktop_snapshot","unknown":"` + canary + `"}`)},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(strings.Repeat("x", 65537))},
+		{Method: "POST", Path: "/internal/runtime/mcp/desktop", Body: []byte(`{"action":"desktop_snapshot"} {}`)},
+	} {
+		r.mcpArgs = nil
+		_, err := Dispatch(context.Background(), r, req)
+		if err == nil || r.mcpArgs != nil || strings.Contains(err.Error(), canary) {
+			t.Fatalf("boundary failed: %v", err)
+		}
+	}
+	if !MethodAllowed("POST", "/internal/runtime/mcp/desktop") || MethodAllowed("DELETE", "/internal/runtime/mcp/desktop") || AllowHeader("/internal/runtime/mcp/desktop") != "GET, POST" {
+		t.Fatal("method contract")
 	}
 }

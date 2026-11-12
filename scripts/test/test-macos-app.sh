@@ -25,6 +25,7 @@ if grep -Fq 'isVisible = false' "$APP_DELEGATE"; then
   exit 1
 fi
 
+if [[ "${1:-}" != "--fixtures-only" ]]; then
 swiftc \
   -swift-version 5 \
   -parse-as-library \
@@ -33,6 +34,8 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/LocalizationPreferenceTests.swift" \
   -o "$TMP_ROOT/localization-preference-tests"
 "$TMP_ROOT/localization-preference-tests"
+
+fi
 
 swiftc \
   -swift-version 5 \
@@ -45,6 +48,7 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateServiceState.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateHandoff.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ManagedEnvironment.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppIdentity.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppPaths.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ACPConfiguration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/TunnelTokenStore.swift" \
@@ -63,6 +67,7 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppVersion.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/DesktopUpdateServiceState.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ManagedEnvironment.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppIdentity.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/AppPaths.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ACPConfiguration.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/TunnelTokenStore.swift" \
@@ -71,9 +76,16 @@ swiftc \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/UpdateStatusItemVisibility.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/ServiceController.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Sources/InstallerRunner.swift" \
+  "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/AppIdentityTests.swift" \
   "$ROOT_DIR/desktop/macos/AgentDockApp/Tests/ServiceControllerValidationTests.swift" \
   -o "$TMP_ROOT/service-controller-validation-tests"
 "$TMP_ROOT/service-controller-validation-tests"
+
+python3 "$ROOT_DIR/scripts/test/test-macos-identity.py"
+if [[ "${1:-}" == "--fixtures-only" ]]; then
+  print -- "macOS fixture tests passed"
+  exit 0
+fi
 
 swiftc \
   -swift-version 5 \

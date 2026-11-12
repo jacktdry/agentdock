@@ -64,22 +64,33 @@ func TestStartCapturesCompleteOutputAndExitState(t *testing.T) {
 func TestStartCapturesFastCommandOutputRepeatedly(t *testing.T) {
 	requirePOSIXShell(t)
 	const iterations = 200
+	workdir := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	// This tests output capture, not shell startup latency under host load.
+	// TestStartMarksTimeout separately verifies the command timeout contract.
 	for iteration := range iterations {
+		started := time.Now()
 		s, _, err := Start(
-			context.Background(),
+			ctx,
 			"printf 'fast-output'",
-			t.TempDir(),
+			workdir,
 			os.Environ(),
-			time.Second,
+			5*time.Second,
 			nil,
 		)
 		if err != nil {
 			t.Fatalf("iteration %d Start() error = %v", iteration, err)
 		}
-		<-s.Done
+		select {
+		case <-s.Done:
+		case <-ctx.Done():
+			s.Cancel()
+			t.Fatalf("iteration %d exceeded total fixture deadline", iteration)
+		}
 		s.Cancel()
 		if err := s.WaitError(); err != nil {
-			t.Fatalf("iteration %d WaitError() = %v", iteration, err)
+			t.Fatalf("iteration %d WaitError() = %v (elapsed=%s timed_out=%t)", iteration, err, time.Since(started), s.TimedOut)
 		}
 		result := s.Snapshot("exited", 1024)
 		if result.Stdout != "fast-output" {

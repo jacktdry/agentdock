@@ -63,8 +63,9 @@ func TestStoreRoundTripPermissionsAndUnset(t *testing.T) {
 			t.Fatalf("Unset(%s) did not report removal", key)
 		}
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("empty env file still exists: %v", err)
+	assertMode(t, path, 0o600)
+	if loaded, err := store.Load(scope); err != nil || len(loaded) != 0 {
+		t.Fatal("metadata-only file must load as empty")
 	}
 }
 

@@ -1,6 +1,6 @@
 # AgentDock 运行配置速查
 
-本文件描述 AgentDock Core 当前版本从启动环境读取的主要运行配置。它不是新的配置文件格式，也不要求所有发行方式直接暴露这些变量给用户。
+本文件描述 AgentDock Core 当前版本从启动环境读取的主要运行配置。它不是新的配置文件格式，也不要求所有发行方式直接暴露这些变量给用户。**默认 8765 和 `~/.agentdock` 只用于原版/通用默认示例**；macOS AgentDock Next 的独立 Core 使用 8767 与 `~/.agentdock-next`，需从正在使用的实例 `agentdock_context` 和实际运行配置确认，不能跨实例修改。
 
 ## 常用配置
 

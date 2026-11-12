@@ -29,11 +29,12 @@ type Manager struct {
 	operationsCond     *sync.Cond
 	closed             bool
 
-	startMu   sync.Mutex
-	runSlots  chan struct{}
-	closedCh  chan struct{}
-	closeOnce sync.Once
-	closeErr  error
+	startMu       sync.Mutex
+	runSlots      chan struct{}
+	closedCh      chan struct{}
+	lifecycleDone chan struct{}
+	closeOnce     sync.Once
+	closeErr      error
 
 	sessionMCPMu       sync.Mutex
 	sessionMCPReleased map[string]struct{}
@@ -74,6 +75,7 @@ func NewManager(opts Options) (*Manager, error) {
 		sessionOperations:  make(map[string]int),
 		runSlots:           make(chan struct{}, opts.MaxConcurrentRuns),
 		closedCh:           make(chan struct{}),
+		lifecycleDone:      make(chan struct{}),
 		sessionMCPReleased: make(map[string]struct{}),
 	}
 	manager.operationsCond = sync.NewCond(&manager.mu)
@@ -88,6 +90,7 @@ func NewManager(opts Options) (*Manager, error) {
 		manager.sessions[record.ID] = record
 		manager.remoteToLocal[record.RemoteSessionID] = record.ID
 	}
+	go manager.runLifecycleSweeper()
 	return manager, nil
 }
 
@@ -122,6 +125,7 @@ func (m *Manager) Close() error {
 			}
 		}
 		process := m.process
+		hasMCPProvider := m.opts.SessionMCPProvider != nil
 		sessionIDs := make([]string, 0, len(m.sessions))
 		for sessionID := range m.sessions {
 			sessionIDs = append(sessionIDs, sessionID)
@@ -130,6 +134,9 @@ func (m *Manager) Close() error {
 		m.loaded = make(map[string]sessionLifecycleResponse)
 		m.projections = make(map[string]SessionProjection)
 		m.mu.Unlock()
+		if m.lifecycleDone != nil {
+			<-m.lifecycleDone
+		}
 		for _, run := range activeRuns {
 			if runStatus(run) != RunRunning {
 				continue
@@ -145,7 +152,7 @@ func (m *Manager) Close() error {
 		if process != nil {
 			m.closeErr = process.Close()
 		}
-		if m.opts.SessionMCPProvider != nil {
+		if hasMCPProvider {
 			for _, sessionID := range sessionIDs {
 				ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 				m.closeErr = errors.Join(m.closeErr, m.releaseSessionMCP(ctx, sessionID))

@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ func TestPermissionExplicitRejectOptionIsReturned(t *testing.T) {
 	manager := newPermissionTestManager(time.Second)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
 	interaction := waitForPendingInteraction(t, manager)
-	settled, err := manager.RespondInteraction(interaction.ID, "reject-once", false)
+	settled, err := manager.RespondInteraction(context.Background(), interaction.ID, "reject-once", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,13 +28,106 @@ func TestPermissionExplicitCancellationIsReturned(t *testing.T) {
 	manager := newPermissionTestManager(time.Second)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
 	interaction := waitForPendingInteraction(t, manager)
-	settled, err := manager.RespondInteraction(interaction.ID, "", true)
+	settled, err := manager.RespondInteraction(context.Background(), interaction.ID, "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if settled.Status != InteractionCancelled {
 		t.Fatalf("interaction status = %s", settled.Status)
 	}
+	result := <-resultCh
+	assertPermissionOutcome(t, result.value, result.err, "cancelled", "")
+}
+
+func TestPermissionOptionSelectionRequiresContinuationAdmission(t *testing.T) {
+	manager := newPermissionTestManager(time.Second)
+	blocked := errors.New("continuation blocked")
+	var captured PermissionContinuation
+	manager.opts.PermissionContinuationAdmission = func(_ context.Context, continuation PermissionContinuation) (PermissionContinuationFinish, error) {
+		captured = continuation
+		return nil, blocked
+	}
+	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write", "path": "demo.txt"}))
+	interaction := waitForPendingInteraction(t, manager)
+
+	if _, err := manager.RespondInteraction(context.Background(), interaction.ID, "reject-once", false); !errors.Is(err, blocked) {
+		t.Fatalf("provider-labelled reject bypassed admission: %v", err)
+	}
+	if captured.InteractionID != interaction.ID || captured.SessionID != "local-session" || captured.WorkspaceRoot != "/workspace" ||
+		captured.OptionID != "reject-once" || captured.ToolCall["title"] != "write" {
+		t.Fatalf("continuation admission input=%#v", captured)
+	}
+	if current, err := manager.InspectInteraction(interaction.ID); err != nil || current.Status != InteractionPending {
+		t.Fatalf("blocked interaction status=%#v err=%v", current, err)
+	}
+	select {
+	case result := <-resultCh:
+		t.Fatalf("provider resumed before admission: %#v", result)
+	default:
+	}
+
+	finished := false
+	manager.opts.PermissionContinuationAdmission = func(_ context.Context, continuation PermissionContinuation) (PermissionContinuationFinish, error) {
+		if continuation.OptionID != "reject-once" {
+			t.Fatalf("retry continuation=%#v", continuation)
+		}
+		return func(err error) {
+			if err != nil {
+				t.Fatalf("allowed continuation finish err=%v", err)
+			}
+			finished = true
+		}, nil
+	}
+	settled, err := manager.RespondInteraction(context.Background(), interaction.ID, "reject-once", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settled.Status != InteractionResponded || !finished {
+		t.Fatalf("allowed continuation settled=%#v finished=%v", settled, finished)
+	}
+	result := <-resultCh
+	assertPermissionOutcome(t, result.value, result.err, "selected", "reject-once")
+}
+
+func TestPermissionCancellationBypassesContinuationAdmission(t *testing.T) {
+	manager := newPermissionTestManager(time.Second)
+	admissionCalls := 0
+	manager.opts.PermissionContinuationAdmission = func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error) {
+		admissionCalls++
+		return nil, errors.New("must not be called for cancellation")
+	}
+	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
+	interaction := waitForPendingInteraction(t, manager)
+	settled, err := manager.RespondInteraction(context.Background(), interaction.ID, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admissionCalls != 0 || settled.Status != InteractionCancelled {
+		t.Fatalf("cancel admission calls=%d settled=%#v", admissionCalls, settled)
+	}
+	result := <-resultCh
+	assertPermissionOutcome(t, result.value, result.err, "cancelled", "")
+}
+
+func TestPermissionOptionSelectionFailsClosedWithoutContinuationAdmission(t *testing.T) {
+	manager := newPermissionTestManager(time.Second)
+	manager.opts.PermissionContinuationAdmission = nil
+	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
+	interaction := waitForPendingInteraction(t, manager)
+	_, err := manager.RespondInteraction(context.Background(), interaction.ID, "allow-once", false)
+	var acpErr *Error
+	if !errors.As(err, &acpErr) || acpErr.Code != "ACP_PERMISSION_ADMISSION_UNAVAILABLE" {
+		t.Fatalf("missing admission error=%#v", err)
+	}
+	if current, inspectErr := manager.InspectInteraction(interaction.ID); inspectErr != nil || current.Status != InteractionPending {
+		t.Fatalf("fail-closed interaction=%#v err=%v", current, inspectErr)
+	}
+	select {
+	case result := <-resultCh:
+		t.Fatalf("provider resumed without admission hook: %#v", result)
+	default:
+	}
+	manager.cancelPendingInteractions("local-session")
 	result := <-resultCh
 	assertPermissionOutcome(t, result.value, result.err, "cancelled", "")
 }
@@ -104,9 +198,17 @@ type permissionResult struct {
 
 func newPermissionTestManager(timeout time.Duration) *Manager {
 	return &Manager{
-		opts:          Options{InteractionTimeout: timeout},
+		opts: Options{
+			InteractionTimeout: timeout,
+			PermissionContinuationAdmission: func(context.Context, PermissionContinuation) (PermissionContinuationFinish, error) {
+				return func(error) {}, nil
+			},
+		},
 		remoteToLocal: map[string]string{"remote-session": "local-session"},
-		interactions:  make(map[string]*Interaction), runs: make(map[string]*Run),
+		sessions: map[string]SessionRecord{
+			"local-session": {ID: "local-session", CWD: "/workspace"},
+		},
+		interactions: make(map[string]*Interaction), runs: make(map[string]*Run),
 		activeRunBySession: make(map[string]string), closedCh: make(chan struct{}),
 	}
 }
@@ -215,7 +317,7 @@ func TestHelperPermissionRoutesToOriginatingSecondSession(t *testing.T) {
 	if pending := manager.ListInteractions(first.Session.ID, true); len(pending) != 0 {
 		t.Fatalf("first session received second-session interaction: %#v", pending)
 	}
-	if _, err := manager.RespondInteraction(interaction.ID, "allow-once", false); err != nil {
+	if _, err := manager.RespondInteraction(context.Background(), interaction.ID, "allow-once", false); err != nil {
 		t.Fatal(err)
 	}
 	result := waitForSettledRun(t, manager, started.RunID)

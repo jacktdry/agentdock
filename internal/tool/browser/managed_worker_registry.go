@@ -39,6 +39,14 @@ type WorkerSession interface {
 type WorkerDependencies struct {
 	Probe VersionProbe
 	Open  func(context.Context, mcpclient.ServerConfig) (WorkerSession, error)
+	// ReadyWitness persists optional owner-scoped diagnostic evidence before
+	// the ready WorkerInfo reaches lease admission. Failure is fail-closed.
+	// This callback does NOT grant OS process ownership or kill authority.
+	ReadyWitness func(WorkerInfo) error
+	// StartedWitness runs on the real owned stdio process immediately after
+	// cmd.Start/Attach and before the MCP handshake. Only Next shared opts in.
+	// Failure denies the session and cleans up its existing owned tree.
+	StartedWitness func(context.Context, int) error
 }
 type ManagedWorkerOptions struct{ Cwd string }
 
@@ -51,6 +59,7 @@ type managedWorker struct {
 	stopDone  chan struct{}
 	stopOnce  sync.Once
 	stopErr   error
+	onStop    func() // Optional Core-owned transport cleanup; immutable after creation.
 }
 
 // WorkerRegistry owns ephemeral workers. This substrate is not a bounded pool,
@@ -70,7 +79,7 @@ func NewWorkerRegistry(deps WorkerDependencies) *WorkerRegistry {
 	}
 	if deps.Open == nil {
 		deps.Open = func(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerSession, error) {
-			session, err := mcpclient.OpenStdioSession(ctx, cfg)
+			session, err := mcpclient.OpenStdioSessionWithStartedWitness(ctx, cfg, deps.StartedWitness)
 			if session == nil {
 				return nil, err
 			}
@@ -102,13 +111,17 @@ func (r *WorkerRegistry) StartManaged(ctx context.Context, options ManagedWorker
 }
 
 func (r *WorkerRegistry) startWorker(ctx context.Context, cfg mcpclient.ServerConfig) (WorkerInfo, error) {
+	return r.startWorkerWithCleanup(ctx, cfg, nil, nil)
+}
+
+func (r *WorkerRegistry) startWorkerWithCleanup(ctx context.Context, cfg mcpclient.ServerConfig, onStop func(), beforeOpen func() error) (WorkerInfo, error) {
 	startTimeout := 30 * time.Second
 	if configured := time.Duration(cfg.TimeoutMS) * time.Millisecond; configured >= startTimeout {
 		startTimeout = configured + 5*time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
-	w := &managedWorker{info: WorkerInfo{WorkerID: rand.Text(), CreatedAt: time.Now().UTC(), State: WorkerStarting}, cancel: cancel, startDone: make(chan struct{}), stopDone: make(chan struct{})}
+	w := &managedWorker{info: WorkerInfo{WorkerID: rand.Text(), CreatedAt: time.Now().UTC(), State: WorkerStarting}, cancel: cancel, startDone: make(chan struct{}), stopDone: make(chan struct{}), onStop: onStop}
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -134,6 +147,11 @@ func (r *WorkerRegistry) startWorker(ctx context.Context, cfg mcpclient.ServerCo
 	}
 	if err := validateManagedVersion(version); err != nil {
 		return fail(err)
+	}
+	if beforeOpen != nil {
+		if err := beforeOpen(); err != nil {
+			return fail(err)
+		}
 	}
 	session, err := r.deps.Open(ctx, cfg)
 	w.mu.Lock()
@@ -170,6 +188,11 @@ func (r *WorkerRegistry) startWorker(ctx context.Context, cfg mcpclient.ServerCo
 	w.info.Compatibility = compatibility
 	result := w.info
 	w.mu.Unlock()
+	if r.deps.ReadyWitness != nil {
+		if err := r.deps.ReadyWitness(result); err != nil {
+			return fail(workerError(ErrEngineUnavailable, w.info.WorkerID, err))
+		}
+	}
 	return result, nil
 }
 
@@ -214,6 +237,9 @@ func (r *WorkerRegistry) Call(ctx context.Context, id, tool string, args map[str
 }
 
 func (r *WorkerRegistry) stop(ctx context.Context, w *managedWorker) error {
+	if w.onStop != nil {
+		w.onStop()
+	}
 	w.cancel()
 	w.stopOnce.Do(func() {
 		go func() {

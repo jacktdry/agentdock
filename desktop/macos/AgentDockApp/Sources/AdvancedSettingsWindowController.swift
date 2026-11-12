@@ -46,7 +46,7 @@ final class AdvancedSettingsWindowController: NSWindowController, NSTextFieldDel
     private let languagePreference = NSPopUpButton(frame: .zero, pullsDown: false)
     private let serviceAutostart = NSButton(checkboxWithTitle: L10n.text("Allow AgentDock to run in the background"), target: nil, action: nil)
     private let menuAutostart = NSButton(checkboxWithTitle: L10n.text("Show AgentDock in the menu bar after sign-in"), target: nil, action: nil)
-    private let portField = NSTextField(string: "8765")
+    private let portField = NSTextField(string: "")
     private let logLevel = NSPopUpButton(frame: .zero, pullsDown: false)
     private let mcpAppsMode = NSPopUpButton(frame: .zero, pullsDown: false)
     private let browserEnabled = NSButton(checkboxWithTitle: L10n.text("Enable browser CDP control"), target: nil, action: nil)
@@ -71,7 +71,7 @@ final class AdvancedSettingsWindowController: NSWindowController, NSTextFieldDel
     private var currentConfiguration: ServiceConfiguration?
     private var initialServiceAutostart = true
     private var initialMenuAutostart = true
-    private var initialPort = 8765
+    private var initialPort = 0
     private var initialLogLevel = "info"
     private var initialMCPAppsMode = MCPAppsMode.full
     private var initialBrowserEnabled = false
@@ -121,6 +121,8 @@ final class AdvancedSettingsWindowController: NSWindowController, NSTextFieldDel
         window.minSize = NSSize(width: 700, height: 560)
         window.center()
         super.init(window: window)
+        initialPort = service.paths.identity.defaultPort
+        portField.stringValue = String(initialPort)
         configureUI()
     }
 
@@ -843,7 +845,7 @@ final class AdvancedSettingsWindowController: NSWindowController, NSTextFieldDel
                 selectMCPAppsMode(initialMCPAppsMode)
                 browserCDPURL.stringValue = initialBrowserCDPURL
                 selectBrowserConnectionMode(initialBrowserConnectionMode)
-                if let updatedConfiguration = ServiceConfiguration.load(from: service.paths.environment) {
+                if let updatedConfiguration = ServiceConfiguration.load(from: service.paths.environment, identity: service.paths.identity) {
                     currentConfiguration = updatedConfiguration
                 }
                 refreshBrowserStatus()

@@ -44,6 +44,7 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "  agentdock version [--json]")
 		fmt.Fprintln(stderr, "  agentdock update [--check]")
 		fmt.Fprintln(stderr, "  agentdock service <status|start|stop|restart|autostart> --runtime-root <目录>")
+		fmt.Fprintln(stderr, "  agentdock browser-mode <status|enable|disable> --runtime-root <AgentDock Next runtime>")
 		fmt.Fprintln(stderr, "  agentdock tunnel <status|start|stop|restart|regenerate|configure|autostart> --runtime-root <目录>")
 		fmt.Fprintln(stderr, "  agentdock skill bootstrap --bundle <目录>")
 		fmt.Fprintln(stderr, "  agentdock nexus pair --endpoint <URL> --code <配对码> [--name <名称>]")
@@ -123,6 +124,10 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 		return serveStdio(ctx, server)
 	}
 	nexusStatus := &nexusbridge.ConnectionState{}
+	nexusIdentityGeneration := ""
+	if identityErr == nil {
+		nexusIdentityGeneration = nexusbridge.Generation(identity)
+	}
 	serviceCtx, cancelServices := context.WithCancel(ctx)
 	var bridgeWG sync.WaitGroup
 	defer func() {
@@ -149,10 +154,28 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	go func() { done <- httpx.Serve(serviceCtx, server, runtime, cfg) }()
 	go func() {
 		done <- desktopcontrol.Serve(serviceCtx, runtimeRoot, func(controlCtx context.Context, request desktopcontrol.Request) (any, error) {
+			if request.Method == "permission.bootstrap" {
+				return runtime.DesktopPermissionBootstrap(request.Params)
+			}
+			if request.Method == "browser.snapshot" {
+				return runtime.RuntimeBrowserDesktop(), nil
+			}
+			if request.Method == "next_codex.readiness" {
+				return runtime.NextCodexMCPReadiness(), nil
+			}
+			if request.Method == "next_codex.operator_identity" {
+				if params := strings.TrimSpace(string(request.Params)); params != "" && params != "{}" && params != "null" {
+					return nil, errors.New("operator identity does not accept parameters")
+				}
+				return runtime.NextCodexOperatorIdentity(controlCtx), nil
+			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,
 				request,
-				desktopruntime.ControlRuntimeStatus{NexusConnected: nexusStatus.Connected()},
+				desktopruntime.ControlRuntimeStatus{
+					NexusConnected:          nexusStatus.Connected(),
+					NexusIdentityGeneration: nexusIdentityGeneration,
+				},
 			)
 		})
 	}()

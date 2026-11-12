@@ -18,6 +18,7 @@ import (
 
 type agentProcess struct {
 	spec       AgentSpec
+	pid        int
 	command    *exec.Cmd
 	controller *processcontrol.Controller
 	connection *Connection
@@ -59,7 +60,7 @@ func startAgentProcess(ctx context.Context, spec AgentSpec, defaultCWD string, r
 		return nil, newError("ACP_START_FAILED", "attach ACP process controller", false, map[string]any{"agent": spec.Name}, err)
 	}
 	process := &agentProcess{
-		spec: spec, command: command, controller: controller, stderr: stderr,
+		spec: spec, pid: command.Process.Pid, command: command, controller: controller, stderr: stderr,
 	}
 	process.connection = NewConnection(stdout, stdin, requestHandler, notificationHandler)
 

@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 
+	"github.com/uvwt/agentdock/internal/controlplane"
 	"github.com/uvwt/agentdock/internal/workspace"
 )
 
@@ -13,10 +14,17 @@ type Service struct {
 	ws                   *workspace.Workspace
 	resolveSkillResource SkillResourceResolver
 	commandEnv           CommandEnv
+	protected            *controlplane.PathSet
 }
 
 func New(ws *workspace.Workspace, resolveSkillResource SkillResourceResolver, commandEnv CommandEnv) *Service {
 	return &Service{ws: ws, resolveSkillResource: resolveSkillResource, commandEnv: commandEnv}
+}
+
+func (svc *Service) SetProtectedPathSet(paths *controlplane.PathSet) {
+	if svc != nil {
+		svc.protected = paths
+	}
 }
 
 const (

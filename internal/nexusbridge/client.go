@@ -19,6 +19,7 @@ import (
 	protocol "github.com/uvwt/agentdock-protocol"
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/buildinfo"
+	"github.com/uvwt/agentdock/internal/httpx/requestmeta"
 	"github.com/uvwt/agentdock/internal/observability"
 	"github.com/uvwt/agentdock/internal/publicartifacts"
 	"github.com/uvwt/agentdock/internal/runtimeapi"
@@ -237,6 +238,7 @@ func (c *Client) invoke(parent context.Context, socket *websocket.Conn, incoming
 			err = fmt.Errorf("解析工具请求: %w", decodeErr)
 		} else {
 			toolCtx := observability.WithSource(ctx, observability.SourceNexus)
+			toolCtx = requestmeta.WithAuthPrincipal(toolCtx, nexusAuthPrincipal(c.identity))
 			result, err = c.node.Invoke(toolCtx, request.Tool, request.Arguments)
 		}
 	case protocol.OperationResourceRead:
@@ -337,4 +339,8 @@ func bridgeError(err error) *protocol.RemoteError {
 		converted.Details = toolErr.Details
 	}
 	return converted
+}
+
+func nexusAuthPrincipal(identity Identity) requestmeta.AuthPrincipal {
+	return requestmeta.NewStableAuthPrincipal("nexus_device", identity.NodeID, identity.DeviceID)
 }

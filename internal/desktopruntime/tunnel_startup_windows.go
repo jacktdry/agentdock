@@ -8,11 +8,24 @@ import (
 	"strings"
 )
 
-func platformSetTunnelAutostart(_ context.Context, runtimeRoot string, enabled bool) error {
+func platformSetTunnelAutostart(ctx context.Context, runtimeRoot string, enabled bool) error {
 	runtime, err := loadTunnelRuntime(runtimeRoot)
 	if err != nil {
 		return err
 	}
+	old, err := tunnelAutostartEnabled(runtime.manifest)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		if _, err := tunnelStartupCommand(runtime.manifest, runtime.root); err != nil {
+			return err
+		}
+	}
+	return runTunnelTransactionLocked(ctx, runtime.root, nil, func(ctx context.Context) error { return setTunnelAutostartWindows(runtime, enabled) }, func(ctx context.Context) error { return setTunnelAutostartWindows(runtime, old) })
+}
+
+func setTunnelAutostartWindows(runtime tunnelRuntime, enabled bool) error {
 	name := defaultString(runtime.manifest.CloudflaredStartupValueName, "AgentDockCloudflared")
 	if !enabled {
 		return removeRunValue(name)

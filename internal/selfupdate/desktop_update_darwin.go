@@ -13,19 +13,34 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/uvwt/agentdock/internal/updateidentity"
 )
 
 const maxExtractedDesktopBytes = 1 << 30
 
 func detectDesktopUpdateTarget() string {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return ""
+	}
 	candidates := make([]string, 0, 3)
 	if configured := strings.TrimSpace(os.Getenv("AGENTDOCK_DESKTOP_APP_PATH")); configured != "" {
-		candidates = append(candidates, configured)
+		if id.Variant == "next" {
+			home, err := os.UserHomeDir()
+			if err != nil || id.ValidateDestination(configured, home) != nil {
+				return ""
+			}
+		}
+		if validateMacOSDesktopTarget(configured) == nil {
+			return configured
+		}
+		return ""
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates,
-			"/Applications/AgentDock.app",
-			filepath.Join(home, "Applications", "AgentDock.app"),
+			filepath.Join("/Applications", id.AppName()),
+			filepath.Join(home, "Applications", id.AppName()),
 		)
 	}
 	for _, candidate := range uniqueStrings(candidates) {
@@ -67,11 +82,20 @@ func desktopUpdateOwnsExecutable(appPath, executable string) bool {
 }
 
 func extractDesktopUpdateArchive(ctx context.Context, archiveData []byte, tempDir, targetVersion string) (string, error) {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return "", err
+	}
 	reader, err := zip.NewReader(bytes.NewReader(archiveData), int64(len(archiveData)))
 	if err != nil {
 		return "", err
 	}
 	root := filepath.Join(tempDir, "macos-desktop")
+	if id.Variant == "next" {
+		if err := updateidentity.SafePath(root); err != nil {
+			return "", err
+		}
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", fmt.Errorf("创建桌面更新暂存目录失败: %w", err)
 	}
@@ -92,7 +116,7 @@ func extractDesktopUpdateArchive(ctx context.Context, archiveData []byte, tempDi
 		if containsAppleDoubleComponent(clean) {
 			continue
 		}
-		if clean != "AgentDock.app" && !strings.HasPrefix(clean, "AgentDock.app/") {
+		if clean != id.AppName() && !strings.HasPrefix(clean, id.AppName()+"/") {
 			return "", fmt.Errorf("桌面更新 ZIP 包含非 App 内容 %q", file.Name)
 		}
 		if file.Mode()&os.ModeSymlink != 0 {
@@ -143,7 +167,20 @@ func extractDesktopUpdateArchive(ctx context.Context, archiveData []byte, tempDi
 		}
 	}
 
-	appPath := filepath.Join(root, "AgentDock.app")
+	appPath := filepath.Join(root, id.AppName())
+	if id.Variant == "next" {
+		// Do not execute downloaded helpers until staging proves source signer continuity.
+		if err := id.ValidateBundle(ctx, appPath); err != nil {
+			return "", err
+		}
+		if err := id.ValidateSignatures(ctx, appPath); err != nil {
+			return "", err
+		}
+		if err := validateMacOSDesktopVersion(ctx, appPath, targetVersion); err != nil {
+			return "", err
+		}
+		return appPath, nil
+	}
 	if err := validateMacOSDesktopRuntime(ctx, appPath, targetVersion); err != nil {
 		return "", err
 	}
@@ -160,6 +197,13 @@ func containsAppleDoubleComponent(path string) bool {
 }
 
 func validateMacOSDesktopTarget(appPath string) error {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return err
+	}
+	if err := id.ValidateBundle(context.Background(), appPath); err != nil {
+		return err
+	}
 	info, err := os.Lstat(appPath)
 	if err != nil {
 		return err
@@ -168,7 +212,7 @@ func validateMacOSDesktopTarget(appPath string) error {
 		return fmt.Errorf("macOS App 不是普通目录: %s", appPath)
 	}
 	identifier, err := plistValue(context.Background(), filepath.Join(appPath, "Contents", "Info.plist"), "CFBundleIdentifier")
-	if err != nil || identifier != "com.uvwt.agentdock" {
+	if err != nil || identifier != id.BundleID {
 		return fmt.Errorf("macOS App Bundle Identifier 无效: %s", appPath)
 	}
 	executable := filepath.Join(appPath, "Contents", "MacOS", "AgentDock")
@@ -197,6 +241,18 @@ func validateMacOSDesktopVersion(ctx context.Context, appPath, targetVersion str
 }
 
 func validateMacOSDesktopRuntime(ctx context.Context, appPath, targetVersion string) error {
+	id, err := currentMacOSUpdateIdentity()
+	if err != nil {
+		return err
+	}
+	if id.Variant == "next" {
+		if err := id.ValidateBundle(ctx, appPath); err != nil {
+			return err
+		}
+		if err := id.ValidateSignatures(ctx, appPath); err != nil {
+			return err
+		}
+	}
 	if err := validateMacOSDesktopVersion(ctx, appPath, targetVersion); err != nil {
 		return err
 	}
@@ -204,7 +260,7 @@ func validateMacOSDesktopRuntime(ctx context.Context, appPath, targetVersion str
 	cloudflared := filepath.Join(appPath, "Contents", "Helpers", "cloudflared")
 	arbiter := filepath.Join(appPath, "Contents", "Helpers", "agentdock-arbiter")
 	menuHelper := filepath.Join(appPath, "Contents", "Helpers", "AgentDockLoginHelper")
-	menuAgent := filepath.Join(appPath, "Contents", "Library", "LaunchAgents", "com.uvwt.agentdock.menu-login.plist")
+	menuAgent := filepath.Join(appPath, "Contents", "Library", "LaunchAgents", id.Label("menu-login")+".plist")
 	skillManifest := filepath.Join(appPath, "Contents", "Resources", "core-skills", "manifest.json")
 	for _, path := range []string{core, cloudflared, menuHelper, menuAgent, skillManifest} {
 		info, err := os.Lstat(path)
@@ -231,7 +287,7 @@ func validateMacOSDesktopRuntime(ctx context.Context, appPath, targetVersion str
 		key   string
 		value string
 	}{
-		{key: "Label", value: "com.uvwt.agentdock.menu-login"},
+		{key: "Label", value: id.Label("menu-login")},
 		{key: "BundleProgram", value: "Contents/Helpers/AgentDockLoginHelper"},
 		{key: "ProgramArguments.0", value: "AgentDockLoginHelper"},
 		{key: "RunAtLoad", value: "true"},
@@ -269,4 +325,8 @@ func plistValue(ctx context.Context, plistPath, key string) (string, error) {
 		return "", fmt.Errorf("读取 plist %s 失败: %w: %s", key, err, strings.TrimSpace(string(output)))
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func currentMacOSUpdateIdentity() (updateidentity.Identity, error) {
+	return updateidentity.Resolve(os.Getenv("AGENTDOCK_DESKTOP_VARIANT"))
 }

@@ -1,0 +1,22 @@
+# NEXT RC19 — macOS Tray AX scoped-proxy ownership contrast (2026-10-24, Asia/Taipei)
+
+## User workflow / actual blocker
+
+When Stable AgentDock and AgentDock Next run together, users and assistive technology must be able to **identify the NEXT menu-bar controller before choosing Open/Start/Stop/Restart**, never accidentally operate Stable. Installed NEXT `0.9.2-rc.19` already compiles the visible `NEXT` button title with leading package icon and identity-specific menu item strings. Installed Core 8767 and GUI were separately Host PASS, but prior probes failed to identify/read NEXT's menu bar accessible title. **This checkpoint narrows the native AX difference by measuring both apps on the same running Mac without focusing or clicking either menu.**
+
+## Read-only OS evidence
+
+- Same inspection agent had genuine Accessibility authorization (`AXIsProcessTrusted=true`). Query `AXUIElementCreateApplication(pid)`, read `AXExtrasMenuBar` → `AXChildren` for exact active bundle IDs `dev.dropabit.agentdock.next` and `com.uvwt.agentdock`. No `AXPress`, synthetic click, focus/window activation, screen snapshot, app install/restart, or user consent changes.
+- The NEXT-scoped extras proxy had **1 AXMenuBarItem**, `AXPosition=(957,-1437)`, `AXSize=(40,24)`; AX `Title`, `Description`, `Help`, `Value`, `Identifier` did **not contain AgentDock/NEXT**; its four public text fields were observed blank earlier on installed RC19. Its own `AXMenuBar` app-menu branch did have **two AgentDock/NEXT-related matches**, but an ordinary app menu is **not** the NEXT status icon.
+- The independent Stable-scoped extras proxy also had **1 AXMenuBarItem**, adjacent `AXPosition=(995,-1437)`, `AXSize=(36,24)`. Its **Description** was AgentDock-branded; Title and Identifier were not. Same AX query, same machine/session and no restart. Distinct x coordinates show the app-scoped proxies are not simply reporting identical geometry.
+- `com.apple.systemuiserver` and `com.apple.controlcenter` did not expose extra status item trees to this same read-only inspector; do not assume either is a canonical cross-app status item inventory.
+- Existing NEXT Swift code uses `NSStatusItem.variableLength`, sets `button.setAccessibilityLabel("AgentDock Next")`, `button.toolTip`, `button.image` with accessibilityDescription, `button.title="NEXT"`, and `button.imagePosition=.imageLeading` for the validated NEXT bundle. Stable remains icon-only. Therefore the missing accessible name is **not explained by an explicitly square-length item**, and more blind tweaks are unjustified.
+- User's normal running foreground was not modified. Installed NEXT 0.9.2-rc.19/8767 and separate Stable 1.1.0/8765 healthy. Running NEXT GUI PID 75194; source branch unchanged.
+
+## Correct acceptance and next action
+
+**Actual finding:** NEXT's application-scoped `AXExtrasMenuBar` accessible item remains **unbranded**, in contrast to the adjacent Stable item. This identifies a specific missing accessibility/readability result on installed RC19; it does **not** establish that the visible NEXT text is absent or that the status item can safely be clicked based solely on unlabeled coordinates. **Tray accessible identification and actual menu operation remain OPEN / not Host PASS.**
+
+Do **not** use the `AXMenuBar` matches as Tray PASS. Do **not** click the unlabeled item at x957 during normal Chrome work, change systemwide menu-bar preferences, trigger macOS permissions, or ship iterative RCs just to alter an unproven OS proxy. Next safe real acceptance step is a **bounded foreground-allowed, user-visible native menu inspection** when interrupting the foreground is acceptable, identify the item by actual visible icon/text and menu names, then verify a harmless action (e.g. Open/Show Next only), not Start/Stop/Restart. If the macOS menu manager hides or merges the item, first establish app-specific ownership without altering any Stable preferences. Under currently enforced no-focus constraints, maintain OPEN.
+
+Independently open release gates: actual refused-Connection mutation + Overview navigation display under installed RC19, and trusted/native Codex ACP MCP full process ownership authorization B0–B6. See [RC19 installed GUI/packaging](next-rc19-installed-gui-2026-10-24.md) and [Codex ACP MCP B0–B6 closeout](codex-acp-mcp-b0-b6-closeout-2026-10-12.md). No worktree source modifications, Stable impact, Edge authorization, merge/push/tag, or public release in this checkpoint.

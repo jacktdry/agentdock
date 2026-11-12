@@ -31,6 +31,12 @@ const (
 	EngineChromeDevToolsMCP EngineKind = "chrome-devtools-mcp"
 )
 const PreferredEngineVersion = "1.7.0"
+const nativeEdgeEngineVersion = "1"
+
+func supportedExternalEngine(browser Kind, engine EngineKind, version string) bool {
+	return (engine == EngineChromeDevToolsMCP && version == PreferredEngineVersion) ||
+		(browser == BrowserEdge && engine == EngineNativeCDP && version == nativeEdgeEngineVersion)
+}
 
 type ProfileClass string
 
@@ -126,6 +132,7 @@ type ResolvedStart struct {
 	ProfileClass     ProfileClass
 	Endpoint         string
 	ProfilePath      string
+	OriginScope      browserpolicy.OriginScope
 	Headless         bool
 	BackgroundPage   bool
 	ForegroundPolicy ForegroundPolicy
@@ -136,6 +143,8 @@ type RouteDecision struct {
 	Scope RequestScope
 	Route browserpolicy.RouteKind
 	Start ResolvedStart
+	// Core-only admission authority. Serialization cannot transfer this grant.
+	grant *externalRouteGrant
 }
 type PIDObservation struct {
 	PID           int

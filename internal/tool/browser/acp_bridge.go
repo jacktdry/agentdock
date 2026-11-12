@@ -10,62 +10,196 @@ import (
 	"time"
 
 	"github.com/uvwt/agentdock/internal/browserpolicy"
+	"github.com/uvwt/agentdock/internal/permission"
 )
 
 type acpBrowserLease struct {
 	route browserpolicy.RouteKind
 }
+type directBrowserLease struct {
+	scope RequestScope
+	route browserpolicy.RouteKind
+}
 
 type acpBrowserOwner struct {
-	sessionID string
-	profileID string
-	scope     RequestScope
-	token     string
-	leases    map[string]acpBrowserLease
+	authenticatedMCPRequestObserved bool // Guarded by ACPBridge.mu; endpoint access only.
+	sessionID                       string
+	profileID                       string
+	scope                           RequestScope
+	token                           string
+	leases                          map[string]acpBrowserLease
 }
 
 // ACPBridge is the only ACP-facing browser ownership boundary. ACP adapters own
 // neither chrome-devtools-mcp nor a browser process; they receive only a scoped
 // HTTP MCP capability token for this bridge.
 type ACPBridge struct {
-	planner   *RoutePlanner
-	registry  *WorkerRegistry
-	managed   *managedLeaseCoordinator
-	external  *ExternalLeaseManager
-	lifecycle *browserLifecycleRunner
+	planner          *RoutePlanner
+	registry         *WorkerRegistry
+	managed          *managedLeaseCoordinator
+	external         *ExternalLeaseManager
+	lifecycle        *browserLifecycleRunner
+	shared           *managedSharedWorkerBackend // Private opt-in; runtime constructor stays exclusive.
+	rotating         *managedSharedRotatingBackend
+	budgetOwnerClaim *managedSharedBudgetOwnerClaim
+	closeOnce        sync.Once
+	closeErr         error
 
-	mu        sync.Mutex
-	byToken   map[string]*acpBrowserOwner
-	bySession map[string]*acpBrowserOwner
-	closed    bool
+	mu            sync.Mutex
+	byToken       map[string]*acpBrowserOwner
+	bySession     map[string]*acpBrowserOwner
+	directLeases  map[string]directBrowserLease
+	admissionHook permission.HostAdmissionHook
+	closed        bool
 }
 
 func NewACPBridge(planner *RoutePlanner, registry *WorkerRegistry) (*ACPBridge, error) {
+	return newACPBridge(planner, registry, registry, nil, nil)
+}
+
+// Source-only spike: one canonical workspace and one terminal pool generation.
+// No product setting or runtime caller enables this constructor.
+func newACPBridgeSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string) (*ACPBridge, error) {
 	if planner == nil || registry == nil {
-		return nil, browserError(ErrPolicyConflict, "ACP browser bridge requires planner and worker registry", "acp", nil, nil)
+		return nil, errManagedSharedUnavailable
 	}
-	managed, err := newManagedLeaseCoordinator(registry, defaultManagedLeasePolicy())
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	adapter := &sharedRegistryBackend{WorkerRegistry: registry}
+	shared, err := newManagedSharedWorkerBackend(adapter, ManagedWorkerOptions{Cwd: root})
 	if err != nil {
 		return nil, err
 	}
+	adapter.shared = shared
+	return newACPBridge(planner, registry, shared, shared, nil)
+}
+
+// NewNextSingleWorkspaceSharedACPBridge is the bounded, Next-only source
+// integration point for the existing private budgeted rotating pool.
+// It does not select a workspace, authorize a browser profile, or turn on a
+// product flag; the Runtime caller MUST separately enforce explicit Next
+// ownership and exact workspace selection before invoking this constructor.
+// Other workspaces and non-managed routes remain fail-closed on Acquire.
+// This deliberately caps a single Core at one pool-owned Chrome generation.
+func NewNextSingleWorkspaceSharedACPBridge(planner *RoutePlanner, registry *WorkerRegistry, workspace string) (*ACPBridge, error) {
+	budget, err := newManagedSharedBrowserBudget(1)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	return newACPBridgeBudgetedRotatingSharedForWorkspace(planner, registry, workspace, budget)
+}
+
+// Source-only opt-in: the owner replaces only successfully stopped generations.
+func newACPBridgeRotatingSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string) (*ACPBridge, error) {
+	if planner == nil || registry == nil {
+		return nil, errManagedSharedUnavailable
+	}
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	pool := newManagedSharedRotatingBackend(registry, ManagedWorkerOptions{Cwd: root})
+	return newACPBridge(planner, registry, pool, nil, pool)
+}
+
+// Each owner gets a distinct registry lifecycle; only process admission is
+// shared. The caller must supply one common budget for all participating roots.
+func newACPBridgeBudgetedRotatingSharedForWorkspace(planner *RoutePlanner, registry *WorkerRegistry, cwd string, budget *managedSharedBrowserBudget) (*ACPBridge, error) {
+	if planner == nil || registry == nil || budget == nil {
+		return nil, errManagedSharedUnavailable
+	}
+	root, err := browserpolicy.CanonicalWorkspaceRoot(cwd)
+	if err != nil {
+		return nil, errManagedSharedUnavailable
+	}
+	claim, err := budget.claim(registry, root)
+	if err != nil {
+		return nil, err
+	}
+	pool := newManagedSharedRotatingBackend(registry, ManagedWorkerOptions{Cwd: root})
+	pool.budget = budget
+	bridge, err := newACPBridge(planner, registry, pool, nil, pool)
+	if err != nil {
+		// newACPBridge fails before starting its lifecycle runner or dispatching
+		// worker startup; only this side-effect-free failure permits rollback.
+		budget.releaseOwner(registry, claim)
+		return nil, errManagedSharedUnavailable
+	}
+	bridge.budgetOwnerClaim = claim
+	return bridge, nil
+}
+
+func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend ManagedLeaseBackend, shared *managedSharedWorkerBackend, rotating *managedSharedRotatingBackend) (*ACPBridge, error) {
+	if planner == nil || registry == nil {
+		return nil, browserError(ErrPolicyConflict, "ACP browser bridge requires planner and worker registry", "acp", nil, nil)
+	}
+	managed, err := newManagedLeaseCoordinator(backend, defaultManagedLeasePolicy())
+	if err != nil {
+		return nil, err
+	}
+	external := NewExternalLeaseManager(registry)
+	if planner.externalRuntime != nil {
+		external = NewExternalLeaseManager(planner.externalRuntime)
+		external.verifier = planner.externalRuntime
+		planner.externalRuntime.setRevalidation(external.verifyPeer)
+	}
 	bridge := &ACPBridge{
-		planner: planner, registry: registry, managed: managed, external: NewExternalLeaseManager(registry),
+		planner: planner, registry: registry, managed: managed, shared: shared, rotating: rotating, external: external,
 		byToken: make(map[string]*acpBrowserOwner), bySession: make(map[string]*acpBrowserOwner),
+		directLeases: make(map[string]directBrowserLease),
 	}
 	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
 	return bridge, nil
+}
+
+func (b *ACPBridge) SetAdmissionHook(hook permission.HostAdmissionHook) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.admissionHook = hook
+	b.mu.Unlock()
+}
+
+func (b *ACPBridge) admissionFor(ctx context.Context, owner *acpBrowserOwner, action string, payload any) (permission.HostOperationFinish, error) {
+	if b == nil || owner == nil {
+		return nil, nil
+	}
+	b.mu.Lock()
+	hook := b.admissionHook
+	b.mu.Unlock()
+	if hook == nil {
+		return nil, nil
+	}
+	return hook(ctx, permission.HostOperation{
+		Tool:          "acp_browser",
+		Action:        action,
+		SessionID:     owner.sessionID,
+		ProfileID:     owner.profileID,
+		WorkspaceRoot: owner.scope.CanonicalWorkspaceRoot,
+		Payload:       payload,
+	})
 }
 
 func (b *ACPBridge) sweepLifecycle(now time.Time) error {
 	if b == nil {
 		return nil
 	}
-	return errors.Join(
+	err := errors.Join(
 		b.managed.SweepExpired(now),
 		b.external.SweepExpired(now),
 		b.managed.RecoverFailed(now),
 		b.external.RecoverFailed(now),
 	)
+	if b.shared != nil {
+		err = errors.Join(err, b.shared.ReapIdle(now))
+	}
+	if b.rotating != nil {
+		err = errors.Join(err, b.rotating.ReapIdle(now))
+	}
+	return err
 }
 
 func (b *ACPBridge) RegisterSession(sessionID, profileID, cwd string) (string, error) {
@@ -118,6 +252,11 @@ func (b *ACPBridge) registerSession(sessionID, profileID, cwd, token string) (st
 func (b *ACPBridge) owner(token string) (*acpBrowserOwner, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.ownerLocked(token)
+}
+
+// ownerLocked requires b.mu and never records transport activity.
+func (b *ACPBridge) ownerLocked(token string) (*acpBrowserOwner, error) {
 	if b.closed {
 		return nil, browserError(ErrEngineUnavailable, "ACP browser bridge is closed", "acp", nil, nil)
 	}
@@ -128,16 +267,32 @@ func (b *ACPBridge) owner(token string) (*acpBrowserOwner, error) {
 	return owner, nil
 }
 
-func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (LeaseMetadata, error) {
+func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseMetadata, err error) {
 	owner, err := b.owner(token)
 	if err != nil {
 		return LeaseMetadata{}, err
+	}
+	plan, planErr := b.planner.Plan(owner.scope, nil)
+	if planErr != nil {
+		return LeaseMetadata{}, planErr
+	}
+	if plan.Route == browserpolicy.RouteManaged && ((b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd) || (b.rotating != nil && owner.scope.CanonicalWorkspaceRoot != b.rotating.options.Cwd)) {
+		return LeaseMetadata{}, errManagedSharedUnavailable
+	}
+	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"url": url})
+	if err != nil {
+		return LeaseMetadata{}, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
 	}
 	decision, err := b.planner.Resolve(ctx, owner.scope, nil)
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	var meta LeaseMetadata
+	if (b.shared != nil || b.rotating != nil) && decision.Route != browserpolicy.RouteManaged && (b.planner.externalRuntime == nil || decision.Start.Engine != EngineNativeCDP) {
+		return LeaseMetadata{}, errManagedSharedUnavailable
+	}
 	switch decision.Route {
 	case browserpolicy.RouteManaged:
 		meta, _, err = b.managed.Acquire(ctx, decision.Scope, decision.Start, url)
@@ -178,10 +333,17 @@ func (b *ACPBridge) leaseOwner(token, leaseID string) (*acpBrowserOwner, acpBrow
 	return owner, entry, nil
 }
 
-func (b *ACPBridge) Call(ctx context.Context, token, leaseID, tool string, args map[string]any) (map[string]any, error) {
+func (b *ACPBridge) Call(ctx context.Context, token, leaseID, tool string, args map[string]any) (result map[string]any, err error) {
 	owner, entry, err := b.leaseOwner(token, leaseID)
 	if err != nil {
 		return nil, err
+	}
+	finish, err := b.admissionFor(ctx, owner, tool, map[string]any{"lease_id": leaseID, "arguments": args})
+	if err != nil {
+		return nil, err
+	}
+	if finish != nil {
+		defer func() { finish(err) }()
 	}
 	switch entry.route {
 	case browserpolicy.RouteManaged:
@@ -265,6 +427,11 @@ func (b *ACPBridge) Close() error {
 	if b == nil {
 		return nil
 	}
+	b.closeOnce.Do(func() { b.closeErr = b.close() })
+	return b.closeErr
+}
+
+func (b *ACPBridge) close() error {
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
@@ -285,8 +452,56 @@ func (b *ACPBridge) Close() error {
 		failures = append(failures, b.ReleaseSession(ctx, id))
 		cancel()
 	}
+	// Direct leases have no ACP session; release through the same coordinator.
+	b.managed.mu.Lock()
+	direct := make(map[string]RequestScope)
+	for id, entry := range b.managed.active {
+		if entry.scope.Provenance == ScopeUpstream {
+			direct[id] = entry.scope
+		}
+	}
+	b.managed.mu.Unlock()
+	for id, scope := range direct {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		_, err := b.managed.Release(ctx, scope, id)
+		cancel()
+		failures = append(failures, err)
+	}
+	b.mu.Lock()
+	externalDirect := make(map[string]directBrowserLease)
+	for id, entry := range b.directLeases {
+		if entry.route != browserpolicy.RouteManaged {
+			externalDirect[id] = entry
+		}
+	}
+	b.mu.Unlock()
+	for id, entry := range externalDirect {
+		cleanup, stop := context.WithTimeout(context.Background(), 35*time.Second)
+		_, err := b.releaseLease(cleanup, entry.scope, id, entry.route)
+		stop()
+		failures = append(failures, err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
-	failures = append(failures, b.registry.Shutdown(ctx))
-	return errors.Join(failures...)
+	if b.shared != nil {
+		failures = append(failures, b.shared.Shutdown(ctx))
+	}
+	if b.rotating != nil {
+		failures = append(failures, b.rotating.Shutdown(ctx))
+	}
+	registryErr := b.registry.Shutdown(ctx)
+	if b.planner.externalRuntime != nil {
+		failures = append(failures, b.planner.externalRuntime.Close())
+	}
+	if b.rotating != nil && registryErr != nil {
+		registryErr = errManagedSharedUnavailable
+	}
+	failures = append(failures, registryErr)
+	err := errors.Join(failures...)
+	if err == nil && b.budgetOwnerClaim != nil {
+		// Registry Shutdown above revokes admission and waits for every owned
+		// worker, including browsers outside the rotating generation.
+		b.rotating.budget.releaseOwner(b.registry, b.budgetOwnerClaim)
+	}
+	return err
 }

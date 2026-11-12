@@ -165,6 +165,8 @@ func (m *Manager) AttachRemoteSession(remote RemoteSession) (SessionRecord, erro
 		Title:                 strings.TrimSpace(remote.Title),
 		AdditionalDirectories: additional,
 		Status:                SessionClosed,
+		LifecyclePolicy:       LifecyclePersistent,
+		LastActiveAt:          now,
 		CreatedAt:             now,
 		UpdatedAt:             now,
 	}

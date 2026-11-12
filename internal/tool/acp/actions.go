@@ -10,6 +10,29 @@ import (
 	acpruntime "github.com/uvwt/agentdock/internal/acp"
 )
 
+func sessionLifecycleOptions(request SessionRequest) (acpruntime.SessionLifecycleOptions, error) {
+	policy := strings.TrimSpace(request.LifecyclePolicy)
+	if policy == "" && request.IdleCloseAfterMS != nil {
+		return acpruntime.SessionLifecycleOptions{}, validationError("ACP_SESSION_LIFECYCLE_INVALID", "lifecycle_policy is required when idle_close_after_ms is provided", nil)
+	}
+	options := acpruntime.SessionLifecycleOptions{Policy: acpruntime.SessionLifecyclePolicy(policy)}
+	if request.IdleCloseAfterMS != nil {
+		options.IdleCloseAfter = time.Duration(*request.IdleCloseAfterMS) * time.Millisecond
+	}
+	normalized, err := acpruntime.NormalizeSessionLifecycleOptions(options)
+	if err != nil {
+		return acpruntime.SessionLifecycleOptions{}, acpToolError(err)
+	}
+	return normalized, nil
+}
+
+func (s *Service) newSessionLifecycleOptions(request SessionRequest) (acpruntime.SessionLifecycleOptions, error) {
+	if strings.TrimSpace(request.LifecyclePolicy) != "" || request.IdleCloseAfterMS != nil || s == nil || s.newSessionLifecycle.Policy == "" {
+		return sessionLifecycleOptions(request)
+	}
+	return s.newSessionLifecycle, nil
+}
+
 func (s *Service) Session(ctx context.Context, request SessionRequest) (response Result, returnErr error) {
 	manager, profileID, err := s.managerFor(request.ProfileID)
 	if err != nil {
@@ -55,13 +78,25 @@ func (s *Service) Session(ctx context.Context, request SessionRequest) (response
 		}
 		return result, nil
 
+	case "status":
+		diagnostics := manager.Diagnostics()
+		result := Result{"action": action, "diagnostics": diagnostics}
+		if pid := manager.AdapterProcessID(); pid > 0 {
+			result["adapter_pid"] = pid
+		}
+		return result, nil
+
 	case "new":
+		lifecycle, lifecycleErr := s.newSessionLifecycleOptions(request)
+		if lifecycleErr != nil {
+			return nil, lifecycleErr
+		}
 		var result acpruntime.SessionResult
 		if strings.TrimSpace(request.FromSessionID) != "" {
 			additional := request.AdditionalDirectories
-			result, err = manager.ForkSession(ctx, request.FromSessionID, request.CWD, additional)
+			result, err = manager.ForkSessionWithLifecycle(ctx, request.FromSessionID, request.CWD, additional, lifecycle)
 		} else {
-			result, err = manager.NewSession(ctx, request.CWD, request.AdditionalDirectories)
+			result, err = manager.NewSessionWithLifecycle(ctx, request.CWD, request.AdditionalDirectories, lifecycle)
 		}
 		if err != nil {
 			return nil, acpToolError(err)
@@ -152,10 +187,40 @@ func (s *Service) Session(ctx context.Context, request SessionRequest) (response
 		}
 		modeID := strings.TrimSpace(request.ModeID)
 		configID := strings.TrimSpace(request.ConfigID)
+		lifecyclePolicy := strings.TrimSpace(request.LifecyclePolicy)
 		hasMode := modeID != ""
 		hasConfig := configID != ""
-		if hasMode == hasConfig {
-			return nil, validationError("ACP_SESSION_UPDATE_INVALID", "provide exactly one of mode_id or config_id for update", nil)
+		hasLifecycle := lifecyclePolicy != "" || request.IdleCloseAfterMS != nil
+		targets := 0
+		for _, selected := range []bool{hasMode, hasConfig, hasLifecycle} {
+			if selected {
+				targets++
+			}
+		}
+		if targets != 1 {
+			return nil, validationError("ACP_SESSION_UPDATE_INVALID", "provide exactly one update family: mode_id, config_id, or lifecycle_policy", nil)
+		}
+		if hasLifecycle {
+			if lifecyclePolicy == "" {
+				return nil, validationError("ACP_SESSION_LIFECYCLE_INVALID", "lifecycle_policy is required for lifecycle update", nil)
+			}
+			lifecycle, lifecycleErr := sessionLifecycleOptions(request)
+			if lifecycleErr != nil {
+				return nil, lifecycleErr
+			}
+			before, err := manager.InspectSession(request.SessionID)
+			if err != nil {
+				return nil, acpToolError(err)
+			}
+			updated, err := manager.SetSessionLifecycle(request.SessionID, lifecycle)
+			if err != nil {
+				return nil, acpToolError(err)
+			}
+			return Result{
+				"action": action, "session": updated,
+				"change":  acpSettingChange("lifecycle", "lifecycle_policy", "Lifecycle policy", string(before.LifecyclePolicy), string(updated.LifecyclePolicy)),
+				"changed": before.LifecyclePolicy != updated.LifecyclePolicy || before.IdleCloseAfterMS != updated.IdleCloseAfterMS,
+			}, nil
 		}
 		current, err := manager.EnsureSessionActive(ctx, request.SessionID)
 		if err != nil {
@@ -438,7 +503,7 @@ func localSessionTitle(manager *acpruntime.Manager, sessionID string) string {
 	return strings.TrimSpace(session.Title)
 }
 
-func (s *Service) Interaction(_ context.Context, request InteractionRequest) (response Result, returnErr error) {
+func (s *Service) Interaction(ctx context.Context, request InteractionRequest) (response Result, returnErr error) {
 	manager, profileID, err := s.managerFor(request.ProfileID)
 	if err != nil {
 		return nil, err
@@ -468,7 +533,7 @@ func (s *Service) Interaction(_ context.Context, request InteractionRequest) (re
 		if cancelled == (optionID != "") {
 			return nil, validationError("ACP_INTERACTION_RESPONSE_INVALID", "provide exactly one of response.option_id or response.action=cancel", nil)
 		}
-		interaction, err := manager.RespondInteraction(request.InteractionID, optionID, cancelled)
+		interaction, err := manager.RespondInteraction(ctx, request.InteractionID, optionID, cancelled)
 		if err != nil {
 			return nil, acpToolError(err)
 		}
