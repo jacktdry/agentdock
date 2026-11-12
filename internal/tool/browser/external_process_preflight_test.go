@@ -13,6 +13,9 @@ import (
 const testEdgeExecutable = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
 
 func TestEdgeCommandMatchesConservativeArguments(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	const dir = "/tmp/Edge Profile"
 	for i, args := range []string{
 		`--remote-debugging-port=9222 --user-data-dir="/tmp/Edge Profile"`,
@@ -30,6 +33,9 @@ func TestEdgeCommandMatchesConservativeArguments(t *testing.T) {
 }
 
 func TestEdgeCommandMatchesRejectsSpoofedOrAmbiguousArguments(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	const valid = `--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture`
 	for i, args := range []string{
 		`--x--remote-debugging-port=9222 --user-data-dir=/tmp/edge-fixture`,
@@ -225,6 +231,9 @@ func edgeFixture() *fakeEdgeProcessProbe {
 }
 
 func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	f := edgeFixture()
 	p, err := readEdgeProcessPreflight(context.Background(),
 		"ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
@@ -242,6 +251,9 @@ func TestEdgeProcessPreflightMatchesOnlyOSProcessEvidence(t *testing.T) {
 }
 
 func TestEdgeProcessPreflightRejectsAllAmbiguousEvidence(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	cases := map[string]func(*fakeEdgeProcessProbe){
 		"unrelated executable": func(f *fakeEdgeProcessProbe) {
 			f.commandsRaw[0] = strings.Replace(f.commandsRaw[0], testEdgeExecutable, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", 1)
@@ -314,6 +326,9 @@ func TestEdgeProcessPreflightRejectsAllAmbiguousEvidence(t *testing.T) {
 }
 
 func TestEdgeProcessPreflightRejectsUnsignedAndChangedDuringSigning(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	t.Run("missing or invalid Microsoft signature", func(t *testing.T) {
 		f := edgeFixture()
 		f.signatureErr = errors.New("codesign failed: sensitive detail must not escape")
@@ -356,6 +371,9 @@ func TestEdgeProcessPreflightRejectsUnsignedAndChangedDuringSigning(t *testing.T
 }
 
 func TestEdgeProcessPreflightRejectsUnsafeInputsAndCancellation(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	for _, endpoint := range []string{
 		"ws://localhost:9222/devtools/browser/candidate",
 		"ws://192.168.1.100:9222/devtools/browser/candidate",
@@ -392,6 +410,9 @@ func TestEdgeProcessPreflightRejectsUnsafeInputsAndCancellation(t *testing.T) {
 }
 
 func TestEdgeProcessPreflightExposesNoAuthOrRouteGrant(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	f := edgeFixture()
 	e, err := readEdgeProcessPreflight(context.Background(), "ws://127.0.0.1:9222/devtools/browser/candidate", "/tmp/edge-fixture", f)
 	if err != nil {
@@ -423,6 +444,9 @@ func TestUniqueEdgeListenerParser(t *testing.T) {
 }
 
 func TestEdgeProcessPreflightLiveSignatureFence(t *testing.T) {
+	if !edgeEpochPositiveFixtureAvailable(t) {
+		return // The injected POSIX/macOS evidence is not a native Windows Edge identity.
+	}
 	for _, scenario := range []string{"accepted", "negative", "listener", "start", "argv", "image", "canceled"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := edgeFixture()

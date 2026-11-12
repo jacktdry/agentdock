@@ -277,7 +277,7 @@ func TestEdgeEvidencePinnedReject(t *testing.T) {
 			case "profile":
 				source.userDataDir = "/private/../edge"
 			case "profile-mismatch":
-				source.userDataDir = "/private/other-edge"
+				source.userDataDir = filepath.Join(os.TempDir(), "other-edge-socket-fixture")
 			case "endpoint":
 				source.endpoint = "ws://127.0.0.1:1/devtools/browser/fixture"
 			case "endpoint-path":

@@ -239,8 +239,9 @@ func TestConcurrencyIdleTTLAndSweeps(t *testing.T) {
 	l, _ := c.manager.lease(meta.BrowserLeaseID)
 	// Make the lease genuinely idle without sleeping for the production TTL.
 	l.mu.Lock()
-	l.metadata.LastActiveAt = time.Now().Add(-2 * c.policy.IdleTTL)
-	l.metadata.ExpiresAt = l.metadata.LastActiveAt.Add(c.policy.IdleTTL)
+	previousActivity := time.Now().Add(-2 * c.policy.IdleTTL)
+	l.metadata.LastActiveAt = previousActivity
+	l.metadata.ExpiresAt = previousActivity.Add(c.policy.IdleTTL)
 	l.mu.Unlock()
 	done := make(chan error, 1)
 	go func() {
@@ -267,10 +268,10 @@ func TestConcurrencyIdleTTLAndSweeps(t *testing.T) {
 	l.mu.Lock()
 	refreshed := l.metadata
 	l.mu.Unlock()
-	if !refreshed.LastActiveAt.After(meta.LastActiveAt) || !refreshed.ExpiresAt.Equal(refreshed.LastActiveAt.Add(c.policy.IdleTTL)) {
+	if !refreshed.LastActiveAt.After(previousActivity) || !refreshed.ExpiresAt.Equal(refreshed.LastActiveAt.Add(c.policy.IdleTTL)) {
 		t.Fatal("TTL not refreshed")
 	}
-	if err := c.SweepExpired(meta.ExpiresAt); err != nil {
+	if err := c.SweepExpired(previousActivity.Add(c.policy.IdleTTL)); err != nil {
 		t.Fatal(err)
 	}
 	if active, _ := queueState(c.queue); active != 1 {
