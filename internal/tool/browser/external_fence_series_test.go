@@ -99,35 +99,35 @@ func TestExternalFenceSeriesFailureLatchAndNoRawLeak(t *testing.T) {
 					panic("secret WS URL")
 				}
 				return &seriesTestOp{call: func(context.Context, WorkerInfo, externalPeerIdentity, string, map[string]any) (map[string]any, error) {
-					called++
-					if mode == "call-error" {
-						return map[string]any{"secret": "token"}, errors.New("secret token")
-					}
-					if mode == "call-panic" {
-						panic("secret token")
-					}
-					if mode == "canceled-after-call" {
-						cancel()
-					}
-					return map[string]any{"secret": "token"}, nil
-				}, close: func() error {
-					closes++
-					if mode == "canceled-during-close" {
-						cancel()
-					}
-					if mode == "close-error" {
-						return errors.New("secret socket")
-					}
-					if mode == "close-panic" {
-						panic("secret socket")
-					}
-					return nil
-				}}, func() error {
-					if mode == "open-error-with-op" {
-						return errors.New("secret factory")
-					}
-					return nil
-				}()
+						called++
+						if mode == "call-error" {
+							return map[string]any{"secret": "token"}, errors.New("secret token")
+						}
+						if mode == "call-panic" {
+							panic("secret token")
+						}
+						if mode == "canceled-after-call" {
+							cancel()
+						}
+						return map[string]any{"secret": "token"}, nil
+					}, close: func() error {
+						closes++
+						if mode == "canceled-during-close" {
+							cancel()
+						}
+						if mode == "close-error" {
+							return errors.New("secret socket")
+						}
+						if mode == "close-panic" {
+							panic("secret socket")
+						}
+						return nil
+					}}, func() error {
+						if mode == "open-error-with-op" {
+							return errors.New("secret factory")
+						}
+						return nil
+					}()
 			}
 			s, err := newExternalFenceSeries(w, p, factory, seriesTestRevalidate)
 			if err != nil {

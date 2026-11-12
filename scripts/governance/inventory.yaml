@@ -23,6 +23,7 @@ scripts:
     owner: desktop
     public_contract: false
     deletable: false
+    oversize_justification: Next-only 部署安全交易需在同一受控流程核對來源身份、服務重新註冊、失敗回滾與原服務隔離；目前 329 行，後續可獨立重構，但不可省略這些保護。
     notes: Next-only 交易部署、服务重新注册及保留回滚 Contents；不得修改 stable App。
 
   - path: packaging/macos/install-next-shared.py
@@ -30,6 +31,13 @@ scripts:
     owner: desktop
     public_contract: false
     deletable: false
+
+  - path: scripts/release/next-unpublished-candidate-macos.sh
+    class: release
+    owner: desktop
+    public_contract: false
+    deletable: false
+    notes: Next-only 手動觸發的未發佈來源候選驗證；僅驗證 ad-hoc 包與來源身分，不上傳或公開發行。
 
   - path: scripts/test/test-next-shared-deploy.py
     class: test
@@ -44,6 +52,7 @@ scripts:
     owner: desktop
     public_contract: false
     deletable: false
+    oversize_justification: Next-only macOS App 安全封裝與原生身分的端到端負向測試，覆蓋簽章、版本、bundle 檔案佈局及候選隔離；目前約 410 行，不能略過重要平台契約。
 
   - path: scripts/install/install.sh
     class: bootstrap

@@ -186,7 +186,7 @@ func externalCDPHasURL(t *testing.T, endpoint, want string) bool {
 	return false
 }
 
-func TestExternalLeaseManagerKeepsBrowserAliveAndClosesOnlyOwnedPage(t *testing.T) {
+func TestExternalLeaseManagerWithoutTransportFencePreservesExternalBrowser(t *testing.T) {
 	userServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `<title>User Sentinel</title><main>user-page</main>`)
 	}))
@@ -235,33 +235,20 @@ func TestExternalLeaseManagerKeepsBrowserAliveAndClosesOnlyOwnedPage(t *testing.
 	}
 	registry := NewWorkerRegistry(WorkerDependencies{})
 	defer func() { _ = registry.Shutdown(context.Background()) }()
-	// TEST ONLY: synthetic admission, not live peer attestation.
+	// Synthetic route admission cannot replace a socket-bound transport fence.
+	// This legacy WorkerRegistry backend must fail closed without changing the
+	// user's already-open Chrome or creating a broker-owned page.
 	route = grantExternalRouteForTest(route)
 	leases := newTestExternalLeaseManager(registry)
-	meta, _, err := leases.Acquire(context.Background(), route, server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !externalCDPHasURL(t, endpoint, userServer.URL) {
-		t.Fatal("broker acquire removed or replaced external user page")
-	}
-	if !externalCDPHasURL(t, endpoint, server.URL) {
-		t.Fatalf("broker-owned page missing after acquire: %#v", externalCDPPages(t, endpoint))
-	}
-	if _, err := leases.Call(context.Background(), route.Scope, meta.BrowserLeaseID, "take_snapshot", nil); err != nil {
-		t.Fatal(err)
-	}
-	cleanupMeta, err := leases.Release(context.Background(), route.Scope, meta.BrowserLeaseID)
-	if err != nil || cleanupMeta.CleanupState != CleanupComplete || cleanupMeta.CleanupError != "" {
-		t.Fatalf("release = %+v, %v", cleanupMeta, err)
-	}
+	_, _, err = leases.Acquire(context.Background(), route, server.URL)
+	assertBrowserCode(t, err, ErrRequiredRouteUnavailable)
 	if err := probeCDPEndpoint(context.Background(), endpoint); err != nil {
-		t.Fatalf("external browser stopped after connector release: %v", err)
+		t.Fatalf("unfenced rejection stopped external Chrome: %v", err)
 	}
 	if !externalCDPHasURL(t, endpoint, userServer.URL) {
-		t.Fatal("release removed external user page")
+		t.Fatal("unfenced rejection removed or replaced external user page")
 	}
 	if externalCDPHasURL(t, endpoint, server.URL) {
-		t.Fatal("release left AgentDock-owned page behind")
+		t.Fatalf("unfenced rejection created a broker page: %#v", externalCDPPages(t, endpoint))
 	}
 }
