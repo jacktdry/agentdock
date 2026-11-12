@@ -48,10 +48,11 @@ func (s *PathSet) Contains(target string) bool {
 	if s == nil || strings.TrimSpace(target) == "" {
 		return false
 	}
-	target = filepath.Clean(target)
-	for _, root := range s.roots {
-		if within(root, target) {
-			return true
+	for _, candidate := range pathCandidates(target) {
+		for _, root := range s.roots {
+			if within(root, candidate) {
+				return true
+			}
 		}
 	}
 	return false
@@ -61,10 +62,11 @@ func (s *PathSet) Intersects(target string) bool {
 	if s == nil || strings.TrimSpace(target) == "" {
 		return false
 	}
-	target = filepath.Clean(target)
-	for _, root := range s.roots {
-		if within(root, target) || within(target, root) {
-			return true
+	for _, candidate := range pathCandidates(target) {
+		for _, root := range s.roots {
+			if within(root, candidate) || within(candidate, root) {
+				return true
+			}
 		}
 	}
 	return false
@@ -74,14 +76,29 @@ func (s *PathSet) Descendants(root string) []string {
 	if s == nil || strings.TrimSpace(root) == "" {
 		return nil
 	}
-	root = filepath.Clean(root)
 	result := make([]string, 0)
 	for _, protected := range s.roots {
-		if within(root, protected) {
-			result = append(result, protected)
+		for _, candidate := range pathCandidates(root) {
+			if within(candidate, protected) {
+				result = append(result, protected)
+				break
+			}
 		}
 	}
 	return result
+}
+
+// Check both lexical and resolved paths. Protecting only the canonical root
+// misses macOS /var -> /private/var aliases and symlinks into a protected
+// directory; dropping the lexical path would instead allow links *out* of one.
+// If resolution fails, retain the existing lexical deny behavior.
+func pathCandidates(raw string) []string {
+	clean := filepath.Clean(raw)
+	resolved, err := canonicalPath(raw)
+	if err != nil || resolved == clean {
+		return []string{clean}
+	}
+	return []string{clean, resolved}
 }
 
 func canonicalPath(raw string) (string, error) {

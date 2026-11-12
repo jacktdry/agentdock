@@ -75,8 +75,14 @@ func TestNextBrowserModeStatusPreservesGuardWithoutClearing(t *testing.T) {
 	if err := os.Mkdir(workspace, 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Hosted macOS may place t.TempDir under /var, an alias for /private/var.
+	// The production guard correctly rejects noncanonical workspace opt-ins.
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
 	state, err := browserModeStatusFromValues(filepath.Join(home, "Library", "Application Support", "AgentDock Next"), map[string]string{
-		nextBrowserModeKey: workspace,
+		nextBrowserModeKey: canonicalWorkspace,
 	})
 	if err != nil || state.ConfiguredMode != "shared" || !state.GuardPresent || state.EffectiveMode != "not_observed" {
 		t.Fatalf("guard state not visible: %+v / %v", state, err)
@@ -84,6 +90,12 @@ func TestNextBrowserModeStatusPreservesGuardWithoutClearing(t *testing.T) {
 	after, err := os.ReadFile(marker)
 	if err != nil || !reflect.DeepEqual(data, after) {
 		t.Fatal("status changed the restart guard")
+	}
+	if canonicalWorkspace != workspace {
+		invalidAlias, err := browserModeStatusFromValues("", map[string]string{nextBrowserModeKey: workspace})
+		if err != nil || invalidAlias.ConfiguredMode != "invalid" {
+			t.Fatalf("noncanonical alias unexpectedly accepted: %+v / %v", invalidAlias, err)
+		}
 	}
 	if invalid, err := browserModeStatusFromValues("", map[string]string{nextBrowserModeKey: ""}); err != nil || invalid.ConfiguredMode != "invalid" {
 		t.Fatal("invalid empty explicit opt-in reported as exclusive")

@@ -40,6 +40,15 @@ func TestPathSetContainsIntersectsAndResolvesSymlinks(t *testing.T) {
 	if !set.Contains(viaAlias) {
 		t.Fatalf("symlink alias did not resolve into protected root: %s", viaAlias)
 	}
+	if !set.Contains(filepath.Join(alias, "permissions", "state.json")) {
+		t.Fatal("raw symlink alias bypassed protected child")
+	}
+	if !set.Intersects(alias) {
+		t.Fatal("raw symlink alias bypassed protected ancestor")
+	}
+	if got := set.Descendants(alias); len(got) != 1 || got[0] != viaAlias {
+		t.Fatalf("raw symlink alias omitted protected descendant: %v", got)
+	}
 }
 
 func TestPathSetCanonicalizesMissingProtectedLeaf(t *testing.T) {
