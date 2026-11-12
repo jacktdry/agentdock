@@ -181,6 +181,9 @@ func TestACPSaveSettingsMapsConflictAndReportsPersistenceOnly(t *testing.T) {
 }
 
 func TestACPProbeProfileReturnsSafeDetectedMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix shell adapter fixture cannot execute on Windows; native Windows ACP updates remain fail-closed")
+	}
 	root := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -281,6 +284,9 @@ func testACPUpdateService(t *testing.T, latestTag string) (*ACPService, string, 
 }
 
 func TestACPCheckProfileUpdateRequiresTrustedForkRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only Next-owned ACP update target attestation is unavailable on Windows")
+	}
 	service, _, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
 	got := service.CheckProfileUpdate(context.Background(), "antigravity")
@@ -293,6 +299,9 @@ func TestACPCheckProfileUpdateRequiresTrustedForkRelease(t *testing.T) {
 }
 
 func TestACPCheckProfileUpdateDoesNotExposeProtectedArguments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only Next-owned ACP update target attestation is unavailable on Windows")
+	}
 	service, _, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
 	baseRead := service.readConfiguration
@@ -321,6 +330,9 @@ func TestACPCheckProfileUpdateDoesNotExposeProtectedArguments(t *testing.T) {
 }
 
 func TestACPUpdateProfileAdapterRejectsStalePlan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only executable and Next-owned ACP promotion fixture")
+	}
 	service, command, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
 	got := service.UpdateProfileAdapter(context.Background(), "antigravity", "stale-plan")
@@ -337,6 +349,9 @@ func TestACPUpdateProfileAdapterRejectsStalePlan(t *testing.T) {
 }
 
 func TestACPUpdateProfileAdapterReconcilesOutcomeUnknown(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only executable and Next-owned ACP promotion fixture")
+	}
 	service, _, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
 	service.applyUpdate = func(context.Context, *http.Client, desktopruntime.ACPUpdateSource, string, desktopruntime.ACPAdapterUpdate) error {
@@ -357,6 +372,9 @@ func TestACPUpdateProfileAdapterReconcilesOutcomeUnknown(t *testing.T) {
 }
 
 func TestACPUpdateProfileAdapterPromotesVerifiedNextOwnedBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ACP promotion deliberately unavailable without native ownership attestation")
+	}
 	service, command, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
 	defer cleanup()
 	checked := service.CheckProfileUpdate(context.Background(), "antigravity")
@@ -376,5 +394,32 @@ func TestACPUpdateProfileAdapterPromotesVerifiedNextOwnedBinary(t *testing.T) {
 	}
 	if string(output) != "1.2.0-agentdock.7\n" {
 		t.Fatalf("version after update = %q", output)
+	}
+}
+
+// Windows currently has no trusted target/atomic promotion implementation.
+// A normal-looking release or a stale plan must never turn that into authority.
+func TestACPUpdateProfileAdapterWindowsFailsClosed(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows native ACP ownership refusal")
+	}
+	service, command, cleanup := testACPUpdateService(t, "v1.2.0-agentdock.7")
+	defer cleanup()
+	before, err := os.ReadFile(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := service.CheckProfileUpdate(context.Background(), "antigravity")
+	if checked.Error != nil || checked.Profile == nil || checked.Profile.CanUpdate ||
+		checked.Profile.UpdatePlan != "" || checked.Profile.BlockedReason != "update_target_not_next_owned" {
+		t.Fatalf("Windows ACP update check must refuse untrusted target: %#v", checked)
+	}
+	result := service.UpdateProfileAdapter(context.Background(), "antigravity", "arbitrary-plan")
+	if result.Error == nil || result.Error.Code != "acp_profile_update_unavailable" || result.Completed {
+		t.Fatalf("Windows ACP update unexpectedly permitted: %#v", result)
+	}
+	after, err := os.ReadFile(command)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("failed Windows ACP update changed the candidate binary")
 	}
 }

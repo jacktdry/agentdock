@@ -28,6 +28,7 @@ func TestRuntimeACPBrowserNextSharedWorkspaceOptIn(t *testing.T) {
 	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	nextState := filepath.Join(home, ".agentdock-next")
 	if err := os.Mkdir(nextState, 0700); err != nil {
 		t.Fatal(err)

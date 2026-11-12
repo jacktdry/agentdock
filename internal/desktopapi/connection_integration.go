@@ -437,7 +437,7 @@ func privateConnectionTokenFile(root, token string) (string, func(), error) {
 		return "", nil, errors.New("unsafe token root")
 	}
 	info, err := os.Lstat(root)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0022 != 0 {
+	if err != nil || !info.IsDir() || secureConnectionTokenRoot(root, info) != nil {
 		return "", nil, errors.New("unsafe token root")
 	}
 	file, err := os.CreateTemp(root, ".connection-token-*")
@@ -445,16 +445,10 @@ func privateConnectionTokenFile(root, token string) (string, func(), error) {
 		return "", nil, err
 	}
 	cleanup := func() { _ = os.Remove(file.Name()) }
-	if err := file.Chmod(0600); err != nil {
+	if err := secureConnectionTokenFile(file); err != nil {
 		_ = file.Close()
 		cleanup()
 		return "", nil, err
-	}
-	info, err = file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
-		_ = file.Close()
-		cleanup()
-		return "", nil, errors.New("unsafe token file")
 	}
 	_, writeErr := io.WriteString(file, token)
 	closeErr := file.Close()

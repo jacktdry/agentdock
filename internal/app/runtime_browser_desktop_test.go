@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -219,10 +220,11 @@ func TestRuntimeBrowserDesktopCompanyEdgeIsOnlyIntent(t *testing.T) {
 // Definitions (including unused profiles) and all policy classes describe intent,
 // independent of bridge availability; retained state never becomes live health.
 func TestRuntimeBrowserDesktopConfiguredAndRetainedRoutes(t *testing.T) {
+	fixtureRoot := t.TempDir()
 	cfg := config.Config{BrowserEnabled: true, ACPEnabled: true,
 		BrowserCatalog: browserpolicy.CatalogDefinition{
 			Profiles: []browserpolicy.ProfileDefinition{
-				{ID: "private-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: "/private/profiles/edge"},
+				{ID: "private-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: filepath.Join(fixtureRoot, "profiles", "edge")},
 				{ID: "private-unused", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal},
 				{ID: "private-persistent", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileExternalPersistent},
 				{ID: "private-chrome", Browser: browserpolicy.BrowserChrome, Class: browserpolicy.ProfileAuthenticatedExternal},
@@ -230,9 +232,9 @@ func TestRuntimeBrowserDesktopConfiguredAndRetainedRoutes(t *testing.T) {
 			Connectors: []browserpolicy.ConnectorDefinition{{ID: "private-connector", ProfileID: "private-edge", Driver: browserpolicy.DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}},
 		},
 		BrowserWorkspacePolicies: []browserpolicy.WorkspaceRootPolicy{
-			{Root: "/private/company", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge", AllowedOrigins: []string{"https://company.example.com"}}},
-			{Root: "/private/default", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
-			{Root: "/private/managed", Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}},
+			{Root: filepath.Join(fixtureRoot, "company"), Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge", AllowedOrigins: []string{"https://company.example.com"}}},
+			{Root: filepath.Join(fixtureRoot, "default"), Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "private-connector", RequiredProfileID: "private-edge"}},
+			{Root: filepath.Join(fixtureRoot, "managed"), Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceDefault, Route: browserpolicy.RouteManaged}},
 		},
 	}
 	// Pure catalog/policy validation, deliberately no root canonicalization on read.
