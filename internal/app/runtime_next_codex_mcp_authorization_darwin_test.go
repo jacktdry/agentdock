@@ -30,6 +30,7 @@ func nextCodexAuthorizationFixture(t *testing.T) (*Runtime, config.ACPProfile, n
 	// Missing isolation options deliberately prevent even a fixture Adapter
 	// from starting after Allow. We test the uncertain-bootstrap reservation.
 	profile := config.ACPProfile{ID: "codex", Kind: "codex", Enabled: true, Command: os.Args[0]}
+	nextCodexCLIPrerequisite(t, &profile, filepath.Join(root, ".agentdock-next"))
 	rt, err := NewRuntime(config.Config{AgentDockHome: filepath.Join(root, ".agentdock-next"), AgentDockDefaultDir: work, ACPEnabled: true, ACPProfiles: []config.ACPProfile{profile}, ACPDefaultProfile: "codex"})
 	if err != nil {
 		t.Fatal(err)

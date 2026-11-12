@@ -23,6 +23,7 @@ func TestNextCodexRegistrarSourceOnlyGuardAndNoImplicitACPStart(t *testing.T) {
 	}
 	cfg := config.Config{AgentDockHome: filepath.Join(root, ".agentdock-next"), AgentDockDefaultDir: work, ACPEnabled: true,
 		ACPProfiles: []config.ACPProfile{{ID: "codex", Kind: "codex", Enabled: true, Command: os.Args[0], Args: []string{"-test.run=^TestNextM8ACPHelperProcess$"}}}, ACPDefaultProfile: "codex"}
+	nextCodexCLIPrerequisite(t, &cfg.ACPProfiles[0], cfg.AgentDockHome)
 	rt, err := NewRuntime(cfg)
 	if err != nil {
 		t.Fatal(err)
