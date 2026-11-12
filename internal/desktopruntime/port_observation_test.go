@@ -7,8 +7,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -57,6 +59,17 @@ func TestPortAvailableTempScope(t *testing.T) {
 	}
 	before := time.Now()
 	observation := ObservePort(context.Background(), request)
+	if runtime.GOOS == "windows" {
+		// Without trustworthy Next birth evidence, even a free port cannot
+		// authorize a Windows mutation.
+		if observation.State != PortUnknown || observation.ReasonCode != "next_identity_unavailable" || observation.ObservedAt.Before(before) {
+			t.Fatal("unproven Windows Next identity accepted", observation)
+		}
+		if preflight, err := PreflightPortMutation(context.Background(), request); !errors.Is(err, ErrPortPreflight) || preflight.State != PortUnknown {
+			t.Fatal("unproven Windows port mutation allowed", preflight, err)
+		}
+		return
+	}
 	if observation.State != PortAvailable || observation.ConfiguredPort != 8767 || observation.ObservedPort != request.CandidatePort || observation.ConfigRevision != request.ConfigRevision || observation.ObservedAt.Before(before) {
 		t.Fatal(observation)
 	}
@@ -66,7 +79,12 @@ func TestPortMutationReobservesWithoutAcquiringLock(t *testing.T) {
 	listener := tempPortListener(t)
 	request := portFixtureRequest(t, listener.Addr().(*net.TCPAddr).Port)
 	_ = listener.Close()
-	if ObservePort(context.Background(), request).State != PortAvailable {
+	initial := ObservePort(context.Background(), request)
+	if runtime.GOOS == "windows" {
+		if initial.State != PortUnknown || initial.ReasonCode != "next_identity_unavailable" {
+			t.Fatal("unproven Windows Next identity accepted", initial)
+		}
+	} else if initial.State != PortAvailable {
 		t.Fatal("fixture unavailable")
 	}
 	release, err := AcquireDesktopMutation(context.Background(), request.Runtime.Root)
@@ -88,8 +106,10 @@ func TestPortMutationReobservesWithoutAcquiringLock(t *testing.T) {
 }
 
 func TestPortOccupiedFixtures(t *testing.T) {
-	listener := tempPortListener(t)
-	request := portFixtureRequest(t, listener.Addr().(*net.TCPAddr).Port)
+	// Classifier fixtures are intentionally independent of the kernel bind.
+	// Windows may report WSAEACCES for an exclusive listener; that is an
+	// unknown probe result, not authority to manufacture owner evidence.
+	request := portFixtureRequest(t, 18768)
 	for _, tc := range []struct {
 		name             string
 		pids             []int
@@ -105,17 +125,28 @@ func TestPortOccupiedFixtures(t *testing.T) {
 		{"denied", []int{123}, "", "", errors.New("secret-command-line"), PortUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			observation := observePort(context.Background(), request, func(context.Context, PortObservationRequest) (PortState, string) {
-				return classifyPortOwner(request, tc.pids, tc.binary, tc.instance, tc.err)
-			})
-			if observation.State != tc.want {
-				t.Fatal(observation)
+			state, reason := classifyPortOwner(request, tc.pids, tc.binary, tc.instance, tc.err)
+			if state != tc.want {
+				t.Fatalf("state=%s reason=%s want=%s", state, reason, tc.want)
 			}
-			encoded, _ := json.Marshal(observation)
+			encoded, _ := json.Marshal(PortObservation{State: state, ReasonCode: reason})
 			if strings.Contains(string(encoded), "secret") || strings.Contains(string(encoded), request.Runtime.Root) {
 				t.Fatal("private evidence leaked")
 			}
 		})
+	}
+}
+
+func TestPortAddressInUsePlatform(t *testing.T) {
+	if !portAddressInUse(syscall.EADDRINUSE) {
+		t.Fatal("EADDRINUSE must trigger a conservative ownership probe")
+	}
+	// Windows net.Listen wraps Winsock error 10048 in net.OpError.
+	if got := portAddressInUse(&net.OpError{Op: "listen", Net: "tcp", Err: syscall.Errno(10048)}); got != (runtime.GOOS == "windows") {
+		t.Fatalf("WSAEADDRINUSE classification = %t on %s", got, runtime.GOOS)
+	}
+	if portAddressInUse(syscall.Errno(10013)) {
+		t.Fatal("access denied is not listener ownership evidence")
 	}
 }
 
@@ -137,6 +168,11 @@ func TestPortProbePreservesCallerDeadline(t *testing.T) {
 		}
 		return PortUnknown, "ownership_unavailable"
 	})
+	if !called && runtime.GOOS == "windows" && observation.State == PortUnknown && observation.ReasonCode == "probe_failed" {
+		// A Windows exclusive listener can make Listen return WSAEACCES
+		// instead of WSAEADDRINUSE. No owner probe is allowed in that case.
+		return
+	}
 	if !called || observation.State != PortUnknown {
 		t.Fatal("cancelled ownership probe accepted", observation)
 	}
