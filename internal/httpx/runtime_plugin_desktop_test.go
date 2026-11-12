@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"encoding/json"
 	"github.com/uvwt/agentdock/internal/app"
 	"github.com/uvwt/agentdock/internal/auth"
 	"net/http"
@@ -57,7 +58,12 @@ func TestRuntimePluginDesktopCandidateRouteIsLoopbackOnlyAndSafe(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "plugin.json"), []byte(`{"name":"http-candidate","version":"1.0.0","description":"HTTP candidate"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"action":"prepare","source":"` + source + `","kind":"install"}`
+	// Native Windows picker paths contain backslashes, which need JSON escaping.
+	bodyJSON, err := json.Marshal(map[string]string{"action": "prepare", "source": source, "kind": "install"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(bodyJSON)
 	credential := runtime.DesktopPermissionControlCredential()
 	if credential == "" {
 		t.Fatal("missing Desktop control credential")

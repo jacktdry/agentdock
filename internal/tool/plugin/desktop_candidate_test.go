@@ -262,9 +262,15 @@ func TestSafeCandidateReviewControlCharactersPreservePathBoundaries(t *testing.T
 func TestDecodeDesktopCandidateRequestStrict(t *testing.T) {
 	generation := strings.Repeat("a", 64)
 	candidateID := strings.Repeat("b", 64)
+	// Encode an actual host-native absolute path, not a Unix-only path literal.
+	sourceJSON, err := json.Marshal(filepath.Join(t.TempDir(), "plugin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceJSON)
 	valid := []string{
-		`{"action":"prepare","source":"/private/plugin","kind":"install"}`,
-		`{"action":"prepare","source":"/private/plugin","kind":"update","target_name":"demo","target_generation":"` + generation + `"}`,
+		`{"action":"prepare","source":` + source + `,"kind":"install"}`,
+		`{"action":"prepare","source":` + source + `,"kind":"update","target_name":"demo","target_generation":"` + generation + `"}`,
 		`{"action":"discard","candidate_id":"` + candidateID + `"}`,
 	}
 	for _, body := range valid {
@@ -275,9 +281,9 @@ func TestDecodeDesktopCandidateRequestStrict(t *testing.T) {
 	invalid := []string{
 		`{"action":"prepare","source":"relative/plugin","kind":"install"}`,
 		`{"action":"prepare","source":"https://example.invalid/plugin.zip","kind":"install"}`,
-		`{"action":"prepare","source":"/private/plugin","kind":"install","target_name":"demo"}`,
-		`{"action":"prepare","source":"/private/plugin","kind":"update","target_name":"demo"}`,
-		`{"action":"prepare","source":"/private/plugin","kind":"update","target_name":"demo","target_generation":"` + generation + `","review_token":"secret"}`,
+		`{"action":"prepare","source":` + source + `,"kind":"install","target_name":"demo"}`,
+		`{"action":"prepare","source":` + source + `,"kind":"update","target_name":"demo"}`,
+		`{"action":"prepare","source":` + source + `,"kind":"update","target_name":"demo","target_generation":"` + generation + `","review_token":"secret"}`,
 		`{"action":"discard","candidate_id":"short"}`,
 	}
 	for _, body := range invalid {

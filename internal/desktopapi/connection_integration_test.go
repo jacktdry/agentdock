@@ -223,7 +223,7 @@ func TestConnectionTokenBridgeCleanupAndNoLeak(t *testing.T) {
 					}
 				}
 				info, err := os.Lstat(tokenPath)
-				if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || filepath.Dir(tokenPath) != service.runtimeRoot {
+				if err != nil || !info.Mode().IsRegular() || !testConnectionTokenPrivate(tokenPath, info) || filepath.Dir(tokenPath) != service.runtimeRoot {
 					t.Fatal("unsafe temp token")
 				}
 				data, _ := os.ReadFile(tokenPath)
@@ -248,6 +248,10 @@ func TestConnectionTokenBridgeCleanupAndNoLeak(t *testing.T) {
 	root := t.TempDir()
 	alias := filepath.Join(t.TempDir(), "alias")
 	if err := os.Symlink(root, alias); err != nil {
+		if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
+			t.Log("Windows runner lacks symbolic-link creation privilege; the canonical-root rejection remains covered by native capable runners")
+			return
+		}
 		t.Fatal(err)
 	}
 	if path, cleanup, err := privateConnectionTokenFile(alias, "TOKEN"); err == nil {
