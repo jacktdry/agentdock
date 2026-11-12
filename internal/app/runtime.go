@@ -79,6 +79,7 @@ type Runtime struct {
 	nextCodexPin              *launchregistry.GenerationPin
 	nextCodexRegisteredID     string
 	nextCodexRegisteredDigest string
+	nextNativeMCPPrepared     *nextCodexMCPConfig // lifecycleMu; only the server-ID path may attach this pin.
 	observer                  *observability.Recorder
 	execution                 *execution.Store
 	permissions               *permission.Store
@@ -250,7 +251,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser catalog: %w", catalogErr)
 		}
-		planner, plannerErr := toolbrowser.NewRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, nil)
+		planner, plannerErr := newRuntimeBrowserRoutePlanner(cfg, catalog)
 		if plannerErr != nil {
 			_ = runtime.Close()
 			return nil, fmt.Errorf("initialize ACP browser route planner: %w", plannerErr)
@@ -358,6 +359,10 @@ func (r *Runtime) Close() error {
 		var closeErrors []error
 		r.lifecycleMu.Lock()
 		r.closing = true
+		// This is a Core-owned in-memory admission pin, not durable recovery
+		// authority. Drop it when the runtime is closing; the crash sentinel
+		// remains subject to independent ACP teardown rules below.
+		r.nextNativeMCPPrepared = nil
 		commandCancel := r.commandCancel
 		r.lifecycleMu.Unlock()
 

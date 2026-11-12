@@ -189,6 +189,7 @@ func DefaultManifest() Manifest {
 				Domain: DomainACP, Version: 1, Availability: AvailabilityAvailable,
 				Operations: []OperationCapability{
 					{Name: "status", Access: AccessRead},
+					{Name: "nativeCodexReadiness", Access: AccessRead, Availability: AvailabilityExperimental, NativeRequired: true},
 					{Name: "settings", Access: AccessRead},
 					{Name: "probeProfile", Access: AccessRead},
 					{Name: "checkProfileUpdate", Access: AccessRead},

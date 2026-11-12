@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const maxRPCLineBytes = 4 << 20
@@ -40,7 +41,10 @@ type Connection struct {
 	reader io.ReadCloser
 	writer io.WriteCloser
 
-	writeMu sync.Mutex
+	writeSlot    chan struct{}
+	writeTimeout time.Duration
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	pendingMu sync.Mutex
 	pending   map[string]chan rpcResponse
@@ -57,6 +61,7 @@ type Connection struct {
 }
 
 func NewConnection(reader io.ReadCloser, writer io.WriteCloser, requestHandler RequestHandler, notificationHandler NotificationHandler) *Connection {
+	ctx, cancel := context.WithCancel(context.Background())
 	connection := &Connection{
 		reader:              reader,
 		writer:              writer,
@@ -65,7 +70,12 @@ func NewConnection(reader io.ReadCloser, writer io.WriteCloser, requestHandler R
 		requestHandler:      requestHandler,
 		notificationHandler: notificationHandler,
 		closed:              make(chan struct{}),
+		writeSlot:           make(chan struct{}, 1),
+		writeTimeout:        30 * time.Second,
+		ctx:                 ctx,
+		cancel:              cancel,
 	}
+	connection.writeSlot <- struct{}{}
 	go connection.readLoop()
 	return connection
 }
@@ -97,7 +107,7 @@ func (c *Connection) request(ctx context.Context, method string, params any, res
 	c.pending[key] = response
 	c.pendingMu.Unlock()
 
-	if err := c.writeMessage(rpcMessage{
+	if err := c.writeMessageContext(ctx, rpcMessage{
 		JSONRPC: "2.0",
 		ID:      idRaw,
 		Method:  method,
@@ -124,7 +134,12 @@ func (c *Connection) request(ctx context.Context, method string, params any, res
 		return nil
 	case <-ctx.Done():
 		c.removePending(key)
-		_ = c.Notify("$/cancel_request", map[string]any{"requestId": id})
+		// Best-effort cancellation must not hold up an already cancelled caller.
+		go func() {
+			notifyCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = c.writeMessageContext(notifyCtx, rpcMessage{JSONRPC: "2.0", Method: "$/cancel_request", Params: json.RawMessage(`{"requestId":` + string(idRaw) + `}`)})
+		}()
 		return newError("ACP_REQUEST_CANCELLED", "ACP request was cancelled", true, map[string]any{"method": method}, ctx.Err())
 	case <-c.closed:
 		c.removePending(key)
@@ -261,6 +276,10 @@ func (c *Connection) handleResponse(message rpcMessage) {
 }
 
 func (c *Connection) writeMessage(message rpcMessage) error {
+	return c.writeMessageContext(context.Background(), message)
+}
+
+func (c *Connection) writeMessageContext(ctx context.Context, message rpcMessage) error {
 	data, err := json.Marshal(message)
 	if err != nil {
 		return newError("ACP_PROTOCOL_ERROR", "encode ACP JSON-RPC message", false, nil, err)
@@ -269,17 +288,54 @@ func (c *Connection) writeMessage(message rpcMessage) error {
 		return newError("ACP_MESSAGE_TOO_LARGE", "ACP JSON-RPC message exceeds limit", false, map[string]any{"bytes": len(data), "limit": maxRPCLineBytes}, nil)
 	}
 	data = append(data, '\n')
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, c.writeTimeout)
+	defer cancel()
+	stop := context.AfterFunc(c.ctx, cancel)
+	defer stop()
+	select {
+	case <-c.closed:
+		return newError("ACP_CONNECTION_CLOSED", "ACP connection is closed", true, nil, c.closeErr)
+	case <-ctx.Done():
+		return c.writeContextError(ctx)
+	case <-c.writeSlot:
+	}
+	defer func() { c.writeSlot <- struct{}{} }()
+	if ctx.Err() != nil {
+		return c.writeContextError(ctx)
+	}
 	select {
 	case <-c.closed:
 		return newError("ACP_CONNECTION_CLOSED", "ACP connection is closed", true, nil, c.closeErr)
 	default:
 	}
-	if _, err := c.writer.Write(data); err != nil {
-		return newError("ACP_CONNECTION_FAILED", "write ACP stream", true, nil, err)
+	if started, err := writeACPStream(ctx, c.writer, data); err != nil {
+		writeErr := newError("ACP_CONNECTION_FAILED", "write ACP stream", true, nil, err)
+		select {
+		case <-c.closed:
+			// Close publishes terminal state before its asynchronous context
+			// cancellation reaches this write; an I/O error can arrive first.
+			writeErr = newError("ACP_CONNECTION_CLOSED", "ACP connection is closed", true, nil, c.closeErr)
+		default:
+			if ctx.Err() != nil {
+				writeErr = c.writeContextError(ctx)
+			}
+		}
+		if started {
+			// A failed or interrupted frame may be partial; never reuse the stream.
+			c.finish(writeErr)
+		}
+		return writeErr
 	}
 	return nil
+}
+
+func (c *Connection) writeContextError(ctx context.Context) *Error {
+	select {
+	case <-c.closed:
+		return newError("ACP_CONNECTION_CLOSED", "ACP connection is closed", true, nil, c.closeErr)
+	default:
+		return newError("ACP_REQUEST_CANCELLED", "ACP write was cancelled", true, nil, ctx.Err())
+	}
 }
 
 func (c *Connection) removePending(key string) {
@@ -301,8 +357,13 @@ func (c *Connection) failPending(err error) {
 func (c *Connection) finish(err error) {
 	c.closeOnce.Do(func() {
 		c.closeErr = errors.Join(c.closeErr, err)
+		close(c.closed)
+		c.cancel()
 		if c.writer != nil {
-			c.closeErr = errors.Join(c.closeErr, c.writer.Close())
+			// Windows Close may wait for synchronous I/O. Publish closure and
+			// cancel the active write before releasing the owned handle.
+			writer := c.writer
+			go func() { _ = writer.Close() }()
 		}
 		if c.reader != nil {
 			// Closing a Windows anonymous-pipe reader while another goroutine is
@@ -312,7 +373,6 @@ func (c *Connection) finish(err error) {
 			reader := c.reader
 			go func() { _ = reader.Close() }()
 		}
-		close(c.closed)
 		c.failPending(newError("ACP_CONNECTION_CLOSED", "ACP connection closed", true, nil, c.closeErr))
 		c.cancelAllInbound()
 	})

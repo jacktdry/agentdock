@@ -18,13 +18,14 @@ type fakeEdgeSocketProbe struct {
 	calls                                 string
 	cancel                                context.CancelFunc
 	wait                                  bool
+	expectedPort                          int
 }
 
-func (f *fakeEdgeSocketProbe) connections(ctx context.Context, pid int) (string, error) {
+func (f *fakeEdgeSocketProbe) connections(ctx context.Context, pid, port int) (string, error) {
 	i := strings.Count(f.calls, "c")
 	f.calls += "c"
 	deadline, ok := ctx.Deadline()
-	if !ok || time.Until(deadline) > edgeSocketWindow || pid != 1245 {
+	if !ok || time.Until(deadline) > edgeSocketWindow || pid != 1245 || port != f.expectedPort {
 		return "", errors.New("bad probe contract")
 	}
 	if f.wait {
@@ -67,7 +68,7 @@ func edgeSocketFixture(t *testing.T) (*net.TCPConn, edgeProcessPreflight, *fakeE
 		executable: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", userDataDir: "/private/edge-fixture",
 		startToken: "501:Fri Oct 9 12:00:00 2026", observedAt: time.Now()}
 	raw := fmt.Sprintf("p1245\nf7\nn%s->%s\nTST=ESTABLISHED\nTQR=0\nTQS=0\n", c.RemoteAddr(), c.LocalAddr())
-	return c.(*net.TCPConn), source, &fakeEdgeSocketProbe{raw: [2]string{raw, raw}, tokens: [2]string{source.startToken, source.startToken}}
+	return c.(*net.TCPConn), source, &fakeEdgeSocketProbe{raw: [2]string{raw, raw}, tokens: [2]string{source.startToken, source.startToken}, expectedPort: c.RemoteAddr().(*net.TCPAddr).Port}
 }
 
 func TestEdgeEstablishedSocketSuccess(t *testing.T) {

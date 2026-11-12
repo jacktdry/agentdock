@@ -16,6 +16,10 @@ import (
 type acpBrowserLease struct {
 	route browserpolicy.RouteKind
 }
+type directBrowserLease struct {
+	scope RequestScope
+	route browserpolicy.RouteKind
+}
 
 type acpBrowserOwner struct {
 	authenticatedMCPRequestObserved bool // Guarded by ACPBridge.mu; endpoint access only.
@@ -44,6 +48,7 @@ type ACPBridge struct {
 	mu            sync.Mutex
 	byToken       map[string]*acpBrowserOwner
 	bySession     map[string]*acpBrowserOwner
+	directLeases  map[string]directBrowserLease
 	admissionHook permission.HostAdmissionHook
 	closed        bool
 }
@@ -134,9 +139,16 @@ func newACPBridge(planner *RoutePlanner, registry *WorkerRegistry, backend Manag
 	if err != nil {
 		return nil, err
 	}
+	external := NewExternalLeaseManager(registry)
+	if planner.externalRuntime != nil {
+		external = NewExternalLeaseManager(planner.externalRuntime)
+		external.verifier = planner.externalRuntime
+		planner.externalRuntime.setRevalidation(external.verifyPeer)
+	}
 	bridge := &ACPBridge{
-		planner: planner, registry: registry, managed: managed, shared: shared, rotating: rotating, external: NewExternalLeaseManager(registry),
+		planner: planner, registry: registry, managed: managed, shared: shared, rotating: rotating, external: external,
 		byToken: make(map[string]*acpBrowserOwner), bySession: make(map[string]*acpBrowserOwner),
+		directLeases: make(map[string]directBrowserLease),
 	}
 	bridge.lifecycle = newBrowserLifecycleRunner(browserLifecycleSweepInterval, bridge.sweepLifecycle)
 	return bridge, nil
@@ -260,7 +272,11 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	if (b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd) || (b.rotating != nil && owner.scope.CanonicalWorkspaceRoot != b.rotating.options.Cwd) {
+	plan, planErr := b.planner.Plan(owner.scope, nil)
+	if planErr != nil {
+		return LeaseMetadata{}, planErr
+	}
+	if plan.Route == browserpolicy.RouteManaged && ((b.shared != nil && owner.scope.CanonicalWorkspaceRoot != b.shared.options.Cwd) || (b.rotating != nil && owner.scope.CanonicalWorkspaceRoot != b.rotating.options.Cwd)) {
 		return LeaseMetadata{}, errManagedSharedUnavailable
 	}
 	finish, err := b.admissionFor(ctx, owner, "acquire", map[string]any{"url": url})
@@ -274,7 +290,7 @@ func (b *ACPBridge) Acquire(ctx context.Context, token, url string) (meta LeaseM
 	if err != nil {
 		return LeaseMetadata{}, err
 	}
-	if (b.shared != nil || b.rotating != nil) && decision.Route != browserpolicy.RouteManaged {
+	if (b.shared != nil || b.rotating != nil) && decision.Route != browserpolicy.RouteManaged && (b.planner.externalRuntime == nil || decision.Start.Engine != EngineNativeCDP) {
 		return LeaseMetadata{}, errManagedSharedUnavailable
 	}
 	switch decision.Route {
@@ -451,6 +467,20 @@ func (b *ACPBridge) close() error {
 		cancel()
 		failures = append(failures, err)
 	}
+	b.mu.Lock()
+	externalDirect := make(map[string]directBrowserLease)
+	for id, entry := range b.directLeases {
+		if entry.route != browserpolicy.RouteManaged {
+			externalDirect[id] = entry
+		}
+	}
+	b.mu.Unlock()
+	for id, entry := range externalDirect {
+		cleanup, stop := context.WithTimeout(context.Background(), 35*time.Second)
+		_, err := b.releaseLease(cleanup, entry.scope, id, entry.route)
+		stop()
+		failures = append(failures, err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
 	if b.shared != nil {
@@ -460,6 +490,9 @@ func (b *ACPBridge) close() error {
 		failures = append(failures, b.rotating.Shutdown(ctx))
 	}
 	registryErr := b.registry.Shutdown(ctx)
+	if b.planner.externalRuntime != nil {
+		failures = append(failures, b.planner.externalRuntime.Close())
+	}
 	if b.rotating != nil && registryErr != nil {
 		registryErr = errManagedSharedUnavailable
 	}

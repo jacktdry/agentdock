@@ -258,7 +258,7 @@ def main() -> None:
     source = no_symlinks(sys.argv[1])
     require(source != destination and not os.path.samefile(source, destination), "Source and installed Next must differ")
     require(validate_bundle(source, shared=True) == source, "Validated source bundle path mismatch")
-    require(validate_bundle(destination, shared=True) == destination, "Validated installed bundle path mismatch")
+    require(validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True) == destination, "Validated installed bundle path mismatch")
     manual_version_gate(source, destination)
     validate_next_skill_paths(home)
     loaded = jobs()
@@ -273,7 +273,7 @@ def main() -> None:
     try:
         install_output = run_checked([sys.executable, str(INSTALLER), str(source)], timeout=100)
         backup = backup_from_installer_output(install_output, destination)
-        validate_bundle(backup.parent, shared=True)
+        validate_bundle(backup.parent, shared=True, allow_legacy_rc19_shared_omissions=True)
         validate_bundle(destination, shared=True)
         verify_same_payload(source, destination)
         registrar(destination, "core")
@@ -292,9 +292,11 @@ def main() -> None:
             # exactly when restoring known-good Contents must still work.
             require((destination / "Contents").is_dir(), "Installed Next Contents missing")
             no_symlinks(destination / "Contents")
-            validate_bundle(backup.parent, shared=True)
+            validate_bundle(backup.parent, shared=True, allow_legacy_rc19_shared_omissions=True)
             NEXT_INSTALLER.rename_swap(backup, destination / "Contents")
-            validate_bundle(destination, shared=True)
+            # Rollback reinstates signed RC19, which predates the native MCP
+            # catalog and launcher. Do not confuse this with candidate checks.
+            validate_bundle(destination, shared=True, allow_legacy_rc19_shared_omissions=True)
             registrar(destination, "core")
             require(wait_for_core(None, destination=destination), "Rolled-back Next Core identity/health not recovered")
             if tunnel_enabled:

@@ -36,7 +36,9 @@ onMounted(() => {
             : t(connection.snapshot.coreRunning ? 'common.running' : 'common.stopped') }}
         </p>
         <p class="safe-url">{{ connection.snapshot?.publicMCPURL || t('common.unavailable') }}</p>
-        <OperationStatus :busy="connection.busy" :error="connection.error" />
+        <OperationStatus :busy="connection.busy" :error="connection.operationError" />
+        <OperationStatus v-if="!connection.busy && connection.actionError && connection.error"
+          :busy="false" :error="connection.error" />
         <button type="button" @click="emit('navigate', 'connection')">{{ t('overview.open_connection') }}</button>
       </article>
       <article class="panel">

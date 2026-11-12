@@ -25,10 +25,39 @@ const nextSharedBrowserWorkspaceEnv = "AGENTDOCK_NEXT_SHARED_BROWSER_WORKSPACE"
 
 const sharedBrowserRestartMarker = ".shared-browser-restart-pending.v1"
 
+func newRuntimeBrowserRoutePlanner(cfg config.Config, catalog browserpolicy.Catalog) (*toolbrowser.RoutePlanner, error) {
+	native := false
+	for _, connector := range catalog.Definition().Connectors {
+		if connector.Driver == browserpolicy.DriverNextEdgeCDP {
+			native = true
+		}
+	}
+	if !native {
+		return toolbrowser.NewRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, nil)
+	}
+	if cfg.Stdio || !cfg.ACPEnabled || !cfg.BrowserEnabled || cfg.Port != 8767 {
+		return nil, fmt.Errorf("native company Edge requires the isolated NEXT Core on port 8767")
+	}
+	return toolbrowser.NewNextEdgeRoutePlanner(cfg.BrowserWorkspacePolicies, catalog, cfg.AgentDockHome)
+}
+
 func newRuntimeACPBrowserBridge(cfg config.Config, planner *toolbrowser.RoutePlanner) (*toolbrowser.ACPBridge, *sharedBrowserRestartGuard, error) {
 	registry := toolbrowser.NewWorkerRegistry(toolbrowser.WorkerDependencies{})
 	workspace, selected := os.LookupEnv(nextSharedBrowserWorkspaceEnv)
 	if !selected {
+		// Disabling shared mode in the Next-only preference must not bypass a
+		// surviving restart fence from a prior shared Core crash. Exclusive
+		// startup with orphan evidence would otherwise launch fresh Chrome.
+		if os.Getenv("AGENTDOCK_DESKTOP_VARIANT") == "next" && cfg.ACPEnabled && cfg.BrowserEnabled && !cfg.Stdio {
+			home, err := os.UserHomeDir()
+			if err != nil || cfg.AgentDockHome != filepath.Join(home, ".agentdock-next") {
+				return nil, nil, fmt.Errorf("Next Browser startup requires its isolated state root")
+			}
+			_, markerErr := os.Lstat(filepath.Join(cfg.AgentDockHome, sharedBrowserRestartMarker))
+			if markerErr == nil || !os.IsNotExist(markerErr) {
+				return nil, nil, fmt.Errorf("Next Browser restart blocked: shared-mode restart guard requires reconciliation")
+			}
+		}
 		bridge, err := toolbrowser.NewACPBridge(planner, registry)
 		return bridge, nil, err
 	}

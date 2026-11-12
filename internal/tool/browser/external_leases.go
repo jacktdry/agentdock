@@ -70,8 +70,19 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if err := validateExternalStart(route); err != nil {
 		return LeaseMetadata{}, EngineBinding{}, err
 	}
+	if start.Engine == EngineNativeCDP && url != "" && url != "about:blank" && !start.OriginScope.Allows(url) {
+		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrActionInvalid, "", "initial company URL outside approved origins", nil)
+	}
 	if ctx.Err() != nil || !consumeExternalRouteGrant(route) {
 		return LeaseMetadata{}, EngineBinding{}, externalLeaseError(ErrRequiredRouteUnavailable, "", "external route admission unavailable", nil)
+	}
+	if start.Engine == EngineNativeCDP {
+		// The five-second one-shot grant authorizes starting this admission,
+		// not every subsequent independently verified OS and CDP step.
+		// Bound the whole procedure even when the caller has no deadline.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 35*time.Second)
+		defer cancel()
 	}
 	// Consume admission once even when the required transport is unavailable.
 	// Do not start a legacy connector or touch any browser without this fence.
@@ -126,7 +137,11 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 	if err := m.verifyAdmissionPeer(ctx, route.grant, worker); err != nil {
 		return fail(err)
 	}
-	result, createErr := m.callExternalFenced(ctx, worker, route.grant.peer, "new_page", map[string]any{"url": url, "background": true})
+	createURL := url
+	if start.Engine == EngineNativeCDP {
+		createURL = "about:blank"
+	}
+	result, createErr := m.callExternalFenced(ctx, worker, route.grant.peer, "new_page", map[string]any{"url": createURL, "background": true})
 	var pageString string
 	pageID, pageString, err = externalNewPageID(baseline, result)
 	if err != nil {
@@ -153,10 +168,25 @@ func (m *ExternalLeaseManager) Acquire(ctx context.Context, route RouteDecision,
 		OwnerType: OwnerExternalPersistent, ProfileClass: start.ProfileClass, Ownership: start.Ownership, CDPEndpoint: start.Endpoint, ProfilePath: start.ProfilePath,
 		ForegroundPolicy: ForegroundForbidden, LifecyclePolicy: LifecycleExternal, CreatedAt: now, LastActiveAt: now, ExpiresAt: now.Add(m.policy.IdleTTL), CleanupState: CleanupPending,
 		ConnectorPID: PIDObservation{PID: worker.Session.PID, ObservedAt: now}}
-	binding := EngineBinding{BrowserLeaseID: id, BrowserSessionID: session, WorkerID: worker.WorkerID, PageID: pageString, ConnectorID: start.ConnectorID, Engine: EngineChromeDevToolsMCP}
+	binding := EngineBinding{BrowserLeaseID: id, BrowserSessionID: session, WorkerID: worker.WorkerID, PageID: pageString, ConnectorID: start.ConnectorID, Engine: start.Engine}
 	m.mu.Lock()
 	m.leases[id] = &externalLease{managedLease: managedLease{metadata: meta, binding: binding, pageID: pageID, idleTTL: m.policy.IdleTTL}, worker: worker, peer: route.grant.peer}
 	m.mu.Unlock()
+	// Admission proves and publishes the blank owned target within the short
+	// one-shot grant. Potentially slow site loading is an active scoped lease
+	// operation, with normal owner, peer, TTL and cancellation enforcement.
+	if start.Engine == EngineNativeCDP && url != "about:blank" {
+		if _, err := m.Call(ctx, scope, id, "navigate_page", map[string]any{"url": url}); err != nil {
+			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, releaseErr := m.Release(cleanup, scope, id)
+			return LeaseMetadata{}, EngineBinding{}, errors.Join(err, releaseErr)
+		}
+		l, _ := m.lease(id)
+		l.mu.Lock()
+		meta = l.metadata
+		l.mu.Unlock()
+	}
 	return meta, binding, nil
 }
 
@@ -335,10 +365,16 @@ func (m *ExternalLeaseManager) releaseLocked(ctx context.Context, scope RequestS
 	l.metadata.CleanupState = CleanupComplete
 	if closeErr != nil {
 		l.metadata.CleanupReason = "external connector stopped; owned page close unconfirmed"
+		if l.binding.Engine == EngineNativeCDP {
+			l.metadata.CleanupReason = "native lease retired; owned page close unconfirmed; shared connection preserved when healthy"
+		}
 		l.metadata.CleanupError = closeErr.Error()
 		return l.metadata, nil
 	}
 	l.metadata.CleanupReason = "owned external page closed and connector stopped"
+	if l.binding.Engine == EngineNativeCDP {
+		l.metadata.CleanupReason = "owned external page closed; native lease retired; shared connection preserved"
+	}
 	return l.metadata, nil
 }
 

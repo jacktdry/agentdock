@@ -64,7 +64,11 @@ func (macEdgeProcessProbe) command(ctx context.Context, pid int) (string, error)
 }
 
 func (macEdgeProcessProbe) image(ctx context.Context, pid int) (string, error) {
-	return macProcessEvidenceCommand(ctx, "/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-d", "txt", "-Fpn")
+	path, err := macEdgeExecutablePath(ctx, pid)
+	if err != nil || path != edgeSystemBundle+"/Contents/MacOS/Microsoft Edge" {
+		return "", errEdgeProcessUnqualified
+	}
+	return fmt.Sprintf("p%d\nftxt\nn%s\n", pid, path), nil
 }
 
 func (macEdgeProcessProbe) startToken(ctx context.Context, pid int) (string, error) {

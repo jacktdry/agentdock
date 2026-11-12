@@ -17,6 +17,7 @@ type externalRouteGrant struct {
 	peer      externalPeerIdentity
 	expiresAt time.Time
 	used      atomic.Bool
+	started   atomic.Bool // The native backend may start one worker for a consumed grant.
 }
 
 type externalPeerIdentity struct {
@@ -68,21 +69,43 @@ func consumeExternalRouteGrant(d RouteDecision) bool {
 const externalPeerVerificationTimeout = 2 * time.Second
 
 func (m *ExternalLeaseManager) verifyAdmissionPeer(ctx context.Context, g *externalRouteGrant, worker WorkerInfo) error {
-	if !g.fresh() {
+	if !m.admissionGrantValid(g) {
 		return externalPeerVerificationError()
 	}
 	if err := m.verifyPeer(ctx, g.peer, worker); err != nil {
 		return err
 	}
-	if !g.fresh() {
+	if !m.admissionGrantValid(g) {
 		return externalPeerVerificationError()
 	}
 	return nil
 }
 
+func (m *ExternalLeaseManager) admissionGrantValid(g *externalRouteGrant) bool {
+	if g == nil {
+		return false
+	}
+	if _, native := m.backend.(*nativeEdgeRuntime); native {
+		// A fresh grant must have been consumed exactly once by the native
+		// worker start. During bounded Acquire the live peer is independently
+		// rechecked at every admission/operation boundary.
+		return g.used.Load() && g.started.Load()
+	}
+	return g.fresh()
+}
+
 func externalPeerVerificationError() error {
 	// Never expose provider errors/panics, proof identities, URLs or PIDs.
 	return externalLeaseError(ErrRequiredRouteUnavailable, "", "external peer verification unavailable or mismatched", nil)
+}
+
+func nativePeerVerificationErrorAt(stage string) error {
+	switch stage {
+	case "transport", "process_epoch", "profile_epoch", "held_socket", "postcondition":
+		return externalLeaseError(ErrRequiredRouteUnavailable, "", "external peer verification unavailable at "+stage, nil)
+	default:
+		return externalPeerVerificationError()
+	}
 }
 
 // Active leases verify the saved identity, without renewing or requiring the
@@ -97,7 +120,13 @@ func (m *ExternalLeaseManager) verifyPeer(ctx context.Context, expected external
 	if verifier == nil || ctx.Err() != nil || expected.source == nil || expected.incarnation == nil || expected.source == expected.incarnation {
 		return reject()
 	}
-	verifyCtx, cancel := context.WithTimeout(ctx, externalPeerVerificationTimeout)
+	verifyTimeout := externalPeerVerificationTimeout
+	if _, native := m.backend.(*nativeEdgeRuntime); native {
+		// The native attestor rechecks process/signature and the held socket
+		// independently. Two 2s child limits cannot fit a 2s parent.
+		verifyTimeout = nativeEdgePeerVerificationBudget
+	}
+	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 	// Hold the slot until the verifier actually exits, even after timeout.
 	// A noncooperative verifier cannot create unbounded background work.
@@ -111,23 +140,34 @@ func (m *ExternalLeaseManager) verifyPeer(ctx context.Context, expected external
 		return reject()
 	}
 	type verificationResult struct {
-		peer externalPeerIdentity
-		ok   bool
+		peer  externalPeerIdentity
+		ok    bool
+		stage string
 	}
 	results := make(chan verificationResult, 1)
 	go func() {
-		defer func() { <-m.verificationInFlight }()
 		var result verificationResult
 		defer func() {
 			_ = recover()
+			// Publish a successful proof only AFTER releasing its bounded
+			// single-flight slot; the next serial peer check must not race
+			// with a slot still held by this completed worker.
+			<-m.verificationInFlight
 			results <- result
 		}()
 		peer, err := verifier.VerifyExternalPeer(verifyCtx, expected, worker)
-		result = verificationResult{peer: peer, ok: err == nil}
+		stage := ""
+		if _, native := m.backend.(*nativeEdgeRuntime); native {
+			stage = safeNativeEdgePeerStage(err)
+		}
+		result = verificationResult{peer: peer, ok: err == nil, stage: stage}
 	}()
 	select {
 	case result := <-results:
 		if !result.ok || result.peer != expected || verifyCtx.Err() != nil {
+			if verifyCtx.Err() == nil && !result.ok {
+				return nativePeerVerificationErrorAt(result.stage)
+			}
 			return reject()
 		}
 		return nil

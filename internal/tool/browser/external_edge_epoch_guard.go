@@ -36,12 +36,18 @@ func newEdgeProcessEpochRevalidation(source edgeProcessPreflight, worker WorkerI
 		}
 		// readEdgeProcessPreflight has its own 2-second deadline and compares OS
 		// evidence twice. Do NOT synthesize a new grant from its result.
-		current, err := readEdgeProcessPreflight(ctx, source.endpoint, source.userDataDir, probe)
-		if err != nil || ctx.Err() != nil || current.pid != source.pid ||
-			current.startToken != source.startToken || current.endpoint != source.endpoint ||
-			current.userDataDir != source.userDataDir || current.profile != source.profile || current.executable != source.executable {
+		if _, err := revalidateEdgeProcessEpoch(ctx, source, probe); err != nil {
 			return externalTransportFenceError()
 		}
 		return nil
 	}, nil
+}
+
+func revalidateEdgeProcessEpoch(ctx context.Context, source edgeProcessPreflight, probe edgeProcessProbe) (edgeProcessPreflight, error) {
+	current, err := readEdgeProcessPreflightCommand(ctx, source.endpoint, source.userDataDir, probe, source.defaultLaunch)
+	if err != nil || ctx.Err() != nil || current.pid != source.pid || current.startToken != source.startToken || current.endpoint != source.endpoint ||
+		current.userDataDir != source.userDataDir || current.profile != source.profile || current.executable != source.executable {
+		return edgeProcessPreflight{}, externalTransportFenceError()
+	}
+	return current, nil
 }

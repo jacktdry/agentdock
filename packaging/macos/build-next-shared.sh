@@ -57,6 +57,8 @@ fi
 CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build "${CORE_BUILD_ARGS[@]}" -mod=readonly -trimpath \
   -ldflags="-s -w -X github.com/uvwt/agentdock/internal/buildinfo.Commit=$SOURCE_COMMIT -X github.com/uvwt/agentdock/internal/buildinfo.BuildDate=$SOURCE_DATE" \
   -o "$BUILD_DIR/core/bin/agentdock" ./cmd/agentdock
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -mod=readonly -trimpath \
+  -ldflags='-s -w' -o "$BUILD_DIR/agentdock-next-mcp-launch" ./cmd/agentdock-next-mcp-launch
 python3 packaging/build-core-skill-bundle.py --output "$BUILD_DIR/core/share/agentdock/core-skills"
 tar -C "$BUILD_DIR/core" -czf "$BUILD_DIR/payload/agentdock_darwin_arm64.tar.gz" bin/agentdock share/agentdock/core-skills
 cp "$CLOUDFLARED_SOURCE" "$BUILD_DIR/payload/cloudflared_darwin_arm64"
@@ -67,6 +69,7 @@ cp "$CLOUDFLARED_SOURCE" "$BUILD_DIR/payload/cloudflared_darwin_arm64"
 )
 AGENTDOCK_MACOS_APP_VARIANT=next AGENTDOCK_MACOS_ARCHES=arm64 \
   AGENTDOCK_MACOS_MIN_VERSION=13.0 AGENTDOCK_MACOS_SHARED_EXECUTABLE="$BUILD_DIR/AgentDock" \
+  AGENTDOCK_MACOS_NEXT_MCP_LAUNCHER="$BUILD_DIR/agentdock-next-mcp-launch" \
   AGENTDOCK_MACOS_APP_OUTPUT_DIR="$BUILD_DIR/package" \
   AGENTDOCK_MACOS_OFFLINE_PAYLOAD_DIR="$BUILD_DIR/payload" \
   AGENTDOCK_CODESIGN_IDENTITY=- AGENTDOCK_CODESIGN_KEYCHAIN='' \

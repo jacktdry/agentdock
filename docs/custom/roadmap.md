@@ -1,6 +1,10 @@
 # AgentDock Custom Roadmap
 
-> **Current operational entrypoint (2026-10-21):** [NEXT active backlog](next-active-backlog-2026-10-21.md) and [worktree consolidation](worktree-consolidation-2026-10-21.md). Older sections preserve chronological checkpoints and may state pending gates closed by later evidence.
+> **Current RC21 A＋B＋C 本機 Source 基準（2026-11-12）：**[非破壞性合流與驗證](next-rc21-consolidated-handoff-2026-11-12.md)。已保留 H02／H04／RC21 既有成果，納入 B 的 P8 NEXT-only **CLI**（不是 GUI，一律下次正常啟動生效）與 C 的 Plugin 回饋／Settings 讀回修正。**Source-only、未部署現役 NEXT、H01 原生 Host 未 PASS**。D 尚無正式治理結案，未 Push／Merge `custom/main`／授權 Release。以下 A-only 或舊 RC21 文句作歷史，不覆蓋本決策。
+
+> **A-only historical checkpoint (superseded by consolidated baseline above, 2026-11-12):** [RC21 Source＋Docs 統一本機基準](next-rc21-product-baseline-2026-11-12.md) → [Active Backlog 最新頁首](next-active-backlog-2026-10-21.md) → [A／B／C／D 交接與寫入邊界](next-four-workstreams-handoff-2026-11-12.md)。**H02、H04、RC21 NEXT-only 本機建置／安裝與 rollback 證據已結案**；P8 真實三 Actor 共享 Broker 流程早已 PASS，但預設仍 exclusive，B 專注安全顯式 opt-in 的產品入口；C 檢查 P6／P7／H01 具體使用缺口；D 唯讀審核公開 GitHub 與 Release。P13/P14、NexusDock、無獨特用途 Native MCP Backend 保持 deferred/NO-GO。R01 Hosted CI、Developer ID、公證、正式 Feed **只有公開發行時才成為門檻**。本機整合分支不是 `custom/main` 或正式 Release；無 Push／Deploy。
+
+> **Historical notes:** 2026-10-23 RC11 installed／RC10 Browser UAT、2026-10-21 backlog/worktree consolidation 及下方 Roadmap 的 OPEN 均為當時證據，可能已由 RC21 結案覆蓋；不要重新以 RC11/RC20 或新增 AX/Focus/Race/rollback 驗收作為 NEXT 上線 Gate。歷史入口：[RC10/RC11 evidence](next-rc10-edge-host-uat-2026-10-23.md)、[worktree consolidation](worktree-consolidation-2026-10-21.md)、[RC21 結案](next-rc21-product-closeout-and-p8-resume-2026-11-11.md)。
 
 > 狀態：Accepted initial roadmap
 

@@ -406,8 +406,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.autosaveName = "AgentDockMenuBarItem"
             item.isVisible = true
             if let button = item.button {
-                button.image = NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: "AgentDock")
+                // Stable and Next can run concurrently. Identify the actual,
+                // validated bundle so assistive technology and pointer users
+                // do not mistake Next's service controls for Stable's.
+                let appName = AppIdentity.current.name
+                button.image = NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: appName)
                 button.image?.isTemplate = true
+                button.setAccessibilityLabel(appName)
+                button.toolTip = appName
+                if !AppIdentity.current.menuBarShortLabel.isEmpty {
+                    // macOS may expose an image-only status item with blank
+                    // Title/Description even after setAccessibilityLabel.
+                    // A short visible title identifies Next without relying
+                    // on Accessibility proxy forwarding.
+                    button.title = AppIdentity.current.menuBarShortLabel
+                    button.imagePosition = .imageLeading
+                }
             }
             statusItem = item
             return
@@ -451,7 +465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if isUpdating {
             let activity = isCheckingForUpdate ? L10n.text("Checking for updates…") : L10n.text("Updating…")
             let statusMenuItem = NSMenuItem(
-                title: L10n.format("AgentDock: %@", activity),
+                title: AppIdentity.current.menuText(L10n.format("AgentDock: %@", activity)),
                 action: nil,
                 keyEquivalent: ""
             )
@@ -488,12 +502,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             statusText = L10n.text("Stopped")
         }
-        let statusMenuItem = NSMenuItem(title: L10n.format("AgentDock: %@", statusText), action: nil, keyEquivalent: "")
+        let statusMenuItem = NSMenuItem(title: AppIdentity.current.menuText(L10n.format("AgentDock: %@", statusText)), action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
         menu.addItem(.separator())
 
-        menu.addItem(item(currentStatus.installed ? L10n.text("Open AgentDock") : L10n.text("Set up AgentDock…"), #selector(showSetup)))
+        menu.addItem(item(AppIdentity.current.menuText(currentStatus.installed ? L10n.text("Open AgentDock") : L10n.text("Set up AgentDock…")), #selector(showSetup)))
         menu.addItem(item(L10n.text("Check permissions"), #selector(openPermissions)))
         if currentStatus.installed {
             menu.addItem(.separator())
@@ -501,10 +515,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if currentStatus.requiresApproval {
                 menu.addItem(item(L10n.text("Open background settings"), #selector(openBackgroundSettings)))
             } else if currentStatus.loaded {
-                menu.addItem(item(L10n.text("Stop AgentDock"), #selector(stopService)))
-                menu.addItem(item(L10n.text("Restart AgentDock"), #selector(restartService)))
+                menu.addItem(item(AppIdentity.current.menuText(L10n.text("Stop AgentDock")), #selector(stopService)))
+                menu.addItem(item(AppIdentity.current.menuText(L10n.text("Restart AgentDock")), #selector(restartService)))
             } else {
-                menu.addItem(item(L10n.text("Start AgentDock"), #selector(startService)))
+                menu.addItem(item(AppIdentity.current.menuText(L10n.text("Start AgentDock")), #selector(startService)))
             }
             menu.addItem(item(L10n.text("Check for updates…"), #selector(updateService)))
             menu.addItem(.separator())

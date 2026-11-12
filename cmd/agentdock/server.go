@@ -44,6 +44,7 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "  agentdock version [--json]")
 		fmt.Fprintln(stderr, "  agentdock update [--check]")
 		fmt.Fprintln(stderr, "  agentdock service <status|start|stop|restart|autostart> --runtime-root <目录>")
+		fmt.Fprintln(stderr, "  agentdock browser-mode <status|enable|disable> --runtime-root <AgentDock Next runtime>")
 		fmt.Fprintln(stderr, "  agentdock tunnel <status|start|stop|restart|regenerate|configure|autostart> --runtime-root <目录>")
 		fmt.Fprintln(stderr, "  agentdock skill bootstrap --bundle <目录>")
 		fmt.Fprintln(stderr, "  agentdock nexus pair --endpoint <URL> --code <配对码> [--name <名称>]")
@@ -158,6 +159,15 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 			}
 			if request.Method == "browser.snapshot" {
 				return runtime.RuntimeBrowserDesktop(), nil
+			}
+			if request.Method == "next_codex.readiness" {
+				return runtime.NextCodexMCPReadiness(), nil
+			}
+			if request.Method == "next_codex.operator_identity" {
+				if params := strings.TrimSpace(string(request.Params)); params != "" && params != "{}" && params != "null" {
+					return nil, errors.New("operator identity does not accept parameters")
+				}
+				return runtime.NextCodexOperatorIdentity(controlCtx), nil
 			}
 			return desktopruntime.DispatchControlRequest(
 				controlCtx,

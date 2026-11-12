@@ -10,12 +10,14 @@ func (m *Manager) sessionMCPServers(ctx context.Context, sessionID, cwd string, 
 		return []SessionMCPServer{}, nil
 	}
 	servers, err := provider.Servers(ctx, sessionID, cwd, append([]string(nil), additional...))
-	if err != nil {
-		return nil, newError("ACP_SESSION_MCP_FAILED", "prepare host-owned ACP MCP capabilities", false, map[string]any{"session_id": sessionID}, err)
-	}
+	// Preparation can allocate before failing. A prior release must not suppress
+	// cleanup of a new allocation (including a failed provider rollback).
 	m.sessionMCPMu.Lock()
 	delete(m.sessionMCPReleased, sessionID)
 	m.sessionMCPMu.Unlock()
+	if err != nil {
+		return nil, newError("ACP_SESSION_MCP_FAILED", "prepare host-owned ACP MCP capabilities", false, map[string]any{"session_id": sessionID}, err)
+	}
 	if servers == nil {
 		return []SessionMCPServer{}, nil
 	}

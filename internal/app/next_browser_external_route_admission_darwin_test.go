@@ -112,3 +112,46 @@ func TestNextPrivateCompanyRoutesRequireBoundExternalAttestor(t *testing.T) {
 		})
 	}
 }
+
+func TestNextNativeEdgePlannerIsPassiveAndRejectsOtherRuntimeModes(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "next")
+	company, _ := browserpolicy.CanonicalWorkspaceRoot(t.TempDir())
+	catalog, err := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{
+		Profiles: []browserpolicy.ProfileDefinition{{ID: "company", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal,
+			UserDataDir: filepath.Join(home, "Library", "Application Support", "Microsoft Edge"), SelectedProfileName: "公司", BindCurrentProfile: true}},
+		Connectors: []browserpolicy.ConnectorDefinition{{ID: "company-edge", ProfileID: "company", Driver: browserpolicy.DriverNextEdgeCDP, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{AgentDockHome: filepath.Join(home, ".agentdock-next"), ACPEnabled: true, BrowserEnabled: true, Port: 8767,
+		BrowserWorkspacePolicies: []browserpolicy.WorkspaceRootPolicy{{Root: company, Policy: browserpolicy.BrowserRoutePolicy{Class: browserpolicy.WorkspaceCompany,
+			Route: browserpolicy.RouteRequiredExternal, RequiredConnectorID: "company-edge", RequiredProfileID: "company", AllowedOrigins: []string{"https://oprueba.com", "https://www.oprueba.com"}}}}}
+	planner, err := newRuntimeBrowserRoutePlanner(cfg, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = planner.Resolve(context.Background(), toolbrowser.RequestScope{WorkspaceID: "company", CanonicalWorkspaceRoot: company, OwnerTaskID: "task", Provenance: toolbrowser.ScopeACP}, nil)
+	var routeErr *toolbrowser.Error
+	if !errors.As(err, &routeErr) || routeErr.Code != toolbrowser.ErrRequiredRouteUnavailable {
+		t.Fatal("passive planner connected or published a route without explicit consent", err)
+	}
+	for _, mutate := range []func(*config.Config){
+		func(c *config.Config) { c.Stdio = true }, func(c *config.Config) { c.Port = 8765 }, func(c *config.Config) { c.ACPEnabled = false },
+		func(c *config.Config) { c.BrowserEnabled = false }, func(c *config.Config) { c.AgentDockHome = filepath.Join(home, ".agentdock") },
+	} {
+		bad := cfg
+		mutate(&bad)
+		if _, err := newRuntimeBrowserRoutePlanner(bad, catalog); err == nil {
+			t.Fatal("native Edge admitted outside isolated NEXT mode")
+		}
+	}
+	t.Setenv("AGENTDOCK_DESKTOP_VARIANT", "stable")
+	if _, err := newRuntimeBrowserRoutePlanner(cfg, catalog); err == nil {
+		t.Fatal("stable variant admitted native NEXT Edge")
+	}
+}

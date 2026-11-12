@@ -5,9 +5,27 @@ package browser
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestEdgeKernelExecutablePathOnlyObservesOwnedTestProcess(t *testing.T) {
+	path, err := macEdgeExecutablePath(context.Background(), os.Getpid())
+	if err != nil || !filepath.IsAbs(path) || path == edgeSystemBundle+"/Contents/MacOS/Microsoft Edge" {
+		t.Fatal("kernel executable lookup invalid")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, pid := range []int{0, -1, int(1 << 31)} {
+		if _, err := macEdgeExecutablePath(context.Background(), pid); err != errEdgeProcessUnqualified {
+			t.Fatal("invalid PID admitted")
+		}
+	}
+	if _, err := macEdgeExecutablePath(ctx, os.Getpid()); err != errEdgeProcessUnqualified {
+		t.Fatal("canceled executable lookup admitted")
+	}
+}
 
 func TestEdgeLiveSignatureNativeRejectsTestProcess(t *testing.T) {
 	// Only this test process is queried; never discover or inspect user's Edge.
@@ -91,5 +109,27 @@ func TestEdgeLiveSignatureVerifierPanicFailsClosed(t *testing.T) {
 		if err := v.check(context.Background(), 123); err != errEdgeProcessUnqualified {
 			t.Fatal("unexpected native verifier recovery qualified process")
 		}
+	}
+}
+
+func TestEdgeLiveSignatureCompletionReleasesSlotBeforeNextAction(t *testing.T) {
+	var calls int
+	v := edgeLiveSignatureVerifier{slot: make(chan struct{}, 1), verify: func(int) bool {
+		calls++
+		return true
+	}}
+	// A real Broker performs serial admissions, page operations and release
+	// using the same native verifier. A successful verification must guarantee
+	// the next one will not be rejected by a stale occupied slot.
+	for i := 0; i < 150; i++ {
+		if err := v.check(context.Background(), 123); err != nil {
+			t.Fatalf("serial peer revalidation %d failed closed spuriously: %v", i, err)
+		}
+		if len(v.slot) != 0 {
+			t.Fatalf("native verification %d returned before disposing its slot", i)
+		}
+	}
+	if calls != 150 {
+		t.Fatal("serial verification skipped a legitimate invocation")
 	}
 }

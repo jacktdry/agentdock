@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "catalog": {
+    "profiles": [{
+      "id": "company-edge",
+      "browser": "edge",
+      "class": "authenticated-external",
+      "user_data_dir": "/Users/wei/Library/Application Support/Microsoft Edge",
+      "selected_profile_name": "公司",
+      "profile_directory": "Default"
+    }],
+    "connectors": [{
+      "id": "company-edge-cdp",
+      "profile_id": "company-edge",
+      "driver": "next-core-edge-cdp",
+      "endpoint": "ws://127.0.0.1:9222/devtools/browser"
+    }]
+  },
+  "workspace_policies": [
+    {
+      "root": "/Users/wei/opruebaCode/official_site/oprueba",
+      "policy": {
+        "class": "company",
+        "route": "required-authenticated-external",
+        "required_connector_id": "company-edge-cdp",
+        "required_profile_id": "company-edge",
+        "allowed_origins": ["https://oprueba.com", "https://www.oprueba.com"]
+      }
+    },
+    {
+      "root": "/Users/wei/opruebaCode/official_site/homiplay",
+      "policy": {
+        "class": "company",
+        "route": "required-authenticated-external",
+        "required_connector_id": "company-edge-cdp",
+        "required_profile_id": "company-edge",
+        "allowed_origins": ["https://homiplay.io", "https://www.homiplay.io"]
+      }
+    },
+    {
+      "root": "/Users/wei/opruebaCode/homiplay",
+      "policy": {
+        "class": "company",
+        "route": "required-authenticated-external",
+        "required_connector_id": "company-edge-cdp",
+        "required_profile_id": "company-edge",
+        "allowed_origins": ["https://homiplay.io", "https://www.homiplay.io"]
+      }
+    },
+    {
+      "root": "/Users/wei/opruebaCode/official_site/content-cms",
+      "policy": {
+        "class": "company",
+        "route": "required-authenticated-external",
+        "required_connector_id": "company-edge-cdp",
+        "required_profile_id": "company-edge",
+        "allowed_origins": ["https://oprueba.com", "https://www.oprueba.com", "https://homiplay.io", "https://www.homiplay.io"]
+      }
+    }
+  ]
+}

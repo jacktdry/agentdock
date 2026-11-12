@@ -5,6 +5,16 @@ enum AppIdentity: String, CaseIterable {
     case stable, next
 
     var name: String { self == .stable ? "AgentDock" : "AgentDock Next" }
+    // Existing localized menu strings intentionally contain the product name.
+    // Keep their grammar/translation intact while showing the validated bundle
+    // identity; otherwise Next appears to control the separate Stable service.
+    func menuText(_ localizedText: String) -> String {
+        guard self == .next else { return localizedText }
+        return localizedText.replacingOccurrences(of: "AgentDock", with: name)
+    }
+    // Keep Stable's existing icon-only menu bar, but make Next visibly
+    // distinguishable when both service controllers are running together.
+    var menuBarShortLabel: String { self == .next ? "NEXT" : "" }
     var bundleID: String { self == .stable ? "com.uvwt.agentdock" : "dev.dropabit.agentdock.next" }
     var appFilename: String { name + ".app" }
     var coreLabel: String { bundleID + ".core" }

@@ -46,6 +46,22 @@ func (r *Runtime) ApplyPermissionControlMutation(
 	if err != nil {
 		return nil, err
 	}
+	if r.nextPermissionOwner != nil && (authorized.Kind == permission.ControlMutationUpdatePolicy || authorized.Kind == permission.ControlMutationApproveWorkspace) {
+		// Only the source-only Next native owner shares the dispatch fence.
+		// Confirmation and M8 admission must remain outside lifecycleMu;
+		// lock order here, as in native Prepare/Attach, is lifecycleMu -> Store.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		r.lifecycleMu.Lock()
+		defer r.lifecycleMu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if r.closing {
+			return nil, toolError("RUNTIME_CLOSING", "AgentDock runtime is shutting down", "runtime")
+		}
+	}
 	switch authorized.Kind {
 	case permission.ControlMutationUpdatePolicy:
 		updated, err := r.permissions.ReplacePolicy(authorized.PolicyRevision, *authorized.Policy)

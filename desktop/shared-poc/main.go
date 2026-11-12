@@ -173,6 +173,9 @@ func main() {
 
 	tray := app.SystemTray.New()
 	if runtime.GOOS == "darwin" {
+		// Wails macOS does not apply SetTooltip to NSStatusItem; a short
+		// native label distinguishes the Next tray from Original in AX.
+		tray.SetLabel("NEXT")
 		tray.SetTemplateIcon(icons.SystrayMacTemplate)
 	} else {
 		tray.SetIcon(icons.DefaultWindowsIcon)

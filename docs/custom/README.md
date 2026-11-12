@@ -12,6 +12,9 @@
 
 ## 文件索引
 
+- [next-rc21-product-baseline-2026-11-12.md](next-rc21-product-baseline-2026-11-12.md)：**RC21 Source＋Docs 最新本機整合基準**、合流方式與有效 Backlog。
+- [next-four-workstreams-handoff-2026-11-12.md](next-four-workstreams-handoff-2026-11-12.md)：**A／B／C／D 四線共用開發交接**，新 Session 先讀文件再執行指定工作線。
+
 - [p8-followup-checkpoint-2026-10-21.md](p8-followup-checkpoint-2026-10-21.md)：P8 三真實 Agent 已通過的歷史證據及現階段 Edge／原生非干擾／崩潰恢復驗收門檻。
 
 - [next-active-backlog-2026-10-21.md](next-active-backlog-2026-10-21.md)：**目前 NEXT 待辦與單頁交接入口**，區分 installed/source-only、保留分支與發佈門檻。

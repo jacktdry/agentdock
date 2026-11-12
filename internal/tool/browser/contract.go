@@ -65,9 +65,10 @@ func InputSchema(name string) (map[string]any, bool) {
 		props["timeout_ms"] = boundedIntProp("Overall operation timeout in milliseconds. Defaults to 30000 and is capped at 300000.", 1, 300000)
 		required = []string{"session_id", "actions"}
 	case ToolBroker:
-		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_stale", "cleanup_acp_session", "direct_acquire", "direct_evaluate", "direct_snapshot", "direct_release"}, "description": "Browser Broker control-plane action."}
+		props["action"] = map[string]any{"type": "string", "enum": []string{"status", "cleanup_stale", "cleanup_acp_session", "connect_external", "disconnect_external", "direct_acquire", "direct_evaluate", "direct_snapshot", "direct_screenshot", "direct_navigate", "direct_release"}, "description": "Browser Broker control-plane action."}
+		props["workspace_root"] = stringProp("Optional exact configured company worktree; omission uses the configured default workspace. Arbitrary roots and browser/profile/origin overrides are rejected.")
 		props["owner_acp_session_id"] = stringProp("ACP session owner to clean up for action=cleanup_acp_session. Only AgentDock-owned leases/connectors/pages are released; external browser/profile processes are preserved.")
-		props["url"] = stringProp("Initial managed page URL for direct_acquire; defaults to about:blank.")
+		props["url"] = stringProp("Initial page URL for direct_acquire, or approved HTTPS URL for direct_navigate. Company routing never falls back to Managed Chrome.")
 		props["lease_id"] = stringProp("Exact owned direct lease id.")
 		props["function"] = stringProp("JavaScript function for direct_evaluate; effects require M8 admission.")
 		required = []string{"action"}
@@ -92,18 +93,23 @@ func InputSchema(name string) (map[string]any, bool) {
 				allowed[field] = props[field]
 			}
 			req := []string{"action"}
-			if action == "direct_evaluate" || action == "direct_snapshot" || action == "direct_release" {
+			if action == "direct_evaluate" || action == "direct_snapshot" || action == "direct_release" || action == "direct_screenshot" || action == "direct_navigate" {
 				req = append(req, "lease_id")
 			}
 			if action == "direct_evaluate" {
 				req = append(req, "function")
 			}
+			if action == "direct_navigate" {
+				req = append(req, "url")
+			}
 			return toolcontract.InputObject(allowed, req...)
 		}
 		schema["oneOf"] = []map[string]any{
 			variant("status"), variant("cleanup_stale"), variant("cleanup_acp_session", "owner_acp_session_id"),
-			variant("direct_acquire", "url"), variant("direct_evaluate", "lease_id", "function"),
-			variant("direct_snapshot", "lease_id"), variant("direct_release", "lease_id"),
+			variant("connect_external", "workspace_root"), variant("disconnect_external", "workspace_root"),
+			variant("direct_acquire", "url", "workspace_root"), variant("direct_evaluate", "lease_id", "function", "workspace_root"),
+			variant("direct_snapshot", "lease_id", "workspace_root"), variant("direct_screenshot", "lease_id", "workspace_root"),
+			variant("direct_navigate", "lease_id", "url", "workspace_root"), variant("direct_release", "lease_id", "workspace_root"),
 		}
 	}
 	return schema, true

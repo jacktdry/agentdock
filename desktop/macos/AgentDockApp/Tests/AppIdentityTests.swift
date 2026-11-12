@@ -17,6 +17,17 @@ func testAppIdentity(root: URL) throws {
         ]
         let loaded = try AppIdentity.load(metadata: metadata)
         precondition(loaded == identity)
+        // Used by the native status item accessibility label and tooltip.
+        // Stable and Next must remain distinguishable when running together.
+        precondition(identity.name == name)
+        precondition(identity.menuText("AgentDock：運作正常") == name + "：運作正常")
+        precondition(identity.menuText("開啟 AgentDock") == "開啟 " + name)
+        precondition(identity.menuText("重新啟動 AgentDock") == "重新啟動 " + name)
+        precondition(identity.menuText("啟動 AgentDock") == "啟動 " + name)
+        precondition(identity.menuText("Version mismatch · AgentDock 0.9.2 · Core 0.9.1").contains(name + " 0.9.2"))
+        precondition(identity.menuText("AgentDock：版本異常 · AgentDock 0.9.2 · Core 0.9.1") == name + "：版本異常 · " + name + " 0.9.2 · Core 0.9.1")
+        precondition(identity.menuText("Open logs folder") == "Open logs folder")
+        precondition(identity.menuBarShortLabel == (identity == .next ? "NEXT" : ""))
         precondition(identity.bundleID == bundleID && identity.appFilename == name + ".app")
         precondition(identity.coreLabel == bundleID + ".core")
         precondition(identity.tunnelLabel == bundleID + ".tunnel")

@@ -9,9 +9,37 @@ import (
 )
 
 type directTargetInfo struct {
-	TargetID string `json:"targetId"`
-	Type     string `json:"type"`
-	URL      string `json:"url"`
+	TargetID         string `json:"targetId"`
+	Type             string `json:"type"`
+	URL              string `json:"url"`
+	BrowserContextID string `json:"browserContextId"`
+}
+
+// Edge can classify hidden WebContents without a native tab as "other".
+// Accept that only after this dispatcher created the hidden target itself;
+// exact target/session/context and origin checks still apply on every use.
+func (d *directCDPDispatcher) ownedTargetTypeMatches(kind string) bool {
+	return kind == "page" || (kind == "other" && d.ownedHiddenTarget)
+}
+
+// Hidden WebContents can start with a 0x0 viewport. Configure only our owned
+// target's virtual renderer size; never resize or activate a native window.
+func (d *directCDPDispatcher) setOwnedViewport(ctx context.Context) error {
+	ctx, unlock, err := d.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if !d.ownedHiddenTarget || d.targetID == "" || d.sessionID == "" {
+		return errDirectCDPAction
+	}
+	if err := d.verifyTargetLocked(ctx); err != nil {
+		return err
+	}
+	var result struct{}
+	return d.callLocked(ctx, "Emulation.setDeviceMetricsOverride", d.sessionID, map[string]any{
+		"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": false,
+	}, &result)
 }
 
 func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTargetInfo, error) {
@@ -29,8 +57,12 @@ func (d *directCDPDispatcher) targetInfoLocked(ctx context.Context) (directTarge
 	return result.TargetInfo, nil
 }
 func (d *directCDPDispatcher) verifyTargetLocked(ctx context.Context) error {
+	if d.retired.Load() {
+		return errDirectCDPRetired
+	}
 	info, err := d.targetInfoLocked(ctx)
-	if err != nil || info.TargetID != d.targetID || info.Type != "page" || d.sessionID == "" ||
+	if err != nil || info.TargetID != d.targetID || !d.ownedTargetTypeMatches(info.Type) || d.sessionID == "" ||
+		!d.targetContextMatchesLocked(ctx, info) ||
 		(info.URL == "about:blank" && !d.bootstrap) ||
 		(info.URL != "about:blank" && !d.originScope.Allows(info.URL)) {
 		d.Close()

@@ -110,9 +110,10 @@ func copyConnectorRuntimeStatus(status ConnectorRuntimeStatus) ConnectorRuntimeS
 }
 
 type RoutePlanner struct {
-	policies []browserpolicy.WorkspaceRootPolicy
-	catalog  browserpolicy.Catalog
-	status   ConnectorStatusProvider
+	policies        []browserpolicy.WorkspaceRootPolicy
+	catalog         browserpolicy.Catalog
+	status          ConnectorStatusProvider
+	externalRuntime externalRuntime
 	// Held until the provider actually returns, even after the caller times out.
 	statusInFlight chan struct{}
 }
@@ -168,6 +169,10 @@ func (p *RoutePlanner) plan(scope RequestScope, override *RouteOverride) (Profil
 	plan.OriginScope = browserpolicy.OriginScopeForPolicy(policy)
 	plan.Browser, plan.ProfileClass = Kind(profile.Browser), ProfileClass(profile.Class)
 	plan.Headless = false
+	if connector.Driver == browserpolicy.DriverNextEdgeCDP {
+		plan.Engine = EngineNativeCDP
+		plan.EngineVersion = nativeEdgeEngineVersion
+	}
 	plan.Ownership = ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}
 	return plan, policy, nil
 }
@@ -193,7 +198,13 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	}
 	// Bound the caller's wait independently of provider cooperation. A stuck
 	// provider retains this planner's only slot; never spawn another behind it.
-	statusCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	statusTimeout := 2 * time.Second
+	if plan.Engine == EngineNativeCDP {
+		// macOS native attestation has two sequential bounded OS stages.
+		// Preserve the shorter budget of managed/other connectors.
+		statusTimeout = nativeEdgePeerVerificationBudget
+	}
+	statusCtx, cancel := context.WithTimeout(ctx, statusTimeout)
 	defer cancel()
 	select {
 	case p.statusInFlight <- struct{}{}:
@@ -210,7 +221,6 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 	}
 	results := make(chan statusResult, 1)
 	go func() {
-		defer func() { <-p.statusInFlight }()
 		completed := false
 		var result statusResult
 		defer func() {
@@ -220,6 +230,10 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 				_ = recover()
 				result = statusResult{err: errors.New("runtime connector verification unavailable")}
 			}
+			// Dispose the single-flight slot BEFORE returning a ready
+			// observation. The next serial native acquire must not race a
+			// successful provider that has not released its slot yet.
+			<-p.statusInFlight
 			// Buffered so a timed-out consumer cannot prevent slot release.
 			results <- result
 		}()
@@ -238,11 +252,28 @@ func (p *RoutePlanner) Resolve(ctx context.Context, scope RequestScope, override
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime verification canceled or timed out")
 	}
 	if result.err != nil {
+		// Only the exact native runtime can provide reviewed finite Edge
+		// diagnostics. Other providers may never mint a trusted reason even
+		// when they return an error wrapping the native internal type.
+		if plan.Engine == EngineNativeCDP {
+			if _, native := p.status.(*nativeEdgeRuntime); native {
+				if stage := safeNativeEdgePeerStage(result.err); stage != "" {
+					// Error.Message is the caller-visible portion; Details.Reason
+					// alone is not rendered by Browser Broker tool errors.
+					message := "native Edge peer verification unavailable at " + stage
+					return RouteDecision{}, browserError(ErrRequiredRouteUnavailable, message, "routing",
+						&ErrorDetails{WorkspaceID: plan.Scope.WorkspaceID, ConnectorID: plan.ConnectorID, Reason: message}, nil)
+				}
+			}
+		}
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector verification unavailable")
 	}
 	status := result.status
 	if status.ConnectorID != plan.ConnectorID || status.ProfileID != plan.ProfileID || status.Endpoint != plan.Endpoint {
 		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "runtime connector identity mismatch")
+	}
+	if status.Engine != plan.Engine || status.EngineVersion != plan.EngineVersion {
+		return RouteDecision{}, routeUnavailable(plan.Scope, plan.ConnectorID, "connector identity incomplete")
 	}
 	now := time.Now().UTC()
 	if !connectorObservationFresh(status, now) {

@@ -9,18 +9,21 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/uvwt/agentdock/internal/browserpolicy"
 )
 
 // PRIVATE transport identity foundation for a future trusted Core direct
 // dispatcher. Semantic intent belongs to that dispatcher, not CDP frames.
 // This does not prove browser login, consent, or no-focus; Edge is UNQUALIFIED.
 const (
-	directCDPAttachTimeout = 5 * time.Second
-	directCDPMaxLifetime   = 30 * time.Minute
+	directCDPAttachTimeout    = 5 * time.Second
+	directCDPHandshakeTimeout = 15 * time.Second
+	directCDPMaxLifetime      = 30 * time.Minute
 )
 
 type directCDPRelay struct {
@@ -42,16 +45,30 @@ type directCDPRelay struct {
 
 // No production caller, discovery, reconnect, or status mint.
 func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor) (*directCDPRelay, error) {
+	return newDirectCDPRelayWithLimit(ctx, endpoint, expected, attest, directCDPMaxLifetime)
+}
+
+// Only the Core-owned explicit native connection uses limit=0. Its parent
+// lifecycle is canceled on disconnect, failed admission and Runtime.Close;
+// source probes retain their deadline and the default thirty-minute ceiling.
+func newDirectCDPRelayWithLimit(ctx context.Context, endpoint string, expected externalPeerIdentity, attest pinnedCDPAttestor, limit time.Duration) (*directCDPRelay, error) {
 	if ctx == nil || ctx.Err() != nil || attest == nil || expected.source == nil || expected.incarnation == nil ||
-		expected.source == expected.incarnation || !pinnedCDPEndpointValid(endpoint) {
+		expected.source == expected.incarnation || !directCDPEndpointValid(endpoint) || limit < 0 {
 		return nil, errPinnedCDPUnavailable
 	}
-	dialCtx, stopDial := context.WithTimeout(ctx, pinnedCDPTimeout)
+	handshakeTimeout := directCDPHandshakeTimeout
+	if limit == 0 {
+		// The explicit Core connect operation waits for the owner's native
+		// Edge consent. A diagnostic's short budget otherwise expires while
+		// the user is still reading/clicking the browser-owned dialog.
+		handshakeTimeout = 90 * time.Second
+	}
+	dialCtx, stopDial := context.WithTimeout(ctx, handshakeTimeout)
 	defer stopDial()
 	var tcp net.Conn
 	var attempted bool
 	var stopSocket func() bool
-	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: pinnedCDPTimeout,
+	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: handshakeTimeout,
 		NetDialContext: func(dc context.Context, network, addr string) (net.Conn, error) {
 			if attempted { // Count attempts, including failed TCP dials.
 				return nil, errPinnedCDPUnavailable
@@ -92,7 +109,13 @@ func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPe
 		_ = up.Close()
 		return nil, errPinnedCDPUnavailable
 	}
-	lifetime, cancel := context.WithTimeout(ctx, directCDPMaxLifetime)
+	var lifetime context.Context
+	var cancel context.CancelFunc
+	if limit == 0 {
+		lifetime, cancel = context.WithCancel(ctx)
+	} else {
+		lifetime, cancel = context.WithTimeout(ctx, limit)
+	}
 	r := &directCDPRelay{peer: expected, up: up, listener: &pinnedCDPListener{Listener: l, conns: make(map[*pinnedCDPConn]bool)},
 		path: "/devtools/browser/" + hex.EncodeToString(token[:]), cancel: cancel, lifetime: lifetime, done: make(chan struct{}), attached: make(chan struct{})}
 	r.endpoint = "ws://" + l.Addr().String() + r.path
@@ -123,10 +146,27 @@ func newDirectCDPRelay(ctx context.Context, endpoint string, expected externalPe
 	return r, nil
 }
 
+// Edge's existing supported socket can use /devtools/browser without a
+// browser-ID suffix. This canonical form is allowed only by the direct
+// dispatcher; the legacy single-use MCP relay retains its stricter grammar.
+// Either form still requires pre-handshake attestation of the concrete socket.
+func directCDPEndpointValid(endpoint string) bool {
+	if browserpolicy.ValidateCanonicalBrowserEndpoint(endpoint) != nil {
+		return false
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "ws" {
+		return false
+	}
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && (ip.Equal(net.IPv4(127, 0, 0, 1)) || ip.Equal(net.IPv6loopback))
+}
+
 func (r *directCDPRelay) configure(c *websocket.Conn) {
 	c.SetReadLimit(pinnedCDPLimit)
-	deadline, _ := r.lifetime.Deadline()
-	_ = c.SetReadDeadline(deadline)
+	if deadline, limited := r.lifetime.Deadline(); limited {
+		_ = c.SetReadDeadline(deadline)
+	}
 	// Control frames are forwarded with bounded gorilla control writes. Close
 	// frames trigger permanent loss through ReadMessage, then close both sockets.
 	c.SetPingHandler(func(data string) error { return r.control(c, websocket.PingMessage, data) })
@@ -165,7 +205,7 @@ func (r *directCDPRelay) writeFrame(upstream bool, kind int, data []byte, contro
 	allowed := !r.lost && r.lifetime.Err() == nil && to != nil
 	r.mu.Unlock()
 	deadline := time.Now().Add(pinnedCDPTimeout)
-	if end, _ := r.lifetime.Deadline(); end.Before(deadline) {
+	if end, limited := r.lifetime.Deadline(); limited && end.Before(deadline) {
 		deadline = end
 	}
 	var err error

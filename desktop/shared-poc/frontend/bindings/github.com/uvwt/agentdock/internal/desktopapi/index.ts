@@ -47,6 +47,7 @@ export type {
     ACPManagerSnapshot,
     ACPMemoryStatus,
     ACPMutationResult,
+    ACPNativeCodexReadinessResult,
     ACPProcessStatus,
     ACPProfileInfo,
     ACPProfileProbeResult,

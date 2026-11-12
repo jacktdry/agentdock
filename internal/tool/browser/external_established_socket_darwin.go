@@ -23,11 +23,14 @@ func (b *edgeSocketOutput) Write(p []byte) (int, error) {
 	return b.Builder.Write(p)
 }
 
-func (macEdgeSocketProbe) connections(ctx context.Context, pid int) (string, error) {
-	if ctx == nil || ctx.Err() != nil || pid <= 0 || int64(pid) > 2147483647 {
+func (macEdgeSocketProbe) connections(ctx context.Context, pid, port int) (string, error) {
+	if ctx == nil || ctx.Err() != nil || pid <= 0 || int64(pid) > 2147483647 || port <= 0 || port > 65535 {
 		return "", errEdgeProcessUnqualified
 	}
-	cmd := exec.CommandContext(ctx, "/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:ESTABLISHED", "-FpnT")
+	// -iTCP:<port> must be combined with -a and the PID. Without it, the
+	// bounded catalog depends on unrelated user tabs and can fail closed.
+	// Exact reverse tuple and process epoch still receive independent checks.
+	cmd := exec.CommandContext(ctx, "/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP:"+strconv.Itoa(port), "-sTCP:ESTABLISHED", "-FpnT")
 	var out edgeSocketOutput
 	cmd.Stdout = &out
 	cmd.WaitDelay = 100 * time.Millisecond

@@ -102,12 +102,13 @@ func aggregateBrowserDiagnostics(s browserdesktop.Snapshot, d toolbrowser.Broker
 		if expired {
 			s.ExpiredLeases++
 		}
-		if l.ACPSessionID == "" {
+		owned := l.ACPSessionID != "" || l.AuthenticatedDirectOwner
+		if !owned {
 			s.UnownedLeases++
 		}
 		switch l.CleanupState {
 		case toolbrowser.CleanupPending:
-			if !expired && l.ACPSessionID != "" {
+			if !expired && owned {
 				s.ActiveLeases++
 			}
 		case toolbrowser.CleanupReleasing:
