@@ -43,9 +43,19 @@ with tempfile.TemporaryDirectory(prefix="agentdock-identity-") as temporary:
         variables = subprocess.check_output([
             "zsh", "-c", 'source "$1"; print -rl -- "$APP_BUNDLE_NAME" "$ZIP_NAME" "$DMG_NAME" "$LOGIN_SIGN_ID" "$CLOUDFLARED_SIGN_ID" "$ARBITER_SIGN_ID" "$STATE_NAME" "$APP_SUPPORT_NAME" "$LOG_NAME" "$WORK_NAME" "$DEFAULT_PORT"',
             "identity-test", str(IDENTITY)], env=env, text=True).splitlines()
-        assert variables == [name + ".app", prefix + "-macos-universal.zip", prefix + "-macos-universal.dmg",
+        # A Next single-arm64 development bundle must not claim to be universal.
+        # Stable and explicit multi-architecture release bundles retain universal names.
+        artifact_arch = "arm64" if variant == "next" and env.get("AGENTDOCK_MACOS_ARCHES", os.uname().machine) == "arm64" else "universal"
+        assert variables == [name + ".app", prefix + "-macos-" + artifact_arch + ".zip",
+                             prefix + "-macos-" + artifact_arch + ".dmg",
                              bundle + ".login-helper", bundle + ".cloudflared", bundle + ".arbiter",
                              state, name, name, name, port]
+        if variant == "next":
+            universal_env = dict(env, AGENTDOCK_MACOS_ARCHES="arm64,x86_64")
+            universal_names = subprocess.check_output([
+                "zsh", "-c", 'source "$1"; print -rl -- "$ZIP_NAME" "$DMG_NAME"',
+                "identity-test-universal", str(IDENTITY)], env=universal_env, text=True).splitlines()
+            assert universal_names == [prefix + "-macos-universal.zip", prefix + "-macos-universal.dmg"]
     build = BUILD.read_text()
     for statement in [
         'APP_DIR="$OUTPUT_DIR/$APP_BUNDLE_NAME"',
