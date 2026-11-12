@@ -783,4 +783,3 @@ Cloudflare behavior reference used for the Named Tunnel constraint:
 - Cloudflare Tunnel tokens: remotely-managed tunnel token is used to run the connector.
 - Cloudflare published application route: public hostname maps to a configured local Service URL.
 - Remotely-managed route Service URL is configured in Cloudflare, not by AgentDock's current local token-only runner.
-
