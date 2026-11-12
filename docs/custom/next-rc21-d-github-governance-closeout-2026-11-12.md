@@ -1,6 +1,6 @@
 # AgentDock NEXT — D 工作線：GitHub 分支保存與發行治理結案
 
-> **2026-11-12 D 後續審核收斂（單人維護）：**[37 筆 credential 候選逐項語義複核](next-rc21-d-secret-37-review-2026-11-12.md) 已完成，37/37 可解釋、未發現實際硬編碼正式憑證；早前「37 筆待人工審核」為當時狀態。GitHub 僅一位維護者，**不需要第二人審查／不設定 PR 必要批准**。建議保護 `custom/main` 禁 Force Push／刪除，但不要求尚不存在的 CI checks，且**目前尚未修改 GitHub 遠端設定**。A／B／C／D 已於獨立本機工作樹非破壞性合流；此舊 D 文件原本的 Push／Release 未授權邊界持續有效。
+> **2026-11-12 D 後續審核收斂（單人維護）：**[37 筆 credential 候選逐項語義複核](next-rc21-d-secret-37-review-2026-11-12.md) 已完成，37/37 可解釋、未發現實際硬編碼正式憑證；早前「37 筆待人工審核」為當時狀態。GitHub 僅一位維護者，**不需要第二人審查／不設定 PR 必要批准**。已對 `custom/main` 實際套用最小分支保護（禁止 Force Push／刪除、管理員同樣受保護），不要求另一位審查者與未執行的 CI checks；**GitHub 原始碼尚未 Push，正式 Release 未授權**。A／B／C／D 已於獨立本機工作樹非破壞性合流，隨後本機 `custom/main` 已受控 Fast-forward；此舊 D 文件原本的 Push／Release 未授權邊界持續有效。
 
 > 日期：2026-11-12（Asia/Taipei）。**D 僅審查與本機文件提交；未 Push、Merge、Tag、Release、改 GitHub 設定、部署或重啟現役 NEXT/Original**。D 專屬分支與 worktree 由 A＋B＋C 統一基準 `d76f7f218875963cc067c3213ec8b2a784cec956` 分出，僅寫此分支的文件。
 
