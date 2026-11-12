@@ -20,10 +20,14 @@ func (f testConnectorStatus) ConnectorStatus(ctx context.Context, id string) (Co
 	return f(ctx, id)
 }
 
+func testEdgeProfileDir() string {
+	return filepath.Join(os.TempDir(), "agentdock-test-profile", "configured", "edge")
+}
+
 func plannerFixture(t *testing.T, provider ConnectorStatusProvider) (*RoutePlanner, RequestScope) {
 	t.Helper()
 	catalog, err := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{
-		Profiles:   []browserpolicy.ProfileDefinition{{ID: "user-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: filepath.Join(string(filepath.Separator), "configured", "edge")}},
+		Profiles:   []browserpolicy.ProfileDefinition{{ID: "user-edge", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: testEdgeProfileDir()}},
 		Connectors: []browserpolicy.ConnectorDefinition{{ID: "edge-ws", ProfileID: "user-edge", Driver: browserpolicy.DriverChromeDevToolsMCPWS, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}},
 	})
 	if err != nil {
@@ -65,7 +69,7 @@ func TestPlannerCompanyIntentAndCanonicalScope(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.Scope.CanonicalWorkspaceRoot != canonical || plan.Route != browserpolicy.RouteRequiredExternal || plan.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || plan.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || plan.ProfileID != "user-edge" || plan.ConnectorID != "edge-ws" || plan.Browser != BrowserEdge || plan.ProfileClass != ProfileAuthenticatedExternal || plan.Endpoint != "ws://127.0.0.1:9222/devtools/browser" || plan.ProfileTemplate != "" || plan.Engine != EngineChromeDevToolsMCP || plan.EngineVersion != PreferredEngineVersion || plan.Headless || len(plan.RequiredCapabilities) != 4 {
+		if plan.Scope.CanonicalWorkspaceRoot != canonical || plan.Route != browserpolicy.RouteRequiredExternal || plan.ProfilePath != testEdgeProfileDir() || plan.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || plan.ProfileID != "user-edge" || plan.ConnectorID != "edge-ws" || plan.Browser != BrowserEdge || plan.ProfileClass != ProfileAuthenticatedExternal || plan.Endpoint != "ws://127.0.0.1:9222/devtools/browser" || plan.ProfileTemplate != "" || plan.Engine != EngineChromeDevToolsMCP || plan.EngineVersion != PreferredEngineVersion || plan.Headless || len(plan.RequiredCapabilities) != 4 {
 			t.Fatalf("plan=%+v", plan)
 		}
 		if plan.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
@@ -213,7 +217,7 @@ func TestPlannerRuntimeFailClosed(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge || decision.Start.ProfileID != "user-edge" || decision.Start.ConnectorID != "edge-ws" || decision.Start.EngineVersion != PreferredEngineVersion || decision.Start.LifecyclePolicy != LifecycleExternal || decision.Start.ProfilePath != filepath.Join(string(filepath.Separator), "configured", "edge") || decision.Start.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || decision.Start.ForegroundPolicy != ForegroundForbidden || !decision.Start.BackgroundPage || decision.Start.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
+			if err != nil || decision.Route != browserpolicy.RouteRequiredExternal || decision.Start.Browser != BrowserEdge || decision.Start.ProfileID != "user-edge" || decision.Start.ConnectorID != "edge-ws" || decision.Start.EngineVersion != PreferredEngineVersion || decision.Start.LifecyclePolicy != LifecycleExternal || decision.Start.ProfilePath != testEdgeProfileDir() || decision.Start.OriginScope != browserpolicy.OriginScope("https://cms.example.com") || decision.Start.ForegroundPolicy != ForegroundForbidden || !decision.Start.BackgroundPage || decision.Start.Ownership != (ResourceOwnership{Process: OwnerExternalPersistent, Profile: OwnerExternalPersistent, Connector: OwnerAgentDockIsolated}) {
 				t.Fatalf("decision=%+v error=%v", decision, err)
 			}
 		})

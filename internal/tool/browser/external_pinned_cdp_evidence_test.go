@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -84,7 +86,7 @@ func edgeEvidenceServer(t *testing.T) (*edgeEvidenceListener, edgeProcessPreflig
 		s.Close()
 	})
 	return l, edgeProcessPreflight{pid: 1245, endpoint: "ws" + strings.TrimPrefix(s.URL, "http") + "/devtools/browser/fixture",
-		executable: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", userDataDir: "/private/edge-fixture",
+		executable: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", userDataDir: filepath.Join(os.TempDir(), "agentdock-edge-socket-fixture"),
 		startToken: "501:Fri Oct 9 12:00:00 2026", observedAt: time.Now()}
 }
 
@@ -229,7 +231,7 @@ func TestEdgeEvidencePinnedReject(t *testing.T) {
 				called.Store(true)
 				// Synthetic independent policy knows its own profile; B2k only
 				// validates preflight shape and cannot establish profile identity.
-				if source.userDataDir != "/private/edge-fixture" {
+				if source.userDataDir != filepath.Join(os.TempDir(), "agentdock-edge-socket-fixture") {
 					return pinnedTestPeer(), nil
 				}
 				switch name {

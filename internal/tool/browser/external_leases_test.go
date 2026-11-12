@@ -402,7 +402,7 @@ func TestExternalAcquireFailureCleanup(t *testing.T) {
 			if err == nil {
 				t.Fatal("failure published lease")
 			}
-			if len(m.leases) != 0 || b.calls[len(b.calls)-1].tool != "stop" {
+			if len(m.leases) != 0 || len(b.calls) == 0 || b.calls[len(b.calls)-1].tool != "stop" {
 				t.Fatalf("failed acquire leaked: %+v", b.calls)
 			}
 			closes := 0

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -110,8 +111,18 @@ func TestDirectCDPExplicitDefaultContextStillRequiresSameIncarnation(t *testing.
 	}
 }
 
+// Use OS-native absolute paths: inspecting a Windows profile must not be
+// rejected merely because a test fixture supplied a Unix-only root.
+func testOwnedEdgeDataDir() string {
+	return filepath.Join(os.TempDir(), "agentdock-owned-edge")
+}
+
 func TestDirectCDPOwnedProfileProbeCannotBecomeCompanyTarget(t *testing.T) {
-	for _, profile := range []string{"/owned/edge/Default", "/other/edge/Default", "/owned/edge/../other"} {
+	for _, profile := range []string{
+		filepath.Join(testOwnedEdgeDataDir(), "Default"),
+		filepath.Join(os.TempDir(), "agentdock-other-edge", "Default"),
+		testOwnedEdgeDataDir() + string(filepath.Separator) + ".." + string(filepath.Separator) + "other",
+	} {
 		t.Run(profile, func(t *testing.T) {
 			d, f := newDispatcherFixture(t, contextResponder(t, "company", profile))
 			ctx := context.Background()
@@ -121,8 +132,8 @@ func TestDirectCDPOwnedProfileProbeCannotBecomeCompanyTarget(t *testing.T) {
 			if err := d.OpenOwnedTarget(ctx, ""); err != nil {
 				t.Fatal(err)
 			}
-			got, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge")
-			if profile == "/owned/edge/Default" {
+			got, err := d.inspectOwnedEdgeProfile(ctx, testOwnedEdgeDataDir())
+			if profile == filepath.Join(testOwnedEdgeDataDir(), "Default") {
 				if err != nil || got != "Default" {
 					t.Fatalf("profile=%q err=%v", got, err)
 				}
@@ -166,7 +177,7 @@ func TestDirectCDPOtherTypeRequiresOwnedHiddenTargetAndSameContext(t *testing.T)
 	for _, kind := range []string{"page", "other", "tab", "iframe", "service_worker"} {
 		for _, contextID := range []string{"company", "wrong-context"} {
 			t.Run(kind+"/"+contextID, func(t *testing.T) {
-				base := contextResponder(t, contextID, "/owned/edge/Default")
+				base := contextResponder(t, contextID, filepath.Join(testOwnedEdgeDataDir(), "Default"))
 				d, f := newDispatcherFixture(t, func(f *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
 					if cmd.Method != "Target.getTargetInfo" {
 						return base(f, c, cmd)
@@ -196,7 +207,7 @@ func TestDirectCDPOtherTypeRequiresOwnedHiddenTargetAndSameContext(t *testing.T)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if profile, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge"); err != nil || profile != "Default" {
+				if profile, err := d.inspectOwnedEdgeProfile(ctx, testOwnedEdgeDataDir()); err != nil || profile != "Default" {
 					t.Fatalf("owned hidden profile: %q %v", profile, err)
 				}
 				if closed, err := d.CloseOwnedTarget(ctx); err != nil || !closed {
@@ -213,7 +224,7 @@ func TestDirectCDPOtherTypeRequiresOwnedHiddenTargetAndSameContext(t *testing.T)
 func TestDirectCDPProfileWaitsForOwnedVersionDocument(t *testing.T) {
 	for _, transition := range []string{"", "https://unapproved.example/"} {
 		t.Run(transition, func(t *testing.T) {
-			base := contextResponder(t, "company", "/owned/edge/Default")
+			base := contextResponder(t, "company", filepath.Join(testOwnedEdgeDataDir(), "Default"))
 			transitionSeen := false
 			d, f := newDispatcherFixture(t, func(f *dispatcherFixture, c *websocket.Conn, cmd dispatcherCommand) bool {
 				if cmd.Method == "Target.getTargetInfo" && !transitionSeen {
@@ -239,7 +250,7 @@ func TestDirectCDPProfileWaitsForOwnedVersionDocument(t *testing.T) {
 			if err := d.OpenOwnedTarget(ctx, ""); err != nil {
 				t.Fatal(err)
 			}
-			profile, err := d.inspectOwnedEdgeProfile(ctx, "/owned/edge")
+			profile, err := d.inspectOwnedEdgeProfile(ctx, testOwnedEdgeDataDir())
 			if !transitionSeen {
 				t.Fatal("navigation transition not exercised")
 			}

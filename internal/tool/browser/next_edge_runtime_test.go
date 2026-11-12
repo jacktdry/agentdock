@@ -68,7 +68,7 @@ func nativeRuntimeFixture(t *testing.T) (*ACPBridge, *nativeEdgeRuntime, *dispat
 	if err := root.bindBrowserContext(context.Background(), "company"); err != nil {
 		t.Fatal(err)
 	}
-	profile := browserpolicy.ProfileDefinition{ID: "company", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: "/configured/edge", SelectedProfileName: "公司", BindCurrentProfile: true}
+	profile := browserpolicy.ProfileDefinition{ID: "company", Browser: browserpolicy.BrowserEdge, Class: browserpolicy.ProfileAuthenticatedExternal, UserDataDir: testEdgeProfileDir(), SelectedProfileName: "公司", BindCurrentProfile: true}
 	connector := browserpolicy.ConnectorDefinition{ID: "company-edge", ProfileID: profile.ID, Driver: browserpolicy.DriverNextEdgeCDP, Endpoint: "ws://127.0.0.1:9222/devtools/browser"}
 	catalog, err := browserpolicy.NewCatalog(browserpolicy.CatalogDefinition{Profiles: []browserpolicy.ProfileDefinition{profile}, Connectors: []browserpolicy.ConnectorDefinition{connector}})
 	if err != nil {
