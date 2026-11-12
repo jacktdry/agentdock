@@ -148,8 +148,8 @@ func TestStoreBootstrapAndFileMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("state mode=%o", info.Mode().Perm())
+	if err := verifyPrivateStatePath(store.StatePath(), info, false); err != nil {
+		t.Fatalf("state file not private: %v", err)
 	}
 	if filepath.Dir(store.StatePath()) != filepath.Join(root, "permissions") {
 		t.Fatalf("state path=%s", store.StatePath())
