@@ -133,8 +133,7 @@ type acceptResult struct {
 
 func openTestRegistrar(t *testing.T, expected process.BirthIdentity, server string) (string, <-chan acceptResult) {
 	t.Helper()
-	dir := t.TempDir()
-	socket := filepath.Join(dir, "m.sock")
+	socket := shortTestRegistrarSocket(t)
 	addr := &net.UnixAddr{Name: socket, Net: "unix"}
 	l, err := net.ListenUnix("unix", addr)
 	if err != nil {
@@ -155,6 +154,27 @@ func openTestRegistrar(t *testing.T, expected process.BirthIdentity, server stri
 		ch <- acceptResult{observed: o, err: err}
 	}()
 	return socket, ch
+}
+
+// The macOS sockaddr_un path limit is shorter than the nested t.TempDir
+// paths allocated by GitHub Hosted runners. Keep only test-owned sockets in
+// a private, short-lived directory; production socket locations are unchanged.
+func shortTestRegistrarSocket(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/private/tmp", "ad-mcp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("remove test socket directory: %v", err)
+		}
+	})
+	socket := filepath.Join(dir, "m.sock")
+	if len(socket) >= 100 {
+		t.Fatalf("test Unix socket path is too long: %d bytes", len(socket))
+	}
+	return socket
 }
 func waitResult(t *testing.T, ch <-chan acceptResult) acceptResult {
 	t.Helper()
