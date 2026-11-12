@@ -1,5 +1,8 @@
 # AgentDock Custom Roadmap
 
+> **2026-11-12 F／G／H Windows 修復本機整合已完成：**[整合 exact SHA、16 套件 Go1.26.5 PASS、Windows AMD64 7/7 cross-build/Vet 與 Hosted 待驗分界](next-rc21-hosted-ci-fgh-local-integration-2026-11-12.md)。獨立整合分支 `integration/next-rc21-hosted-ci-fgh-20261112` 的程式合流 HEAD 為 `30de149d`，三線來源 Commit、HANDOFF、Worktree clean 與修改範圍已核對，三次 no-ff merge 零衝突。**PR #1 遠端仍為 `5af6f00e`，Windows Native Hosted、完整 macOS Scripts 尚未重跑；不可宣稱 Full CI PASS、不得 Push/Merge/部署或清理。** 只有授權單一整合者更新既有 PR 後再做完整 Hosted CI。
+
+
 > **2026-11-12 ABCDE 整合後第一輪 GitHub Full CI：**[Run 43167819420 實際結果與下一階段 F／G／H 三條 Windows 並行修復規格／提示詞](next-rc21-hosted-ci-post-e-windows-parallel-2026-11-12.md)。Ubuntu Go Check（含 Race）／Browser Integration／Container 已 PASS；macOS Go Test/Build PASS 但 Packaging Identity Script 舊 universal 預期 FAIL，已在本機 `a2b47000` 做 test-only 修正、定點 PASS，整組 scripts 因 Swift 編譯超時未完成；Windows Go Test 尚有 33 個頂層失敗，原 Permission fsync／Scope/panic 錯誤已消除。**PR #1 候選 `5af6f00e` 尚不可 Merge，遠端 `custom/main` 未更動；不得提前清理分支／Worktree。** F/G/H 從固定 `a2b47000` 各自 Worktree 本機開發與提交，不 Push／改 CI。
 
 
